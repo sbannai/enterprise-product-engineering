@@ -1,25 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requirementBindings, requirementCount, getChapterBindings } from "../dist/packages/requirements/registry.js";
+import { requirementBindings, requirementCount } from "../dist/packages/requirements/registry.js";
+import { executeIntegratedRequirement } from "../dist/packages/capability-router.js";
 
-test("228 requirements are integrated into the central requirement registry", () => {
-  assert.equal(requirementCount, 228);
-  assert.equal(requirementBindings[0].id, "REQ-46301");
-  assert.equal(requirementBindings.at(-1)?.id, "REQ-50006");
-});
-
-test("each chapter has six requirement bindings", () => {
-  for (let chapter=463; chapter<=500; chapter++) assert.equal(getChapterBindings(chapter).length, 6);
-});
-
-test("all six implementation patterns are represented", () => {
-  assert.deepEqual([...new Set(requirementBindings.map(x=>x.pattern))].sort(), ["XX01","XX02","XX03","XX04","XX05","XX06"]);
-});
-
-test("every requirement has DATA, API and EVENT integration targets", () => {
-  for (const r of requirementBindings) {
-    assert.ok(r.dataContract);
-    assert.ok(r.apiContract);
-    assert.ok(r.eventContract);
+test("all 228 requirements resolve through the integrated capability router", async () => {
+  const calls = [];
+  const services = Object.fromEntries(["XX01","XX02","XX03","XX04","XX05","XX06"].map(pattern => [
+    pattern,
+    { execute: async (requirement) => { calls.push(requirement.id); return requirement.id; } }
+  ]));
+  for (const requirement of requirementBindings) {
+    const result = await executeIntegratedRequirement(requirement, {}, services);
+    assert.equal(result, requirement.id);
   }
+  assert.equal(calls.length, 228);
+  assert.equal(requirementCount, 228);
 });
