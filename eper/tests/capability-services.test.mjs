@@ -39,19 +39,19 @@ test("all 228 requirements execute through the six concrete services", async () 
   assert.deepEqual([...seen].sort(), ["XX01","XX02","XX03","XX04","XX05","XX06"]);
 });
 
-test("services reject a requirement routed to the wrong capability", async () => {
+test("services reject a requirement routed to the wrong capability", () => {
   const service = new AuthorizationService();
-  await assert.rejects(
-    service.execute(requirementBindings.find(r => r.pattern === "XX01"), {}),
+  assert.throws(
+    () => service.execute(requirementBindings.find(r => r.pattern === "XX01"), {}),
     /CAPABILITY_PATTERN_MISMATCH/,
   );
 });
 
-test("services reject incomplete execution context when supplied", async () => {
+test("services reject incomplete execution context when supplied", () => {
   const service = new AuthorizationService();
   const requirement = requirementBindings.find(r => r.pattern === "XX02");
-  await assert.rejects(
-    service.execute(requirement, { context: { tenantId: "", principalId: "user", correlationId: "c" } }),
+  assert.throws(
+    () => service.execute(requirement, { context: { tenantId: "", principalId: "user", correlationId: "c" } }),
     /CAPABILITY_CONTEXT_REQUIRED/,
   );
 });
