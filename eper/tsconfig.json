@@ -6,7 +6,9 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": []
   },
-  "include": ["packages/**/*.ts", "requirements/**/*.ts"]
+  "include": ["packages/**/*.ts", "requirements/**/*.ts"],
+  "exclude": ["requirements/**/tests/**/*.ts"]
 }
