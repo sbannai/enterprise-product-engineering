@@ -1,0 +1,12 @@
+{
+  "project": "EPER",
+  "scope": "EM-OPS-463-500",
+  "requirements": 228,
+  "requirementRange": ["REQ-46301", "REQ-50006"],
+  "sourceOfTruth": "sbannai/enterprise-product-engineering@main",
+  "buildClass": "SOURCE_TYPECHECK_BASELINE",
+  "compiler": "TypeScript 5.6.3",
+  "emit": false,
+  "status": "TYPECHECK_BASELINE",
+  "artifact": "NOT_GENERATED"
+}
