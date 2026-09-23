@@ -1,0 +1,13 @@
+{
+  "name": "eper-ops-463-500",
+  "private": true,
+  "version": "0.1.0-precode",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
