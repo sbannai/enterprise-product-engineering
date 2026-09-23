@@ -7,7 +7,7 @@ test("all 228 requirements resolve to governed DATA/API/EVENT contracts", () => 
   assert.equal(requirementCount, 228);
   assert.equal(requirementBindings.length, 228);
 
-  const capabilities = new Set<string>();
+  const capabilities = new Set();
   for (const requirement of requirementBindings) {
     const contracts = validateRequirementContracts(requirement);
     assert.equal(contracts.data.id, requirement.dataContract);
