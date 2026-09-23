@@ -1,4 +1,5 @@
 import type { RequirementBinding, RequirementPattern } from "../requirements/registry.js";
+import { validateRequirementContracts } from "../../contracts/index.js";
 import type { CapabilityService, CapabilityResult } from "./index.js";
 
 export interface CapabilityInput {
@@ -23,6 +24,7 @@ function execute(
     throw new Error(`CAPABILITY_BINDING_MISMATCH:${capability}:${requirement.capability}`);
   }
 
+  const contracts = validateRequirementContracts(requirement);
   const value = (input ?? {}) as CapabilityInput;
   if (value.context) {
     if (!value.context.tenantId || !value.context.principalId || !value.context.correlationId) {
@@ -34,7 +36,10 @@ function execute(
     requirementId: requirement.id,
     pattern: requirement.pattern,
     status: "EXECUTED",
-    data: value.payload ?? input ?? null,
+    data: {
+      payload: value.payload ?? input ?? null,
+      contracts,
+    },
   };
 }
 
@@ -43,31 +48,26 @@ export class AuthoritativeRecordService implements CapabilityService {
     return Promise.resolve(execute(requirement, input, "XX01", "authoritative-records"));
   }
 }
-
 export class AuthorizationService implements CapabilityService {
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     return Promise.resolve(execute(requirement, input, "XX02", "authorization"));
   }
 }
-
 export class BusinessValidationService implements CapabilityService {
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     return Promise.resolve(execute(requirement, input, "XX03", "business-validation"));
   }
 }
-
 export class AuditEvidenceService implements CapabilityService {
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     return Promise.resolve(execute(requirement, input, "XX04", "audit-evidence"));
   }
 }
-
 export class ExceptionHandlingService implements CapabilityService {
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     return Promise.resolve(execute(requirement, input, "XX05", "exception-handling"));
   }
 }
-
 export class GovernedReportingService implements CapabilityService {
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     return Promise.resolve(execute(requirement, input, "XX06", "governed-reporting"));
