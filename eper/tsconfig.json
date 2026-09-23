@@ -4,11 +4,19 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "noEmit": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "sourceMap": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": []
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["packages/**/*.ts", "requirements/**/*.ts"],
-  "exclude": ["requirements/**/tests/**/*.ts"]
+  "include": [
+    "packages/**/*.ts",
+    "requirements/**/*.ts"
+  ],
+  "exclude": [
+    "requirements/**/tests/**/*.ts",
+    "dist"
+  ]
 }
