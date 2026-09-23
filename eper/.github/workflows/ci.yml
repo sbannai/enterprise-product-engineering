@@ -2,7 +2,7 @@ name: EPER CI
 
 on:
   push:
-    branches: ["eper/ops-463-500-generated-source-v1"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 

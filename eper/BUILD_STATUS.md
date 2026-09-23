@@ -1,12 +1,16 @@
 # Build Status
 
-Source baseline: GENERATED
+Source of truth: GitHub `main`
+Repository: `sbannai/enterprise-product-engineering`
+EPER scope: EM-OPS Chapters 463–500 / 228 requirements
 
-Project toolchain: DEFINED
-TypeScript compiler target: ES2022 / NodeNext
-Strict type checking: ENABLED
+Source baseline: PRESENT
+Requirement source files: 228/228
+Shared foundation packages: PRESENT
+TypeScript toolchain: PRESENT
+CI workflow: CONFIGURED FOR MAIN
 
-Runtime compilation in repository CI: PENDING
+CI execution: PENDING / NO WORKFLOW RUN RECORDED YET
 Immutable artifact: PENDING
 Test execution: PENDING
 UAT: PENDING
@@ -14,4 +18,4 @@ Release: PENDING
 Production: PENDING
 Certification: PENDING
 
-The toolchain is now defined, but no claim is made that the repository has executed CI successfully until a workflow run is available.
+Important: source presence is not execution or certification evidence.
