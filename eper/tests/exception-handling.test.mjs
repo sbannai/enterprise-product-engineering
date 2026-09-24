@@ -41,6 +41,7 @@ test("exception workflow enforces idempotency and valid transitions", () => {
   const duplicate = store.create({ ...base, id: "ex-2" });
   assert.equal(duplicate.id, first.id);
 
+  store.transition("tenant-a", "ex-1", { state: "RESOLVED" });
   assert.throws(
     () => store.transition("tenant-a", "ex-1", { state: "RETRYING" }),
     /EXCEPTION_INVALID_TRANSITION/,
