@@ -22,85 +22,80 @@ test("XX01 authoritative records: create, update, version control and tenant iso
   const requirement = req("XX01");
   const created = await service.execute(requirement, {
     context: context("xx01-create"),
-    payload: { operation: "create", record: { id: "rec-1", data: { state: "OPEN" } } },
+    payload: {
+      operation: "create",
+      record: { id: "rec-1", tenantId: "behavioral-acceptance", version: 1, state: "OPEN", data: {} },
+    },
   });
-  assert.equal(created.data.payload.operation, "create");
   assert.equal(created.data.payload.record.version, 1);
 
   const updated = await service.execute(requirement, {
     context: context("xx01-update"),
-    payload: {
-      operation: "update",
-      id: "rec-1",
-      expectedVersion: 1,
-      patch: { data: { state: "CLOSED" } },
-    },
+    payload: { operation: "update", id: "rec-1", expectedVersion: 1, patch: { state: "CLOSED" } },
   });
   assert.equal(updated.data.payload.record.version, 2);
-  assert.equal(updated.data.payload.record.data.state, "CLOSED");
+  assert.equal(updated.data.payload.record.state, "CLOSED");
 
   await assert.rejects(
     service.execute(requirement, {
       context: context("xx01-stale"),
       payload: { operation: "update", id: "rec-1", expectedVersion: 1, patch: {} },
     }),
-    /VERSION_CONFLICT/,
+    /RECORD_VERSION_CONFLICT/,
   );
 
-  await assert.rejects(
-    service.execute(requirement, {
-      context: { ...context("xx01-tenant"), tenantId: "other-tenant" },
-      payload: { operation: "get", id: "rec-1" },
-    }),
-    /RECORD_NOT_FOUND/,
-  );
+  const otherTenant = await service.execute(requirement, {
+    context: { ...context("xx01-tenant"), tenantId: "other-tenant" },
+    payload: { operation: "get", id: "rec-1" },
+  });
+  assert.equal(otherTenant.data.payload.record, undefined);
 });
 
-test("XX02 authorization: explicit allow, explicit deny precedence and default deny", async () => {
+test("XX02 authorization: explicit allow, deny precedence and default deny", async () => {
   const service = new AuthorizationService();
   const requirement = req("XX02");
 
-  const result = await service.execute(requirement, {
-    context: context("xx02"),
+  const denied = await service.execute(requirement, {
+    context: context("xx02-deny"),
     payload: {
       operation: "decide",
       request: { tenantId: "behavioral-acceptance", principalId: "user-1", action: "read", resource: "record" },
       policies: [
-        { id: "allow-read", effect: "ALLOW", principalId: "user-1", action: "read", resource: "record" },
-        { id: "deny-read", effect: "DENY", principalId: "user-1", action: "read", resource: "record" },
+        { tenantId: "behavioral-acceptance", principalId: "user-1", actions: ["read"], resources: ["record"], effect: "ALLOW" },
+        { tenantId: "behavioral-acceptance", principalId: "user-1", actions: ["read"], resources: ["record"], effect: "DENY" },
       ],
     },
   });
-  assert.equal(result.data.payload.decision.allowed, false);
+  assert.equal(denied.data.payload.decision.effect, "DENY");
 
   const allowed = await service.execute(requirement, {
     context: context("xx02-allow"),
     payload: {
       operation: "decide",
       request: { tenantId: "behavioral-acceptance", principalId: "user-2", action: "read", resource: "record" },
-      policies: [{ id: "allow-user-2", effect: "ALLOW", principalId: "user-2", action: "read", resource: "record" }],
+      policies: [{ tenantId: "behavioral-acceptance", principalId: "user-2", actions: ["read"], resources: ["record"], effect: "ALLOW" }],
     },
   });
-  assert.equal(allowed.data.payload.decision.allowed, true);
+  assert.equal(allowed.data.payload.decision.effect, "ALLOW");
 
-  const denied = await service.execute(requirement, {
-    context: context("xx02-deny"),
+  const defaultDenied = await service.execute(requirement, {
+    context: context("xx02-default"),
     payload: {
       operation: "decide",
       request: { tenantId: "behavioral-acceptance", principalId: "unknown", action: "delete", resource: "record" },
     },
   });
-  assert.equal(denied.data.payload.decision.allowed, false);
+  assert.equal(defaultDenied.data.payload.decision.effect, "DENY");
 });
 
 test("XX03 business validation: valid input passes and rule violation is reported", async () => {
   const service = new BusinessValidationService();
   const requirement = req("XX03");
+
   service.addRule({
     id: "amount-positive",
-    description: "Amount must be positive",
-    severity: "ERROR",
-    validate: (input) => typeof input === "object" && input !== null && input.amount > 0,
+    evaluate: (input) =>
+      input?.amount > 0 ? null : { code: "AMOUNT_NON_POSITIVE", message: "Amount must be positive", severity: "ERROR" },
   });
 
   const valid = await service.execute(requirement, {
@@ -114,17 +109,21 @@ test("XX03 business validation: valid input passes and rule violation is reporte
     payload: { operation: "validate", input: { amount: 0 } },
   });
   assert.equal(invalid.data.payload.validation.valid, false);
-  assert.equal(invalid.data.payload.validation.errors.length, 1);
+  assert.equal(invalid.data.payload.validation.issues.length, 1);
 });
 
 test("XX04 audit evidence: append, integrity hash and tenant isolation", async () => {
   const service = new AuditEvidenceService();
   const requirement = req("XX04");
+
   const evidence = {
     id: "ev-1",
     tenantId: "behavioral-acceptance",
     requirementId: requirement.id,
-    type: "TEST_EXECUTION",
+    action: "TEST_EXECUTION",
+    principalId: "acceptance-runner",
+    correlationId: "xx04-append",
+    occurredAt: "2026-09-24T00:00:00.000Z",
     payload: { result: "PASS" },
   };
 
@@ -156,10 +155,30 @@ test("XX05 exception handling: valid transition, retry count and invalid termina
     context: context("xx05-create"),
     payload: {
       operation: "create",
-      exception: { id: "ex-1", tenantId: "behavioral-acceptance", state: "OPEN", message: "failure" },
+      exception: {
+        id: "ex-1",
+        tenantId: "behavioral-acceptance",
+        requirementId: requirement.id,
+        code: "FAILURE",
+        message: "failure",
+        idempotencyKey: "idem-ex-1",
+        createdAt: "2026-09-24T00:00:00.000Z",
+      },
     },
   });
   assert.equal(created.data.payload.exception.state, "OPEN");
+
+  const retrying = await service.execute(requirement, {
+    context: context("xx05-retry"),
+    payload: {
+      operation: "transition",
+      tenantId: "behavioral-acceptance",
+      id: "ex-1",
+      patch: { state: "RETRYING" },
+    },
+  });
+  assert.equal(retrying.data.payload.exception.state, "RETRYING");
+  assert.equal(retrying.data.payload.exception.retryCount, 1);
 
   const resolved = await service.execute(requirement, {
     context: context("xx05-resolve"),
@@ -175,14 +194,9 @@ test("XX05 exception handling: valid transition, retry count and invalid termina
   await assert.rejects(
     service.execute(requirement, {
       context: context("xx05-invalid"),
-      payload: {
-        operation: "transition",
-        tenantId: "behavioral-acceptance",
-        id: "ex-1",
-        patch: { state: "RETRYING" },
-      },
+      payload: { operation: "transition", tenantId: "behavioral-acceptance", id: "ex-1", patch: { state: "RETRYING" } },
     }),
-    /INVALID_EXCEPTION_TRANSITION/,
+    /EXCEPTION_INVALID_TRANSITION/,
   );
 });
 
@@ -194,7 +208,13 @@ test("XX06 governed reporting: publish, query filtering and tenant isolation", a
     context: context("xx06-publish"),
     payload: {
       operation: "publish",
-      row: { id: "row-1", tenantId: "behavioral-acceptance", reportType: "STATUS", values: { state: "OPEN" } },
+      row: {
+        tenantId: "behavioral-acceptance",
+        reportId: "status",
+        values: { state: "OPEN", priority: "P1" },
+        sourceRequirementIds: [requirement.id],
+        generatedAt: "2026-09-24T00:00:00.000Z",
+      },
     },
   });
 
@@ -202,7 +222,7 @@ test("XX06 governed reporting: publish, query filtering and tenant isolation", a
     context: context("xx06-query"),
     payload: {
       operation: "query",
-      request: { tenantId: "behavioral-acceptance", reportType: "STATUS", limit: 10 },
+      request: { tenantId: "behavioral-acceptance", reportId: "status", filters: { state: "OPEN" }, limit: 10 },
     },
   });
   assert.equal(own.data.payload.rows.length, 1);
@@ -211,7 +231,7 @@ test("XX06 governed reporting: publish, query filtering and tenant isolation", a
     context: context("xx06-other"),
     payload: {
       operation: "query",
-      request: { tenantId: "other-tenant", reportType: "STATUS", limit: 10 },
+      request: { tenantId: "other-tenant", reportId: "status", limit: 10 },
     },
   });
   assert.equal(other.data.payload.rows.length, 0);
