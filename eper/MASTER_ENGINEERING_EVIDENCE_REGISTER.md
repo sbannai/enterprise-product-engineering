@@ -24,7 +24,7 @@ This is the master engineering evidence index. It reconciles requirement baselin
 | Final verification gate | PR #6 | `4e405d4b1235d469e3e6fc2ef41ad808ada5b267` | CI #27 failed test contract | MERGED |
 | Regression correction | PR #7 | `d969141b7635bad41d174bbcaf289b3d06911f68` | CI #29 PASS | MERGED |
 | Behavioral acceptance | post-PR acceptance baseline | `34767bebbcee52bf82817cc787877cc1308fcde1` | CI #43 / `35950575285` | PASS |
-| Chapter 463 acceptance wave | Wave 01 | `d8650c961699a438e1586bffa3e323bc2ea270a5` | CI execution pending at register creation | PENDING |
+| Chapter 463 acceptance wave | Wave 01 | `d8650c961699a438e1586bffa3e323bc2ea270a5` | CI #47 / `35951426690` | PASS |
 
 ## 3. Capability Implementation Evidence
 
@@ -39,15 +39,33 @@ This is the master engineering evidence index. It reconciles requirement baselin
 
 ## 4. CI History and Evidence
 
-| Run | Purpose | Result | Disposition |
-|---|---|---|---|
-| #21 / `35883938493` | hardened capability verification | FAIL — typecheck | corrected missing Node type dependency |
-| #27 / `35946149839` | final verification gate | FAIL — 36/37 tests | corrected exception-transition test |
-| #29 / `35946503680` | corrected implementation verification | PASS | final implementation baseline |
-| #33 | whole-batch reconciliation | PASS | 228 requirements reconciled |
-| #43 / `35950575285` | behavioral acceptance baseline | PASS — 53/53 | six capability scenarios verified |
+| Run | Commit | Purpose | Result | Disposition |
+|---|---|---|---|---|
+| #21 / `35883938493` | `4d0067cc2cee3231b3c3db649b249e63ca7ef27e` | hardened capability verification | FAIL — typecheck | corrected missing Node type dependency |
+| #27 / `35946149839` | final-verification head | final verification gate | FAIL — 36/37 tests | corrected exception-transition test |
+| #29 / `35946503680` | `d969141b7635bad41d174bbcaf289b3d06911f68` | corrected implementation verification | PASS | final implementation baseline |
+| #32 / `35947745403` | `251c6780c6c4fc19f7e740e2d96c979786f947eb` | whole-batch implementation status | PASS | evidence document verified |
+| #33 / `35947934290` | `43be870f1a2cd420804847dd243c66afc5706200` | whole-batch reconciliation | PASS | 228 requirements reconciled |
+| #34 / `35948447281` | `23102ffcd9eb31600082a8a9a30f5273360b6a55` | 228 acceptance matrix | PASS | matrix committed |
+| #35 / `35948847815` | `83d64af827078ce8f3f9dc0f7838f9eae10aa7f3` | machine-readable acceptance register | PASS | register committed |
+| #36 / `35948855991` | `9be9128f24cbf4a16d165d5ff7df04000d293a70` | closure dashboard | PASS | dashboard committed |
+| #37 / `35949020759` | `8af40d88a70150a82ce6a7042c1a819503a69d1d` | acceptance-register gate | PASS | automated register controls |
+| #38 / `35949407406` | `45242e77dacec4a647a1912e1fb7e0ad470b4058` | six-pattern acceptance wave | PASS | pattern coverage verified |
+| #39 / `35949875183` | `71a634b609bc226ba04d9002315e059780ebd6f0` | behavioral acceptance initial implementation | FAIL | test contract correction followed |
+| #40 / `35950165835` | `8d3e1787a3c03acba0aea0805fe8a57fd53d002a` | behavioral acceptance alignment | FAIL | assertion contract correction followed |
+| #41 / `35950389424` | `54eaaa24c62770d976364b92a01f9bd22046da29` | behavioral acceptance correction | FAIL | synchronous assertion issue isolated |
+| #42 / `35950559335` | `42c4ca16ff098425c05d146526edd0a946836bda` | synchronous assertion fix | PASS | intermediate green verification |
+| #43 / `35950575285` | `34767bebbcee52bf82817cc787877cc1308fcde1` | behavioral acceptance baseline | PASS — 53/53 | six capability scenarios verified |
+| #44 / `35950860420` | `25327c7b085893e2f66e2a182e663c95dfe94b01` | behavioral baseline documentation | PASS | evidence captured |
+| #45 / `35950933291` | `623a80d02d0083326ac77f02db26a83e1d88b1fa` | behavioral evidence documentation | PASS | evidence captured |
+| #46 / `35951233771` | `e389c80995beb5cdb936379bae9e2e2702f5a0b3` | Chapter 463 acceptance-wave definition | PASS | wave documented |
+| #47 / `35951426690` | `d8650c961699a438e1586bffa3e323bc2ea270a5` | Chapter 463 executable acceptance tests | PASS | 6 requirement tests added and CI-verified |
+| #48 / `35952075516` | `a262402656e1ac09615cb03f429d8b2c42a8297f` | milestone/gate evidence register | PASS | evidence register verified |
+| #49 / `35952180775` | `eac01d9d035d182e32c7804a41a438ebd5642860` | historical milestone evidence | PASS | historical trail verified |
+| #50 / `35952413387` | `991b6053ea1e3c389a3325774dcc7e92a54bc7c8` | PR/code commit history | PASS | PR history verified |
+| #51 / `35952485082` | `926aec4bb413cddd79d4c27e65358acf94cbe37b` | master evidence register | PASS | master register verified |
 
-Failed runs are retained as evidence of the engineering correction path; they are not treated as closure failures after the documented correction and successful re-verification.
+Failed runs are retained as evidence of the engineering correction path; successful re-verification is the controlling result for corrected states.
 
 ## 5. Gate Reconciliation
 
@@ -75,13 +93,16 @@ Failed runs are retained as evidence of the engineering correction path; they ar
 | ACCEPTED | 0 |
 | PRODUCTION_CLOSED | 0 |
 
-Chapter 463 is the first requirement-specific acceptance wave. Its six executable tests were added in commit `d8650c961699a438e1586bffa3e323bc2ea270a5`; CI execution remains the next controlled evidence event.
+Chapter 463 is the first requirement-specific acceptance wave. Its six executable tests were added in commit `d8650c961699a438e1586bffa3e323bc2ea270a5` and passed in CI #47 / `35951426690`.
+
+This establishes **requirement-specific executable verification evidence** for the six Chapter 463 requirements. It does not by itself establish UAT, release, production, final business acceptance, or G9 closure.
 
 ## 7. Controlled Evidence Artifacts
 
 - `PR_AND_CODE_COMMIT_HISTORY.md`
 - `HISTORICAL_PASSED_MILESTONE_EVIDENCE.md`
 - `MILESTONE_AND_GATE_EVIDENCE_REGISTER.md`
+- `MASTER_ENGINEERING_EVIDENCE_REGISTER.md`
 - `WHOLE_BATCH_BEHAVIORAL_ACCEPTANCE_BASELINE.md`
 - `WHOLE_BATCH_CLOSURE_DASHBOARD.md`
 - `WHOLE_BATCH_ACCEPTANCE_REGISTER.json`
@@ -107,7 +128,9 @@ Requirement closure must follow the applicable authoritative evidence chain and 
 
 **Behavioral acceptance: 6/6 PASS under CI #43.**
 
-**Requirement-specific acceptance: beginning with Chapter 463.**
+**Chapter 463 requirement-specific executable verification: 6/6 PASS under CI #47.**
+
+**Requirement-level business acceptance: still pending for the 228-requirement batch.**
 
 **UAT / release / production / final acceptance / G9 freeze: not yet established.**
 
