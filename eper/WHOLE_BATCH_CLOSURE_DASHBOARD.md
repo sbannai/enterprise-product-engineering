@@ -26,12 +26,26 @@ Generated from the 228-requirement governed registry and acceptance register.
 | XX06 | governed-reporting | 38 | PASS |
 | **Total** | | **228** | **PASS** |
 
+## Behavioral acceptance baseline
+
+| Control | Result |
+|---|---|
+| Behavioral scenarios | 6/6 PASS |
+| Covered capability families | XX01–XX06 |
+| CI verification | Run #43 / 35950575285 |
+| Test suite | 53/53 PASS |
+| Verification commit | `34767bebbcee52bf82817cc787877cc1308fcde1` |
+| Evidence record | `WHOLE_BATCH_BEHAVIORAL_ACCEPTANCE_BASELINE.md` |
+
+The behavioral wave verifies representative executable behavior across all six shared capability services. It remains capability-level evidence and is not substituted for requirement-specific acceptance.
+
 ## Evidence progression
 
 | Evidence control | Current batch count |
 |---|---:|
 | BRD/SRS source mapping | 228 |
 | Executable shared capability behavior | 228 |
+| Behavioral acceptance scenarios | 6/6 |
 | Requirement-specific acceptance criteria reconciled | 0 |
 | Requirement-specific automated acceptance tests | 0 |
 | Test execution evidence | 0 |
@@ -44,7 +58,7 @@ Generated from the 228-requirement governed registry and acceptance register.
 
 ## Closure interpretation
 
-The repository has established the **engineering baseline** for all 228 requirements.
+The repository has established and CI-verified the engineering baseline for all 228 requirements, including behavioral verification of the six shared capability families.
 
 The dashboard intentionally does not convert shared capability tests into requirement-specific acceptance. The next measurable closure movement is therefore from:
 
@@ -63,6 +77,8 @@ A state transition must be supported by evidence; the register is not a substitu
 ## Current conclusion
 
 **Engineering baseline: established and CI-verified.**
+
+**Capability behavioral acceptance: 6/6 PASS.**
 
 **Requirement-level business acceptance: pending evidence acquisition and execution.**
 
