@@ -1,5 +1,7 @@
 name: EPER CI
 
+# Final verification: run the complete EPER gate on pull requests.
+
 on:
   workflow_dispatch:
   push:
