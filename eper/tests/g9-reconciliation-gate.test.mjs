@@ -40,3 +40,14 @@ test("G9 baseline does not promote pending requirements to final closure", () =>
   assert.equal(register.requirements.filter((r) => r.state === "ACCEPTED").length, 0);
   assert.equal(register.requirements.filter((r) => r.state === "PRODUCTION_CLOSED").length, 0);
 });
+
+test("G9 baseline preserves the authoritative SRS sequence", () => {
+  for (let chapter = 463; chapter <= 500; chapter++) {
+    const rows = requirementBindings.filter((r) => r.chapter === chapter);
+    const first = 2323 + (chapter - 463) * 6;
+    assert.deepEqual(
+      rows.map((r) => r.srs),
+      Array.from({ length: 6 }, (_, i) => "SRS-FR-" + (first + i)),
+    );
+  }
+});
