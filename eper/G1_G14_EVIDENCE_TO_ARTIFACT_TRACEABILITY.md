@@ -16,7 +16,7 @@ This register maps each closure gate to its controlled evidence artifacts, evide
 | G6 | tests/*; acceptance waves 01–38; CI evidence | Verification | 228 / 38 waves | PASS for engineering verification | Defect/retest disposition and downstream acceptance |
 | G7 | UAT execution records; business acceptance records; evidence archive | UAT / business | 228 requirements | PENDING | Requirement-level UAT result, approver, date and evidence |
 | G8 | G9_FINAL_RECONCILIATION_GATE_PREPARATION.md; acceptance register; reconciliation controls | Freeze preparation | 228 requirements | PREPARED / NOT EXECUTED | Authorized freeze-entry decision and prerequisites |
-| G9 | G9 preparation; g9-reconciliation-gate.test.mjs; G1_G14_GATE_EVIDENCE_MATRIX.md | Final reconciliation / freeze | 228 requirements | PENDING / NOT FROZEN | CI PASS, downstream reconciliation, authorized freeze |
+| G9 | G9_CI_RECONCILIATION_EVIDENCE.md; g9-reconciliation-gate.test.mjs; G1_G14_GATE_EVIDENCE_MATRIX.md | Final reconciliation / CI verification | 228 requirements | CI PASS / NOT FROZEN | Authoritative downstream reconciliation and authorized traceability freeze |
 | G10 | G10_IMPLEMENTATION_CLOSURE_EVIDENCE.md; CI/build/typecheck/test records | Implementation closure | Engineering baseline | PASS — implementation only | Production evidence remains separate |
 | G11 | Release candidate/package; checklist; approval; deployment record | Release | Frozen baseline | PENDING | Approved package, version/build, release and rollback evidence |
 | G12 | Production deployment; smoke/OPS validation; monitoring; rollback evidence | Production / OPS | Released baseline | PENDING | Production validation and OPS sign-off |
@@ -45,10 +45,20 @@ Control: 38 waves × 6 requirements = 228 requirement-specific executable verifi
 
 ### G8/G9 controls
 - eper/G9_FINAL_RECONCILIATION_GATE_PREPARATION.md
+- eper/G9_CI_RECONCILIATION_EVIDENCE.md
 - eper/tests/g9-reconciliation-gate.test.mjs
 - eper/G1_G14_GATE_EVIDENCE_REGISTER.md
 - eper/G1_G14_GATE_EVIDENCE_MATRIX.md
 Control: identity, chapter population, routing, contract joins and non-promotion of pending requirements.
+
+### G9 CI evidence
+- Workflow: .github/workflows/g9-reconciliation.yml
+- Run #1 / ID: 36099926093
+- Job: g9-reconciliation / ID 107960049446
+- Verification commit: 82db3396eea6cfaed52e376c1e12d7ee3c030d11
+- Conclusion: SUCCESS
+- Regular EPER CI on same commit: #139 / ID 36099926073 / SUCCESS
+Control: dedicated G9 reconciliation workflow executes successfully against the repository baseline.
 
 ### Implementation closure
 - eper/G10_IMPLEMENTATION_CLOSURE_EVIDENCE.md
@@ -56,16 +66,23 @@ Control: identity, chapter population, routing, contract joins and non-promotion
 - eper/WHOLE_BATCH_BEHAVIORAL_ACCEPTANCE_BASELINE.md
 Control: implementation verification is separated from production/business closure.
 
-## G9 controlled hold
-The G9 reconciliation test was committed at 8b6e1df54ea7d81ec89421f51d8e06f4597683f9.
-The current GitHub connector returned no PR-triggered workflow run for that commit.
+## G9 controlled state
 
-Therefore: G9 CI PASS: NOT YET VERIFIED.
-G9 remains: PENDING / NOT FROZEN.
-No traceability-freeze claim is made until CI evidence and required downstream reconciliation are both available.
+The dedicated G9 reconciliation workflow has now been executed successfully.
+
+**G9 CI verification: PASS.**  
+Workflow run #1 / ID 36099926093 completed with SUCCESS. The g9-reconciliation job also completed with SUCCESS, including build and G9 reconciliation test.
+
+The CI result verifies the repository-side G9 reconciliation controls. It does **not** execute or imply traceability freeze.
+
+**G9 traceability freeze: NOT EXECUTED / NOT FROZEN.**
+
+Authoritative downstream evidence remains required for UAT/business acceptance, release, production/OPS, final acceptance and formal traceability freeze.
 
 ## Evidence promotion chain
+
 G1 source baseline → G2 routing → G3 design traceability → G4 contracts → G5 implementation → G6 verification → G7 UAT/business → G8 freeze preparation → G9 reconciliation/freeze → G10 implementation closure → G11 release → G12 production/OPS → G13 final acceptance/certification → G14 audit submission/controlled closure.
 
 ## Controlled conclusion
-This register provides the gate-to-artifact linkage required for audit navigation. It does not convert missing downstream evidence into a PASS state. G9 remains deliberately held pending CI verification and authorized freeze execution; G11–G14 remain dependent on authoritative downstream evidence.
+
+The G9 engineering reconciliation CI evidence is verified and recorded. G9 remains **NOT FROZEN** because the downstream authoritative acceptance chain and authorized traceability-freeze execution are still outstanding. G11–G14 remain dependent on authoritative downstream evidence.
