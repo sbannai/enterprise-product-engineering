@@ -1,0 +1,25 @@
+TAP version 13
+# Subtest: REQ-46301: creates and reads tenant-scoped authoritative record
+ok 1 - REQ-46301: creates and reads tenant-scoped authoritative record
+# Subtest: REQ-46301: stale update is rejected
+ok 2 - REQ-46301: stale update is rejected
+# Subtest: REQ-46302: missing permission is denied
+ok 3 - REQ-46302: missing permission is denied
+# Subtest: REQ-46302: cross-tenant resource access is denied
+ok 4 - REQ-46302: cross-tenant resource access is denied
+# Subtest: REQ-46303: mandatory business conditions are enforced
+ok 5 - REQ-46303: mandatory business conditions are enforced
+# Subtest: REQ-46304: privileged action produces audit evidence
+ok 6 - REQ-46304: privileged action produces audit evidence
+# Subtest: REQ-46305: controlled exception returns governed failure
+ok 7 - REQ-46305: controlled exception returns governed failure
+# Subtest: REQ-46306: reporting is tenant-scoped and authorized
+ok 8 - REQ-46306: reporting is tenant-scoped and authorized
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
