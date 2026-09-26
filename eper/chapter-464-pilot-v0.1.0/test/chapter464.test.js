@@ -1,0 +1,9 @@
+const test=require('node:test');const assert=require('node:assert/strict');const{SupplierRepository,auth,audit,controlledException,report,AuthorizationError,ValidationError}=require('../src/domain');
+const A={authenticated:true,principalId:'u1',tenantIds:['T1'],permissions:['supplier:create','supplier:transition','report:read']};const B={authenticated:true,principalId:'u2',tenantIds:['T2'],permissions:['report:read']};
+function seed(r){return r.create(A,{id:'S1',tenantId:'T1',name:'Acme Supplier',status:'PROSPECTIVE'})}
+test('REQ-46401: authoritative supplier lifecycle history is preserved',()=>{const r=new SupplierRepository();seed(r);const s=r.transition(A,'S1','QUALIFIED','qualification complete');assert.equal(s.lifecycleHistory.length,2);assert.equal(s.status,'QUALIFIED')});
+test('REQ-46402: unauthorized material lifecycle action is denied',()=>{const r=new SupplierRepository();seed(r);assert.throws(()=>r.transition(B,'S1','QUALIFIED','x'),AuthorizationError)});
+test('REQ-46403: invalid business transition is rejected',()=>{const r=new SupplierRepository();seed(r);assert.throws(()=>r.transition(A,'S1','INACTIVE',''),ValidationError)});
+test('REQ-46404: material supplier action produces audit evidence',()=>{const a=[];audit(a,A,'supplier:transition','S1','SUCCESS');assert.equal(a[0].resourceId,'S1')});
+test('REQ-46405: controlled exception is represented as governed failure',()=>{const x=controlledException(()=>{throw new Error('supplier policy rejection')});assert.equal(x.ok,false);assert.equal(x.error.message,'supplier policy rejection')});
+test('REQ-46406: reporting is tenant-scoped and authorized',()=>{const r=new SupplierRepository();seed(r);r.create({...A,tenantIds:['T2'],principalId:'u2'},{id:'S2',tenantId:'T2',name:'Other Supplier',status:'ACTIVE'});assert.deepEqual(report(r,A).map(x=>x.id),['S1'])});
