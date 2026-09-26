@@ -1,0 +1,64 @@
+name: EPER Chapter 466
+
+on:
+  push:
+    paths:
+      - 'eper/chapter-466-pilot-v0.1.0/**'
+      - '.github/workflows/eper-chapter-466.yml'
+  pull_request:
+    paths:
+      - 'eper/chapter-466-pilot-v0.1.0/**'
+      - '.github/workflows/eper-chapter-466.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eper/chapter-466-pilot-v0.1.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Execute candidate tests and capture actual output
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test 2>&1 | tee ci-test-output.txt
+
+      - name: Capture execution metadata
+        shell: bash
+        run: |
+          cat > execution-metadata.md <<EOF
+          # Chapter 466 CI Execution Metadata
+
+          - Commit: $GITHUB_SHA
+          - Workflow: $GITHUB_WORKFLOW
+          - Run ID: $GITHUB_RUN_ID
+          - Run Number: $GITHUB_RUN_NUMBER
+          - Attempt: $GITHUB_RUN_ATTEMPT
+          - Repository: $GITHUB_REPOSITORY
+          - Ref: $GITHUB_REF
+          - Event: $GITHUB_EVENT_NAME
+          - Runner OS: $RUNNER_OS
+          - Node: $(node --version)
+          - Timestamp UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          This artifact contains actual CI execution metadata for this run.
+          It is not a historical implementation record.
+          EOF
+
+      - name: Upload execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eper-chapter-466-execution
+          path: |
+            eper/chapter-466-pilot-v0.1.0/ci-test-output.txt
+            eper/chapter-466-pilot-v0.1.0/execution-metadata.md
+          if-no-files-found: warn
