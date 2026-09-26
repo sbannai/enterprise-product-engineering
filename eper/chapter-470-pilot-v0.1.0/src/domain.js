@@ -1,0 +1,15 @@
+export const STATES=Object.freeze({DRAFT:"DRAFT",ACTIVE:"ACTIVE",SUSPENDED:"SUSPENDED",COMPLETED:"COMPLETED",CANCELLED:"CANCELLED"});
+export class ValidationError extends Error{} export class AuthorizationError extends Error{}
+const transitions={DRAFT:new Set(["ACTIVE","CANCELLED"]),ACTIVE:new Set(["SUSPENDED","COMPLETED","CANCELLED"]),SUSPENDED:new Set(["ACTIVE","CANCELLED"]),COMPLETED:new Set([]),CANCELLED:new Set([])};
+function authorize(ctx,tenantId,p){if(!ctx?.tenantId||ctx.tenantId!==tenantId)throw new AuthorizationError("Tenant context denied");if(!ctx.permissions?.includes(p))throw new AuthorizationError("Permission denied")}
+export class RecordRepository{
+ constructor(){this.records=new Map()}
+ create(ctx,input){authorize(ctx,input.tenantId,"record:write");if(!input.reference||!input.category)throw new ValidationError("Reference and category are required");const id=input.id??`rec-${this.records.size+1}`;const r={id,tenantId:input.tenantId,reference:input.reference,category:input.category,status:STATES.DRAFT,version:1,history:[{action:"CREATE",status:STATES.DRAFT,at:new Date().toISOString()}]};this.records.set(id,r);return structuredClone(r)}
+ transition(ctx,id,next,reason){const r=this.records.get(id);if(!r)throw new ValidationError("Record not found");authorize(ctx,r.tenantId,"record:transition");if(!reason||reason.length<3)throw new ValidationError("Transition reason is required");if(!transitions[r.status]?.has(next))throw new ValidationError(`Invalid record transition ${r.status} -> ${next}`);r.status=next;r.version++;r.history.push({action:"STATUS_CHANGE",status:next,reason,at:new Date().toISOString()});return structuredClone(r)}
+ get(ctx,id){const r=this.records.get(id);if(!r)throw new ValidationError("Record not found");authorize(ctx,r.tenantId,"record:read");return structuredClone(r)}
+ list(ctx,tenantId){authorize(ctx,tenantId,"record:read");return [...this.records.values()].filter(x=>x.tenantId===tenantId).map(structuredClone)}
+}
+export function validateMaterialChange(record,{approvalConfirmed,preconditionsMet}){if(record.status==="DRAFT"&&(!approvalConfirmed||!preconditionsMet))throw new ValidationError("Approval and mandatory preconditions are required");return true}
+export function audit(event,actor,resourceId){return{event,actorId:actor.actorId,tenantId:actor.tenantId,resourceId,at:new Date().toISOString()}}
+export function controlledException(code,message,context={}){return{code,message,context,governed:true,at:new Date().toISOString()}}
+export function report(ctx,repo,tenantId){authorize(ctx,tenantId,"record:report");const rows=repo.list(ctx,tenantId);return{tenantId,totalRecords:rows.length,byStatus:Object.fromEntries(Object.values(STATES).map(s=>[s,rows.filter(x=>x.status===s).length]))}}
