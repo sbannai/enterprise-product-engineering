@@ -1,0 +1,24 @@
+name: EPER Chapter 487
+on:
+  push:
+    paths: ["eper/chapter-487-pilot-v0.1.0/**",".github/workflows/eper-chapter-487.yml"]
+  pull_request:
+    paths: ["eper/chapter-487-pilot-v0.1.0/**",".github/workflows/eper-chapter-487.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eper/chapter-487-pilot-v0.1.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: set -o pipefail; node --test 2>&1 | tee ci-test-output.txt
+      - run: printf "repository=%s\ncommit=%s\nrun_id=%s\nnode=%s\ntimestamp=%s\n" "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(node --version)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > execution-metadata.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eper-chapter-487-execution
+          path: |
+            eper/chapter-487-pilot-v0.1.0/ci-test-output.txt
+            eper/chapter-487-pilot-v0.1.0/execution-metadata.txt
