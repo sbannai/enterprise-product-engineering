@@ -1,0 +1,15 @@
+export const STATES=Object.freeze({PLANNED:"PLANNED",SCHEDULED:"SCHEDULED",RELEASED:"RELEASED",IN_PROGRESS:"IN_PROGRESS",COMPLETED:"COMPLETED",CANCELLED:"CANCELLED"});
+export class ValidationError extends Error{} export class AuthorizationError extends Error{}
+const transitions={PLANNED:new Set(["SCHEDULED","CANCELLED"]),SCHEDULED:new Set(["RELEASED","CANCELLED"]),RELEASED:new Set(["IN_PROGRESS","CANCELLED"]),IN_PROGRESS:new Set(["COMPLETED","CANCELLED"]),COMPLETED:new Set([]),CANCELLED:new Set([])};
+function authorize(ctx,tenantId,p){if(!ctx?.tenantId||ctx.tenantId!==tenantId)throw new AuthorizationError("Tenant context denied");if(!ctx.permissions?.includes(p))throw new AuthorizationError("Permission denied")}
+export class ProductionRepository{
+ constructor(){this.orders=new Map()}
+ create(ctx,input){authorize(ctx,input.tenantId,"production:write");if(!input.workOrder||!input.item||!Number.isInteger(input.quantity)||input.quantity<=0)throw new ValidationError("Work order, item and positive quantity are required");const id=input.id??`wo-${this.orders.size+1}`;const o={id,tenantId:input.tenantId,workOrder:input.workOrder,item:input.item,quantity:input.quantity,status:STATES.PLANNED,version:1,history:[{action:"CREATE",status:STATES.PLANNED,at:new Date().toISOString()}]};this.orders.set(id,o);return structuredClone(o)}
+ transition(ctx,id,next,reason){const o=this.orders.get(id);if(!o)throw new ValidationError("Work order not found");authorize(ctx,o.tenantId,"production:transition");if(!reason||reason.length<3)throw new ValidationError("Transition reason is required");if(!transitions[o.status]?.has(next))throw new ValidationError(`Invalid production transition ${o.status} -> ${next}`);o.status=next;o.version++;o.history.push({action:"STATUS_CHANGE",status:next,reason,at:new Date().toISOString()});return structuredClone(o)}
+ get(ctx,id){const o=this.orders.get(id);if(!o)throw new ValidationError("Work order not found");authorize(ctx,o.tenantId,"production:read");return structuredClone(o)}
+ list(ctx,tenantId){authorize(ctx,tenantId,"production:read");return [...this.orders.values()].filter(x=>x.tenantId===tenantId).map(structuredClone)}
+}
+export function validateMaterialChange(order,{scheduleApproved,materialAvailable}){if(order.status==="PLANNED"&&(!scheduleApproved||!materialAvailable))throw new ValidationError("Schedule approval and material availability are required");return true}
+export function audit(event,actor,resourceId){return{event,actorId:actor.actorId,tenantId:actor.tenantId,resourceId,at:new Date().toISOString()}}
+export function controlledException(code,message,context={}){return{code,message,context,governed:true,at:new Date().toISOString()}}
+export function report(ctx,repo,tenantId){authorize(ctx,tenantId,"production:report");const rows=repo.list(ctx,tenantId);return{tenantId,totalWorkOrders:rows.length,byStatus:Object.fromEntries(Object.values(STATES).map(s=>[s,rows.filter(x=>x.status===s).length])),totalQuantity:rows.reduce((n,x)=>n+x.quantity,0)}}
