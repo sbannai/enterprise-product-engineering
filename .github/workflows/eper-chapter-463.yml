@@ -29,7 +29,9 @@ jobs:
         run: node --version
 
       - name: Run Chapter 463 tests
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee ci-test-output.txt
 
       - name: Generate execution metadata
         run: |
@@ -49,5 +51,5 @@ jobs:
         with:
           name: eper-chapter-463-execution
           path: |
-            eper/chapter-463-pilot-v0.1.0/test-output.txt
+            eper/chapter-463-pilot-v0.1.0/ci-test-output.txt
             eper/chapter-463-pilot-v0.1.0/execution-metadata.md
