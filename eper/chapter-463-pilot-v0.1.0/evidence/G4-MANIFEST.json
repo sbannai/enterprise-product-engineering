@@ -1,0 +1,48 @@
+{
+  "evidencePackage": "EPER-G4-CH463",
+  "chapter": 463,
+  "status": "PREPARED_NOT_EXECUTED",
+  "repository": "sbannai/enterprise-product-engineering",
+  "implementationPath": "eper/chapter-463-pilot-v0.1.0",
+  "workflowPath": ".github/workflows/eper-chapter-463.yml",
+  "execution": {
+    "command": "npm test",
+    "workingDirectory": "eper/chapter-463-pilot-v0.1.0",
+    "nodeMajor": 20,
+    "runner": "GitHub Actions Ubuntu"
+  },
+  "requirements": [
+    {"id":"REQ-46301","srs":"SRS-FR-2323","test":"authoritative record creation/read + concurrency"},
+    {"id":"REQ-46302","srs":"SRS-FR-2324","test":"permission denial + cross-tenant denial"},
+    {"id":"REQ-46303","srs":"SRS-FR-2325","test":"mandatory business-condition validation"},
+    {"id":"REQ-46304","srs":"SRS-FR-2326","test":"privileged-action audit evidence"},
+    {"id":"REQ-46305","srs":"SRS-FR-2327","test":"controlled exception result"},
+    {"id":"REQ-46306","srs":"SRS-FR-2328","test":"tenant-scoped authorized reporting"}
+  ],
+  "requiredEvidence": [
+    "workflow-run-id",
+    "workflow-run-url",
+    "executed-commit-sha",
+    "job-id",
+    "runtime-version",
+    "execution-timestamp",
+    "test-result",
+    "pass-count",
+    "fail-count",
+    "retained-artifact-id",
+    "job-log-reference"
+  ],
+  "executionRecord": {
+    "workflowRunId": null,
+    "workflowRunUrl": null,
+    "executedCommitSha": null,
+    "jobId": null,
+    "runtimeVersion": null,
+    "executionTimestampUtc": null,
+    "result": null,
+    "passCount": null,
+    "failCount": null,
+    "artifactId": null,
+    "jobLogReference": null
+  }
+}
