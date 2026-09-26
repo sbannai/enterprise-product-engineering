@@ -1,0 +1,1 @@
+{"name":"eper-chapter-464-pilot","version":"0.1.0","private":true,"description":"NEW implementation candidate for Chapter 464; not historical evidence.","scripts":{"test":"node --test","start":"node src/app.js"},"engines":{"node":">=20"}}
