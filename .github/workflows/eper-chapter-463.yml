@@ -1,0 +1,53 @@
+name: EPER Chapter 463
+
+on:
+  push:
+    paths:
+      - "eper/chapter-463-pilot-v0.1.0/**"
+      - ".github/workflows/eper-chapter-463.yml"
+  pull_request:
+    paths:
+      - "eper/chapter-463-pilot-v0.1.0/**"
+      - ".github/workflows/eper-chapter-463.yml"
+
+jobs:
+  chapter-463-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eper/chapter-463-pilot-v0.1.0
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify runtime
+        run: node --version
+
+      - name: Run Chapter 463 tests
+        run: npm test
+
+      - name: Generate execution metadata
+        run: |
+          {
+            echo "## EPER Chapter 463 Execution"
+            echo ""
+            echo "- Runtime: Node.js 20"
+            echo "- Working directory: eper/chapter-463-pilot-v0.1.0"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Run ID: $GITHUB_RUN_ID"
+            echo "- Workflow: $GITHUB_WORKFLOW"
+            echo "- Executed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > execution-metadata.md
+
+      - name: Upload execution evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: eper-chapter-463-execution
+          path: |
+            eper/chapter-463-pilot-v0.1.0/test-output.txt
+            eper/chapter-463-pilot-v0.1.0/execution-metadata.md
