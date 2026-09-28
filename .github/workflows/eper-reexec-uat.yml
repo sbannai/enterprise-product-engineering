@@ -1,0 +1,59 @@
+name: EPER REEXEC-002 Controlled UAT Technical Simulation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'eper/**'
+      - '.github/workflows/eper-reexec-uat.yml'
+
+jobs:
+  controlled-uat-simulation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+
+      - name: Install dependencies
+        working-directory: eper
+        run: npm ci
+
+      - name: Build
+        working-directory: eper
+        run: npm run build
+
+      - name: Execute controlled UAT technical simulation
+        working-directory: eper
+        run: |
+          mkdir -p reexec-evidence
+          npm test 2>&1 | tee reexec-evidence/uat-technical-execution.log
+          cat > reexec-evidence/uat-execution-metadata.txt <<EOF
+program=EPER-REEXEC-002
+classification=NEW CONTROLLED UAT TECHNICAL SIMULATION — NOT BUSINESS UAT / NOT HISTORICAL EVIDENCE
+population=228 requirements / 38 chapters
+commit=${GITHUB_SHA}
+run_id=${GITHUB_RUN_ID}
+run_number=${GITHUB_RUN_NUMBER}
+workflow=${GITHUB_WORKFLOW}
+repository=${GITHUB_REPOSITORY}
+runner_os=${RUNNER_OS}
+node=$(node --version)
+npm=$(npm --version)
+timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+business_acceptance=NOT_EXECUTED
+formal_uat_signoff=NOT_EXECUTED
+EOF
+
+      - name: Upload UAT technical evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-REEXEC-002-UAT-TECHNICAL-${{ github.run_id }}
+          path: eper/reexec-evidence/
+          if-no-files-found: error
