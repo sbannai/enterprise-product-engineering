@@ -1,0 +1,55 @@
+name: EPER RE-EXEC-001 Controlled QA Re-Execution
+
+on:
+  push:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-qa.yml"
+  workflow_dispatch:
+
+jobs:
+  controlled-qa-reexecution:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build candidate
+        run: npm run build
+      - name: Execute 228 requirement test suite
+        run: npm test
+      - name: Record execution metadata
+        if: always()
+        run: |
+          mkdir -p reexec-evidence
+          {
+            echo "program=EPER-REEXEC-001"
+            echo "classification=NEW CONTROLLED EXECUTION EVIDENCE — NOT HISTORICAL EVIDENCE"
+            echo "population=228 requirements / 38 chapters"
+            echo "commit=${{github.sha}}"
+            echo "run_id=${{github.run_id}}"
+            echo "run_number=${{github.run_number}}"
+            echo "workflow=${{github.workflow}}"
+            echo "repository=${{github.repository}}"
+            echo "runner_os=$RUNNER_OS"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > reexec-evidence/execution-metadata.txt
+      - name: Upload execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-REEXEC-001-${{github.run_id}}
+          path: eper/reexec-evidence/execution-metadata.txt
+          if-no-files-found: error
