@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           URL="${UAT_BASE_URL%/}${UAT_HEALTH_PATH}"
           CODE="$(curl --silent --show-error --output /tmp/uat-health-body.json --write-out '%{http_code}' --max-time 15 --connect-timeout 5 --proto '=https' --tlsv1.2 "$URL")"
-          printf 'http_status=%s\n' "$CODE"
+          printf 'http_status=%s\n' "$CODE" >> "$GITHUB_OUTPUT"
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
           const status = Number(process.env.HTTP_STATUS ?? "0");
@@ -70,7 +70,6 @@ jobs:
           if (!result.reachable) process.exitCode = 1;
           NODE
         env:
-          HTTP_STATUS: ${{ steps.health.outputs.http_status }}
 
       - name: Record target identity and evidence boundary
         if: always()
