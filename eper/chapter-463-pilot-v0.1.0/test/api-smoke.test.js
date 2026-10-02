@@ -4,15 +4,21 @@ const { server } = require('../src/app');
 
 let baseUrl;
 
-test('HTTP API smoke: health endpoint responds from a real listening server', async (t) => {
+test.before(async () => {
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
-  t.after(async () => {
-    if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  });
   baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+test.after(async () => {
+  if (server.listening) {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('HTTP API smoke: health endpoint responds from a real listening server', async () => {
   const response = await fetch(`${baseUrl}/health`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: 'ok' });
