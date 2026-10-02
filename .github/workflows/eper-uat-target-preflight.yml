@@ -16,6 +16,11 @@ on:
         description: "Expected deployed commit/build identifier"
         required: true
         type: string
+      build_id_field:
+        description: "JSON field in health response that contains the deployed build identifier"
+        required: true
+        default: "buildId"
+        type: string
 
 permissions:
   contents: read
@@ -57,6 +62,8 @@ jobs:
         env:
           UAT_BASE_URL: ${{ inputs.base_url }}
           UAT_HEALTH_PATH: ${{ inputs.health_path }}
+          EXPECTED_BUILD: ${{ inputs.expected_build }}
+          BUILD_ID_FIELD: ${{ inputs.build_id_field }}
         run: |
           set -euo pipefail
           URL="${UAT_BASE_URL%/}${UAT_HEALTH_PATH}"
@@ -81,6 +88,7 @@ jobs:
           UAT_BASE_URL: ${{ inputs.base_url }}
           UAT_HEALTH_PATH: ${{ inputs.health_path }}
           EXPECTED_BUILD: ${{ inputs.expected_build }}
+          BUILD_ID_FIELD: ${{ inputs.build_id_field }}
           HEALTH_OUTCOME: ${{ steps.health.outcome }}
           WORKFLOW_COMMIT: ${{ github.sha }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
@@ -94,6 +102,7 @@ jobs:
             targetHost: url.host,
             healthPath: process.env.UAT_HEALTH_PATH,
             expectedBuild: process.env.EXPECTED_BUILD,
+            buildIdField: process.env.BUILD_ID_FIELD,
             workflowCommit: process.env.WORKFLOW_COMMIT,
             runId: process.env.WORKFLOW_RUN_ID,
             healthStepOutcome: process.env.HEALTH_OUTCOME,
@@ -102,7 +111,7 @@ jobs:
             businessUatExecuted: false,
             businessAcceptance: "NOT_EXECUTED",
             formalSignoff: "NOT_EXECUTED",
-            nextChecks: ["Verify actual deployed build identity against expectedBuild", "Verify OAuth login using approved test identity", "Confirm role/tenant scope", "Confirm approved test data", "Confirm audit/report visibility", "Obtain business authority approval before executing B01"]
+            nextChecks: ["Verify OAuth login using approved test identity", "Verify OAuth login using approved test identity", "Confirm role/tenant scope", "Confirm approved test data", "Confirm audit/report visibility", "Obtain business authority approval before executing B01"]
           };
           writeFileSync("uat-target-preflight.json", JSON.stringify(record,null,2)+"\n");
           NODE
