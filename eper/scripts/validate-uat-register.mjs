@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const file = resolve(process.cwd(), "uat/EPER_228_BUSINESS_UAT_EXECUTION_CAPTURE.csv");
+const file = resolve(process.cwd(), process.env.EPER_UAT_REGISTER_PATH ?? "uat/EPER_228_BUSINESS_UAT_EXECUTION_CAPTURE.csv");
 const text = readFileSync(file, "utf8").replace(/^\uFEFF/, "").trimEnd();
 
 function parseCsv(source) {
