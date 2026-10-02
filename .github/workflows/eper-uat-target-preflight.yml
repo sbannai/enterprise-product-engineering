@@ -54,7 +54,7 @@ jobs:
           if (url.username || url.password || url.search || url.hash) throw new Error("Base URL must not contain credentials, query parameters, or fragments.");
           if (!path.startsWith("/") || path.startsWith("//") || path.includes("..") || /[?#]/.test(path)) throw new Error("Health path must be an absolute safe path without query/fragment.");
           if (!expected.trim()) throw new Error("Expected build identifier is required.");
-          console.log(JSON.stringify({scheme:url.protocol,host:url.host,hostAllowlistMatch:true,healthPath:path,expectedBuild:expected.trim(),credentialsInUrl:false},null,2));
+          console.log(JSON.stringify({scheme:url.protocol,host:url.host,hostAllowlistMatch:true,healthPath:path,credentialsInUrl:false},null,2));
           NODE
 
       - name: Check approved target health endpoint
@@ -81,7 +81,7 @@ jobs:
           const reachable = status >= 200 && status < 300;
           const buildMatched = typeof observedBuild === "string" && observedBuild === process.env.EXPECTED_BUILD;
           const result = { checkedAt: new Date().toISOString(), httpStatus: status, reachable, buildIdField: field, buildIdentityMatched: buildMatched, responseBodyCaptured: false };
-          writeFileSync("uat-target-health-result.json", JSON.stringify(result,null,2)+"\\n");
+          writeFileSync("uat-target-health-result.json", JSON.stringify(result,null,2)+"\n");
           console.log(JSON.stringify(result,null,2));
           if (!reachable || !buildMatched) process.exitCode = 1;
           NODE
@@ -115,7 +115,7 @@ jobs:
             businessUatExecuted: false,
             businessAcceptance: "NOT_EXECUTED",
             formalSignoff: "NOT_EXECUTED",
-            nextChecks: ["Verify OAuth login using approved test identity", "Verify OAuth login using approved test identity", "Confirm role/tenant scope", "Confirm approved test data", "Confirm audit/report visibility", "Obtain business authority approval before executing B01"]
+            nextChecks: ["Verify OAuth login using approved test identity", "Confirm role/tenant scope", "Confirm approved test data", "Confirm audit/report visibility", "Obtain business authority approval before executing B01"]
           };
           writeFileSync("uat-target-preflight.json", JSON.stringify(record,null,2)+"\n");
           NODE
