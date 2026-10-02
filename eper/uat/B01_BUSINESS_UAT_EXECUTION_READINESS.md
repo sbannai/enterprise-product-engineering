@@ -25,8 +25,11 @@ Record a real value/reference and the responsible person for each item. Do not m
 | E10 | Target audit logs and business reports are accessible | Access verification evidence | PENDING |
 | E11 | Evidence archive location and naming/reference convention are available | Archive index/location reference | PENDING |
 | E12 | Defect and exception handling routes, owners, and escalation path are known | Tracker/project reference | PENDING |
+| E13 | Every in-scope B01 requirement has a reviewed scenario reference, explicit expected result, and approved requirement/SRS acceptance-criteria source reference | Completed case-gap register and source-document references; business/requirements owner approval | PENDING |
 
-**Gate decision:** B01 may start only after the authorized business owner confirms E1–E12 are satisfied. If any item is blocked or unknown, record the blocker and stop; do not manufacture execution records.
+**Gate decision:** B01 may start only after the authorized business owner confirms E1–E13 are satisfied. E13 is requirement-specific: a pattern/capability label is not an executable test case. Each of the 48 rows must point to reviewed scenario steps, an explicit expected result, and the approved source acceptance criteria. If any item is blocked or unknown, record the blocker and stop; do not manufacture execution records.
+
+The initial gap inventory is `eper/uat/B01_REQUIREMENT_CASE_GAP_REGISTER.csv`. It records missing case inputs as gaps only; it is not an approved test-case set and must not be used to infer results.
 
 ## 2. Batch scope
 
