@@ -37,7 +37,7 @@ export class OrderRepository{
   }
   list(ctx,tenantId){
     authorize(ctx,tenantId,"order:read");
-    return [...this.orders.values()].filter(x=>x.tenantId===tenantId).map(structuredClone);
+    return [...this.orders.values()].filter(x=>x.tenantId===tenantId).map((item) => structuredClone(item));
   }
 }
 export function validateMaterialChange(order,{allocationConfirmed,pricingConfirmed}){
