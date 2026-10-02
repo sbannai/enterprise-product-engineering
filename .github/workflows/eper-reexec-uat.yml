@@ -21,39 +21,52 @@ jobs:
           cache: npm
           cache-dependency-path: eper/package-lock.json
 
+      - name: Initialize diagnostic evidence
+        run: |
+          mkdir -p eper/reexec-evidence
+          printf "program=EPER-REEXEC-002\nclassification=NEW CONTROLLED UAT TECHNICAL SIMULATION — NOT BUSINESS UAT / NOT HISTORICAL EVIDENCE\ncommit=%s\nrun_id=%s\nrun_number=%s\nworkflow=%s\nrepository=%s\nrunner_os=%s\nnode=%s\nnpm=%s\ntimestamp=%s\nbusiness_acceptance=NOT_EXECUTED\nformal_uat_signoff=NOT_EXECUTED\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_WORKFLOW" "$GITHUB_REPOSITORY" "$RUNNER_OS" "$(node --version)" "$(npm --version)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > eper/reexec-evidence/uat-execution-metadata.txt
+
       - name: Install dependencies
-        working-directory: eper
-        run: npm ci
-
-      - name: Build
-        working-directory: eper
-        run: npm run build
-
-      - name: Execute controlled UAT technical simulation
+        id: install
         working-directory: eper
         run: |
-          mkdir -p reexec-evidence
-          npm test 2>&1 | tee reexec-evidence/uat-technical-execution.log
-          cat > reexec-evidence/uat-execution-metadata.txt <<EOF
-program=EPER-REEXEC-002
-classification=NEW CONTROLLED UAT TECHNICAL SIMULATION — NOT BUSINESS UAT / NOT HISTORICAL EVIDENCE
-population=228 requirements / 38 chapters
-commit=${GITHUB_SHA}
-run_id=${GITHUB_RUN_ID}
-run_number=${GITHUB_RUN_NUMBER}
-workflow=${GITHUB_WORKFLOW}
-repository=${GITHUB_REPOSITORY}
-runner_os=${RUNNER_OS}
-node=$(node --version)
-npm=$(npm --version)
-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-business_acceptance=NOT_EXECUTED
-formal_uat_signoff=NOT_EXECUTED
-EOF
+          set +e
+          npm ci 2>&1 | tee reexec-evidence/npm-ci.log
+          command_status=${PIPESTATUS[0]}
+          printf "npm_ci_exit_code=%s\n" "$command_status" >> reexec-evidence/npm-ci.log
+          exit "$command_status"
 
-      - name: Upload UAT technical evidence
+      - name: Build
+        id: build
+        if: always() && steps.install.outcome == 'success'
+        working-directory: eper
+        run: |
+          set +e
+          npm run build 2>&1 | tee reexec-evidence/build.log
+          command_status=${PIPESTATUS[0]}
+          printf "build_exit_code=%s\n" "$command_status" >> reexec-evidence/build.log
+          exit "$command_status"
+
+      - name: Execute controlled UAT technical simulation
+        id: test
+        if: always() && steps.build.outcome == 'success'
+        working-directory: eper
+        run: |
+          set +e
+          npm test 2>&1 | tee reexec-evidence/uat-technical-execution.log
+          command_status=${PIPESTATUS[0]}
+          printf "npm_test_exit_code=%s\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
+          exit "$command_status"
+
+      - name: Append step outcomes
+        if: always()
+        run: |
+          printf "install_outcome=%s\nbuild_outcome=%s\ntest_outcome=%s\n" "${{ steps.install.outcome }}" "${{ steps.build.outcome }}" "${{ steps.test.outcome }}" >> eper/reexec-evidence/uat-execution-metadata.txt
+
+      - name: Upload diagnostic and technical evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: EPER-REEXEC-002-UAT-TECHNICAL-${{ github.run_id }}
+          name: EPER-REEXEC-002-DIAGNOSTICS-${{ github.run_id }}
           path: eper/reexec-evidence/
           if-no-files-found: error
