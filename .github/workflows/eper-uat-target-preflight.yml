@@ -58,6 +58,7 @@ jobs:
           URL="${UAT_BASE_URL%/}${UAT_HEALTH_PATH}"
           CODE="$(curl --silent --show-error --output /tmp/uat-health-body.json --write-out '%{http_code}' --max-time 15 --connect-timeout 5 --proto '=https' --tlsv1.2 "$URL")"
           printf 'http_status=%s\n' "$CODE" >> "$GITHUB_OUTPUT"
+          export HTTP_STATUS="$CODE"
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
           const status = Number(process.env.HTTP_STATUS ?? "0");
@@ -69,8 +70,6 @@ jobs:
           console.log(JSON.stringify(result,null,2));
           if (!result.reachable) process.exitCode = 1;
           NODE
-        env:
-          HTTP_STATUS: ${{ steps.health.outputs.http_status }}
 
       - name: Record target identity and evidence boundary
         if: always()
@@ -79,8 +78,8 @@ jobs:
           UAT_HEALTH_PATH: ${{ inputs.health_path }}
           EXPECTED_BUILD: ${{ inputs.expected_build }}
           HEALTH_OUTCOME: ${{ steps.health.outcome }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_COMMIT: ${{ github.sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           node --input-type=module <<'NODE'
           import { writeFileSync } from "node:fs";
@@ -91,8 +90,8 @@ jobs:
             targetHost: url.host,
             healthPath: process.env.UAT_HEALTH_PATH,
             expectedBuild: process.env.EXPECTED_BUILD,
-            workflowCommit: process.env.GITHUB_SHA,
-            runId: process.env.GITHUB_RUN_ID,
+            workflowCommit: process.env.WORKFLOW_COMMIT,
+            runId: process.env.WORKFLOW_RUN_ID,
             healthStepOutcome: process.env.HEALTH_OUTCOME,
             oauthLoginVerified: false,
             testerRoleVerified: false,
