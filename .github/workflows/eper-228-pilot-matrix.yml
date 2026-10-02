@@ -1,0 +1,41 @@
+name: EPER 228 Requirement Pilot Test Matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'eper/**'
+      - '.github/workflows/eper-228-pilot-matrix.yml'
+  push:
+    paths:
+      - 'eper/**'
+      - '.github/workflows/eper-228-pilot-matrix.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  chapter-pilot-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Execute 38 chapter pilot test suites and build 228-row matrix
+        run: node eper/scripts/run-chapter-pilot-matrix.mjs
+
+      - name: Upload per-requirement results and raw test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-${{ github.run_id }}
+          path: |
+            eper/reexec-evidence/
+          if-no-files-found: warn
+          retention-days: 90
