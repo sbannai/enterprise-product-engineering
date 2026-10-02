@@ -39,7 +39,7 @@ for (const chapter of chapters) {
   }));
   const testResultsByRequirement = new Map();
   for (const testCase of testCases) {
-    for (const match of testCase.title.matchAll(new RegExp(\`REQ-\${chapter}(\\d{2})\\b\`, "g"))) {
+    for (const match of testCase.title.matchAll(new RegExp("REQ-" + chapter + "(\\d{2})\\b", "g"))) {
       const id = `REQ-${chapter}${match[1]}`;
       if (!testResultsByRequirement.has(id)) testResultsByRequirement.set(id, []);
       testResultsByRequirement.get(id).push(testCase.passed);
