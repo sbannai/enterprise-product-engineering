@@ -40,7 +40,7 @@ export class InventoryRepository {
     current.lifecycleHistory.push({action:"ADJUST",quantity,reason,at:new Date().toISOString()}); return structuredClone(current);
   }
   get(ctx,id){ const current=this.items.get(id); if(!current) throw new ValidationError("Inventory record not found"); authorize(ctx,current.tenantId,"inventory:read"); return structuredClone(current); }
-  list(ctx,tenantId){ authorize(ctx,tenantId,"inventory:read"); return [...this.items.values()].filter(x=>x.tenantId===tenantId).map(structuredClone); }
+  list(ctx,tenantId){ authorize(ctx,tenantId,"inventory:read"); return [...this.items.values()].filter(x=>x.tenantId===tenantId).map((item) => structuredClone(item)); }
 }
 export function audit(event,actor){ return {event,actorId:actor.actorId,tenantId:actor.tenantId,at:new Date().toISOString()}; }
 export function controlledException(code,message,context={}){ return {code,message,context,governed:true,at:new Date().toISOString()}; }
