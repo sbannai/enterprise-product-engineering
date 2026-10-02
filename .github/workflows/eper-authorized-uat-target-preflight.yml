@@ -42,7 +42,7 @@ jobs:
         id: preflight
         shell: bash
         run: |
-          set +e
+          set -e
           python3 - <<'PY'
           import json
           import os
@@ -112,7 +112,7 @@ jobs:
                   and not hp.netloc
                   and not hp.query
                   and not hp.fragment
-                  and "\\\\" not in health_path
+                  and "\\" not in health_path
               )
           except Exception:
               valid_path = False
