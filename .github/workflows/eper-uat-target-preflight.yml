@@ -75,11 +75,15 @@ jobs:
           const status = Number(process.env.HTTP_STATUS ?? "0");
           const body = readFileSync("/tmp/uat-health-body.json","utf8");
           let parsed;
-          try { parsed = JSON.parse(body); } catch { parsed = { nonJsonResponse: true }; }
-          const result = { checkedAt: new Date().toISOString(), httpStatus: status, reachable: status >= 200 && status < 300, responseShape: parsed && typeof parsed === "object" ? Object.keys(parsed).slice(0,30) : [], responseBodyCaptured: false };
-          writeFileSync("uat-target-health-result.json", JSON.stringify(result,null,2)+"\n");
+          try { parsed = JSON.parse(body); } catch { parsed = null; }
+          const field = process.env.BUILD_ID_FIELD;
+          const observedBuild = parsed && typeof parsed === "object" ? parsed[field] : undefined;
+          const reachable = status >= 200 && status < 300;
+          const buildMatched = typeof observedBuild === "string" && observedBuild === process.env.EXPECTED_BUILD;
+          const result = { checkedAt: new Date().toISOString(), httpStatus: status, reachable, buildIdField: field, buildIdentityMatched: buildMatched, responseBodyCaptured: false };
+          writeFileSync("uat-target-health-result.json", JSON.stringify(result,null,2)+"\\n");
           console.log(JSON.stringify(result,null,2));
-          if (!result.reachable) process.exitCode = 1;
+          if (!reachable || !buildMatched) process.exitCode = 1;
           NODE
 
       - name: Record target identity and evidence boundary
