@@ -1,0 +1,116 @@
+name: EPER Authorized UAT Target Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Approved UAT base URL (no credentials, tokens, or query secrets)"
+        required: true
+        type: string
+      health_path:
+        description: "Approved unauthenticated health/readiness path"
+        required: true
+        default: "/health"
+        type: string
+      expected_build:
+        description: "Expected deployed commit/build identifier"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  target-preflight:
+    runs-on: ubuntu-latest
+    environment: eper-business-uat
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs without exposing credentials
+        id: validate
+        env:
+          UAT_BASE_URL: ${{ inputs.base_url }}
+          UAT_HEALTH_PATH: ${{ inputs.health_path }}
+          EXPECTED_BUILD: ${{ inputs.expected_build }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const urlText = process.env.UAT_BASE_URL;
+          const path = process.env.UAT_HEALTH_PATH;
+          const expected = process.env.EXPECTED_BUILD;
+          const url = new URL(urlText);
+          if (url.protocol !== "https:") throw new Error("UAT_BASE_URL must use HTTPS.");
+          if (url.username || url.password || url.search || url.hash) throw new Error("Base URL must not contain credentials, query parameters, or fragments.");
+          if (!path.startsWith("/") || path.startsWith("//") || path.includes("..") || /[?#]/.test(path)) throw new Error("Health path must be an absolute safe path without query/fragment.");
+          if (!expected.trim()) throw new Error("Expected build identifier is required.");
+          console.log(JSON.stringify({scheme:url.protocol,host:url.host,healthPath:path,expectedBuild:expected.trim(),credentialsInUrl:false},null,2));
+          NODE
+
+      - name: Check approved target health endpoint
+        id: health
+        env:
+          UAT_BASE_URL: ${{ inputs.base_url }}
+          UAT_HEALTH_PATH: ${{ inputs.health_path }}
+        run: |
+          set -euo pipefail
+          URL="${UAT_BASE_URL%/}${UAT_HEALTH_PATH}"
+          CODE="$(curl --silent --show-error --output /tmp/uat-health-body.json --write-out '%{http_code}' --max-time 15 --connect-timeout 5 --proto '=https' --tlsv1.2 "$URL")"
+          printf 'http_status=%s\n' "$CODE"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const status = Number(process.env.HTTP_STATUS ?? "0");
+          const body = readFileSync("/tmp/uat-health-body.json","utf8");
+          let parsed;
+          try { parsed = JSON.parse(body); } catch { parsed = { nonJsonResponse: true }; }
+          const result = { checkedAt: new Date().toISOString(), httpStatus: status, reachable: status >= 200 && status < 300, responseShape: parsed && typeof parsed === "object" ? Object.keys(parsed).slice(0,30) : [], responseBodyCaptured: false };
+          writeFileSync("uat-target-health-result.json", JSON.stringify(result,null,2)+"\n");
+          console.log(JSON.stringify(result,null,2));
+          if (!result.reachable) process.exitCode = 1;
+          NODE
+        env:
+          HTTP_STATUS: ${{ steps.health.outputs.http_status }}
+
+      - name: Record target identity and evidence boundary
+        if: always()
+        env:
+          UAT_BASE_URL: ${{ inputs.base_url }}
+          UAT_HEALTH_PATH: ${{ inputs.health_path }}
+          EXPECTED_BUILD: ${{ inputs.expected_build }}
+          HEALTH_OUTCOME: ${{ steps.health.outcome }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const url = new URL(process.env.UAT_BASE_URL);
+          const record = {
+            classification: "UAT TARGET REACHABILITY PREFLIGHT — NOT BUSINESS UAT / NOT ACCEPTANCE",
+            checkedAt: new Date().toISOString(),
+            targetHost: url.host,
+            healthPath: process.env.UAT_HEALTH_PATH,
+            expectedBuild: process.env.EXPECTED_BUILD,
+            workflowCommit: process.env.GITHUB_SHA,
+            runId: process.env.GITHUB_RUN_ID,
+            healthStepOutcome: process.env.HEALTH_OUTCOME,
+            oauthLoginVerified: false,
+            testerRoleVerified: false,
+            businessUatExecuted: false,
+            businessAcceptance: "NOT_EXECUTED",
+            formalSignoff: "NOT_EXECUTED",
+            nextChecks: ["Verify actual deployed build identity against expectedBuild", "Verify OAuth login using approved test identity", "Confirm role/tenant scope", "Confirm approved test data", "Confirm audit/report visibility", "Obtain business authority approval before executing B01"]
+          };
+          writeFileSync("uat-target-preflight.json", JSON.stringify(record,null,2)+"\n");
+          NODE
+
+      - name: Upload target preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-UAT-TARGET-PREFLIGHT-${{ github.run_id }}
+          path: |
+            uat-target-preflight.json
+            uat-target-health-result.json
+          if-no-files-found: warn
+          retention-days: 90
