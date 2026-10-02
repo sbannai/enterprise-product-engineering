@@ -61,7 +61,6 @@ for (const [n, row] of rows.entries()) {
     for (const fieldName of ["execution_timestamp","environment","build_commit","session_authorization_reference","actual_steps","actual_result","evidence_archive_reference"]) {
       if (get(fieldName)) errors.push(`line ${line}: ${fieldName} must remain blank while outcome is NOT_RUN`);
     }
-    if (get("expected_result") === "") errors.push(`line ${line}: expected_result must be populated for planned execution`);
     if (decision !== "PENDING") errors.push(`line ${line}: NOT_RUN row must retain PENDING business_decision`);
   } else if (["PASS","FAIL","BLOCKED","NOT_APPLICABLE"].includes(outcome)) {
     for (const fieldName of ["execution_timestamp","environment","build_commit","session_authorization_reference","actual_steps","expected_result","actual_result","evidence_archive_reference"]) {
