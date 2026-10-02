@@ -15,15 +15,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: set -o pipefail; node --test 2>&1 | tee ci-test-output.txt
-      - run: printf "repository=%s
-commit=%s
-run_id=%s
-node=%s
-" "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(node --version)" > execution-metadata.txt
-      - uses: actions/upload-artifact@v4
+      - name: Run Chapter 498 tests
+        id: chapter498_tests
+        run: |
+          set +e
+          node --test 2>&1 | tee ci-test-output.txt
+          test_status=${PIPESTATUS[0]}
+          printf "test_exit_code=%s\n" "$test_status" >> ci-test-output.txt
+          exit "$test_status"
+      - name: Write execution metadata
+        if: always()
+        run: |
+          printf "repository=%s\ncommit=%s\nrun_id=%s\nnode=%s\ntest_outcome=%s\n" "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(node --version)" "${{ steps.chapter498_tests.outcome }}" > execution-metadata.txt
+      - name: Upload Chapter 498 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: eper-chapter-498-execution
+          name: eper-chapter-498-diagnostics-${{ github.run_id }}
           path: |
             eper/chapter-498-pilot-v0.1.0/ci-test-output.txt
             eper/chapter-498-pilot-v0.1.0/execution-metadata.txt
+          if-no-files-found: warn
