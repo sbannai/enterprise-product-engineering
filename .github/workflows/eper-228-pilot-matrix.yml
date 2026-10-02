@@ -30,6 +30,10 @@ jobs:
       - name: Execute 38 chapter pilot test suites and build 228-row matrix
         run: node eper/scripts/run-chapter-pilot-matrix.mjs
 
+      - name: Smoke-test available chapter HTTP pilot apps
+        if: always()
+        run: node eper/scripts/run-pilot-http-smoke.mjs
+
       - name: Upload per-requirement results and raw test logs
         if: always()
         uses: actions/upload-artifact@v4
