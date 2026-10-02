@@ -66,12 +66,23 @@ for (const [n, row] of rows.entries()) {
     for (const fieldName of ["execution_timestamp","environment","build_commit","session_authorization_reference","actual_steps","expected_result","actual_result","evidence_archive_reference"]) {
       if (!get(fieldName)) errors.push(`line ${line}: executed outcome ${outcome} requires ${fieldName}`);
     }
-    if (outcome === "PASS" && decision === "ACCEPTED" && (!get("business_approver") || !get("approval_date"))) {
-      errors.push(`line ${line}: ACCEPTED decision requires business approver and approval date`);
+    if (outcome === "FAIL" && !get("defect_id") && !get("exception_id")) {
+      errors.push(`line ${line}: FAIL outcome requires defect_id or exception_id`);
+    }
+    if (outcome === "BLOCKED" && !get("exception_id")) {
+      errors.push(`line ${line}: BLOCKED outcome requires exception_id`);
     }
   } else errors.push(`line ${line}: unsupported outcome ${outcome}`);
-  if (decision === "PENDING") pending += 1;
-  else if (!["ACCEPTED","REJECTED","WAIVED"].includes(decision)) errors.push(`line ${line}: unsupported business decision ${decision}`);
+
+  if (decision === "PENDING") {
+    pending += 1;
+    if (get("business_approver") || get("approval_date")) errors.push(`line ${line}: PENDING decision must not contain approval details`);
+  } else if (["ACCEPTED","REJECTED","WAIVED"].includes(decision)) {
+    if (!get("business_approver") || !get("approval_date")) errors.push(`line ${line}: ${decision} decision requires business approver and approval date`);
+    if (decision === "ACCEPTED" && outcome !== "PASS") errors.push(`line ${line}: ACCEPTED decision requires PASS outcome`);
+    if (decision === "REJECTED" && outcome !== "FAIL") errors.push(`line ${line}: REJECTED decision requires FAIL outcome`);
+    if (decision === "WAIVED" && outcome !== "NOT_APPLICABLE") errors.push(`line ${line}: WAIVED decision requires NOT_APPLICABLE outcome`);
+  } else errors.push(`line ${line}: unsupported business decision ${decision}`);
 }
 for (let chapter = 463; chapter <= 500; chapter += 1) {
   if (chapterCounts.get(chapter) !== 6) errors.push(`chapter ${chapter}: expected 6 requirements, found ${chapterCounts.get(chapter) ?? 0}`);
