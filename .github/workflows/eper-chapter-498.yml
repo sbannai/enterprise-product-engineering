@@ -1,5 +1,6 @@
 name: EPER Chapter 498
 on:
+  workflow_dispatch:
   push:
     paths: ["eper/chapter-498-pilot-v0.1.0/**",".github/workflows/eper-chapter-498.yml"]
   pull_request:
