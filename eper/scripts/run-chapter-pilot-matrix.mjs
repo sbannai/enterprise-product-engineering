@@ -33,13 +33,20 @@ for (const chapter of chapters) {
   const combined = stdout + (stderr ? "\n[stderr]\n" + stderr : "");
   writeFileSync(resolve(evidenceDir, `chapter-${chapter}-test.log`), combined);
 
-  const testTitles = [...stdout.matchAll(/^ok \d+ - (.+)$/gm)].map((match) => match[1].trim());
-  const requirementIdsInTitles = new Set();
-  for (const title of testTitles) {
-    for (const match of title.matchAll(new RegExp(`REQ-${chapter}(\\d{2})\\b`, "g"))) {
-      requirementIdsInTitles.add(`REQ-${chapter}${match[1]}`);
+  const testCases = [...stdout.matchAll(/^(ok|not ok) \\d+ - (.+)$/gm)].map((match) => ({
+    passed: match[1] === "ok",
+    title: match[2].trim(),
+  }));
+  const testResultsByRequirement = new Map();
+  for (const testCase of testCases) {
+    for (const match of testCase.title.matchAll(new RegExp(`REQ-${chapter}(\\\\d{2})\\\\b`, "g"))) {
+      const id = `REQ-${chapter}${match[1]}`;
+      if (!testResultsByRequirement.has(id)) testResultsByRequirement.set(id, []);
+      testResultsByRequirement.get(id).push(testCase.passed);
     }
   }
+  const requirementIdsInTitles = new Set(testResultsByRequirement.keys());
+  const testTitles = testCases.map((testCase) => testCase.title);
   const sourceRequirementIds = new Set(
     [...source.matchAll(new RegExp(`REQ-${chapter}(\\d{2})\\b`, "g"))].map((m) => `REQ-${chapter}${m[1]}`)
   );
@@ -67,9 +74,11 @@ for (const chapter of chapters) {
     const testNamed = requirementIdsInTitles.has(id);
     const testReferenced = sourceRequirementIds.has(id);
     let status;
+    const observedResults = testResultsByRequirement.get(id) ?? [];
     if (!source) status = "NO_TEST_FILE";
-    else if (!suitePass) status = "CHAPTER_SUITE_FAILED";
-    else if (!testNamed || !testReferenced) status = "REQUIREMENT_TEST_MAPPING_GAP";
+    else if (!testReferenced) status = "REQUIREMENT_TEST_MAPPING_GAP";
+    else if (observedResults.length === 0) status = "REQUIREMENT_TEST_NOT_OBSERVED";
+    else if (observedResults.some((passed) => !passed)) status = "REQUIREMENT_TEST_FAIL";
     else status = "AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT";
     requirementResults.push({
       requirementId: id,
