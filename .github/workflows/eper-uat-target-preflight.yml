@@ -34,18 +34,22 @@ jobs:
           UAT_BASE_URL: ${{ inputs.base_url }}
           UAT_HEALTH_PATH: ${{ inputs.health_path }}
           EXPECTED_BUILD: ${{ inputs.expected_build }}
+          UAT_ALLOWED_HOST: ${{ vars.UAT_ALLOWED_HOST }}
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           const urlText = process.env.UAT_BASE_URL;
           const path = process.env.UAT_HEALTH_PATH;
           const expected = process.env.EXPECTED_BUILD;
+          const allowedHost = process.env.UAT_ALLOWED_HOST;
           const url = new URL(urlText);
           if (url.protocol !== "https:") throw new Error("UAT_BASE_URL must use HTTPS.");
+          if (!allowedHost?.trim()) throw new Error("Configure the UAT_ALLOWED_HOST variable in the protected eper-business-uat GitHub Environment before running this workflow.");
+          if (url.host.toLowerCase() !== allowedHost.trim().toLowerCase()) throw new Error("UAT_BASE_URL host does not match the protected UAT_ALLOWED_HOST allowlist.");
           if (url.username || url.password || url.search || url.hash) throw new Error("Base URL must not contain credentials, query parameters, or fragments.");
           if (!path.startsWith("/") || path.startsWith("//") || path.includes("..") || /[?#]/.test(path)) throw new Error("Health path must be an absolute safe path without query/fragment.");
           if (!expected.trim()) throw new Error("Expected build identifier is required.");
-          console.log(JSON.stringify({scheme:url.protocol,host:url.host,healthPath:path,expectedBuild:expected.trim(),credentialsInUrl:false},null,2));
+          console.log(JSON.stringify({scheme:url.protocol,host:url.host,hostAllowlistMatch:true,healthPath:path,expectedBuild:expected.trim(),credentialsInUrl:false},null,2));
           NODE
 
       - name: Check approved target health endpoint
