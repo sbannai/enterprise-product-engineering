@@ -70,6 +70,7 @@ jobs:
           if (!result.reachable) process.exitCode = 1;
           NODE
         env:
+          HTTP_STATUS: ${{ steps.health.outputs.http_status }}
 
       - name: Record target identity and evidence boundary
         if: always()
