@@ -55,3 +55,43 @@ test("services reject incomplete execution context when supplied", () => {
     /CAPABILITY_CONTEXT_REQUIRED/,
   );
 });
+
+test("exception create and transitions emit tenant-scoped lifecycle audit evidence", async () => {
+  const service = new ExceptionHandlingService();
+  const requirement = requirementBindings.find(r => r.pattern === "XX05");
+  const context = { tenantId: "tenant-a", principalId: "operator-1", correlationId: "corr-lifecycle-1" };
+  await service.execute(requirement, {
+    context,
+    payload: {
+      operation: "create",
+      exception: {
+        id: "exception-a",
+        tenantId: "tenant-a",
+        requirementId: requirement.id,
+        code: "PROCESS_FAILURE",
+        message: "Processing failed",
+        idempotencyKey: "idem-lifecycle-1",
+        createdAt: "2026-10-03T05:00:00.000Z",
+      },
+    },
+  });
+  await service.execute(requirement, {
+    context,
+    payload: { operation: "transition", tenantId: "tenant-a", id: "exception-a", patch: { state: "RETRYING" } },
+  });
+  await service.execute(requirement, {
+    context,
+    payload: { operation: "transition", tenantId: "tenant-a", id: "exception-a", patch: { state: "RESOLVED" } },
+  });
+
+  const events = service.listLifecycleEvidence("tenant-a", requirement.id);
+  assert.equal(events.length, 3);
+  assert.deepEqual(events.map(e => e.action), ["EXCEPTION_CREATED", "EXCEPTION_TRANSITIONED", "EXCEPTION_TRANSITIONED"]);
+  assert.deepEqual(events.map(e => e.payload.state), ["OPEN", "RETRYING", "RESOLVED"]);
+  assert.equal(events.every(e => e.principalId === "operator-1" && e.correlationId === "corr-lifecycle-1"), true);
+  assert.equal(service.listLifecycleEvidence("tenant-b", requirement.id).length, 0);
+  assert.equal(events.every(e => service.listLifecycleEvidence("tenant-a", requirement.id).every(stored => {
+    if (stored.id !== e.id) return true;
+    return new InMemoryAuditEvidenceStore().verify(e) === false;
+  })), true);
+});
