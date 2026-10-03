@@ -33,3 +33,5 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
+      - name: UAT preflight regression tests
+        run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
