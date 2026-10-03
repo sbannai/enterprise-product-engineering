@@ -17,9 +17,9 @@ export class InMemoryGovernedReportingService {
   private readonly rows: ReportRow[] = [];
 
   private cloneJson<T>(value: T): T {
-    const serialized = JSON.stringify(value);
-    if (serialized === undefined) throw new Error("REPORT_DATA_NOT_SERIALIZABLE");
     try {
+      const serialized = JSON.stringify(value);
+      if (serialized === undefined) throw new Error("REPORT_DATA_NOT_SERIALIZABLE");
       return JSON.parse(serialized) as T;
     } catch {
       throw new Error("REPORT_DATA_NOT_SERIALIZABLE");
