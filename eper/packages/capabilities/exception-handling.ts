@@ -81,7 +81,12 @@ export class InMemoryExceptionStore {
     return value ? { ...value } : undefined;
   }
 
-  transition(tenantId: string, id: string, patch: ExceptionPatch): WorkflowException {
+  transition(
+    tenantId: string,
+    id: string,
+    patch: ExceptionPatch,
+    beforeCommit?: (next: WorkflowException, current: WorkflowException) => void,
+  ): WorkflowException {
     const current = this.get(tenantId, id);
     if (!current) throw new Error("EXCEPTION_NOT_FOUND");
 
@@ -103,6 +108,7 @@ export class InMemoryExceptionStore {
       retryCount: patch.state === "RETRYING" ? current.retryCount + 1 : current.retryCount,
       updatedAt: new Date().toISOString(),
     };
+    beforeCommit?.({ ...next }, { ...current });
     this.exceptions.set(this.key(tenantId, id), next);
     return { ...next };
   }
