@@ -20,9 +20,12 @@ export interface ExceptionPatch {
   message?: string;
 }
 
+type ExceptionCreateInput = Omit<WorkflowException, "state" | "retryCount" | "updatedAt">;
+
 export class InMemoryExceptionStore {
   private readonly exceptions = new Map<string, WorkflowException>();
   private readonly idempotency = new Map<string, string>();
+  private readonly idempotencyFingerprints = new Map<string, string>();
 
   private key(tenantId: string, id: string): string {
     return JSON.stringify([tenantId, id]);
@@ -32,12 +35,29 @@ export class InMemoryExceptionStore {
     return JSON.stringify([tenantId, key]);
   }
 
-  create(input: Omit<WorkflowException, "state" | "retryCount" | "updatedAt">): WorkflowException {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey) {
+  private fingerprint(input: ExceptionCreateInput): string {
+    return JSON.stringify({
+      id: input.id,
+      tenantId: input.tenantId,
+      requirementId: input.requirementId,
+      code: input.code,
+      message: input.message,
+      idempotencyKey: input.idempotencyKey,
+      owner: input.owner ?? null,
+      createdAt: input.createdAt,
+    });
+  }
+
+  create(input: ExceptionCreateInput): WorkflowException {
+    if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey || !input.createdAt) {
       throw new Error("EXCEPTION_CONTEXT_REQUIRED");
     }
     const scopedIdempotencyKey = this.idempotencyKey(input.tenantId, input.idempotencyKey);
+    const fingerprint = this.fingerprint(input);
     if (this.idempotency.has(scopedIdempotencyKey)) {
+      if (this.idempotencyFingerprints.get(scopedIdempotencyKey) !== fingerprint) {
+        throw new Error("IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST");
+      }
       return this.get(input.tenantId, this.idempotency.get(scopedIdempotencyKey)!)!;
     }
     const scopedId = this.key(input.tenantId, input.id);
@@ -52,6 +72,7 @@ export class InMemoryExceptionStore {
     };
     this.exceptions.set(scopedId, value);
     this.idempotency.set(scopedIdempotencyKey, input.id);
+    this.idempotencyFingerprints.set(scopedIdempotencyKey, fingerprint);
     return { ...value };
   }
 

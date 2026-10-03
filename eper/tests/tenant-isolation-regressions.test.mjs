@@ -39,14 +39,20 @@ test("exception IDs and idempotency keys are tenant-scoped", () => {
   assert.equal(store.get("tenant-c", "same-id"), undefined);
 });
 
-test("repeated idempotency key returns only the same tenant's exception", () => {
+test("identical idempotency retries return only the same tenant's exception", () => {
   const store = new InMemoryExceptionStore();
-  store.create(exception("tenant-a", "exception-a", "shared-key"));
-  store.create(exception("tenant-b", "exception-b", "shared-key"));
-  const replayA = store.create(exception("tenant-a", "ignored-a", "shared-key"));
-  const replayB = store.create(exception("tenant-b", "ignored-b", "shared-key"));
+  const originalA = exception("tenant-a", "exception-a", "shared-key");
+  const originalB = exception("tenant-b", "exception-b", "shared-key");
+  store.create(originalA);
+  store.create(originalB);
+  const replayA = store.create({ ...originalA });
+  const replayB = store.create({ ...originalB });
   assert.equal(replayA.id, "exception-a");
   assert.equal(replayB.id, "exception-b");
+  assert.throws(
+    () => store.create(exception("tenant-a", "different-id", "shared-key")),
+    /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST/,
+  );
 });
 
 test("composite tenant keys cannot collide when identifiers contain delimiters", () => {
