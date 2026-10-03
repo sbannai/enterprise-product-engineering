@@ -16,6 +16,24 @@ export interface ReportQuery {
 export class InMemoryGovernedReportingService {
   private readonly rows: ReportRow[] = [];
 
+  private cloneJson<T>(value: T): T {
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized === undefined) throw new Error("REPORT_DATA_NOT_SERIALIZABLE");
+      return JSON.parse(serialized) as T;
+    } catch {
+      throw new Error("REPORT_DATA_NOT_SERIALIZABLE");
+    }
+  }
+
+  private cloneRow(row: ReportRow): ReportRow {
+    return {
+      ...row,
+      values: this.cloneJson(row.values),
+      sourceRequirementIds: [...row.sourceRequirementIds],
+    };
+  }
+
   publish(row: ReportRow): void {
     if (!row.tenantId || !row.reportId || !row.generatedAt) {
       throw new Error("REPORT_CONTEXT_REQUIRED");
@@ -23,11 +41,7 @@ export class InMemoryGovernedReportingService {
     if (row.sourceRequirementIds.length === 0) {
       throw new Error("REPORT_PROVENANCE_REQUIRED");
     }
-    this.rows.push({
-      ...row,
-      values: { ...row.values },
-      sourceRequirementIds: [...row.sourceRequirementIds],
-    });
+    this.rows.push(this.cloneRow(row));
   }
 
   query(request: ReportQuery): readonly ReportRow[] {
@@ -47,10 +61,6 @@ export class InMemoryGovernedReportingService {
       );
     });
 
-    return matches.slice(0, limit).map((row) => ({
-      ...row,
-      values: { ...row.values },
-      sourceRequirementIds: [...row.sourceRequirementIds],
-    }));
+    return matches.slice(0, limit).map((row) => this.cloneRow(row));
   }
 }
