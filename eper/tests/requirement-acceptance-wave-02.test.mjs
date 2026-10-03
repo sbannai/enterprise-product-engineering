@@ -18,7 +18,7 @@ const req = (id) => {
 
 const context = (correlationId) => ({
   tenantId: "wave-02-ch464",
-  principalId: "wave-02-runner",
+  principalId: "actor-46402",
   correlationId,
 });
 
@@ -39,7 +39,7 @@ test("REQ-46402 / SRS-FR-2330: authorization enforces deny precedence and defaul
   const service = new AuthorizationService();
   const decision = await service.execute(requirement, { context: context("46402-deny"), payload: { operation: "decide", request: { tenantId: "wave-02-ch464", principalId: "actor-46402", action: "material.update", resource: "authoritative-record" }, policies: [{ tenantId: "wave-02-ch464", principalId: "actor-46402", actions: ["material.update"], resources: ["authoritative-record"], effect: "ALLOW" }, { tenantId: "wave-02-ch464", principalId: "actor-46402", actions: ["material.update"], resources: ["authoritative-record"], effect: "DENY" }] } });
   assert.equal(decision.data.payload.decision.effect, "DENY");
-  const defaultDeny = await service.execute(requirement, { context: context("46402-default"), payload: { operation: "decide", request: { tenantId: "wave-02-ch464", principalId: "unlisted-actor", action: "material.delete", resource: "authoritative-record" } } });
+  const defaultDeny = await service.execute(requirement, { context: context("46402-default"), payload: { operation: "decide", request: { tenantId: "wave-02-ch464", principalId: "actor-46402", action: "material.delete", resource: "authoritative-record" } } });
   assert.equal(defaultDeny.data.payload.decision.effect, "DENY");
 });
 
@@ -59,7 +59,7 @@ test("REQ-46404 / SRS-FR-2332: audit evidence preserves integrity and tenant bou
   const requirement = req("REQ-46404");
   assert.equal(requirement.pattern, "XX04");
   const service = new AuditEvidenceService();
-  const appended = await service.execute(requirement, { context: context("46404-append"), payload: { operation: "append", evidence: { id: "46404-evidence", tenantId: "wave-02-ch464", requirementId: "REQ-46404", action: "MATERIAL_EVENT", principalId: "wave-02-runner", correlationId: "46404-append", occurredAt: "2026-09-24T03:00:00.000Z", payload: { result: "PASS" } } } });
+  const appended = await service.execute(requirement, { context: context("46404-append"), payload: { operation: "append", evidence: { id: "46404-evidence", tenantId: "wave-02-ch464", requirementId: "REQ-46404", action: "MATERIAL_EVENT", principalId: "actor-46402", correlationId: "46404-append", occurredAt: "2026-09-24T03:00:00.000Z", payload: { result: "PASS" } } } });
   assert.match(appended.data.payload.evidence.integrityHash, /^[a-f0-9]{64}$/);
   const own = await service.execute(requirement, { context: context("46404-list"), payload: { operation: "listByRequirement", tenantId: "wave-02-ch464", requirementId: "REQ-46404" } });
   assert.equal(own.data.payload.evidence.length, 1);

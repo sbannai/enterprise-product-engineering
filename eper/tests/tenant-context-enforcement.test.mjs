@@ -56,3 +56,12 @@ test("exception and reporting operations reject cross-tenant payloads", () => {
     payload: { operation: "query", request: { tenantId: "tenant-b", reportId: "r1" } },
   }), /TENANT_CONTEXT_MISMATCH/);
 });
+
+test("authorization cannot impersonate a different principal in the same tenant", () => {
+  const service = new AuthorizationService();
+  service.addPolicy({ tenantId: "tenant-a", principalId: "admin", actions: ["delete"], resources: ["student-record"], effect: "ALLOW" });
+  assert.throws(() => service.execute(req("XX02"), {
+    context: context("tenant-a"),
+    payload: { operation: "decide", request: { tenantId: "tenant-a", principalId: "admin", action: "delete", resource: "student-record" } },
+  }), /AUTHORIZATION_PRINCIPAL_MISMATCH/);
+});
