@@ -41,3 +41,20 @@ test("audit evidence rejects duplicate IDs and incomplete context", () => {
     /AUDIT_EVIDENCE_CONTEXT_REQUIRED/,
   );
 });
+
+test("audit evidence verification detects changed fields and payloads", () => {
+  const store = new InMemoryAuditEvidenceStore();
+  const entry = store.append(evidence);
+  assert.equal(store.verify(entry), true);
+  assert.equal(store.verify({ ...entry, action: "DELETE" }), false);
+  assert.equal(store.verify({ ...entry, payload: { recordId: "changed" } }), false);
+  assert.equal(store.verify({ ...entry, integrityHash: "not-a-hash" }), false);
+});
+
+test("audit evidence verification is safe for malformed evidence", () => {
+  const store = new InMemoryAuditEvidenceStore();
+  assert.equal(store.verify(null), false);
+  const circular = {};
+  circular.self = circular;
+  assert.equal(store.verify({ ...evidence, payload: circular, integrityHash: "a".repeat(64) }), false);
+});
