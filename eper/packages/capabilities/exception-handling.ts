@@ -25,11 +25,11 @@ export class InMemoryExceptionStore {
   private readonly idempotency = new Map<string, string>();
 
   private key(tenantId: string, id: string): string {
-    return `${tenantId}:${id}`;
+    return JSON.stringify([tenantId, id]);
   }
 
   private idempotencyKey(tenantId: string, key: string): string {
-    return `${tenantId}:${key}`;
+    return JSON.stringify([tenantId, key]);
   }
 
   create(input: Omit<WorkflowException, "state" | "retryCount" | "updatedAt">): WorkflowException {
