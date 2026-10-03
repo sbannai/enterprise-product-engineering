@@ -37,6 +37,9 @@ class AuthorizedUatPreflightTests(unittest.TestCase):
     def test_rejects_external_health_path(self):
         code,result,build=self.run_check(dict(BASE_ENV,UAT_HEALTH_PATH="//attacker.example.test/health"),FakeOpener())
         self.assertEqual(code,1); self.assertEqual(result["checks"]["healthPathValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_rejects_backslash_in_health_path(self):
+        code,result,build=self.run_check(dict(BASE_ENV,UAT_HEALTH_PATH="/safe\\other"),FakeOpener())
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthPathValidation"]["status"],"FAIL"); build.assert_not_called()
     def test_build_mismatch_fails(self):
         code,result,_=self.run_check(opener=FakeOpener(FakeResponse(b'{"buildId":"different"}')))
         self.assertEqual(code,1); self.assertEqual(result["checks"]["buildIdentity"]["status"],"FAIL")
