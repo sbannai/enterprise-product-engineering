@@ -199,6 +199,10 @@ export class ExceptionHandlingService implements CapabilityService {
     return this.lifecycleEvidence.listByRequirement(tenantId, requirementId);
   }
 
+  verifyLifecycleEvidence(entry: AuditEvidence): boolean {
+    return this.lifecycleEvidence.verify(entry);
+  }
+
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     const { value, contracts } = prepare(requirement, input, "XX05", "exception-handling");
     const payload = (value.payload ?? input) as any;
