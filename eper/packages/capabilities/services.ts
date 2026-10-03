@@ -209,11 +209,12 @@ export class ExceptionHandlingService implements CapabilityService {
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "create") {
         const tenantId = requireTenantContext(value, payload.exception?.tenantId);
-        const existing = this.store.get(tenantId, payload.exception?.id);
-        const created = this.store.create({ ...payload.exception, tenantId });
-        if (!existing) {
-          this.recordLifecycleEvent(requirement, value.context!, created, "EXCEPTION_CREATED");
-        }
+        const created = this.store.create(
+          { ...payload.exception, tenantId },
+          (newException) => {
+            this.recordLifecycleEvent(requirement, value.context!, newException, "EXCEPTION_CREATED");
+          },
+        );
         return Promise.resolve(result(requirement, contracts, { operation: "create", exception: created }));
       }
       if (payload.operation === "transition") {
