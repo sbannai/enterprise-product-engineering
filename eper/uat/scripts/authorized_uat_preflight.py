@@ -31,7 +31,7 @@ def run_preflight(env=None):
     result["checks"]["targetValidation"]={"status":"PASS","reason":"HTTPS host exactly matches the configured allowlist"}
     try:
         hp=urllib.parse.urlsplit(health_path)
-        valid_path=(health_path.startswith("/") and not health_path.startswith("//") and bool(hp.path) and not hp.scheme and not hp.netloc and not hp.query and not hp.fragment and "\\\\" not in health_path)
+        valid_path=(health_path.startswith("/") and not health_path.startswith("//") and bool(hp.path) and not hp.scheme and not hp.netloc and not hp.query and not hp.fragment and "\\" not in health_path)
     except (ValueError,AttributeError): valid_path=False
     if not valid_path:
         result["checks"]["healthPathValidation"]={"status":"FAIL","reason":"Health path must be an absolute path only, with no scheme, host, query, fragment or backslash"}
