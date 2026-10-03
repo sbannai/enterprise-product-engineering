@@ -48,3 +48,17 @@ test("repeated idempotency key returns only the same tenant's exception", () => 
   assert.equal(replayA.id, "exception-a");
   assert.equal(replayB.id, "exception-b");
 });
+
+test("composite tenant keys cannot collide when identifiers contain delimiters", () => {
+  const audit = new InMemoryAuditEvidenceStore();
+  audit.append(evidence("a", "b:c"));
+  audit.append(evidence("a:b", "c"));
+  assert.equal(audit.get("a", "b:c")?.tenantId, "a");
+  assert.equal(audit.get("a:b", "c")?.tenantId, "a:b");
+
+  const exceptions = new InMemoryExceptionStore();
+  exceptions.create(exception("a", "b:c", "shared:key"));
+  exceptions.create(exception("a:b", "c", "shared:key"));
+  assert.equal(exceptions.get("a", "b:c")?.tenantId, "a");
+  assert.equal(exceptions.get("a:b", "c")?.tenantId, "a:b");
+});
