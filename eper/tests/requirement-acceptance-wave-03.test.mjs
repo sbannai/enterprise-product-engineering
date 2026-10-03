@@ -50,7 +50,7 @@ test("REQ-46503 / SRS-FR-2337: mandatory business validation", async () => {
 test("REQ-46504 / SRS-FR-2338: audit integrity and tenant isolation", async () => {
   const r = req("REQ-46504"); assert.equal(r.pattern, "XX04");
   const s = new AuditEvidenceService();
-  const a = await s.execute(r, { context: ctx("46504-append"), payload: { operation: "append", evidence: { id: "46504-evidence", tenantId: "wave-03-ch465", requirementId: "REQ-46504", action: "MATERIAL_EVENT", principalId: "wave-03-runner", correlationId: "46504-append", occurredAt: "2026-09-24T04:00:00.000Z", payload: { result: "PASS" } } } });
+  const a = await s.execute(r, { context: ctx("46504-append"), payload: { operation: "append", evidence: { id: "46504-evidence", tenantId: "wave-03-ch465", requirementId: "REQ-46504", action: "MATERIAL_EVENT", principalId: "actor-46502", correlationId: "46504-append", occurredAt: "2026-09-24T04:00:00.000Z", payload: { result: "PASS" } } } });
   assert.match(a.data.payload.evidence.integrityHash, /^[a-f0-9]{64}$/);
   const own = await s.execute(r, { context: ctx("46504-list"), payload: { operation: "listByRequirement", tenantId: "wave-03-ch465", requirementId: "REQ-46504" } });
   assert.equal(own.data.payload.evidence.length, 1);
