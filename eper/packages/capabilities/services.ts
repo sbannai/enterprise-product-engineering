@@ -105,7 +105,6 @@ export class AuthorizationService implements CapabilityService {
     if (payload && typeof payload === "object" && payload.operation === "decide") {
       const request = payload.request as AuthorizationRequest;
       requireTenantContext(value, request?.tenantId);
-      for (const policy of (payload.policies ?? [])) this.policyService.addPolicy(policy);
       return Promise.resolve(result(requirement, contracts, {
         operation: "decide",
         decision: this.policyService.decide(request),

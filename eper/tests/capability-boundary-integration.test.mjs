@@ -26,11 +26,11 @@ test("XX01 service executes authoritative record create/update through its bound
 test("XX02 service executes policy decision through its boundary", async () => {
   const service = new AuthorizationService();
   const requirement = req("XX02");
+  service.addPolicy({ tenantId: "tenant-a", principalId: "user-a", actions: ["read"], resources: ["student"], effect: "ALLOW" });
   const result = await service.execute(requirement, {
     context: { tenantId: "tenant-a", principalId: "user-a", correlationId: "c2" },
     payload: {
       operation: "decide",
-      policies: [{ tenantId: "tenant-a", actions: ["read"], resources: ["student"], effect: "ALLOW" }],
       request: { tenantId: "tenant-a", principalId: "user-a", action: "read", resource: "student" },
     },
   });
