@@ -17,9 +17,9 @@ export class InMemoryAuthoritativeRecordStore implements AuthoritativeRecordStor
   private readonly records = new Map<string, AuthoritativeRecord>();
 
   private cloneData(data: Record<string, unknown>): Record<string, unknown> {
-    const serialized = JSON.stringify(data);
-    if (serialized === undefined) throw new Error("RECORD_DATA_NOT_SERIALIZABLE");
     try {
+      const serialized = JSON.stringify(data);
+      if (serialized === undefined) throw new Error("RECORD_DATA_NOT_SERIALIZABLE");
       return JSON.parse(serialized) as Record<string, unknown>;
     } catch {
       throw new Error("RECORD_DATA_NOT_SERIALIZABLE");
