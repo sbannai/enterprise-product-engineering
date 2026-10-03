@@ -84,6 +84,22 @@ test("exception create and transitions emit tenant-scoped lifecycle audit eviden
     payload: { operation: "transition", tenantId: "tenant-a", id: "exception-a", patch: { state: "RESOLVED" } },
   });
 
+  await service.execute(requirement, {
+    context,
+    payload: {
+      operation: "create",
+      exception: {
+        id: "exception-a",
+        tenantId: "tenant-a",
+        requirementId: requirement.id,
+        code: "PROCESS_FAILURE",
+        message: "Processing failed",
+        idempotencyKey: "idem-lifecycle-1",
+        createdAt: "2026-10-03T05:00:00.000Z",
+      },
+    },
+  });
+
   const events = service.listLifecycleEvidence("tenant-a", requirement.id);
   assert.equal(events.length, 3);
   assert.deepEqual(events.map(e => e.action), ["EXCEPTION_CREATED", "EXCEPTION_TRANSITIONED", "EXCEPTION_TRANSITIONED"]);
