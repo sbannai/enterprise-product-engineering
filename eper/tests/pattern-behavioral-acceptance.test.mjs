@@ -17,9 +17,12 @@ test("XX01 authoritative records: create, update, version control and tenant iso
 });
 test("XX02 authorization: explicit allow, deny precedence and default deny",async()=>{
  const service=new AuthorizationService(),requirement=req("XX02");
- const denied=await service.execute(requirement,{context:context("xx02-deny"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-1",action:"read",resource:"record"},policies:[{tenantId:"behavioral-acceptance",principalId:"user-1",actions:["read"],resources:["record"],effect:"ALLOW"},{tenantId:"behavioral-acceptance",principalId:"user-1",actions:["read"],resources:["record"],effect:"DENY"}]}});
+ service.addPolicy({tenantId:"behavioral-acceptance",principalId:"user-1",actions:["read"],resources:["record"],effect:"ALLOW"});
+ service.addPolicy({tenantId:"behavioral-acceptance",principalId:"user-1",actions:["read"],resources:["record"],effect:"DENY"});
+ const denied=await service.execute(requirement,{context:context("xx02-deny"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-1",action:"read",resource:"record"}}});
  assert.equal(denied.data.payload.decision.effect,"DENY");
- const allowed=await service.execute(requirement,{context:context("xx02-allow"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-2",action:"read",resource:"record"},policies:[{tenantId:"behavioral-acceptance",principalId:"user-2",actions:["read"],resources:["record"],effect:"ALLOW"}]}});
+ service.addPolicy({tenantId:"behavioral-acceptance",principalId:"user-2",actions:["read"],resources:["record"],effect:"ALLOW"});
+ const allowed=await service.execute(requirement,{context:context("xx02-allow"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-2",action:"read",resource:"record"}}});
  assert.equal(allowed.data.payload.decision.effect,"ALLOW");
  const def=await service.execute(requirement,{context:context("xx02-default"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"unknown",action:"delete",resource:"record"}}});
  assert.equal(def.data.payload.decision.effect,"DENY");
