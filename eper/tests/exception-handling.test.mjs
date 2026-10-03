@@ -69,3 +69,12 @@ test("transition callback runs before exception state is committed", () => {
   assert.throws(() => store.transition("tenant-a", "ex-1", { state: "ESCALATED" }, () => { throw new Error("CALLBACK_FAILED"); }), /CALLBACK_FAILED/);
   assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
 });
+
+test("create callback failure leaves no exception and does not consume idempotency key", () => {
+  const store = new InMemoryExceptionStore();
+  assert.throws(() => store.create(base, () => { throw new Error("AUDIT_WRITE_FAILED"); }), /AUDIT_WRITE_FAILED/);
+  assert.equal(store.get("tenant-a", "ex-1"), undefined);
+  const created = store.create(base);
+  assert.equal(created.id, "ex-1");
+  assert.equal(created.state, "OPEN");
+});
