@@ -48,7 +48,7 @@ export class InMemoryExceptionStore {
     });
   }
 
-  create(input: ExceptionCreateInput): WorkflowException {
+  create(input: ExceptionCreateInput, beforeCommit?: (created: WorkflowException) => void): WorkflowException {
     if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey || !input.createdAt) {
       throw new Error("EXCEPTION_CONTEXT_REQUIRED");
     }
