@@ -27,6 +27,7 @@ test("XX02 service executes policy decision through its boundary", async () => {
   const service = new AuthorizationService();
   const requirement = req("XX02");
   const result = await service.execute(requirement, {
+    context: { tenantId: "tenant-a", principalId: "user-a", correlationId: "c2" },
     payload: {
       operation: "decide",
       policies: [{ tenantId: "tenant-a", actions: ["read"], resources: ["student"], effect: "ALLOW" }],
@@ -47,17 +48,19 @@ test("XX03 service executes registered business rules", async () => {
 test("XX04 service appends and retrieves audit evidence", async () => {
   const service = new AuditEvidenceService();
   const evidence = { id: "a1", tenantId: "tenant-a", requirementId: req("XX04").id, action: "CREATE", principalId: "user-a", correlationId: "c1", occurredAt: "2026-09-23T15:00:00Z", payload: { x: 1 } };
-  const result = await service.execute(req("XX04"), { payload: { operation: "append", evidence } });
+  const context = { tenantId: "tenant-a", principalId: "user-a", correlationId: "c3" };
+  const result = await service.execute(req("XX04"), { context, payload: { operation: "append", evidence } });
   assert.equal(result.data.payload.evidence.integrityHash.length, 64);
-  const found = await service.execute(req("XX04"), { payload: { operation: "get", tenantId: "tenant-a", id: "a1" } });
+  const found = await service.execute(req("XX04"), { context, payload: { operation: "get", tenantId: "tenant-a", id: "a1" } });
   assert.equal(found.data.payload.evidence.id, "a1");
 });
 
 test("XX05 service executes exception lifecycle", async () => {
   const service = new ExceptionHandlingService();
   const requirement = req("XX05");
-  await service.execute(requirement, { payload: { operation: "create", exception: { id: "e1", tenantId: "tenant-a", requirementId: requirement.id, code: "E1", message: "failed", idempotencyKey: "idem-1", createdAt: "2026-09-23T15:00:00Z" } } });
-  const result = await service.execute(requirement, { payload: { operation: "transition", tenantId: "tenant-a", id: "e1", patch: { state: "RETRYING" } } });
+  const context = { tenantId: "tenant-a", principalId: "user-a", correlationId: "c4" };
+  await service.execute(requirement, { context, payload: { operation: "create", exception: { id: "e1", tenantId: "tenant-a", requirementId: requirement.id, code: "E1", message: "failed", idempotencyKey: "idem-1", createdAt: "2026-09-23T15:00:00Z" } } });
+  const result = await service.execute(requirement, { context, payload: { operation: "transition", tenantId: "tenant-a", id: "e1", patch: { state: "RETRYING" } } });
   assert.equal(result.data.payload.exception.state, "RETRYING");
   assert.equal(result.data.payload.exception.retryCount, 1);
 });
@@ -65,7 +68,8 @@ test("XX05 service executes exception lifecycle", async () => {
 test("XX06 service publishes and queries governed reporting data", async () => {
   const service = new GovernedReportingService();
   const requirement = req("XX06");
-  await service.execute(requirement, { payload: { operation: "publish", row: { tenantId: "tenant-a", reportId: "rpt-1", values: { status: "OPEN" }, sourceRequirementIds: [requirement.id], generatedAt: "2026-09-23T15:00:00Z" } } });
-  const result = await service.execute(requirement, { payload: { operation: "query", request: { tenantId: "tenant-a", reportId: "rpt-1", filters: { status: "OPEN" } } } });
+  const context = { tenantId: "tenant-a", principalId: "user-a", correlationId: "c5" };
+  await service.execute(requirement, { context, payload: { operation: "publish", row: { tenantId: "tenant-a", reportId: "rpt-1", values: { status: "OPEN" }, sourceRequirementIds: [requirement.id], generatedAt: "2026-09-23T15:00:00Z" } } });
+  const result = await service.execute(requirement, { context, payload: { operation: "query", request: { tenantId: "tenant-a", reportId: "rpt-1", filters: { status: "OPEN" } } } });
   assert.equal(result.data.payload.rows.length, 1);
 });
