@@ -83,9 +83,7 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
     try {
       const material = this.integrityMaterial(entry);
       const expected = createHash("sha256").update(material).digest("hex");
-      const actual = Buffer.from(entry.integrityHash, "hex");
-      const expectedBytes = Buffer.from(expected, "hex");
-      return actual.length === expectedBytes.length && actual.equals(expectedBytes);
+      return expected === entry.integrityHash;
     } catch {
       return false;
     }
