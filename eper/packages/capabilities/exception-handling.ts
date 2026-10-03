@@ -48,7 +48,7 @@ export class InMemoryExceptionStore {
     });
   }
 
-  create(input: ExceptionCreateInput): WorkflowException {
+  create(input: ExceptionCreateInput, beforeCommit?: (created: WorkflowException) => void): WorkflowException {
     if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey || !input.createdAt) {
       throw new Error("EXCEPTION_CONTEXT_REQUIRED");
     }
@@ -70,6 +70,7 @@ export class InMemoryExceptionStore {
       retryCount: 0,
       updatedAt: now,
     };
+    beforeCommit?.({ ...value });
     this.exceptions.set(scopedId, value);
     this.idempotency.set(scopedIdempotencyKey, input.id);
     this.idempotencyFingerprints.set(scopedIdempotencyKey, fingerprint);
@@ -81,7 +82,12 @@ export class InMemoryExceptionStore {
     return value ? { ...value } : undefined;
   }
 
-  transition(tenantId: string, id: string, patch: ExceptionPatch): WorkflowException {
+  transition(
+    tenantId: string,
+    id: string,
+    patch: ExceptionPatch,
+    beforeCommit?: (next: WorkflowException, current: WorkflowException) => void,
+  ): WorkflowException {
     const current = this.get(tenantId, id);
     if (!current) throw new Error("EXCEPTION_NOT_FOUND");
 
@@ -103,6 +109,7 @@ export class InMemoryExceptionStore {
       retryCount: patch.state === "RETRYING" ? current.retryCount + 1 : current.retryCount,
       updatedAt: new Date().toISOString(),
     };
+    beforeCommit?.({ ...next }, { ...current });
     this.exceptions.set(this.key(tenantId, id), next);
     return { ...next };
   }

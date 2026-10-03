@@ -209,21 +209,28 @@ export class ExceptionHandlingService implements CapabilityService {
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "create") {
         const tenantId = requireTenantContext(value, payload.exception?.tenantId);
-        const existing = this.store.get(tenantId, payload.exception?.id);
-        const created = this.store.create({ ...payload.exception, tenantId });
-        if (!existing) {
-          this.recordLifecycleEvent(requirement, value.context!, created, "EXCEPTION_CREATED");
-        }
+        const created = this.store.create(
+          { ...payload.exception, tenantId },
+          (newException) => {
+            this.recordLifecycleEvent(requirement, value.context!, newException, "EXCEPTION_CREATED");
+          },
+        );
         return Promise.resolve(result(requirement, contracts, { operation: "create", exception: created }));
       }
       if (payload.operation === "transition") {
         const tenantId = requireTenantContext(value, payload.tenantId);
         const previous = this.store.get(tenantId, payload.id);
         if (!previous) throw new Error("EXCEPTION_NOT_FOUND");
-        const updated = this.store.transition(tenantId, payload.id, payload.patch as ExceptionPatch);
-        if (updated.state !== previous.state || updated.retryCount !== previous.retryCount || updated.owner !== previous.owner || updated.message !== previous.message) {
-          this.recordLifecycleEvent(requirement, value.context!, updated, "EXCEPTION_TRANSITIONED", previous.state);
-        }
+        const updated = this.store.transition(
+          tenantId,
+          payload.id,
+          payload.patch as ExceptionPatch,
+          (next, current) => {
+            if (next.state !== current.state || next.retryCount !== current.retryCount || next.owner !== current.owner || next.message !== current.message) {
+              this.recordLifecycleEvent(requirement, value.context!, next, "EXCEPTION_TRANSITIONED", current.state);
+            }
+          },
+        );
         return Promise.resolve(result(requirement, contracts, {
           operation: "transition",
           exception: updated,
