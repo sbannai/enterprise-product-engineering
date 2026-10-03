@@ -78,3 +78,14 @@ test("create callback failure leaves no exception and does not consume idempoten
   assert.equal(created.id, "ex-1");
   assert.equal(created.state, "OPEN");
 });
+
+test("retry count increments only on retry transitions", () => {
+  const store = new InMemoryExceptionStore();
+  store.create(base);
+  assert.equal(store.get("tenant-a", "ex-1").retryCount, 0);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "RETRYING" }).retryCount, 1);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "RETRYING" }).retryCount, 2);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "ESCALATED" }).retryCount, 2);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "RESOLVED" }).retryCount, 2);
+  assert.equal(store.get("tenant-a", "ex-1").retryCount, 2);
+});
