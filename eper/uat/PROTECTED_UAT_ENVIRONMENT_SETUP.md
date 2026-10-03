@@ -2,6 +2,10 @@
 
 **Purpose:** Configure the GitHub controls needed to run the authorized UAT target reachability/build-identity preflight. This is setup guidance, not proof that a target is deployed or approved.
 
+## Workflow selection note
+
+The repository currently contains two workflow files with the same Actions display name. To avoid dispatching the legacy variant, select the workflow defined by **`.github/workflows/eper-authorized-uat-target-preflight.yml`** (inputs include `expected_build_id` and `build_id_json_field`). Do not use the older `.github/workflows/eper-uat-target-preflight.yml` variant (inputs include `expected_build` and `build_id_field`). A maintainer should retire or rename the legacy workflow in a separately reviewed change; this runbook note does not remove it.
+
 ## 1. Create the protected environment
 
 In the repository, open **Settings → Environments → New environment** and create:
