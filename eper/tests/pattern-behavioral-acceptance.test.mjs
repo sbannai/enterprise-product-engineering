@@ -39,8 +39,7 @@ test("XX04 audit evidence: append, integrity hash and tenant isolation",async()=
  assert.equal(appended.data.payload.evidence.id,"ev-1"); assert.match(appended.data.payload.evidence.integrityHash,/^[a-f0-9]{64}$/);
  const listed=await service.execute(requirement,{context:context("xx04-list"),payload:{operation:"listByRequirement",tenantId:"behavioral-acceptance",requirementId:requirement.id}});
  assert.equal(listed.data.payload.evidence.length,1);
- const other=await service.execute(requirement,{context:context("xx04-other"),payload:{operation:"listByRequirement",tenantId:"other-tenant",requirementId:requirement.id}});
- assert.equal(other.data.payload.evidence.length,0);
+ assert.throws(()=>service.execute(requirement,{context:context("xx04-other"),payload:{operation:"listByRequirement",tenantId:"other-tenant",requirementId:requirement.id}}),/TENANT_CONTEXT_MISMATCH/);
 });
 test("XX05 exception handling: valid transition, retry count and invalid terminal transition",async()=>{
  const service=new ExceptionHandlingService(),requirement=req("XX05");
@@ -57,6 +56,5 @@ test("XX06 governed reporting: publish, query filtering and tenant isolation",as
  await service.execute(requirement,{context:context("xx06-publish"),payload:{operation:"publish",row:{tenantId:"behavioral-acceptance",reportId:"status",values:{state:"OPEN",priority:"P1"},sourceRequirementIds:[requirement.id],generatedAt:"2026-09-24T00:00:00.000Z"}}});
  const own=await service.execute(requirement,{context:context("xx06-query"),payload:{operation:"query",request:{tenantId:"behavioral-acceptance",reportId:"status",filters:{state:"OPEN"},limit:10}}});
  assert.equal(own.data.payload.rows.length,1);
- const other=await service.execute(requirement,{context:context("xx06-other"),payload:{operation:"query",request:{tenantId:"other-tenant",reportId:"status",limit:10}}});
- assert.equal(other.data.payload.rows.length,0);
+ assert.throws(()=>service.execute(requirement,{context:context("xx06-other"),payload:{operation:"query",request:{tenantId:"other-tenant",reportId:"status",limit:10}}),/TENANT_CONTEXT_MISMATCH/);
 });
