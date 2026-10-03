@@ -41,3 +41,23 @@ test("governed reporting validates query context and limit", () => {
     /REPORT_LIMIT_INVALID/,
   );
 });
+
+test("governed reports isolate nested input and returned values", () => {
+  const service = new InMemoryGovernedReportingService();
+  const row = {
+    ...serviceRow,
+    values: { nested: { labels: ["original"] } },
+  };
+  service.publish(row);
+  row.values.nested.labels.push("caller-change");
+  const result = service.query({ tenantId: "tenant-a", reportId: "rpt-1" });
+  result[0].values.nested.labels.push("returned-change");
+  assert.deepEqual(service.query({ tenantId: "tenant-a", reportId: "rpt-1" })[0].values, { nested: { labels: ["original"] } });
+});
+
+test("governed reports reject circular values", () => {
+  const service = new InMemoryGovernedReportingService();
+  const circular = {};
+  circular.self = circular;
+  assert.throws(() => service.publish({ ...serviceRow, values: circular }), /REPORT_DATA_NOT_SERIALIZABLE/);
+});
