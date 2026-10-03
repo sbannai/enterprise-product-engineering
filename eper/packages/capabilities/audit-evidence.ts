@@ -55,6 +55,12 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
     if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) {
       throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
     }
+    if (!input.action || !input.occurredAt) {
+      throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    }
+    if (Number.isNaN(Date.parse(input.occurredAt))) {
+      throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
+    }
     const material = this.integrityMaterial(input);
     const clonedPayload = JSON.parse(JSON.stringify(input.payload)) as unknown;
     const integrityHash = createHash("sha256").update(material).digest("hex");
