@@ -56,5 +56,5 @@ test("XX06 governed reporting: publish, query filtering and tenant isolation",as
  await service.execute(requirement,{context:context("xx06-publish"),payload:{operation:"publish",row:{tenantId:"behavioral-acceptance",reportId:"status",values:{state:"OPEN",priority:"P1"},sourceRequirementIds:[requirement.id],generatedAt:"2026-09-24T00:00:00.000Z"}}});
  const own=await service.execute(requirement,{context:context("xx06-query"),payload:{operation:"query",request:{tenantId:"behavioral-acceptance",reportId:"status",filters:{state:"OPEN"},limit:10}}});
  assert.equal(own.data.payload.rows.length,1);
- assert.throws(()=>service.execute(requirement,{context:context("xx06-other"),payload:{operation:"query",request:{tenantId:"other-tenant",reportId:"status",limit:10}}),/TENANT_CONTEXT_MISMATCH/);
+ assert.throws(() => service.execute(requirement, { context: context("xx06-other"), payload: { operation: "query", request: { tenantId: "other-tenant", reportId: "status", limit: 10 } } }), /TENANT_CONTEXT_MISMATCH/);
 });
