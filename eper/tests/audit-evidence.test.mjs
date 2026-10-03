@@ -58,3 +58,19 @@ test("audit evidence verification is safe for malformed evidence", () => {
   circular.self = circular;
   assert.equal(store.verify({ ...evidence, payload: circular, integrityHash: "a".repeat(64) }), false);
 });
+
+test("audit evidence rejects missing action and timestamp", () => {
+  const store = new InMemoryAuditEvidenceStore();
+  assert.throws(
+    () => store.append({ ...evidence, action: "" }),
+    /AUDIT_EVIDENCE_FIELDS_REQUIRED/,
+  );
+  assert.throws(
+    () => store.append({ ...evidence, occurredAt: "" }),
+    /AUDIT_EVIDENCE_FIELDS_REQUIRED/,
+  );
+  assert.throws(
+    () => store.append({ ...evidence, occurredAt: "not-a-timestamp" }),
+    /AUDIT_EVIDENCE_TIMESTAMP_INVALID/,
+  );
+});
