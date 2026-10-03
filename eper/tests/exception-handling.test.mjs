@@ -38,8 +38,12 @@ test("exception workflow supports escalation and resolution", () => {
 test("exception workflow enforces idempotency and valid transitions", () => {
   const store = new InMemoryExceptionStore();
   const first = store.create(base);
-  const duplicate = store.create({ ...base, id: "ex-2" });
+  const duplicate = store.create({ ...base });
   assert.equal(duplicate.id, first.id);
+  assert.throws(
+    () => store.create({ ...base, id: "ex-2", message: "Different request" }),
+    /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST/,
+  );
 
   store.transition("tenant-a", "ex-1", { state: "RESOLVED" });
   assert.throws(
