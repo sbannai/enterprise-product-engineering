@@ -62,3 +62,14 @@ test("exception workflow rejects cross-tenant access and incomplete context", ()
     /EXCEPTION_CONTEXT_REQUIRED/,
   );
 });
+
+test("retry count increments only on retry transitions", () => {
+  const store = new InMemoryExceptionStore();
+  store.create(base);
+  assert.equal(store.get("tenant-a", "ex-1").retryCount, 0);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "RETRYING" }).retryCount, 1);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "RETRYING" }).retryCount, 2);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "ESCALATED" }).retryCount, 2);
+  assert.equal(store.transition("tenant-a", "ex-1", { state: "RESOLVED" }).retryCount, 2);
+  assert.equal(store.get("tenant-a", "ex-1").retryCount, 2);
+});
