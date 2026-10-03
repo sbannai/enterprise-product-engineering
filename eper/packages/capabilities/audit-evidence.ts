@@ -21,6 +21,10 @@ export interface AuditEvidenceStore {
 export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
   private readonly entries = new Map<string, AuditEvidence>();
 
+  private key(tenantId: string, id: string): string {
+    return `${tenantId}:${id}`;
+  }
+
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
     if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) {
       throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
@@ -37,15 +41,15 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
     });
     const integrityHash = createHash("sha256").update(material).digest("hex");
     const entry = { ...input, integrityHash };
-    if (this.entries.has(input.id)) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
-    this.entries.set(input.id, entry);
+    const key = this.key(input.tenantId, input.id);
+    if (this.entries.has(key)) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
+    this.entries.set(key, entry);
     return { ...entry };
   }
 
   get(tenantId: string, id: string): AuditEvidence | undefined {
-    const entry = this.entries.get(id);
-    if (!entry || entry.tenantId !== tenantId) return undefined;
-    return { ...entry };
+    const entry = this.entries.get(this.key(tenantId, id));
+    return entry ? { ...entry } : undefined;
   }
 
   listByRequirement(tenantId: string, requirementId: string): readonly AuditEvidence[] {
