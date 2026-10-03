@@ -70,6 +70,7 @@ export class InMemoryExceptionStore {
       retryCount: 0,
       updatedAt: now,
     };
+    beforeCommit?.({ ...value });
     this.exceptions.set(scopedId, value);
     this.idempotency.set(scopedIdempotencyKey, input.id);
     this.idempotencyFingerprints.set(scopedIdempotencyKey, fingerprint);
