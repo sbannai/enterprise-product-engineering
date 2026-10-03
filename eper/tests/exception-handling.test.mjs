@@ -62,3 +62,10 @@ test("exception workflow rejects cross-tenant access and incomplete context", ()
     /EXCEPTION_CONTEXT_REQUIRED/,
   );
 });
+
+test("transition callback runs before exception state is committed", () => {
+  const store = new InMemoryExceptionStore();
+  store.create(base);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { state: "ESCALATED" }, () => { throw new Error("CALLBACK_FAILED"); }), /CALLBACK_FAILED/);
+  assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+});
