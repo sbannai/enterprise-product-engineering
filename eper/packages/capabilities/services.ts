@@ -164,20 +164,69 @@ export class AuditEvidenceService implements CapabilityService {
 
 export class ExceptionHandlingService implements CapabilityService {
   private readonly store = new InMemoryExceptionStore();
+  private readonly lifecycleEvidence = new InMemoryAuditEvidenceStore();
+  private lifecycleSequence = 0;
+
+  private recordLifecycleEvent(
+    requirement: RequirementBinding,
+    context: NonNullable<CapabilityInput["context"]>,
+    exception: WorkflowException,
+    eventType: "EXCEPTION_CREATED" | "EXCEPTION_TRANSITIONED",
+    previousState?: WorkflowException["state"],
+  ): AuditEvidence {
+    const id = `exception-lifecycle:${exception.id}:${++this.lifecycleSequence}`;
+    return this.lifecycleEvidence.append({
+      id,
+      tenantId: exception.tenantId,
+      requirementId: exception.requirementId || requirement.id,
+      action: eventType,
+      principalId: context.principalId,
+      correlationId: context.correlationId,
+      occurredAt: exception.updatedAt,
+      payload: {
+        exceptionId: exception.id,
+        eventType,
+        previousState: previousState ?? null,
+        state: exception.state,
+        retryCount: exception.retryCount,
+        code: exception.code,
+        owner: exception.owner ?? null,
+      },
+    });
+  }
+
+  listLifecycleEvidence(tenantId: string, requirementId: string): readonly AuditEvidence[] {
+    return this.lifecycleEvidence.listByRequirement(tenantId, requirementId);
+  }
+
+  verifyLifecycleEvidence(entry: AuditEvidence): boolean {
+    return this.lifecycleEvidence.verify(entry);
+  }
 
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     const { value, contracts } = prepare(requirement, input, "XX05", "exception-handling");
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "create") {
-        requireTenantContext(value, payload.exception?.tenantId);
-        return Promise.resolve(result(requirement, contracts, { operation: "create", exception: this.store.create(payload.exception) }));
+        const tenantId = requireTenantContext(value, payload.exception?.tenantId);
+        const existing = this.store.get(tenantId, payload.exception?.id);
+        const created = this.store.create({ ...payload.exception, tenantId });
+        if (!existing) {
+          this.recordLifecycleEvent(requirement, value.context!, created, "EXCEPTION_CREATED");
+        }
+        return Promise.resolve(result(requirement, contracts, { operation: "create", exception: created }));
       }
       if (payload.operation === "transition") {
-        requireTenantContext(value, payload.tenantId);
+        const tenantId = requireTenantContext(value, payload.tenantId);
+        const previous = this.store.get(tenantId, payload.id);
+        if (!previous) throw new Error("EXCEPTION_NOT_FOUND");
+        const updated = this.store.transition(tenantId, payload.id, payload.patch as ExceptionPatch);
+        if (updated.state !== previous.state || updated.retryCount !== previous.retryCount || updated.owner !== previous.owner || updated.message !== previous.message) {
+          this.recordLifecycleEvent(requirement, value.context!, updated, "EXCEPTION_TRANSITIONED", previous.state);
+        }
         return Promise.resolve(result(requirement, contracts, {
           operation: "transition",
-          exception: this.store.transition(payload.tenantId, payload.id, payload.patch as ExceptionPatch),
+          exception: updated,
         }));
       }
       if (payload.operation === "get") {
