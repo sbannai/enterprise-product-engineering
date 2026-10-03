@@ -90,8 +90,6 @@ test("exception create and transitions emit tenant-scoped lifecycle audit eviden
   assert.deepEqual(events.map(e => e.payload.state), ["OPEN", "RETRYING", "RESOLVED"]);
   assert.equal(events.every(e => e.principalId === "operator-1" && e.correlationId === "corr-lifecycle-1"), true);
   assert.equal(service.listLifecycleEvidence("tenant-b", requirement.id).length, 0);
-  assert.equal(events.every(e => service.listLifecycleEvidence("tenant-a", requirement.id).every(stored => {
-    if (stored.id !== e.id) return true;
-    return new InMemoryAuditEvidenceStore().verify(e) === false;
-  })), true);
+  assert.equal(events.every(e => service.verifyLifecycleEvidence(e)), true);
+  assert.equal(service.verifyLifecycleEvidence({ ...events[0], action: "TAMPERED" }), false);
 });
