@@ -24,14 +24,24 @@ export class InMemoryExceptionStore {
   private readonly exceptions = new Map<string, WorkflowException>();
   private readonly idempotency = new Map<string, string>();
 
+  private key(tenantId: string, id: string): string {
+    return JSON.stringify([tenantId, id]);
+  }
+
+  private idempotencyKey(tenantId: string, key: string): string {
+    return JSON.stringify([tenantId, key]);
+  }
+
   create(input: Omit<WorkflowException, "state" | "retryCount" | "updatedAt">): WorkflowException {
     if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey) {
       throw new Error("EXCEPTION_CONTEXT_REQUIRED");
     }
-    if (this.idempotency.has(input.idempotencyKey)) {
-      return this.get(input.tenantId, this.idempotency.get(input.idempotencyKey)!)!;
+    const scopedIdempotencyKey = this.idempotencyKey(input.tenantId, input.idempotencyKey);
+    if (this.idempotency.has(scopedIdempotencyKey)) {
+      return this.get(input.tenantId, this.idempotency.get(scopedIdempotencyKey)!)!;
     }
-    if (this.exceptions.has(input.id)) throw new Error("EXCEPTION_ALREADY_EXISTS");
+    const scopedId = this.key(input.tenantId, input.id);
+    if (this.exceptions.has(scopedId)) throw new Error("EXCEPTION_ALREADY_EXISTS");
 
     const now = input.createdAt;
     const value: WorkflowException = {
@@ -40,14 +50,14 @@ export class InMemoryExceptionStore {
       retryCount: 0,
       updatedAt: now,
     };
-    this.exceptions.set(input.id, value);
-    this.idempotency.set(input.idempotencyKey, input.id);
+    this.exceptions.set(scopedId, value);
+    this.idempotency.set(scopedIdempotencyKey, input.id);
     return { ...value };
   }
 
   get(tenantId: string, id: string): WorkflowException | undefined {
-    const value = this.exceptions.get(id);
-    return value && value.tenantId === tenantId ? { ...value } : undefined;
+    const value = this.exceptions.get(this.key(tenantId, id));
+    return value ? { ...value } : undefined;
   }
 
   transition(tenantId: string, id: string, patch: ExceptionPatch): WorkflowException {
@@ -72,7 +82,7 @@ export class InMemoryExceptionStore {
       retryCount: patch.state === "RETRYING" ? current.retryCount + 1 : current.retryCount,
       updatedAt: new Date().toISOString(),
     };
-    this.exceptions.set(id, next);
+    this.exceptions.set(this.key(tenantId, id), next);
     return { ...next };
   }
 }
