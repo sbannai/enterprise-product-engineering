@@ -8,7 +8,7 @@ const packet = readFileSync(
 );
 
 const requirementRows = [...packet.matchAll(
-  /^\| \x60(REQ-(\\d{3})(\\d{2}))\x60 \/ \x60(SRS-FR-(\\d+))\x60 \|.*\| (PENDING) \|$/gm,
+  /^\| \x60(REQ-([0-9]{3})([0-9]{2}))\x60 \/ \x60(SRS-FR-([0-9]+))\x60 \|.*\| (PENDING) \|$/gm,
 )];
 
 test("B01 approval packet maps all 48 requirements to SRS references", () => {
