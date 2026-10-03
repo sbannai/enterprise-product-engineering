@@ -105,6 +105,9 @@ export class AuthorizationService implements CapabilityService {
     if (payload && typeof payload === "object" && payload.operation === "decide") {
       const request = payload.request as AuthorizationRequest;
       requireTenantContext(value, request?.tenantId);
+      if (request?.principalId !== value.context?.principalId) {
+        throw new Error("AUTHORIZATION_PRINCIPAL_MISMATCH");
+      }
       return Promise.resolve(result(requirement, contracts, {
         operation: "decide",
         decision: this.policyService.decide(request),
