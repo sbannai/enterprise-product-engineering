@@ -22,7 +22,7 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
   private readonly entries = new Map<string, AuditEvidence>();
 
   private key(tenantId: string, id: string): string {
-    return `${tenantId}:${id}`;
+    return JSON.stringify([tenantId, id]);
   }
 
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
