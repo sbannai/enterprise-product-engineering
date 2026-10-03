@@ -40,6 +40,15 @@ function prepare(
   return { value, contracts };
 }
 
+function requireTenantContext(value: CapabilityInput, requestedTenantId?: string): string {
+  const tenantId = value.context?.tenantId;
+  if (!tenantId) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
+  if (requestedTenantId && requestedTenantId !== tenantId) {
+    throw new Error("TENANT_CONTEXT_MISMATCH");
+  }
+  return tenantId;
+}
+
 function result(
   requirement: RequirementBinding,
   contracts: ReturnType<typeof validateRequirementContracts>,
@@ -60,9 +69,7 @@ export class AuthoritativeRecordService implements CapabilityService {
     const { value, contracts } = prepare(requirement, input, "XX01", "authoritative-records");
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
-      const context = value.context;
-      const tenantId = payload.record?.tenantId ?? context?.tenantId;
-      if (!tenantId) throw new Error("TENANT_CONTEXT_REQUIRED");
+      const tenantId = requireTenantContext(value, payload.record?.tenantId ?? payload.tenantId);
       switch (payload.operation) {
         case "create":
           return Promise.resolve(result(requirement, contracts, { operation: "create", record: this.store.create({ ...payload.record, tenantId }) }));
@@ -97,6 +104,7 @@ export class AuthorizationService implements CapabilityService {
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation === "decide") {
       const request = payload.request as AuthorizationRequest;
+      requireTenantContext(value, request?.tenantId);
       for (const policy of (payload.policies ?? [])) this.policyService.addPolicy(policy);
       return Promise.resolve(result(requirement, contracts, {
         operation: "decide",
@@ -135,12 +143,15 @@ export class AuditEvidenceService implements CapabilityService {
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "append") {
+        requireTenantContext(value, payload.evidence?.tenantId);
         return Promise.resolve(result(requirement, contracts, { operation: "append", evidence: this.store.append(payload.evidence) }));
       }
       if (payload.operation === "get") {
+        requireTenantContext(value, payload.tenantId);
         return Promise.resolve(result(requirement, contracts, { operation: "get", evidence: this.store.get(payload.tenantId, payload.id) }));
       }
       if (payload.operation === "listByRequirement") {
+        requireTenantContext(value, payload.tenantId);
         return Promise.resolve(result(requirement, contracts, {
           operation: "listByRequirement",
           evidence: this.store.listByRequirement(payload.tenantId, payload.requirementId),
@@ -160,15 +171,18 @@ export class ExceptionHandlingService implements CapabilityService {
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "create") {
+        requireTenantContext(value, payload.exception?.tenantId);
         return Promise.resolve(result(requirement, contracts, { operation: "create", exception: this.store.create(payload.exception) }));
       }
       if (payload.operation === "transition") {
+        requireTenantContext(value, payload.tenantId);
         return Promise.resolve(result(requirement, contracts, {
           operation: "transition",
           exception: this.store.transition(payload.tenantId, payload.id, payload.patch as ExceptionPatch),
         }));
       }
       if (payload.operation === "get") {
+        requireTenantContext(value, payload.tenantId);
         return Promise.resolve(result(requirement, contracts, { operation: "get", exception: this.store.get(payload.tenantId, payload.id) }));
       }
       throw new Error("EXCEPTION_OPERATION_UNSUPPORTED");
@@ -189,10 +203,12 @@ export class GovernedReportingService implements CapabilityService {
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "publish") {
+        requireTenantContext(value, payload.row?.tenantId);
         this.reporting.publish(payload.row as ReportRow);
         return Promise.resolve(result(requirement, contracts, { operation: "publish", published: true }));
       }
       if (payload.operation === "query") {
+        requireTenantContext(value, payload.request?.tenantId);
         return Promise.resolve(result(requirement, contracts, {
           operation: "query",
           rows: this.reporting.query(payload.request as ReportQuery),
