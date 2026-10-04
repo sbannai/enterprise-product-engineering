@@ -4,7 +4,11 @@
 
 ## Workflow selection note
 
-The repository currently contains two workflow files with the same Actions display name. To avoid dispatching the legacy variant, select the workflow defined by **`.github/workflows/eper-authorized-uat-target-preflight.yml`** (inputs include `expected_build_id` and `build_id_json_field`). Do not use the older `.github/workflows/eper-uat-target-preflight.yml` variant (inputs include `expected_build` and `build_id_field`). A maintainer should retire or rename the legacy workflow in a separately reviewed change; this runbook note does not remove it.
+The current workflow display names are distinct:
+- **`EPER Authorized UAT Target Preflight`** — `.github/workflows/eper-authorized-uat-target-preflight.yml`; inputs include `expected_build_id` and `build_id_json_field`. This is the controlled workflow referenced by this runbook.
+- **`EPER Legacy UAT Target Preflight (deprecated)`** — `.github/workflows/eper-uat-target-preflight.yml`; inputs include `expected_build` and `build_id_field`. Do not dispatch this deprecated workflow.
+
+Keep the legacy workflow clearly labeled deprecated until it is removed through a separately reviewed change. The existence of a legacy workflow does not prove that the protected environment or required reviewers are configured; those must still be verified in repository Settings.
 
 ## 1. Create the protected environment
 
