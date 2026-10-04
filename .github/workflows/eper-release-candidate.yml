@@ -46,7 +46,8 @@ jobs:
         run: |
           mkdir -p release-candidate
           tar -czf release-candidate/eper-0.1.0-rc1.tgz package.json package-lock.json dist
-          sha256sum release-candidate/eper-0.1.0-rc1.tgz > release-candidate/eper-0.1.0-rc1.tgz.sha256
+          (cd release-candidate && sha256sum eper-0.1.0-rc1.tgz > eper-0.1.0-rc1.tgz.sha256)
+          (cd release-candidate && sha256sum -c eper-0.1.0-rc1.tgz.sha256)
 
       - name: Record release metadata
         run: |
