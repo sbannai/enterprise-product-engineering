@@ -34,3 +34,18 @@ Legacy `requirementTest=false` and `testExecution=false` values were deliberatel
 - Approved acceptance-test execution: 0/228; NOT EXECUTED.
 - Business UAT / formal UAT sign-off: NOT EXECUTED.
 - G9 traceability freeze: HOLD / NOT FROZEN.
+
+
+## Regression verification on schema v1.1.0 (2026-10-04)
+
+The new G9 regression test was added in commit `ad6f5953c66c41993b1c75e1771cd45c9e86a2cb`. The post-change workflows completed successfully against that exact commit:
+
+- [G9 Reconciliation CI — PASS](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188950028), including the `G9 reconciliation test` step.
+- [EPER CI — PASS](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188950064), including typecheck, build, general tests and UAT preflight regression tests.
+- [228 Requirement Pilot Test Matrix — PASS](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188950074).
+- [REEXEC-002 technical simulation — PASS](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188950085).
+- [REEXEC-001 controlled QA re-execution — PASS](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188950063).
+
+The latest matrix artifact is `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-37188950074`, SHA-256 `b0ea03efe4944d90e5e4bc7cbc1251f56b90e8a8d63cc1c508a15660ecdf6a82`. Its embedded commit is `ad6f5953c66c41993b1c75e1771cd45c9e86a2cb`; it records 38/38 chapter suites, 248/248 tests, and 228/228 requirement rows as automated pilot PASS. `businessAcceptance` and `formalUatSignoff` remain `NOT_EXECUTED`.
+
+**Regression disposition:** G9 schema semantics and preservation of non-acceptance flags are now validated by passing CI. This closes the register-field discrepancy at the *technical schema/control* level; it does not close any business acceptance, UAT, release, production, final acceptance or traceability-freeze gate.
