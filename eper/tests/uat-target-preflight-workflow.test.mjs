@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 // Keep this regression suite attached to the current authorized workflow, not
 // the deprecated legacy workflow with different implementation and inputs.
@@ -32,9 +33,19 @@ test("health path and network request are bounded and redirects are not followed
   assert.match(script, /return None/);
 });
 
-test("preflight requires an exact string build ID and does not capture response body", () => {
+test("preflight requires an exact string build ID and states its evidence boundary", () => {
   assert.match(script, /actual!=expected/);
   assert.match(script, /isinstance\(actual,str\)/);
   assert.doesNotMatch(script, /print\(body/);
   assert.match(script, /Reachability and build identity only; not OAuth, roles, tenant scope, functional UAT, acceptance, release authorization, or certification\./);
+});
+
+test("behavior-level Python tests cover validation and simulated health responses", () => {
+  const output = execFileSync("python3", ["tests/test_authorized_uat_preflight.py"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.match(output, /OK/);
+  assert.match(output, /Ran 8 tests/);
 });
