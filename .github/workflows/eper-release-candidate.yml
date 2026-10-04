@@ -44,8 +44,13 @@ jobs:
 
       - name: Package immutable release candidate
         run: |
-          mkdir -p release-candidate
-          tar -czf release-candidate/eper-0.1.0-rc4.tgz package.json package-lock.json dist
+          mkdir -p release-candidate .rc4-package
+          cp package.json package-lock.json .rc4-package/
+          cp -R dist .rc4-package/dist
+          sed -i 's/0.1.0-precode/0.1.0-rc4/g' .rc4-package/package.json .rc4-package/package-lock.json
+          node -e "const p=require('./.rc4-package/package.json'); const l=require('./.rc4-package/package-lock.json'); if(p.version!=='0.1.0-rc4'||l.version!==p.version||l.packages[''].version!==p.version) process.exit(1)"
+          tar -czf release-candidate/eper-0.1.0-rc4.tgz -C .rc4-package package.json package-lock.json dist
+          rm -rf .rc4-package
           (cd release-candidate && sha256sum eper-0.1.0-rc4.tgz > eper-0.1.0-rc4.tgz.sha256)
           (cd release-candidate && sha256sum -c eper-0.1.0-rc4.tgz.sha256)
 
