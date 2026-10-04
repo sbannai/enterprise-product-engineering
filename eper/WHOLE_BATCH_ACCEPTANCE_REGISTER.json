@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "scope": {
     "chapters": [
       463,
@@ -75,6 +75,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -126,6 +136,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -177,6 +197,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -228,6 +258,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -279,6 +319,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -330,6 +380,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -381,6 +441,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -432,6 +502,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -483,6 +563,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -534,6 +624,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -585,6 +685,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -636,6 +746,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -687,6 +807,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -738,6 +868,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -789,6 +929,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -840,6 +990,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -891,6 +1051,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -942,6 +1112,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -993,6 +1173,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1044,6 +1234,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1095,6 +1295,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1146,6 +1356,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1197,6 +1417,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1248,6 +1478,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1299,6 +1539,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1350,6 +1600,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1401,6 +1661,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1452,6 +1722,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1503,6 +1783,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1554,6 +1844,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1605,6 +1905,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1656,6 +1966,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1707,6 +2027,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1758,6 +2088,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1809,6 +2149,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1860,6 +2210,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1911,6 +2271,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -1962,6 +2332,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2013,6 +2393,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2064,6 +2454,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2115,6 +2515,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2166,6 +2576,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2217,6 +2637,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2268,6 +2698,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2319,6 +2759,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2370,6 +2820,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2421,6 +2881,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2472,6 +2942,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2523,6 +3003,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2574,6 +3064,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2625,6 +3125,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2676,6 +3186,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2727,6 +3247,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2778,6 +3308,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2829,6 +3369,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2880,6 +3430,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2931,6 +3491,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -2982,6 +3552,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3033,6 +3613,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3084,6 +3674,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3135,6 +3735,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3186,6 +3796,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3237,6 +3857,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3288,6 +3918,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3339,6 +3979,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3390,6 +4040,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3441,6 +4101,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3492,6 +4162,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3543,6 +4223,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3594,6 +4284,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3645,6 +4345,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3696,6 +4406,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3747,6 +4467,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3798,6 +4528,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3849,6 +4589,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3900,6 +4650,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -3951,6 +4711,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4002,6 +4772,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4053,6 +4833,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4104,6 +4894,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4155,6 +4955,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4206,6 +5016,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4257,6 +5077,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4308,6 +5138,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4359,6 +5199,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4410,6 +5260,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4461,6 +5321,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4512,6 +5382,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4563,6 +5443,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4614,6 +5504,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4665,6 +5565,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4716,6 +5626,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4767,6 +5687,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4818,6 +5748,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4869,6 +5809,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4920,6 +5870,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -4971,6 +5931,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5022,6 +5992,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5073,6 +6053,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5124,6 +6114,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5175,6 +6175,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5226,6 +6236,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5277,6 +6297,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5328,6 +6358,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5379,6 +6419,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5430,6 +6480,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5481,6 +6541,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5532,6 +6602,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5583,6 +6663,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5634,6 +6724,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5685,6 +6785,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5736,6 +6846,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5787,6 +6907,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5838,6 +6968,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5889,6 +7029,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5940,6 +7090,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -5991,6 +7151,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6042,6 +7212,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6093,6 +7273,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6144,6 +7334,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6195,6 +7395,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6246,6 +7456,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6297,6 +7517,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6348,6 +7578,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6399,6 +7639,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6450,6 +7700,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6501,6 +7761,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6552,6 +7822,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6603,6 +7883,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6654,6 +7944,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6705,6 +8005,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6756,6 +8066,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6807,6 +8127,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6858,6 +8188,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6909,6 +8249,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -6960,6 +8310,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7011,6 +8371,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7062,6 +8432,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7113,6 +8493,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7164,6 +8554,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7215,6 +8615,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7266,6 +8676,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7317,6 +8737,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7368,6 +8798,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7419,6 +8859,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7470,6 +8920,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7521,6 +8981,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7572,6 +9042,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7623,6 +9103,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7674,6 +9164,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7725,6 +9225,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7776,6 +9286,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7827,6 +9347,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7878,6 +9408,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7929,6 +9469,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -7980,6 +9530,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8031,6 +9591,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8082,6 +9652,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8133,6 +9713,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8184,6 +9774,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8235,6 +9835,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8286,6 +9896,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8337,6 +9957,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8388,6 +10018,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8439,6 +10079,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8490,6 +10140,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8541,6 +10201,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8592,6 +10262,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8643,6 +10323,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8694,6 +10384,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8745,6 +10445,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8796,6 +10506,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8847,6 +10567,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8898,6 +10628,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -8949,6 +10689,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9000,6 +10750,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9051,6 +10811,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9102,6 +10872,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9153,6 +10933,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9204,6 +10994,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9255,6 +11055,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9306,6 +11116,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9357,6 +11177,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9408,6 +11238,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9459,6 +11299,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9510,6 +11360,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9561,6 +11421,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9612,6 +11482,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9663,6 +11543,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9714,6 +11604,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9765,6 +11665,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9816,6 +11726,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9867,6 +11787,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9918,6 +11848,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -9969,6 +11909,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10020,6 +11970,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10071,6 +12031,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10122,6 +12092,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10173,6 +12153,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10224,6 +12214,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10275,6 +12275,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10326,6 +12336,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10377,6 +12397,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10428,6 +12458,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10479,6 +12519,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10530,6 +12580,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10581,6 +12641,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10632,6 +12702,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10683,6 +12763,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10734,6 +12824,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10785,6 +12885,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10836,6 +12946,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10887,6 +13007,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10938,6 +13068,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -10989,6 +13129,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11040,6 +13190,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11091,6 +13251,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11142,6 +13312,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11193,6 +13373,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11244,6 +13434,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11295,6 +13495,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11346,6 +13556,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11397,6 +13617,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11448,6 +13678,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11499,6 +13739,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11550,6 +13800,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11601,6 +13861,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     },
     {
@@ -11652,6 +13922,16 @@
         "testerIdentity": null,
         "businessDecisionAuthority": null,
         "evidenceReference": null
+      },
+      "sourceAcceptanceCriteriaReview": {
+        "sourceDocument": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx",
+        "sourceBaselineStatus": "REQUIREMENTS_BASELINE_APPROVAL_REQUIRED",
+        "genericSrsCriteriaPresent": true,
+        "requirementSpecificMeasurableOraclePresent": false,
+        "approvedBusinessBaseline": false,
+        "exactPageParagraphLocator": "NOT_VERIFIED",
+        "ownerDecision": "PENDING",
+        "disposition": "GENERIC_CRITERIA_PRESENT_BUT_NOT_APPROVED_OR_REQUIREMENT_SPECIFIC"
       }
     }
   ],
@@ -11662,5 +13942,10 @@
       "requirementTest": "Reserved for approved requirement-specific acceptance-test definition/execution under the controlled case baseline; automated pilot evidence alone does not set this flag.",
       "testExecution": "Reserved for execution against the approved acceptance case; automated pilot execution alone does not set this flag."
     }
+  },
+  "acceptanceCriteriaSemantics": {
+    "sourceCriteriaFinding": "The consolidated SRS baseline contains generic acceptance criteria for each requirement, but its own document-control statement says Batch 010 is WORKING DRAFT — REQUIREMENTS BASELINE PENDING APPROVAL. Generic wording is not a requirement-specific measurable business oracle.",
+    "sourceReference": "EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx, Batch 010, Chapters 451–500; exact page/paragraph locator not independently verified in repository source.",
+    "decisionRule": "Keep evidence.acceptanceCriteria=false until the requirement-specific measurable oracle and authoritative source baseline are approved by the accountable business owner."
   }
 }
