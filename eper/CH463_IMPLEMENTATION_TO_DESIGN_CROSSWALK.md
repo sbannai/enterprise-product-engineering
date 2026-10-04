@@ -182,3 +182,28 @@ The local pilot HTTP smoke ran 4 checks: health `200`, unauthenticated report `4
 - The matrix marks all six rows `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`; the overall artifact explicitly says business acceptance and formal UAT sign-off were NOT EXECUTED.
 
 **Disposition:** Chapter 463 automated pilot execution evidence = **PASS (14/14; smoke 4/4) at commit 13b806b**. Business UAT / acceptance = **NOT EXECUTED**. SRC-003/G3 = **OPEN / NO-GO**.
+
+
+## Post-merge CI verification (2026-10-04)
+
+The repository's current `main` commit at time of review, `1142a5ccf34538a77089c3b6a0592a359a03101d`, has completed the following push-triggered workflows successfully:
+
+| Workflow | Run | Result |
+|---|---|---|
+| EPER CI (typecheck, build, tests, UAT preflight regression) | [37188613324](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188613324) | SUCCESS |
+| EPER 228 Requirement Pilot Test Matrix | [37188613347](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188613347) | SUCCESS |
+| EPER REEXEC-002 Controlled UAT Technical Simulation | [37188613355](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188613355) | SUCCESS |
+| EPER RE-EXEC-001 Controlled QA Re-Execution | [37188613374](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188613374) | SUCCESS |
+| G9 Reconciliation CI | [37188613534](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37188613534) | SUCCESS |
+
+### Latest 228-row matrix artifact
+- Artifact: `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-37188613347`
+- SHA-256: `c38e5ae28d3932404bb6e754c714ca648649de7f5be46f59d08b136e707b8c82`
+- Matrix records **38/38 chapters PASS, 248/248 tests PASS, 0 failed**, and 228/228 requirement rows classified `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`.
+- Local HTTP smoke: **28/28 checks PASS across 9 available pilot HTTP apps**; 29 chapters had no HTTP app in scope.
+- Artifact's `businessAcceptance` and `formalUatSignoff` fields remain `NOT_EXECUTED`.
+
+### Interpretation
+The previous Chapter 463 test evidence is now confirmed on the current main commit at this verification point, and the cross-repository CI, controlled QA re-execution, technical simulation and G9 reconciliation workflows are green. This closes the **post-merge technical CI verification** task for this commit. It does not close business UAT, formal acceptance, external OAuth/production validation, missing design/contract bindings, owner decisions, or G9 traceability freeze. Any subsequent commit requires its own run verification.
+
+**Disposition:** current-main technical verification = **PASS**; business UAT/final acceptance = **NOT EXECUTED**; SRC-003/G3 = **OPEN / NO-GO**.
