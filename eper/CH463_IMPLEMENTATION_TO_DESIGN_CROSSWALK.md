@@ -122,3 +122,31 @@ The owner decision must establish: (1) in-scope/out-of-scope aggregates; (2) agg
 Owner response options: **EVIDENCE PROVIDED** (approved source + exact locator/version/approval reference); **SOURCE NOT AVAILABLE** (accountable owner + due date); **CLARIFICATION REQUIRED** (specific unresolved question + decision authority); or **APPROVED MODEL CHANGE** (formal change record).
 
 This is a gap determination, not an approved procurement model. REQ-46301 and SRC-003/G3 remain OPEN/NO-GO; UAT remains unauthorized.
+
+
+## REQ-46302–REQ-46306 executable evidence audit (2026-10-04)
+
+This is an implementation/test audit, not a business-rule or design approval.
+
+| Requirement | Positive/negative behavior directly supported by source/test | What the executable evidence does not establish | Disposition |
+|---|---|---|---|
+| REQ-46302 / SRS-FR-2324 | Required tenant/principal/action/resource context; tenant-scoped policy matching; explicit DENY takes precedence over ALLOW; no matching ALLOW defaults to DENY. Wave-01 test exercises conflicting ALLOW+DENY and default-deny. | Approved business role/action/resource matrix, policy persistence/administration, authenticated identity provenance, authorization decision event contract, API middleware enforcement across all entry points. | **CODE PATH TESTED; GOVERNANCE / END-TO-END ENFORCEMENT OPEN** |
+| REQ-46303 / SRS-FR-2325 | Rule ID and evaluator required; duplicate rule IDs rejected; each registered evaluator runs; ERROR severity makes result invalid; Wave-01 tests amount > 0 and amount = 0. | Procurement-specific approved rule set, version/effective-date handling, boundary/precision/currency rules, authorization of rule changes, domain-specific oracle approval. The amount rule is a test fixture, not a source-approved procurement rule. | **GENERIC VALIDATION TESTED; BUSINESS RULE BASELINE OPEN** |
+| REQ-46304 / SRS-FR-2326 | Required audit context and parseable timestamp; duplicate tenant-scoped ID rejected; JSON payload cloned; SHA-256 integrity hash computed/verified; tenant-scoped retrieval/list; Wave-01 tests hash shape and tenant isolation. | Durable/immutable storage, key management or trusted timestamp, retention/legal hold, append-only enforcement outside the process, export/retrieval authorization, approved material-event coverage and retention policy. SHA-256 over stored content alone does not prove tamper-proof storage. | **IN-PROCESS INTEGRITY TESTED; AUDIT CONTROL BASELINE OPEN** |
+| REQ-46305 / SRS-FR-2327 | Exception context required; idempotency key is tenant-scoped and request-fingerprinted; conflicting reuse rejected; transitions validated; retryCount increments when entering RETRYING; Wave-01 tests create→retry→resolve and rejects retry after RESOLVED. | Actual retry scheduler/backoff, durable transactional state, lease/locking under concurrent requests, downstream compensation, DLQ, escalation notification, retry exhaustion policy and approved terminal-state policy. A state labelled RETRYING is not proof a retry was executed. | **STATE-MACHINE TESTED; OPERATIONAL RECOVERY OPEN** |
+| REQ-46306 / SRS-FR-2328 | Reporting context and provenance required; tenant/report scoped query; exact-value filters; positive integer limit; Wave-01 tests publish/query and cross-tenant isolation. | Approved report catalogue/metric formulas, aggregation and pagination semantics, freshness/SLA, lineage validation against source records, report access policy, persisted read model and refresh scheduling/events. | **BASIC QUERY TESTED; GOVERNED REPORTING BASELINE OPEN** |
+
+### Evidence interpretation
+
+The existing `eper/tests/requirement-acceptance-wave-01.test.mjs` exercises these six requirement IDs and meaningful positive/negative cases. The Chapter 463 wave report still classifies CI, defect/retest, UAT, release, production, final acceptance and traceability freeze as pending. The wave's generic acceptance criteria are not a substitute for approved procurement-specific expected outcomes.
+
+### Exit blockers after this code audit
+
+1. **REQ-46302:** approved security matrix and evidence that authorization is enforced at all material-action boundaries.
+2. **REQ-46303:** approved domain rule catalogue with versioned rules and measurable procurement-specific boundary examples.
+3. **REQ-46304:** approved audit event catalogue, retention/integrity control design and evidence for the actual storage/operational control.
+4. **REQ-46305:** approved recovery policy plus executable scheduler/retry/DLQ/escalation integration evidence, or explicitly scoped approved N/A.
+5. **REQ-46306:** approved report/metric catalogue, lineage/freshness/access contract and execution evidence.
+6. **All five:** exact approved HLD/LLD locators and DATA/API/EVENT joins or owner-approved N/A decisions; then authorized business UAT and recorded disposition.
+
+No source code or test fixture has been promoted into an approved business rule or signed-off design. REQ-46302–REQ-46306 remain technically exercised in the pilot, but business UAT/final acceptance is not evidenced. SRC-003/G3 remains OPEN/NO-GO.
