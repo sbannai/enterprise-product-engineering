@@ -64,3 +64,44 @@ The IDs `DATA:*`, `API:*`, and `EVENT:*` at `eper/contracts/index.ts` are regist
 - SRC-003 / G3: **OPEN / NO-GO**.
 
 No requirement-level design locator is promoted by this update. The next genuine closure event is owner-supplied, versioned design/interface evidence or a documented source-unavailable/clarification decision, reviewed by the design authority.
+
+
+## Controlled Library catalogue join — Chapter 463 (2026-10-04)
+
+This pass compares the shared contract baselines found in the project Library:
+- `EM-DATA-001_Database_Dictionary_ER_Model_v1.docx`, §§4–8 (entity catalogue, key attributes, integrity, index baseline).
+- `EM-API-001_OpenAPI_Specification_v1.docx`, §§2–8 (global contract, headers/envelopes/errors, resource and representative endpoint catalogues).
+- `EM-EVT-001_Event_Schema_Catalogue_v1.docx`, §§3–8 (standard event envelope, event catalogue, payload and delivery semantics).
+- `EM-OPS-Ch463_EPER_Shared_Contract_Specification_v1.docx`, §§8–15 (explicitly states exact Chapter-463 DATA entities/fields, API endpoints/schemas and event IDs/schemas remain OPEN where not evidenced).
+
+### Six-row candidate join
+
+| Requirement / pattern | DATA catalogue candidates | API catalogue candidates | EVENT catalogue candidates | Disposition |
+|---|---|---|---|---|
+| REQ-46301 / XX01 records & lifecycle | DOC-001/002 (document lifecycle only), WFL-001/002 (workflow lifecycle only); neither establishes procurement object identity | Document create/get/update/archive endpoints; workflow resource is only a generic resource | EVT-DOC-002/003 or EVT-WFL-002/006 are only candidates for those respective domains | **NO EXACT PROCUREMENT DOMAIN JOIN**; authoritative procurement object/model and approved applicability are not in the shared baseline |
+| REQ-46302 / XX02 authorization | IAM-001…005 and SEC-001 (principal, role, permission, assignments, policy) | Tenant principals/roles and authorization-policies resources; global server-side RBAC/ABAC contract | EVT-SEC-001 AuthorizationPolicyChanged is a catalogue entry; it is not proof every authorization decision must publish it | **SUPPORTING PLATFORM JOIN**; exact Chapter-463 roles/actions/resources remain open |
+| REQ-46303 / XX03 validation | RUL-001/002 RuleSet/RuleSetVersion; candidate domain entity still unconfirmed | Standard 400/422 error semantics; exact procurement command/validation operation not evidenced | EVT-RUL-001 RuleSetPublished records rule publication, not each validation result | **SUPPORTING RULES JOIN**; approved procurement rules and expected outcomes remain open |
+| REQ-46304 / XX04 audit | AUD-001 AuditRecord (append-only; actor/action/resource/outcome/time attributes) | Audit resource `/api/v1/tenants/{tenantId}/audit`; representative operations/payload schema require exact locator confirmation | EVT-AUD-001 SecurityActionRecorded is the catalogue-level candidate | **STRONG SHARED-CONTROL CANDIDATE**; exact material-event coverage, payload, retention and approval still open |
+| REQ-46305 / XX05 exception & recovery | WFL-001/002, INT-001/002/003, OPS-001/002 (workflow, integration, idempotency, outbox) | Workflow and integration jobs/reconciliation resources; exact recovery commands not evidenced | EVT-WFL-005 WorkflowFailed; EVT-INT-003 IntegrationFailed; EVT-INT-004 IntegrationReconciliationRequired | **SUPPORTING RECOVERY JOIN**; requirement applicability, retry policy, producer/payload and delivery binding remain open |
+| REQ-46306 / XX06 reporting | Candidate read-model not specifically defined; DQ-001 is a data-quality issue, not a reporting model | No dedicated governed reporting/analytics endpoint identified in the reviewed representative resource catalogue | EVT-* events may feed consumers but do not define a report-refresh contract | **NO EXACT REPORTING JOIN**; metric catalogue, lineage, freshness, access and endpoint/event remain open |
+
+### What has actually been promoted
+
+- **Catalogue locator promotion:** only the shared catalogue section/entry is recorded as a candidate source reference.
+- **Exact requirement-level binding:** 0/6 confirmed as approved. The Chapter 463 shared-contract baseline explicitly keeps exact DATA/API/EVENT bindings open.
+- **Approved N/A decisions:** 0/6 evidenced.
+- **Contract execution evidence:** not established by the Library catalogue documents.
+- **UAT authorization:** NO.
+
+The distinction is deliberate: a catalogue entry existing is not the same as the domain requirement being bound to it. For example, DOC-001 and EVT-DOC-* are valid document-domain catalogue entries, but they do not establish the authoritative procurement requisition/order/receipt/invoice model for REQ-46301.
+
+### Decision-ready blocker list
+
+1. **Design authority + procurement domain owner:** define/identify the authoritative Chapter-463 business objects and lifecycle. Then bind them to exact EM-DATA-001 rows and exact HLD/LLD locators.
+2. **API owner:** identify operation IDs/method/path and request/response/error schemas for each applicable requirement; if none applies, record an approved N/A with rationale.
+3. **Event owner:** select only events emitted by the authoritative capability; bind event ID/version/payload schema/producer/trigger and delivery semantics, or record approved N/A.
+4. **Security owner:** approve exact role/action/resource/tenant matrix for REQ-46302.
+5. **Business rules owner:** approve validation rules, boundary examples and observable outcomes for REQ-46303.
+6. **Audit/reporting owners:** approve event coverage/retention and report definitions/lineage/freshness respectively.
+
+**Gate disposition remains SRC-003 / G3 OPEN / NO-GO.** This join identifies credible shared-platform candidates and prevents false mappings; it does not manufacture the missing procurement domain contract or approval.
