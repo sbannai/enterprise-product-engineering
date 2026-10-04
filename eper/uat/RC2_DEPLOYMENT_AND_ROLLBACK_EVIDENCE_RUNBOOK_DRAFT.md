@@ -1,9 +1,9 @@
-# EPER RC2 Deployment and Rollback Evidence Runbook (Draft)
+# EPER RC4 Deployment and Rollback Evidence Runbook (Draft)
 
 **Status:** DRAFT — owner approval required  
-**Scope:** EPER / EM-OPS Chapters 463–500; RC2 source commit `31f8f8056176562005369dbaf3cacfb391deee52`  
-**Candidate artifact:** `EPER-0.1.0-RC2-31f8f8056176562005369dbaf3cacfb391deee52`  
-**Build evidence:** [RC2 workflow run #7](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37189950957)  
+**Scope:** EPER / EM-OPS Chapters 463–500; RC4 source baseline `5eb3c757d7407b6ecb4bf96fa762103a3463d905`; candidate packaging workflow commit `13dc7fa94a4c0998d94e22a361d6e5790eee1183`  
+**Candidate artifact:** `EPER-0.1.0-RC4-13dc7fa94a4c0998d94e22a361d6e5790eee1183`  
+**Build evidence:** [RC4 corrected workflow run](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37211275119)  
 **Not an authorization:** This runbook does not approve deployment, business UAT, production release, or final acceptance.
 
 ## 1. Required named owners and approvals
@@ -29,7 +29,7 @@ Do not put passwords, access tokens, private keys, or secret values in this docu
 
 Deployment remains **NO-GO** until every applicable item is evidenced and approved.
 
-- [ ] Release approver confirms the exact RC2 source commit and artifact ID/digest.
+- [ ] Release approver confirms RC4 source baseline `5eb3c757d7407b6ecb4bf96fa762103a3463d905`, packaging workflow commit `13dc7fa94a4c0998d94e22a361d6e5790eee1183`, artifact ID `11306122539`, and digest `sha256:7206c96e72ce6a3279cd62063a694c3c4ecc558d92ae66622297a988f87e075a`.
 - [ ] Artifact has been downloaded from the successful workflow and its embedded SHA-256 check passes.
 - [ ] Change record, target environment, maintenance window, and operator are approved.
 - [ ] Environment configuration and secret availability are verified by the authorized operator without exposing secret values.
@@ -51,8 +51,8 @@ Complete during the approved change window; do not pre-fill results.
 | Target environment and approved host reference | PENDING |
 | Operator and independent witness | PENDING |
 | Start/end timestamps (UTC) | PENDING |
-| RC2 artifact ID and digest | PENDING |
-| Source commit | `31f8f8056176562005369dbaf3cacfb391deee52` (reconfirm before execution) |
+| RC4 artifact ID and digest | `11306122539`; `sha256:7206c96e72ce6a3279cd62063a694c3c4ecc558d92ae66622297a988f87e075a` (reconfirm against downloaded artifact before execution) |
+| Source baseline / packaging workflow commit | `5eb3c757d7407b6ecb4bf96fa762103a3463d905` / `13dc7fa94a4c0998d94e22a361d6e5790eee1183` |
 | Pre-deployment backup/snapshot reference | PENDING / N/A with approved rationale |
 | Deployment command/procedure version | PENDING |
 | Deployment result and log/evidence reference | NOT EXECUTED |
@@ -103,8 +103,8 @@ A successful preflight proves only endpoint reachability and exact build-ID matc
 ## 6. Current evidence boundary
 
 Known technical evidence:
-- RC2 workflow build and verification tests passed: [run #7](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37189950957).
-- RC2 branch is one commit ahead of main and zero commits behind; the only delta is release workflow naming/packaging metadata.
+- RC4 build succeeded and the downloaded artifact was checked for GitHub ZIP digest, embedded tarball checksum, package/lockfile version `0.1.0-rc4`, and release metadata: [run](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37211275119).
+- The earlier RC4 artifact is superseded for current-candidate purposes; use only the corrected RC4 artifact ID/digest above for any future approved change.
 - The automated 228-requirement pilot passed, but business acceptance and formal UAT remain NOT EXECUTED.
 
 Not yet evidenced:
