@@ -139,5 +139,6 @@ console.log(JSON.stringify({
   totalChecks: summary.totalChecks,
   passedChecks: summary.passedChecks,
   failedChapters: summary.failedChapters,
+  failedChapterDetails: results.filter((row) => row.status === "FAIL").map((row) => ({ chapter: row.chapter, error: row.error })),
 }, null, 2));
 if (summary.failedChapters.length) process.exitCode = 1;
