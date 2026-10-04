@@ -53,4 +53,21 @@ class AuthorizedUatPreflightTests(unittest.TestCase):
     def test_missing_allowlist_fails_before_network(self):
         code,result,build=self.run_check(dict(BASE_ENV,UAT_ALLOWED_HOST=""),FakeOpener())
         self.assertEqual(code,1); self.assertEqual(result["checks"]["allowlist"]["status"],"FAIL"); build.assert_not_called()
+    def test_rejects_http_userinfo_query_and_fragment_before_network(self):
+        for url in ("http://uat.example.test", "https://user@uat.example.test", "https://uat.example.test?x=1", "https://uat.example.test#fragment"):
+            with self.subTest(url=url):
+                code,result,build=self.run_check(dict(BASE_ENV,UAT_BASE_URL=url),FakeOpener())
+                self.assertEqual(code,1); self.assertEqual(result["checks"]["targetValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_missing_expected_build_or_json_field_fails_before_network(self):
+        for changes in ({"UAT_EXPECTED_BUILD_ID":""}, {"UAT_BUILD_ID_JSON_FIELD":""}):
+            with self.subTest(changes=changes):
+                code,result,build=self.run_check(dict(BASE_ENV,**changes),FakeOpener())
+                self.assertEqual(code,1); self.assertEqual(result["checks"]["buildInputValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_non_object_json_root_fails(self):
+        code,result,_=self.run_check(opener=FakeOpener(FakeResponse(b'["abc123"]')))
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthResponse"]["status"],"FAIL")
+    def test_oversized_health_response_fails(self):
+        body=b"x"*(preflight.MAX_RESPONSE_BYTES+1)
+        code,result,_=self.run_check(opener=FakeOpener(FakeResponse(body)))
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthResponse"]["status"],"FAIL")
 if __name__=="__main__": unittest.main()
