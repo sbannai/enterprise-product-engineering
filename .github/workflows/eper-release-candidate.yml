@@ -45,9 +45,9 @@ jobs:
       - name: Package immutable release candidate
         run: |
           mkdir -p release-candidate
-          tar -czf release-candidate/eper-0.1.0-rc1.tgz package.json package-lock.json dist
-          (cd release-candidate && sha256sum eper-0.1.0-rc1.tgz > eper-0.1.0-rc1.tgz.sha256)
-          (cd release-candidate && sha256sum -c eper-0.1.0-rc1.tgz.sha256)
+          tar -czf release-candidate/eper-0.1.0-rc4.tgz package.json package-lock.json dist
+          (cd release-candidate && sha256sum eper-0.1.0-rc4.tgz > eper-0.1.0-rc4.tgz.sha256)
+          (cd release-candidate && sha256sum -c eper-0.1.0-rc4.tgz.sha256)
 
       - name: Record release metadata
         run: |
@@ -70,7 +70,7 @@ jobs:
       - name: Upload release candidate
         uses: actions/upload-artifact@v4
         with:
-          name: EPER-0.1.0-RC1-${{ github.sha }}
+          name: EPER-0.1.0-RC4-${{ github.sha }}
           path: eper/release-candidate/*
           if-no-files-found: error
           retention-days: 90
