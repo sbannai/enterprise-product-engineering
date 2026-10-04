@@ -15,7 +15,7 @@ const req = (id) => {
   assert.ok(r, `Missing governed requirement: ${id}`);
   return r;
 };
-const ctx = (id) => ({ tenantId: "wave-03-ch465", principalId: "wave-03-runner", correlationId: id });
+const ctx = (id) => ({ tenantId: "wave-03-ch465", principalId: "actor-46502", correlationId: id });
 
 test("REQ-46501 / SRS-FR-2335: authoritative lifecycle and version control", async () => {
   const r = req("REQ-46501"); assert.equal(r.pattern, "XX01");
@@ -32,7 +32,7 @@ test("REQ-46502 / SRS-FR-2336: authorization deny precedence and default deny", 
   const s = new AuthorizationService();
   const d = await s.execute(r, { context: ctx("46502-deny"), payload: { operation: "decide", request: { tenantId: "wave-03-ch465", principalId: "actor-46502", action: "material.update", resource: "authoritative-record" }, policies: [{ tenantId: "wave-03-ch465", principalId: "actor-46502", actions: ["material.update"], resources: ["authoritative-record"], effect: "ALLOW" }, { tenantId: "wave-03-ch465", principalId: "actor-46502", actions: ["material.update"], resources: ["authoritative-record"], effect: "DENY" }] } });
   assert.equal(d.data.payload.decision.effect, "DENY");
-  const dd = await s.execute(r, { context: ctx("46502-default"), payload: { operation: "decide", request: { tenantId: "wave-03-ch465", principalId: "unlisted", action: "material.delete", resource: "authoritative-record" } } });
+  const dd = await s.execute(r, { context: ctx("46502-default"), payload: { operation: "decide", request: { tenantId: "wave-03-ch465", principalId: "actor-46502", action: "material.delete", resource: "authoritative-record" } } });
   assert.equal(dd.data.payload.decision.effect, "DENY");
 });
 
@@ -50,7 +50,7 @@ test("REQ-46503 / SRS-FR-2337: mandatory business validation", async () => {
 test("REQ-46504 / SRS-FR-2338: audit integrity and tenant isolation", async () => {
   const r = req("REQ-46504"); assert.equal(r.pattern, "XX04");
   const s = new AuditEvidenceService();
-  const a = await s.execute(r, { context: ctx("46504-append"), payload: { operation: "append", evidence: { id: "46504-evidence", tenantId: "wave-03-ch465", requirementId: "REQ-46504", action: "MATERIAL_EVENT", principalId: "wave-03-runner", correlationId: "46504-append", occurredAt: "2026-09-24T04:00:00.000Z", payload: { result: "PASS" } } } });
+  const a = await s.execute(r, { context: ctx("46504-append"), payload: { operation: "append", evidence: { id: "46504-evidence", tenantId: "wave-03-ch465", requirementId: "REQ-46504", action: "MATERIAL_EVENT", principalId: "actor-46502", correlationId: "46504-append", occurredAt: "2026-09-24T04:00:00.000Z", payload: { result: "PASS" } } } });
   assert.match(a.data.payload.evidence.integrityHash, /^[a-f0-9]{64}$/);
   const own = await s.execute(r, { context: ctx("46504-list"), payload: { operation: "listByRequirement", tenantId: "wave-03-ch465", requirementId: "REQ-46504" } });
   assert.equal(own.data.payload.evidence.length, 1);

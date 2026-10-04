@@ -18,7 +18,7 @@ const req = (id) => {
 
 const context = (correlationId) => ({
   tenantId: "wave-01-ch463",
-  principalId: "wave-01-runner",
+  principalId: "actor-46302",
   correlationId,
 });
 
@@ -100,7 +100,7 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
       operation: "decide",
       request: {
         tenantId: "wave-01-ch463",
-        principalId: "unlisted-actor",
+        principalId: "actor-46302",
         action: "material.delete",
         resource: "authoritative-record",
       },
@@ -150,7 +150,7 @@ test("REQ-46304 / SRS-FR-2326: audit evidence preserves integrity and tenant bou
         tenantId: "wave-01-ch463",
         requirementId: "REQ-46304",
         action: "MATERIAL_EVENT",
-        principalId: "wave-01-runner",
+        principalId: "actor-46302",
         correlationId: "req-46304-append",
         occurredAt: "2026-09-24T03:00:00.000Z",
         payload: { result: "PASS" },
