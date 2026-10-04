@@ -34,7 +34,7 @@ test("Chapters 464–470: all 42 requirement bindings retain chapter, SRS sequen
   }
 });
 
-test("Chapters 464–470: tenant mismatch is rejected by record, audit, exception and reporting capabilities", async () => {
+test("Chapters 464–470: record capability rejects tenant mismatch for every chapter binding", async () => {
   for (const chapter of [464, 465, 466, 467, 468, 469, 470]) {
     const binding = requirementBindings.find((r) => r.chapter === chapter && r.sequence === 1);
     assert.ok(binding);
