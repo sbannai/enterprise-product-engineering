@@ -92,3 +92,36 @@ test("the 228-row execution capture does not promote draft B01 cases into execut
     assert.equal(row.evidence_archive_reference, "", row.requirement_id);
   }
 });
+
+const decisions = readCsv("../uat/B01_OWNER_DECISION_LOG.csv");
+
+test("owner decision log covers 48 requirement decisions and 13 environment gates without fabricated approval", () => {
+  assert.equal(decisions.length, 61);
+  const requirementDecisions = decisions.filter((row) => row.requirement_id);
+  const environmentDecisions = decisions.filter((row) => !row.requirement_id);
+  assert.equal(requirementDecisions.length, 48);
+  assert.equal(environmentDecisions.length, 13);
+
+  const expectedRequirementIds = new Set(cases.map((row) => row.requirement_id));
+  const decisionRequirementIds = new Set();
+  for (const row of requirementDecisions) {
+    assert.ok(expectedRequirementIds.has(row.requirement_id), row.decision_id);
+    assert.ok(!decisionRequirementIds.has(row.requirement_id), `duplicate decision for ${row.requirement_id}`);
+    decisionRequirementIds.add(row.requirement_id);
+    assert.equal(row.decision, "PENDING", row.decision_id);
+    assert.equal(row.status, "OPEN", row.decision_id);
+    assert.equal(row.evidence_reference, "", row.decision_id);
+    assert.equal(row.approver_name, "", row.decision_id);
+    assert.equal(row.decision_date_utc, "", row.decision_id);
+  }
+  assert.deepEqual([...decisionRequirementIds].sort(), [...expectedRequirementIds].sort());
+
+  for (const row of environmentDecisions) {
+    assert.match(row.decision_id, /^B01-DEC-(0[1-9]|1[0-3])$/);
+    assert.equal(row.decision, "PENDING", row.decision_id);
+    assert.equal(row.status, "OPEN", row.decision_id);
+    assert.equal(row.evidence_reference, "", row.decision_id);
+    assert.equal(row.approver_name, "", row.decision_id);
+    assert.equal(row.decision_date_utc, "", row.decision_id);
+  }
+});
