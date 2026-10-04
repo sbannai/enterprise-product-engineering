@@ -125,3 +125,23 @@ test("owner decision log covers 48 requirement decisions and 13 environment gate
     assert.equal(row.decision_date_utc, "", row.decision_id);
   }
 });
+
+test("each pending B01 owner decision is requirement-specific and traceable to BRD/SRS", () => {
+  const caseById = new Map(cases.map((row) => [row.requirement_id, row]));
+  const requirementDecisions = decisions.filter((row) => row.requirement_id);
+
+  for (const row of requirementDecisions) {
+    const caseRow = caseById.get(row.requirement_id);
+    assert.ok(caseRow, row.decision_id);
+    assert.ok(row.decision_required.length >= 120, `${row.decision_id}: decision request is too generic`);
+    assert.ok(row.next_action.length >= 30, `${row.decision_id}: missing actionable next step`);
+    assert.ok(row.source_reference.includes(caseRow.srs_id), `${row.decision_id}: SRS mapping missing from source reference`);
+    assert.ok(
+      row.source_reference.includes(`§${row.chapter || caseRow.chapter}.21`),
+      `${row.decision_id}: detailed BRD requirement-register locator missing`
+    );
+    assert.equal(row.decision_options, "APPROVE / RETURN_FOR_REWORK / DEFER", row.decision_id);
+    assert.equal(row.decision, "PENDING", row.decision_id);
+    assert.equal(row.status, "OPEN", row.decision_id);
+  }
+});
