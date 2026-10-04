@@ -71,8 +71,11 @@ test("every B01 case gap remains explicit until requirement-level criteria are a
     assert.ok(caseIds.has(row.requirement_id), row.requirement_id);
     assert.ok(!gapIds.has(row.requirement_id), `duplicate gap ${row.requirement_id}`);
     gapIds.add(row.requirement_id);
-    assert.equal(row.scenario_reference_status, "MISSING", row.requirement_id);
-    assert.equal(row.expected_result_status, "MISSING", row.requirement_id);
+    const draftCase = cases.find((candidate) => candidate.requirement_id === row.requirement_id);
+    assert.ok(draftCase?.steps_draft?.trim(), `draft scenario must exist for ${row.requirement_id}`);
+    assert.ok(draftCase?.expected_result_draft?.trim(), `draft expected result must exist for ${row.requirement_id}`);
+    assert.equal(row.scenario_reference_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
+    assert.equal(row.expected_result_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
     assert.equal(row.approved_acceptance_source_status, "NOT_VERIFIED", row.requirement_id);
     assert.equal(row.gap_status, "BLOCKED", row.requirement_id);
     assert.equal(row.status, "OPEN", row.requirement_id);
