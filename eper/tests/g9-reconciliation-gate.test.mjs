@@ -51,3 +51,42 @@ test("G9 baseline preserves the authoritative SRS sequence", () => {
     );
   }
 });
+
+
+test("G9 separates automated pilot evidence from approved acceptance execution", () => {
+  assert.equal(register.schemaVersion, "1.1.0");
+  assert.equal(register.requirements.length, 228);
+  for (const row of register.requirements) {
+    assert.equal(
+      row.automatedPilotTestEvidence?.classification,
+      "AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT",
+      row.id + " pilot classification",
+    );
+    assert.equal(row.automatedPilotTestEvidence?.status, "PASS", row.id + " pilot status");
+    assert.match(row.automatedPilotTestEvidence?.runUrl ?? "", /^https:\/\/github\.com\/.+\/actions\/runs\/\d+$/);
+    assert.match(row.automatedPilotTestEvidence?.testedCommit ?? "", /^[0-9a-f]{40}$/);
+    assert.match(row.automatedPilotTestEvidence?.artifactSha256 ?? "", /^sha256:[0-9a-f]{64}$/);
+    assert.equal(row.automatedPilotTestEvidence?.requirementIdInTestTitle, true, row.id);
+    assert.equal(row.automatedPilotTestEvidence?.requirementIdInTestSource, true, row.id);
+    assert.equal(row.automatedPilotTestEvidence?.chapterSuiteStatus, "PASS", row.id);
+    assert.ok(row.automatedPilotTestEvidence?.testFile, row.id + " test file");
+    assert.equal(row.approvedAcceptanceTestExecution?.status, "NOT_EXECUTED", row.id);
+    for (const field of [
+      "approvedCaseId",
+      "approvedCaseVersion",
+      "executionSessionId",
+      "environment",
+      "actualResult",
+      "testerIdentity",
+      "businessDecisionAuthority",
+      "evidenceReference",
+    ]) {
+      assert.equal(row.approvedAcceptanceTestExecution?.[field], null, row.id + " " + field);
+    }
+    assert.equal(row.evidence.requirementTest, false, row.id + " legacy acceptance-test flag");
+    assert.equal(row.evidence.testExecution, false, row.id + " legacy acceptance-execution flag");
+    assert.equal(row.evidence.uat, false, row.id + " UAT flag");
+    assert.equal(row.evidence.finalAcceptance, false, row.id + " final acceptance flag");
+    assert.equal(row.evidence.traceabilityFreeze, false, row.id + " freeze flag");
+  }
+});
