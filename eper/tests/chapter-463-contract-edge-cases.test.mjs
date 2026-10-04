@@ -98,11 +98,17 @@ test("REQ-46305 records lifecycle evidence and preserves state if audit callback
   const evidence = service.listLifecycleEvidence("tenant-463", "REQ-46305");
   assert.equal(evidence.length, 1);
   assert.equal(service.verifyLifecycleEvidence(evidence[0]), true);
+  await service.execute(req, {
+    context: context(), payload: { operation: "transition", tenantId: "tenant-463", id: "edge-exception", patch: { state: "RESOLVED" } },
+  });
+  assert.equal(service.getException("tenant-463", "edge-exception").state, "RESOLVED");
   assert.throws(() => service.execute(req, {
     context: context(), payload: { operation: "transition", tenantId: "tenant-463", id: "edge-exception", patch: { state: "RETRYING" } },
   }), /EXCEPTION_INVALID_TRANSITION/);
-  assert.equal(service.getException("tenant-463", "edge-exception").state, "OPEN");
-  assert.equal(service.listLifecycleEvidence("tenant-463", "REQ-46305").length, 1);
+  assert.equal(service.getException("tenant-463", "edge-exception").state, "RESOLVED");
+  const finalEvidence = service.listLifecycleEvidence("tenant-463", "REQ-46305");
+  assert.equal(finalEvidence.length, 2);
+  assert.equal(finalEvidence.every((entry) => service.verifyLifecycleEvidence(entry)), true);
 });
 
 test("REQ-46306 rejects invalid limits and reports without provenance", async () => {
