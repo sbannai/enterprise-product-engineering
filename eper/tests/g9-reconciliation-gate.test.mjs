@@ -54,7 +54,7 @@ test("G9 baseline preserves the authoritative SRS sequence", () => {
 
 
 test("G9 separates automated pilot evidence from approved acceptance execution", () => {
-  assert.equal(register.schemaVersion, "1.1.0");
+  assert.equal(register.schemaVersion, "1.2.0");
   assert.equal(register.requirements.length, 228);
   for (const row of register.requirements) {
     assert.equal(
