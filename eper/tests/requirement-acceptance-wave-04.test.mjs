@@ -4,7 +4,7 @@ import { requirementBindings } from "../dist/packages/requirements/registry.js";
 import { AuthoritativeRecordService, AuthorizationService, BusinessValidationService, AuditEvidenceService, ExceptionHandlingService, GovernedReportingService } from "../dist/packages/capabilities/services.js";
 
 const req = (id) => { const r = requirementBindings.find((x) => x.id === id); assert.ok(r, `Missing governed requirement: ${id}`); return r; };
-const ctx = (id) => ({ tenantId: "wave-04-ch466", principalId: "wave-04-runner", correlationId: id });
+const ctx = (id) => ({ tenantId: "wave-04-ch466", principalId: "actor-46602", correlationId: id });
 
 test("REQ-46601 / SRS-FR-2341: authoritative lifecycle", async () => {
   const r=req("REQ-46601"); assert.equal(r.pattern,"XX01"); const s=new AuthoritativeRecordService();
@@ -18,7 +18,7 @@ test("REQ-46602 / SRS-FR-2342: authorization", async () => {
   const r=req("REQ-46602"); assert.equal(r.pattern,"XX02"); const s=new AuthorizationService();
   const d=await s.execute(r,{context:ctx("46602-deny"),payload:{operation:"decide",request:{tenantId:"wave-04-ch466",principalId:"actor-46602",action:"material.update",resource:"authoritative-record"},policies:[{tenantId:"wave-04-ch466",principalId:"actor-46602",actions:["material.update"],resources:["authoritative-record"],effect:"ALLOW"},{tenantId:"wave-04-ch466",principalId:"actor-46602",actions:["material.update"],resources:["authoritative-record"],effect:"DENY"}]}});
   assert.equal(d.data.payload.decision.effect,"DENY");
-  const dd=await s.execute(r,{context:ctx("46602-default"),payload:{operation:"decide",request:{tenantId:"wave-04-ch466",principalId:"unlisted",action:"material.delete",resource:"authoritative-record"}}});
+  const dd=await s.execute(r,{context:ctx("46602-default"),payload:{operation:"decide",request:{tenantId:"wave-04-ch466",principalId:"actor-46602",action:"material.delete",resource:"authoritative-record"}}});
   assert.equal(dd.data.payload.decision.effect,"DENY");
 });
 
@@ -33,7 +33,7 @@ test("REQ-46603 / SRS-FR-2343: business validation", async () => {
 
 test("REQ-46604 / SRS-FR-2344: audit integrity", async () => {
   const r=req("REQ-46604"); assert.equal(r.pattern,"XX04"); const s=new AuditEvidenceService();
-  const a=await s.execute(r,{context:ctx("46604-append"),payload:{operation:"append",evidence:{id:"46604-evidence",tenantId:"wave-04-ch466",requirementId:"REQ-46604",action:"MATERIAL_EVENT",principalId:"wave-04-runner",correlationId:"46604-append",occurredAt:"2026-09-24T04:00:00.000Z",payload:{result:"PASS"}}}});
+  const a=await s.execute(r,{context:ctx("46604-append"),payload:{operation:"append",evidence:{id:"46604-evidence",tenantId:"wave-04-ch466",requirementId:"REQ-46604",action:"MATERIAL_EVENT",principalId:"actor-46602",correlationId:"46604-append",occurredAt:"2026-09-24T04:00:00.000Z",payload:{result:"PASS"}}}});
   assert.match(a.data.payload.evidence.integrityHash,/^[a-f0-9]{64}$/);
   const own=await s.execute(r,{context:ctx("46604-list"),payload:{operation:"listByRequirement",tenantId:"wave-04-ch466",requirementId:"REQ-46604"}});
   assert.equal(own.data.payload.evidence.length,1);
