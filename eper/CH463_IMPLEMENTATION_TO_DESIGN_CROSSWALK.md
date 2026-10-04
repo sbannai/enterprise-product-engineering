@@ -35,3 +35,32 @@ Do not relabel `DATA:*`, `API:*`, or `EVENT:*` IDs as approved design references
 **Next closure criterion:** for each of the six rows, link an approved HLD section, approved LLD module/section, concrete DATA schema and API/EVENT contract specification (or an approved N/A decision), including source version and approval reference. If the design source is not available, record it as a specific evidence request rather than infer the locator.
 
 **Gate state:** SRC-003 / G3 remains OPEN / NO-GO. This crosswalk improves traceability precision but does not close the design gate or authorize UAT.
+
+
+## Implementation contract inspection (2026-10-04)
+
+The follow-up code inspection is recorded in [CH463_CONTRACT_IMPLEMENTATION_INVENTORY.md](./CH463_CONTRACT_IMPLEMENTATION_INVENTORY.md). It distinguishes what the executable service layer actually demonstrates from what still requires an approved design contract.
+
+| Requirement | Implemented behavior observed | Important boundary not demonstrated |
+|---|---|---|
+| REQ-46301 | Tenant-scoped in-memory records; create/get/update/delete; expected-version conflict handling | Durable persistence/migration, governed lifecycle-state catalogue, approved authoritative schema |
+| REQ-46302 | Explicit deny precedence; matching allow; default deny | Approved role/action matrix, policy administration, authorization-event publisher |
+| REQ-46303 | Registered rules execute; ERROR issues make result invalid | Approved versioned business-rule catalogue and domain-specific expected outcomes |
+| REQ-46304 | Append/retrieve/list audit evidence; SHA-256 integrity check | Tamper-proof storage, trusted timestamp/key management, retention enforcement |
+| REQ-46305 | Tenant-scoped idempotency; controlled exception states and transition checks | Actual retry scheduler/backoff, delivery integration and escalation notification |
+| REQ-46306 | Tenant/report-scoped query, filters and limit | Governed report catalogue, metric formulas, freshness/aggregation and refresh-event publication |
+
+### Contract ID versus contract definition
+
+The IDs `DATA:*`, `API:*`, and `EVENT:*` at `eper/contracts/index.ts` are registry descriptors labelled `v1`. Code validates identity consistency; it does not establish a field-level JSON schema, OpenAPI operation/request/response/error contract, event payload schema, compatibility policy or approval metadata. The in-memory service implementations are executable technical evidence, not proof of approved procurement domain design.
+
+### Revised disposition
+
+- Implementation traceability: **OBSERVED IN CODE** for the behaviors above.
+- Contract registry consistency: **OBSERVED IN CODE**.
+- Approved design traceability: **OPEN** — exact HLD/LLD locators remain unproven.
+- Approved DATA/API/EVENT specification or approved N/A: **OPEN**.
+- Business UAT / final acceptance: **NOT EXECUTED / NOT RECORDED**.
+- SRC-003 / G3: **OPEN / NO-GO**.
+
+No requirement-level design locator is promoted by this update. The next genuine closure event is owner-supplied, versioned design/interface evidence or a documented source-unavailable/clarification decision, reviewed by the design authority.
