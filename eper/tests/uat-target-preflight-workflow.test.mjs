@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 // Keep this regression suite attached to the current authorized workflow, not
 // the deprecated legacy workflow with different implementation and inputs.
@@ -41,11 +41,13 @@ test("preflight requires an exact string build ID and states its evidence bounda
 });
 
 test("behavior-level Python tests cover validation and simulated health responses", () => {
-  const output = execFileSync("python3", ["tests/test_authorized_uat_preflight.py"], {
+  const result = spawnSync("python3", ["tests/test_authorized_uat_preflight.py"], {
     cwd: process.cwd(),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const output = (result.stdout ?? "") + (result.stderr ?? "");
+  assert.equal(result.status, 0, output);
   assert.match(output, /OK/);
   assert.match(output, /Ran 8 tests/);
 });
