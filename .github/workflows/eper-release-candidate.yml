@@ -1,6 +1,12 @@
 name: EPER Release Candidate Build
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-release-candidate.yml"
   push:
     branches:
       - "release/**"
@@ -39,8 +45,8 @@ jobs:
       - name: Package immutable release candidate
         run: |
           mkdir -p release-candidate
-          tar -czf release-candidate/eper-0.1.0-rc1.tgz             package.json package-lock.json dist
-          sha256sum release-candidate/eper-0.1.0-rc1.tgz             > release-candidate/eper-0.1.0-rc1.tgz.sha256
+          tar -czf release-candidate/eper-0.1.0-rc1.tgz package.json package-lock.json dist
+          sha256sum release-candidate/eper-0.1.0-rc1.tgz > release-candidate/eper-0.1.0-rc1.tgz.sha256
 
       - name: Record release metadata
         run: |
@@ -64,7 +70,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EPER-0.1.0-RC1-${{ github.sha }}
-          path: |
-            eper/release-candidate/*
+          path: eper/release-candidate/*
           if-no-files-found: error
           retention-days: 90
