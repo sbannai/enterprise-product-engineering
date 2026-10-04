@@ -150,3 +150,35 @@ The existing `eper/tests/requirement-acceptance-wave-01.test.mjs` exercises thes
 6. **All five:** exact approved HLD/LLD locators and DATA/API/EVENT joins or owner-approved N/A decisions; then authorized business UAT and recorded disposition.
 
 No source code or test fixture has been promoted into an approved business rule or signed-off design. REQ-46302–REQ-46306 remain technically exercised in the pilot, but business UAT/final acceptance is not evidenced. SRC-003/G3 remains OPEN/NO-GO.
+
+
+## Executed CI evidence reconciliation — Chapter 463 (2026-10-04)
+
+### Run and artifact
+- Workflow run: [EPER 228 Requirement Pilot Test Matrix](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37183899537)
+- Tested commit: `13b806be40419b51edffbc74e89e34c957efc144`
+- Artifact: `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-37183899537`
+- Artifact digest: `sha256:4182b1b0c7f736bd391b258d57401bf3745adfbbf56fe636c39c892d98769e2f`
+- Raw chapter 463 test log and HTTP smoke result are included in that artifact.
+
+### Chapter 463 test results
+- Test file: `chapter-463-pilot-v0.1.0/test/chapter463.test.js`
+- TAP result: **14 passed, 0 failed, 0 skipped**.
+- Requirement-specific tests observed in execution output:
+  - REQ-46301: tenant-scoped create/read; stale update rejected.
+  - REQ-46302: missing permission denied; cross-tenant access denied.
+  - REQ-46303: mandatory conditions enforced.
+  - REQ-46304: privileged action produces audit evidence.
+  - REQ-46305: controlled exception returns governed failure.
+  - REQ-46306: reporting is tenant-scoped and authorized.
+- Additional service/API tests: health endpoint; default API denies GET/POST when no trusted identity resolver is configured; injected test identity creates a valid record; invalid record returns client error; report retrieval; caller without report permission receives 403.
+
+### HTTP smoke results
+The local pilot HTTP smoke ran 4 checks: health `200`, unauthenticated report `401`, unauthenticated create `401`, unknown route `404`. All four checks passed. Classification is explicitly **LOCAL PILOT HTTP SMOKE — NOT BUSINESS UAT**.
+
+### What this closes — and what it does not
+- **Closes as execution evidence:** there is a recorded passing automated run for the Chapter 463 pilot at the stated commit, with requirement-specific test names in the raw log and 4 passing local HTTP smoke checks.
+- **Does not close:** business acceptance, approved requirement-specific acceptance criteria, exact approved DATA/API/EVENT joins, approved HLD/LLD locators, external identity-provider/OAuth validation, production persistence/security/operations, defect/retest disposition, or formal UAT sign-off.
+- The matrix marks all six rows `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`; the overall artifact explicitly says business acceptance and formal UAT sign-off were NOT EXECUTED.
+
+**Disposition:** Chapter 463 automated pilot execution evidence = **PASS (14/14; smoke 4/4) at commit 13b806b**. Business UAT / acceptance = **NOT EXECUTED**. SRC-003/G3 = **OPEN / NO-GO**.
