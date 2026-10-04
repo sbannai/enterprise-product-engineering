@@ -10,13 +10,13 @@ mkdirSync(evidenceDir, { recursive: true });
 const pilotRoutes = [
   { chapter: 463, health: "/health", report: "/api/v1/records", recordCreate: true, requiresAuth: true },
   { chapter: 464, health: "/health", report: "/api/v1/suppliers", requiresAuth: true },
-  { chapter: 465, health: "/health", report: "/report", requiresAuth: true },
-  { chapter: 466, health: "/health", report: "/report", requiresAuth: true },
-  { chapter: 467, health: "/health", report: "/report", requiresAuth: true },
-  { chapter: 468, health: "/health", report: "/report", requiresAuth: true },
-  { chapter: 469, health: "/health", report: "/report", requiresAuth: true },
-  { chapter: 470, health: "/health", report: "/report", requiresAuth: true },
-  { chapter: 471, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 465, health: "/health", report: "/report" },
+  { chapter: 466, health: "/health", report: "/report" },
+  { chapter: 467, health: "/health", report: "/report" },
+  { chapter: 468, health: "/health", report: "/report" },
+  { chapter: 469, health: "/health", report: "/report" },
+  { chapter: 470, health: "/health", report: "/report" },
+  { chapter: 471, health: "/health", report: "/report" },
 ];
 
 async function freePort() {
