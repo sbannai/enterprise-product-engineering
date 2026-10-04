@@ -93,4 +93,6 @@ These checkpoint figures refer to the linked automation run and are not a substi
 - Workflow: https://github.com/sbannai/enterprise-product-engineering/actions/workflows/eper-authorized-uat-target-preflight.yml
 - Workflow notes: https://github.com/sbannai/enterprise-product-engineering/blob/main/eper/uat/AUTHORIZED_TARGET_PREFLIGHT_WORKFLOW_NOTES.md
 - Protected environment setup: https://github.com/sbannai/enterprise-product-engineering/blob/main/eper/uat/PROTECTED_UAT_ENVIRONMENT_SETUP.md
-- Latest 228-requirement pilot run: https://github.com/sbannai/enterprise-product-engineering/actions/runs/37207767169
+- Latest 228-requirement pilot run on the recorded current-main checkpoint: https://github.com/sbannai/enterprise-product-engineering/actions/runs/37208462411
+- Verified RC4 candidate artifact ID: `11306122539`; artifact ZIP digest: `sha256:7206c96e72ce6a3279cd62063a694c3c4ecc558d92ae66622297a988f87e075a`.
+- **Important:** the RC4 artifact ID/digest is not automatically the runtime build ID returned by the target health endpoint. The service owner must confirm the deployed build identifier and the exact JSON field before preflight.
