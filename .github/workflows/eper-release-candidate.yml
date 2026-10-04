@@ -1,0 +1,76 @@
+name: EPER Release Candidate Build
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-release-candidate.yml"
+  push:
+    branches:
+      - "release/**"
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-release-candidate.yml"
+  workflow_dispatch:
+
+jobs:
+  release-candidate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build release candidate
+        run: npm run build
+
+      - name: Execute verification tests
+        run: npm test
+
+      - name: Package immutable release candidate
+        run: |
+          mkdir -p release-candidate
+          tar -czf release-candidate/eper-0.1.0-rc1.tgz package.json package-lock.json dist
+          (cd release-candidate && sha256sum eper-0.1.0-rc1.tgz > eper-0.1.0-rc1.tgz.sha256)
+          (cd release-candidate && sha256sum -c eper-0.1.0-rc1.tgz.sha256)
+
+      - name: Record release metadata
+        run: |
+          {
+            echo "program=EPER"
+            echo "scope=EM-OPS-463-500"
+            echo "population=228 requirements / 38 chapters"
+            echo "classification=RELEASE CANDIDATE BUILD — NOT RELEASED / NOT PRODUCTION"
+            echo "commit=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "workflow=$GITHUB_WORKFLOW"
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "runner_os=$RUNNER_OS"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > release-candidate/release-metadata.txt
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-0.1.0-RC1-${{ github.sha }}
+          path: eper/release-candidate/*
+          if-no-files-found: error
+          retention-days: 90
