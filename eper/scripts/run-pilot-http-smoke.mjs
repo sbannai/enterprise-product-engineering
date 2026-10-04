@@ -72,24 +72,22 @@ for (const pilot of pilotRoutes) {
     row.checks.push({ name: "health", status: "PASS", httpStatus: health.status });
 
     if (pilot.recordCreate) {
-      const id = `UAT-HTTP-${pilot.chapter}-${Date.now()}`;
-      const created = await fetch(baseUrl + pilot.report, {
+      // The default Chapter 463 server intentionally has no trusted identity resolver.
+      // Its local smoke must verify fail-closed behavior, not bypass auth with fake identity.
+      const listed = await fetch(baseUrl + pilot.report, { signal: AbortSignal.timeout(3000) });
+      if (listed.status !== 401) throw new Error(`unauthenticated report returned HTTP ${listed.status}, expected 401`);
+      const listBody = await listed.json();
+      if (listBody.error !== "authentication required") throw new Error("unauthenticated report error contract failed");
+      row.checks.push({ name: "unauthenticated-report-denied", status: "PASS", httpStatus: listed.status });
+
+      const deniedCreate = await fetch(baseUrl + pilot.report, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id, tenantId: "TENANT-A", name: "Pilot HTTP Smoke Record" }),
+        body: JSON.stringify({ id: `UNAUTH-HTTP-${pilot.chapter}-${Date.now()}`, tenantId: "TENANT-A", name: "Should not be created" }),
         signal: AbortSignal.timeout(3000),
       });
-      if (created.status !== 201) throw new Error(`record create returned HTTP ${created.status}`);
-      const record = await created.json();
-      if (record.id !== id) throw new Error("created record ID did not match request");
-      row.checks.push({ name: "record-create", status: "PASS", httpStatus: created.status });
-
-      const listed = await fetch(baseUrl + pilot.report, { signal: AbortSignal.timeout(3000) });
-      const listBody = await listed.json();
-      if (listed.status !== 200 || !Array.isArray(listBody.items) || !listBody.items.some((item) => item.id === id)) {
-        throw new Error("created record was not returned by list endpoint");
-      }
-      row.checks.push({ name: "record-list-persistence-within-process", status: "PASS", httpStatus: listed.status });
+      if (deniedCreate.status !== 401) throw new Error(`unauthenticated create returned HTTP ${deniedCreate.status}, expected 401`);
+      row.checks.push({ name: "unauthenticated-create-denied", status: "PASS", httpStatus: deniedCreate.status });
     } else {
       const report = await fetch(baseUrl + pilot.report, { signal: AbortSignal.timeout(3000) });
       if (report.status !== 200) throw new Error(`report endpoint returned HTTP ${report.status}`);
