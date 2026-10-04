@@ -8,15 +8,15 @@ const evidenceDir = resolve(root, "reexec-evidence");
 mkdirSync(evidenceDir, { recursive: true });
 
 const pilotRoutes = [
-  { chapter: 463, health: "/health", report: "/api/v1/records", recordCreate: true },
-  { chapter: 464, health: "/health", report: "/api/v1/suppliers" },
-  { chapter: 465, health: "/health", report: "/report" },
-  { chapter: 466, health: "/health", report: "/report" },
-  { chapter: 467, health: "/health", report: "/report" },
-  { chapter: 468, health: "/health", report: "/report" },
-  { chapter: 469, health: "/health", report: "/report" },
-  { chapter: 470, health: "/health", report: "/report" },
-  { chapter: 471, health: "/health", report: "/report" },
+  { chapter: 463, health: "/health", report: "/api/v1/records", recordCreate: true, requiresAuth: true },
+  { chapter: 464, health: "/health", report: "/api/v1/suppliers", requiresAuth: true },
+  { chapter: 465, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 466, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 467, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 468, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 469, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 470, health: "/health", report: "/report", requiresAuth: true },
+  { chapter: 471, health: "/health", report: "/report", requiresAuth: true },
 ];
 
 async function freePort() {
@@ -71,7 +71,7 @@ for (const pilot of pilotRoutes) {
     if (health.status !== 200 || healthBody.status !== "ok") throw new Error("health response contract failed");
     row.checks.push({ name: "health", status: "PASS", httpStatus: health.status });
 
-    if (pilot.recordCreate) {
+    if (pilot.requiresAuth || pilot.recordCreate) {
       // The default Chapter 463 server intentionally has no trusted identity resolver.
       // Its local smoke must verify fail-closed behavior, not bypass auth with fake identity.
       const listed = await fetch(baseUrl + pilot.report, { signal: AbortSignal.timeout(3000) });
@@ -80,6 +80,7 @@ for (const pilot of pilotRoutes) {
       if (listBody.error !== "authentication required") throw new Error("unauthenticated report error contract failed");
       row.checks.push({ name: "unauthenticated-report-denied", status: "PASS", httpStatus: listed.status });
 
+      if (pilot.recordCreate) {
       const deniedCreate = await fetch(baseUrl + pilot.report, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -88,6 +89,7 @@ for (const pilot of pilotRoutes) {
       });
       if (deniedCreate.status !== 401) throw new Error(`unauthenticated create returned HTTP ${deniedCreate.status}, expected 401`);
       row.checks.push({ name: "unauthenticated-create-denied", status: "PASS", httpStatus: deniedCreate.status });
+      }
     } else {
       const report = await fetch(baseUrl + pilot.report, { signal: AbortSignal.timeout(3000) });
       if (report.status !== 200) throw new Error(`report endpoint returned HTTP ${report.status}`);
