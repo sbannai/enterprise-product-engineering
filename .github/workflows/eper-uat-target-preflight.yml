@@ -1,4 +1,4 @@
-name: EPER Authorized UAT Target Preflight
+name: EPER Legacy UAT Target Preflight (deprecated)
 
 on:
   workflow_dispatch:
