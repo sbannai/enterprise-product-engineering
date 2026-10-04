@@ -83,6 +83,31 @@ test("G9 separates automated pilot evidence from approved acceptance execution",
     ]) {
       assert.equal(row.approvedAcceptanceTestExecution?.[field], null, row.id + " " + field);
     }
+    assert.equal(
+      row.sourceAcceptanceCriteriaReview?.requirementSpecificMeasurableOraclePresent,
+      false,
+      row.id + " must not imply a verified measurable acceptance oracle",
+    );
+    assert.equal(
+      row.sourceAcceptanceCriteriaReview?.approvedBusinessBaseline,
+      false,
+      row.id + " business baseline approval remains pending",
+    );
+    assert.equal(
+      row.sourceAcceptanceCriteriaReview?.exactPageParagraphLocator,
+      "NOT_VERIFIED",
+      row.id + " source locator must remain explicitly unverified",
+    );
+    assert.equal(
+      row.sourceAcceptanceCriteriaReview?.ownerDecision,
+      "PENDING",
+      row.id + " owner decision must remain pending",
+    );
+    assert.equal(
+      row.evidence.acceptanceCriteria,
+      false,
+      row.id + " acceptance criteria must not be promoted by generic SRS wording",
+    );
     assert.equal(row.evidence.requirementTest, false, row.id + " legacy acceptance-test flag");
     assert.equal(row.evidence.testExecution, false, row.id + " legacy acceptance-execution flag");
     assert.equal(row.evidence.uat, false, row.id + " UAT flag");
