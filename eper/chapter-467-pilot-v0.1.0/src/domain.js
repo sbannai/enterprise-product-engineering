@@ -1,6 +1,6 @@
 export const STATES=Object.freeze({PLANNED:"PLANNED",TENDERED:"TENDERED",IN_TRANSIT:"IN_TRANSIT",DELIVERED:"DELIVERED",CANCELLED:"CANCELLED",CLAIMED:"CLAIMED"});
 export class ValidationError extends Error{}
-export class AuthorizationError extends Error{}
+export class AuthorizationError extends Error { constructor(message) { super(message); this.name = "AuthorizationError"; } }
 const transitions={PLANNED:new Set(["TENDERED","CANCELLED"]),TENDERED:new Set(["IN_TRANSIT","CANCELLED"]),IN_TRANSIT:new Set(["DELIVERED","CLAIMED"]),DELIVERED:new Set(["CLAIMED"]),CANCELLED:new Set([]),CLAIMED:new Set([])};
 function authorize(ctx,tenantId,p){if(!ctx?.tenantId||ctx.tenantId!==tenantId)throw new AuthorizationError("Tenant context denied");if(!ctx.permissions?.includes(p))throw new AuthorizationError("Permission denied")}
 export class LogisticsRepository{

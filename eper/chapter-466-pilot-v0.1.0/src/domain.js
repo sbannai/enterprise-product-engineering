@@ -1,6 +1,6 @@
 export const STATES=Object.freeze({DRAFT:"DRAFT",ALLOCATED:"ALLOCATED",FULFILLED:"FULFILLED",CANCELLED:"CANCELLED",RETURNED:"RETURNED"});
 export class ValidationError extends Error {}
-export class AuthorizationError extends Error {}
+export class AuthorizationError extends Error { constructor(message) { super(message); this.name = "AuthorizationError"; } }
 const transitions={
   DRAFT:new Set(["ALLOCATED","CANCELLED"]),
   ALLOCATED:new Set(["FULFILLED","CANCELLED"]),

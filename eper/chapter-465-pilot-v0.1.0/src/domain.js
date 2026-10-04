@@ -2,7 +2,7 @@ export const STATES = Object.freeze({
   AVAILABLE: "AVAILABLE", RESERVED: "RESERVED", QUARANTINED: "QUARANTINED", DEPLETED: "DEPLETED"
 });
 export class ValidationError extends Error {}
-export class AuthorizationError extends Error {}
+export class AuthorizationError extends Error { constructor(message) { super(message); this.name = "AuthorizationError"; } }
 const TRANSITIONS = {
   AVAILABLE: new Set(["RESERVED","QUARANTINED","DEPLETED"]),
   RESERVED: new Set(["AVAILABLE","QUARANTINED","DEPLETED"]),
