@@ -10,7 +10,10 @@ function createServer({resolveContext}={}){
     const ctx=typeof resolveContext==='function'?resolveContext(req):null;
     if(!ctx||ctx.authenticated!==true||typeof ctx.principalId!=='string'||!ctx.principalId||
        !Array.isArray(ctx.tenantIds)||!Array.isArray(ctx.permissions))return send(401,{error:'authentication required'});
-    try{return send(200,{items:report(repo,ctx)});}catch{return send(500,{error:'internal error'});}
+    try{return send(200,{items:report(repo,ctx)});}catch(error){
+      if(error?.name==='AuthorizationError')return send(403,{error:'forbidden'});
+      return send(500,{error:'internal error'});
+    }
   });
 }
 const server=createServer();

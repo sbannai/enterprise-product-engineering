@@ -20,7 +20,12 @@ function createServer({ resolveContext } = {}) {
         return send(401, { error: 'authentication required' });
       }
       if (req.url === '/api/v1/records' && req.method === 'GET') {
-        return send(200, { items: report(repo, ctx) });
+        try {
+          return send(200, { items: report(repo, ctx) });
+        } catch (error) {
+          return send(error.name === 'AuthorizationError' ? 403 : 500,
+            { error: error.name === 'AuthorizationError' ? 'forbidden' : 'internal error' });
+        }
       }
       if (req.url === '/api/v1/records' && req.method === 'POST') {
         let raw = '';

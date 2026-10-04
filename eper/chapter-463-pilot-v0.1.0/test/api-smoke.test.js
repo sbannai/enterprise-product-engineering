@@ -82,3 +82,20 @@ test('records can be retrieved through the reporting endpoint', async () => {
   assert.ok(Array.isArray(body.items));
   assert.ok(body.items.some((record) => record.id === 'UAT-HTTP-463-001'));
 });
+
+test('authenticated caller without report permission receives 403', async () => {
+  const deniedServer = createServer({ resolveContext: () => ({
+    authenticated: true,
+    principalId: 'report-denied-user',
+    tenantIds: ['TENANT-A'],
+    permissions: ['record:read'],
+  }) });
+  const deniedUrl = await listen(deniedServer);
+  try {
+    const response = await fetch(`${deniedUrl}/api/v1/records`);
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: 'forbidden' });
+  } finally {
+    await close(deniedServer);
+  }
+});
