@@ -1,5 +1,5 @@
 export const STATES=Object.freeze({DRAFT:"DRAFT",ACTIVE:"ACTIVE",SUSPENDED:"SUSPENDED",COMPLETED:"COMPLETED",CANCELLED:"CANCELLED"});
-export class ValidationError extends Error{} export class AuthorizationError extends Error{}
+export class ValidationError extends Error { constructor(message) { super(message); this.name = "ValidationError"; } } export class AuthorizationError extends Error { constructor(message) { super(message); this.name = "AuthorizationError"; } }
 const transitions={DRAFT:new Set(["ACTIVE","CANCELLED"]),ACTIVE:new Set(["SUSPENDED","COMPLETED","CANCELLED"]),SUSPENDED:new Set(["ACTIVE","CANCELLED"]),COMPLETED:new Set([]),CANCELLED:new Set([])};
 function authorize(ctx,tenantId,p){if(!ctx?.tenantId||ctx.tenantId!==tenantId)throw new AuthorizationError("Tenant context denied");if(!ctx.permissions?.includes(p))throw new AuthorizationError("Permission denied")}
 export class DomainRepository{
