@@ -105,3 +105,20 @@ The distinction is deliberate: a catalogue entry existing is not the same as the
 6. **Audit/reporting owners:** approve event coverage/retention and report definitions/lineage/freshness respectively.
 
 **Gate disposition remains SRC-003 / G3 OPEN / NO-GO.** This join identifies credible shared-platform candidates and prevents false mappings; it does not manufacture the missing procurement domain contract or approval.
+
+
+## REQ-46301 domain-model determination (2026-10-04)
+
+### Executable evidence inspected
+Source: `eper/chapter-463-pilot-v0.1.0/src/domain.js` (main, blob `fa27a0b699a5ffeb5df3baf51a9b03260ecf9169`).
+
+The pilot `RecordRepository` stores generic records in an in-memory `Map`. Its demonstrated record shape is `id`, `tenantId`, `name`, `version`, and optional `status` defaulting to `ACTIVE`. It enforces tenant access, duplicate-ID rejection and expected-version concurrency on update. It does **not** define procurement-specific object types, relationships, or state transitions; persistence and migrations are not demonstrated.
+
+### Decision: NOT ESTABLISHED
+Do not rename the generic `Record` into a procurement object or infer Requisition, PurchaseOrder, GoodsReceipt, SupplierInvoice, Contract, or SourcingEvent as authoritative without a controlled source/owner decision.
+
+The owner decision must establish: (1) in-scope/out-of-scope aggregates; (2) aggregate root, ID/business key, tenant boundary, required attributes, relationships and source of truth; (3) approved lifecycle states/transitions; (4) invariants and duplicate/concurrency/idempotency behavior; (5) exact EM-DATA-001 row, EM-HLD-001 section, EM-LLD-001 module/section and approved version/change reference; (6) applicable API operation and event payload/version/producer/trigger, or separately approved N/A.
+
+Owner response options: **EVIDENCE PROVIDED** (approved source + exact locator/version/approval reference); **SOURCE NOT AVAILABLE** (accountable owner + due date); **CLARIFICATION REQUIRED** (specific unresolved question + decision authority); or **APPROVED MODEL CHANGE** (formal change record).
+
+This is a gap determination, not an approved procurement model. REQ-46301 and SRC-003/G3 remain OPEN/NO-GO; UAT remains unauthorized.
