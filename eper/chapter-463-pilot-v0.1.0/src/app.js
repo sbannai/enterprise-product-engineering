@@ -12,6 +12,8 @@ function createServer({ resolveContext } = {}) {
     };
     try {
       if (req.url === '/health' && req.method === 'GET') return send(200, { status: 'ok' });
+      const isRecordsRoute = req.url === '/api/v1/records' && (req.method === 'GET' || req.method === 'POST');
+      if (!isRecordsRoute) return send(404, { error: 'not found' });
       const ctx = typeof resolveContext === 'function' ? resolveContext(req) : null;
       if (!ctx || ctx.authenticated !== true || !ctx.principalId ||
           !Array.isArray(ctx.tenantIds) || !Array.isArray(ctx.permissions)) {
