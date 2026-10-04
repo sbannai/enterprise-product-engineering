@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { requirementBindings } from "../dist/packages/requirements/registry.js";
 import { AuthoritativeRecordService, AuthorizationService, BusinessValidationService, AuditEvidenceService, ExceptionHandlingService, GovernedReportingService } from "../dist/packages/capabilities/services.js";
 const req=(pattern)=>requirementBindings.find((r)=>r.pattern===pattern);
-const context=(id)=>({tenantId:"behavioral-acceptance",principalId:"acceptance-runner",correlationId:id});
+const context=(id, principalId="acceptance-runner")=>({tenantId:"behavioral-acceptance",principalId,correlationId:id});
 
 test("XX01 authoritative records: create, update, version control and tenant isolation",async()=>{
  const service=new AuthoritativeRecordService(),requirement=req("XX01");
@@ -19,12 +19,12 @@ test("XX02 authorization: explicit allow, deny precedence and default deny",asyn
  const service=new AuthorizationService(),requirement=req("XX02");
  service.addPolicy({tenantId:"behavioral-acceptance",principalId:"user-1",actions:["read"],resources:["record"],effect:"ALLOW"});
  service.addPolicy({tenantId:"behavioral-acceptance",principalId:"user-1",actions:["read"],resources:["record"],effect:"DENY"});
- const denied=await service.execute(requirement,{context:context("xx02-deny"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-1",action:"read",resource:"record"}}});
+ const denied=await service.execute(requirement,{context:context("xx02-deny","user-1"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-1",action:"read",resource:"record"}}});
  assert.equal(denied.data.payload.decision.effect,"DENY");
  service.addPolicy({tenantId:"behavioral-acceptance",principalId:"user-2",actions:["read"],resources:["record"],effect:"ALLOW"});
- const allowed=await service.execute(requirement,{context:context("xx02-allow"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-2",action:"read",resource:"record"}}});
+ const allowed=await service.execute(requirement,{context:context("xx02-allow","user-2"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"user-2",action:"read",resource:"record"}}});
  assert.equal(allowed.data.payload.decision.effect,"ALLOW");
- const def=await service.execute(requirement,{context:context("xx02-default"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"unknown",action:"delete",resource:"record"}}});
+ const def=await service.execute(requirement,{context:context("xx02-default"),payload:{operation:"decide",request:{tenantId:"behavioral-acceptance",principalId:"acceptance-runner",action:"delete",resource:"record"}}});
  assert.equal(def.data.payload.decision.effect,"DENY");
 });
 test("XX03 business validation: valid input passes and rule violation is reported",async()=>{
