@@ -6,7 +6,7 @@ test("Chapter 465 report denies an authenticated caller without report permissio
   const server = createServer({
     resolveContext: () => ({
       authenticated: true,
-      principalId: "report-denied-user",
+      actorId: "report-denied-user",
       tenantId: "tenant-a",
       permissions: [],
     }),
