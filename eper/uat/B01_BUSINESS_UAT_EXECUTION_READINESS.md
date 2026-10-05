@@ -94,3 +94,14 @@ Complete this section during authorized execution; leave blank until then.
 ## 6. Current evidence boundary
 
 At checklist creation, this document establishes only the planned B01 scope and entry/exit criteria. It does not prove any environment setup, target reachability, OAuth verification, execution, acceptance, G9 traceability freeze, or G10 certification. Keep the authoritative register's existing statuses until supported by real evidence and authorized decisions.
+
+
+## Current RC4 readiness checkpoint — 2026-10-05
+
+- Operative candidate: RC4 artifact `11306122539`; GitHub artifact digest `sha256:7206c96e72ce6a3279cd62063a694c3c4ecc558d92ae66622297a988f87e075a`.
+- The 48 draft requirement-level cases are present in `B01_DRAFT_REQUIREMENT_LEVEL_TEST_CASES.csv`; they remain draft/unapproved and must not be executed as business acceptance without owner decisions.
+- The 48-case approval checklist is present and all execution authorization fields remain `NO` pending review.
+- E1–E13 evidence requests are prepared; target/environment authorization and business owner approval remain pending.
+- Upstream blockers: #72 owner acceptance/source decisions and #73 SRC-003 authoritative Chapter 463 design evidence.
+
+**Execution rule:** when upstream decisions and E1–E13 evidence are satisfied, use the RC4 candidate and create a real UAT session record before executing B01. Technical QA or simulation results do not populate business acceptance.
