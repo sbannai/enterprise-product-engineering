@@ -207,3 +207,14 @@ The repository's current `main` commit at time of review, `1142a5ccf34538a77089c
 The previous Chapter 463 test evidence is now confirmed on the current main commit at this verification point, and the cross-repository CI, controlled QA re-execution, technical simulation and G9 reconciliation workflows are green. This closes the **post-merge technical CI verification** task for this commit. It does not close business UAT, formal acceptance, external OAuth/production validation, missing design/contract bindings, owner decisions, or G9 traceability freeze. Any subsequent commit requires its own run verification.
 
 **Disposition:** current-main technical verification = **PASS**; business UAT/final acceptance = **NOT EXECUTED**; SRC-003/G3 = **OPEN / NO-GO**.
+
+
+## Current technical checkpoint — 2026-10-05
+
+Current `main` checkpoint: `6c1ea6b8e7162c83e34b95156d2eb8379126c6f1`.
+
+The repository-level verification workflows completed successfully for this checkpoint, including EPER CI, the 228-requirement pilot matrix, controlled QA re-execution, controlled UAT technical simulation, and G9 reconciliation. The authorized UAT preflight regression suite reports 13/13 unit tests passed, including fail-closed target/build-input/JSON/response-size cases.
+
+For Chapter 463, this strengthens **technical execution evidence only**. It does not create authoritative HLD/LLD bindings, DATA/API/EVENT contracts, approved acceptance criteria, external identity-provider validation, business UAT, or formal release authorization. SRC-003/G3 therefore remains **OPEN / NO-GO** until authoritative design evidence is supplied and reviewed requirement-by-requirement.
+
+**Source decision rule:** candidate HLD/LLD/design documents in the repository remain supporting context unless an authorized source owner confirms the exact version, locator, requirement binding, approval authority and effective date. No implementation-derived design is promoted to authoritative evidence.
