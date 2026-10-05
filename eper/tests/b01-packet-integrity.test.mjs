@@ -26,8 +26,8 @@ function load(path) {
   return { headers:rows[0], rows:rows.slice(1) };
 }
 
-const cases=load("eper/uat/B01_DRAFT_REQUIREMENT_LEVEL_TEST_CASES.csv");
-const approvals=load("eper/uat/B01_48_CASE_APPROVAL_CHECKLIST.csv");
+const cases=load("uat/B01_DRAFT_REQUIREMENT_LEVEL_TEST_CASES.csv");
+const approvals=load("uat/B01_48_CASE_APPROVAL_CHECKLIST.csv");
 
 test("B01 packet contains exactly 48 unique requirements in both registers", () => {
   const ci=cases.headers.indexOf("requirement_id");
