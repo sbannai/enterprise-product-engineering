@@ -66,7 +66,8 @@ jobs:
               "S3 gateway endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"s3"'),
               "S3 prefix-list egress": (main, r'prefix_list_id\s*=\s*aws_vpc_endpoint\.s3\.prefix_list_id'),
               "ALB subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"alb"'),
-              "internet gateway default-route check": (main, r'destination_cidr_block\s*==\s*"0\.0\.0\.0/0".*?can\(regex\("\\?"\^igw-',),
+              "internet gateway default-route destination": (main, r'destination_cidr_block\s*==\s*"0\.0\.0\.0/0"'),
+              "internet gateway target check": (main, r'can\(regex\("\^igw-",\s*route\.gateway_id\)\)'),
               "task subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"tasks"'),
               "S3 endpoint route tables derived from task subnets": (main, r'route_table_ids\s*=\s*distinct\(\[for route_table in values\(data\.aws_route_table\.tasks\) : route_table\.id\]\)'),
           }
