@@ -7,6 +7,7 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY apps ./apps
 COPY packages ./packages
+COPY contracts ./contracts
 COPY requirements ./requirements
 RUN npm run build
 
