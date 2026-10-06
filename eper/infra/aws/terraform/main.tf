@@ -12,8 +12,8 @@ provider "aws" {
   region = var.aws_region
 }
 
-data "aws_vpc" "default" {
-  default = true
+data "aws_vpc" "selected" {
+  id = var.vpc_id
 }
 
 data "aws_subnet" "alb" {
@@ -69,7 +69,7 @@ resource "aws_cloudwatch_log_group" "eper_uat" {
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb"
   description = "Ingress for isolated EPER UAT load balancer"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = data.aws_vpc.selected.id
 
   ingress {
     description = "HTTPS from explicitly approved source CIDRs"
@@ -92,7 +92,7 @@ resource "aws_security_group" "alb" {
 resource "aws_security_group" "tasks" {
   name        = "${var.name_prefix}-tasks"
   description = "Only the EPER UAT load balancer may reach the API"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = data.aws_vpc.selected.id
 
   ingress {
     from_port       = 8080
@@ -131,7 +131,7 @@ resource "aws_lb" "eper_uat" {
     }
     precondition {
       condition = alltrue([
-        for subnet in values(data.aws_subnet.alb) : subnet.vpc_id == data.aws_vpc.default.id
+        for subnet in values(data.aws_subnet.alb) : subnet.vpc_id == data.aws_vpc.selected.id
       ])
       error_message = "All ALB subnets must belong to the selected VPC."
     }
@@ -144,7 +144,7 @@ resource "aws_lb_target_group" "eper_uat" {
   name        = substr("${var.name_prefix}-tg", 0, 32)
   port        = 8080
   protocol    = "HTTP"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = data.aws_vpc.selected.id
   target_type = "ip"
 
   health_check {
@@ -280,7 +280,7 @@ resource "aws_ecs_service" "eper_uat" {
     }
     precondition {
       condition = alltrue([
-        for subnet in values(data.aws_subnet.tasks) : subnet.vpc_id == data.aws_vpc.default.id
+        for subnet in values(data.aws_subnet.tasks) : subnet.vpc_id == data.aws_vpc.selected.id
       ])
       error_message = "All Fargate task subnets must belong to the selected VPC."
     }
