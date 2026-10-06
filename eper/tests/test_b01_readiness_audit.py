@@ -9,10 +9,13 @@ audit = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(audit)
 
 
-def case(req="REQ-46301", case_id="B01-463-01", authorized="NO", decision="PENDING",
-         source="", baseline="APPROVAL_PENDING", reviewer="", date="", approval=""):
+def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL_PENDING",
+         reviewer="", date="", approval=""):
+    chapter = 463 + (i - 1) // 6
+    seq = (i - 1) % 6 + 1
+    req = f"REQ-{chapter}{seq:02d}"
     return {
-        "requirement_id": req, "case_id": case_id,
+        "requirement_id": req, "case_id": f"B01-{chapter}-{seq:02d}",
         "execution_authorized": authorized, "review_decision": decision,
         "requirement_specific_acceptance_source": source,
         "brd_baseline_approval_status": baseline,
@@ -21,12 +24,14 @@ def case(req="REQ-46301", case_id="B01-463-01", authorized="NO", decision="PENDI
     }
 
 
-def gate(gate_id="E1", status="PENDING", evidence=""):
-    return {"gate_id": gate_id, "status": status, "evidence_reference": evidence}
+def gate(i=1, status="PENDING", evidence=""):
+    return {"gate_id": f"E{i}", "status": status, "evidence_reference": evidence}
 
 
-def capture(req="REQ-46301", outcome="NOT_RUN"):
-    return {"requirement_id": req, "outcome": outcome}
+def capture(i=1, outcome="NOT_RUN"):
+    chapter = 463 + (i - 1) // 6
+    seq = (i - 1) % 6 + 1
+    return {"requirement_id": f"REQ-{chapter}{seq:02d}", "outcome": outcome}
 
 
 class B01ReadinessAuditTests(unittest.TestCase):
@@ -39,15 +44,18 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertFalse(report["businessUatExecuted"])
         self.assertTrue(report["blockers"])
 
-    def test_complete_sample_is_only_ready_for_owner_confirmation(self):
-        row = case(authorized="YES", decision="APPROVED", source="SRS §2.1",
-                   baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
-                   approval="DEC-001")
-        report = audit.audit_records([row], [gate(status="PASS", evidence="EVID-1")],
-                                     [capture(outcome="PASS")], [{"requirement_id": "REQ-46301"}])
+    def test_complete_population_is_only_ready_for_owner_confirmation(self):
+        cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
+                      baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
+                      approval=f"DEC-{i:03d}") for i in range(1, 49)]
+        gates = [gate(i, status="PASS", evidence=f"EVID-{i}") for i in range(1, 14)]
+        captures = [capture(i, outcome="PASS") for i in range(1, 229)]
+        gaps = [{"requirement_id": f"REQ-{463 + (i-1)//6}{(i-1)%6+1:02d}"} for i in range(1,49)]
+        report = audit.audit_records(cases, gates, captures, gaps)
         self.assertEqual(report["readiness"], "READY_FOR_AUTHORIZED_OWNER_CONFIRMATION")
         self.assertTrue(report["businessUatExecuted"])
         self.assertEqual(report["counts"]["casesWithoutCompleteReviewApproval"], 0)
+        self.assertEqual(report["integrityErrors"], [])
 
     def test_wrong_population_and_duplicate_ids_are_integrity_errors(self):
         report = audit.audit_records([case(), case()], [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
