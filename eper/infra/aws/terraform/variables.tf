@@ -53,6 +53,11 @@ variable "acm_certificate_arn" {
     condition     = can(regex("^arn:aws:acm:[a-z0-9-]+:", var.acm_certificate_arn))
     error_message = "A valid ACM certificate ARN is required for HTTPS."
   }
+
+  validation {
+    condition     = try(split(":", var.acm_certificate_arn)[3] == var.aws_region, false)
+    error_message = "The ACM certificate must be in the same AWS region as the UAT load balancer."
+  }
 }
 
 variable "allowed_ingress_cidrs" {
@@ -96,6 +101,12 @@ variable "task_memory" {
 }
 
 variable "desired_count" {
-  type    = number
-  default = 1
+  description = "Number of Fargate tasks for isolated UAT; keep small to control cost."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.desired_count >= 1 && var.desired_count <= 4
+    error_message = "UAT desired_count must be between 1 and 4; scaling beyond this requires explicit review."
+  }
 }
