@@ -400,6 +400,16 @@ resource "aws_ecs_service" "eper_uat" {
       ])
       error_message = "All Fargate task subnets must belong to the selected VPC."
     }
+    precondition {
+      condition = alltrue([
+        for route_table in values(data.aws_route_table.tasks) :
+        alltrue([
+          for route in route_table.routes :
+          !(route.destination_cidr_block == "0.0.0.0/0" && can(regex("^igw-", route.gateway_id)))
+        ])
+      ])
+      error_message = "Fargate task subnets must not use an internet gateway as their default route; use private subnets with VPC endpoints or controlled NAT egress."
+    }
   }
 
   tags = local.tags
