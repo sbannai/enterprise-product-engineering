@@ -103,13 +103,68 @@ resource "aws_security_group" "tasks" {
   }
 
   egress {
+    description = "Reach only private addresses within the selected VPC, including required VPC endpoints"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.selected.cidr_block]
   }
 
   tags = local.tags
+}
+
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "${var.name_prefix}-vpce"
+  description = "HTTPS access to required private AWS service endpoints from EPER UAT tasks"
+  vpc_id      = data.aws_vpc.selected.id
+
+  ingress {
+    description     = "HTTPS from EPER UAT tasks"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.tasks.id]
+  }
+
+  tags = local.tags
+}
+
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = data.aws_vpc.selected.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = var.task_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  tags                = local.tags
+}
+
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = data.aws_vpc.selected.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = var.task_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  tags                = local.tags
+}
+
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id              = data.aws_vpc.selected.id
+  service_name        = "com.amazonaws.${var.aws_region}.logs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = var.task_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  tags                = local.tags
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = data.aws_vpc.selected.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = var.task_route_table_ids
+  tags              = local.tags
 }
 
 resource "aws_lb" "eper_uat" {
