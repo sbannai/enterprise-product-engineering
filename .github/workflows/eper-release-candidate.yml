@@ -1,5 +1,8 @@
 name: EPER Release Candidate Build
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches:
@@ -18,6 +21,7 @@ on:
 jobs:
   release-candidate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: eper
