@@ -39,6 +39,19 @@ jobs:
         working-directory: eper/infra/aws/terraform
         run: terraform validate -no-color
 
+      - name: Verify UAT security invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          main="eper/infra/aws/terraform/main.tf"
+          vars="eper/infra/aws/terraform/variables.tf"
+          grep -Fq 'image_tag_mutability = "IMMUTABLE"' "$main"
+          grep -Fq 'assign_public_ip = false' "$main"
+          grep -Fq 'condition     = var.image_tag == var.build_id' "$main"
+          grep -Fq 'length(var.alb_subnet_ids) >= 2' "$vars"
+          grep -Fq 'cidr != "0.0.0.0/0"' "$vars"
+          echo "Security invariants present: immutable image tags, private tasks, matching build identity, multi-subnet ALB, no unrestricted ingress."
+
       - name: Verify deployment remains gated
         shell: bash
         run: |
