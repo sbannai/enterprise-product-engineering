@@ -58,9 +58,13 @@ jobs:
           grep -Fq 'resource "aws_vpc_endpoint" "ecr_dkr"' "$main"
           grep -Fq 'resource "aws_vpc_endpoint" "logs"' "$main"
           grep -Fq 'resource "aws_vpc_endpoint" "s3"' "$main"
+          grep -Fq 'prefix_list_ids = [aws_vpc_endpoint.s3.prefix_list_id]' "$main"
+          grep -Fq 'data "aws_route_table" "alb"' "$main"
+          grep -Fq 'subnet_id = each.value' "$main"
+          grep -Fq 'anytrue([for route in route_table.routes : can(regex("^igw-", route.gateway_id))])' "$main"
           grep -Fq 'variable "task_route_table_ids"' "$vars"
           ! grep -Fq 'default = true' "$main"
-          echo "Security invariants present: immutable image tags, private tasks, matching build identity, explicit VPC, restricted task egress, required private AWS endpoints, multi-subnet ALB, no unrestricted ingress or default-VPC assumption."
+          echo "Security invariants present: immutable image tags, private tasks, matching build identity, explicit VPC, subnet-associated public ALB route-table checks, private endpoint access including S3 prefix-list egress, no unrestricted ingress or default-VPC assumption."
 
       - name: Verify deployment remains gated
         shell: bash
