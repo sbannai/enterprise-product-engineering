@@ -40,8 +40,8 @@ variable "acm_certificate_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:acm:", var.acm_certificate_arn))
-    error_message = "A valid ACM certificate ARN is required for HTTPS."
+    condition     = can(regex("^arn:aws:acm:${var.aws_region}:", var.acm_certificate_arn))
+    error_message = "An ACM certificate ARN in the configured AWS region is required for HTTPS."
   }
 }
 
@@ -50,7 +50,7 @@ variable "allowed_ingress_cidrs" {
   type        = list(string)
 
   validation {
-    condition     = length(var.allowed_ingress_cidrs) > 0 && alltrue([for cidr in var.allowed_ingress_cidrs : cidr != "0.0.0.0/0"])
+    condition     = length(var.allowed_ingress_cidrs) > 0 && alltrue([for cidr in var.allowed_ingress_cidrs : can(cidrnetmask(cidr)) && cidr != "0.0.0.0/0"])
     error_message = "Provide approved CIDRs and do not expose UAT to the entire internet."
   }
 }
