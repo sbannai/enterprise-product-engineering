@@ -28,10 +28,14 @@ def gate(i=1, status="PENDING", evidence=""):
     return {"gate_id": f"E{i}", "status": status, "evidence_reference": evidence}
 
 
-def capture(i=1, outcome="NOT_RUN"):
+def capture(i=1, outcome="NOT_RUN", accepted=False):
     chapter = 463 + (i - 1) // 6
     seq = (i - 1) % 6 + 1
-    return {"requirement_id": f"REQ-{chapter}{seq:02d}", "outcome": outcome}
+    row = {"requirement_id": f"REQ-{chapter}{seq:02d}", "outcome": outcome}
+    if accepted:
+        row.update({"business_decision": "ACCEPTED", "business_approver": "Business Owner",
+                    "approval_date": "2026-10-06", "evidence_archive_reference": f"EVID-{i:03d}"})
+    return row
 
 
 class B01ReadinessAuditTests(unittest.TestCase):
@@ -49,7 +53,7 @@ class B01ReadinessAuditTests(unittest.TestCase):
                       baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
                       approval=f"DEC-{i:03d}") for i in range(1, 49)]
         gates = [gate(i, status="PASS", evidence=f"EVID-{i}") for i in range(1, 14)]
-        captures = [capture(i, outcome="PASS") for i in range(1, 229)]
+        captures = [capture(i, outcome="PASS", accepted=True) for i in range(1, 229)]
         gaps = [{"requirement_id": f"REQ-{463 + (i-1)//6}{(i-1)%6+1:02d}"} for i in range(1,49)]
         report = audit.audit_records(cases, gates, captures, gaps)
         self.assertEqual(report["readiness"], "READY_FOR_AUTHORIZED_OWNER_CONFIRMATION")
