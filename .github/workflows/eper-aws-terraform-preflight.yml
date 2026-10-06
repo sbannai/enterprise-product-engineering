@@ -48,9 +48,12 @@ jobs:
           grep -Fq 'image_tag_mutability = "IMMUTABLE"' "$main"
           grep -Fq 'assign_public_ip = false' "$main"
           grep -Fq 'condition     = var.image_tag == var.build_id' "$main"
+          grep -Fq 'vpc_id = var.vpc_id' "$main"
+          grep -Fq 'variable "vpc_id"' "$vars"
           grep -Fq 'length(var.alb_subnet_ids) >= 2' "$vars"
           grep -Fq 'cidr != "0.0.0.0/0"' "$vars"
-          echo "Security invariants present: immutable image tags, private tasks, matching build identity, multi-subnet ALB, no unrestricted ingress."
+          ! grep -Fq 'default = true' "$main"
+          echo "Security invariants present: immutable image tags, private tasks, matching build identity, explicit VPC, multi-subnet ALB, no unrestricted ingress or default-VPC assumption."
 
       - name: Verify deployment remains gated
         shell: bash
