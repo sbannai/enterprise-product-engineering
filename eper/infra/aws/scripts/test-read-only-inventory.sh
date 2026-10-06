@@ -36,6 +36,16 @@ chmod +x "$MOCK_BIN/aws"
 bash "$ROOT/eper/infra/aws/scripts/read-only-inventory.sh" > "$TMP_DIR/output.txt"
 
 for expected in \
+  "ec2 describe-nat-gateways --region ap-south-2" \
+  "ec2 describe-network-acls --region ap-south-2"; do
+  if ! grep -F -- "$expected" "$AWS_MOCK_LOG" >/dev/null; then
+    echo "FAIL: expected AWS inventory call not found: $expected" >&2
+    cat "$AWS_MOCK_LOG" >&2
+    exit 1
+  fi
+done
+
+for expected in \
   "--vpc-id vpc-aaa --attribute enableDnsSupport" \
   "--vpc-id vpc-aaa --attribute enableDnsHostnames" \
   "--vpc-id vpc-bbb --attribute enableDnsSupport" \
