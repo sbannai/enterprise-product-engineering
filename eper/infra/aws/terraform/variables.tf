@@ -15,6 +15,16 @@ variable "name_prefix" {
   }
 }
 
+variable "vpc_id" {
+  description = "Explicit VPC ID for isolated EPER UAT; do not assume the default VPC."
+  type        = string
+
+  validation {
+    condition     = can(regex("^vpc-[0-9a-f]+$", var.vpc_id))
+    error_message = "Provide a valid VPC ID."
+  }
+}
+
 variable "alb_subnet_ids" {
   description = "At least two ALB subnet IDs in different Availability Zones."
   type        = list(string)
