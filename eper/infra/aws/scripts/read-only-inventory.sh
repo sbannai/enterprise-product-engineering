@@ -49,9 +49,14 @@ aws ec2 describe-vpc-endpoints --region "$REGION" \
   --output json
 
 echo
-echo "== VPC DNS settings =="
-aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[0].VpcId' --output text)" --attribute enableDnsSupport --output json 2>/dev/null || true
-aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[0].VpcId' --output text)" --attribute enableDnsHostnames --output json 2>/dev/null || true
+echo "== VPC DNS settings (all VPCs) =="
+while IFS= read -r VPC_ID; do
+  [ -n "$VPC_ID" ] || continue
+  [ "$VPC_ID" = "None" ] && continue
+  echo "-- $VPC_ID --"
+  aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$VPC_ID" --attribute enableDnsSupport --query 'EnableDnsSupport.Value' --output text
+  aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$VPC_ID" --attribute enableDnsHostnames --query 'EnableDnsHostnames.Value' --output text
+done < <(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[].VpcId' --output text | tr '\\t' '\\n')
 
 echo
 echo "== ACM certificates in ${REGION} =="
