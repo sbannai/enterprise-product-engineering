@@ -21,6 +21,11 @@ data "aws_subnet" "alb" {
   id       = each.value
 }
 
+data "aws_route_table" "alb" {
+  for_each       = toset(var.alb_route_table_ids)
+  route_table_id = each.value
+}
+
 data "aws_subnet" "tasks" {
   for_each = toset(var.task_subnet_ids)
   id       = each.value
@@ -190,6 +195,14 @@ resource "aws_lb" "eper_uat" {
         for subnet in values(data.aws_subnet.alb) : subnet.vpc_id == data.aws_vpc.selected.id
       ])
       error_message = "All ALB subnets must belong to the selected VPC."
+    }
+    precondition {
+      condition = length(var.alb_route_table_ids) >= 2 && alltrue([
+        for route_table in values(data.aws_route_table.alb) :
+        route_table.vpc_id == data.aws_vpc.selected.id &&
+        anytrue([for route in route_table.routes : can(regex("^igw-", route.gateway_id))])
+      ])
+      error_message = "Provide ALB route tables in the selected VPC with a default route through an internet gateway."
     }
   }
 
