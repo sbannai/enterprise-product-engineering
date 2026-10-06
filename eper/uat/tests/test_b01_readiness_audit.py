@@ -75,6 +75,21 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertEqual(report["counts"]["casesWithoutCompleteReviewApproval"], 0)
         self.assertEqual(report["integrityErrors"], [])
 
+    def test_blocked_outcome_and_wrong_requirement_mapping_cannot_count_as_executed(self):
+        cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
+                      baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
+                      approval=f"DEC-{i:03d}") for i in range(1, 49)]
+        gates = [gate(i, status="PASS", evidence=f"EVID-{i}") for i in range(1, 14)]
+        captures = [capture(i, outcome="PASS", accepted=True) for i in range(1, 229)]
+        captures[-1]["requirement_id"] = captures[0]["requirement_id"]
+        captures[-1]["outcome"] = "BLOCKED"
+        report = audit.audit_records(cases, gates, captures,
+                                     [{"requirement_id": f"REQ-{463 + (i-1)//6}{(i-1)%6+1:02d}"} for i in range(1, 49)])
+        self.assertFalse(report["businessUatExecuted"])
+        self.assertTrue(any("duplicate" in error for error in report["integrityErrors"]))
+        self.assertTrue(any("exactly cover" in error for error in report["integrityErrors"]))
+        self.assertEqual(report["counts"]["requirementsNotRun"], 1)
+
     def test_wrong_population_and_duplicate_ids_are_integrity_errors(self):
         report = audit.audit_records([case(), case()], [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
         self.assertTrue(any("expected 48 rows" in error for error in report["integrityErrors"]))
