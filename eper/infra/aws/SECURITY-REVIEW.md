@@ -10,6 +10,8 @@
 - HTTPS listener requires an ACM certificate ARN.
 - ALB ingress requires explicit IPv4 CIDRs and rejects `0.0.0.0/0`.
 - ECS task inbound traffic on port 8080 is restricted to the ALB security group.
+- ALB outbound traffic is limited to port 8080 within the configured task subnet CIDRs; task outbound traffic is limited to required interface endpoints and the S3 prefix list. The reciprocal ALB/task security-group reference was removed to avoid a Terraform dependency cycle.
+- The ALB, task, and endpoint security groups disable provider-default allow-all egress and use explicit egress rules.
 - ECR uses immutable image tags and scan-on-push.
 - CloudWatch log retention is set to 30 days.
 - Terraform now requires `image_tag == build_id`, and the task definition no longer overrides the image's baked-in `EPER_BUILD_ID`.
