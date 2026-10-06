@@ -31,6 +31,11 @@ data "aws_subnet" "tasks" {
   id       = each.value
 }
 
+data "aws_route_table" "tasks" {
+  for_each  = toset(var.task_subnet_ids)
+  subnet_id = each.value
+}
+
 resource "aws_ecr_repository" "eper_uat" {
   name                 = "${var.name_prefix}-api"
   image_tag_mutability = "IMMUTABLE"
@@ -176,7 +181,7 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_id            = data.aws_vpc.selected.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids   = var.task_route_table_ids
+  route_table_ids   = distinct([for route_table in values(data.aws_route_table.tasks) : route_table.id])
   tags              = local.tags
 }
 
@@ -208,7 +213,7 @@ resource "aws_lb" "eper_uat" {
       condition = alltrue([
         for route_table in values(data.aws_route_table.alb) :
         route_table.vpc_id == data.aws_vpc.selected.id &&
-        anytrue([for route in route_table.routes : can(regex("^igw-", route.gateway_id))])
+        anytrue([for route in route_table.routes : route.destination_cidr_block == "0.0.0.0/0" && can(regex("^igw-", route.gateway_id))])
       ])
       error_message = "Provide ALB route tables in the selected VPC with a default route through an internet gateway."
     }
