@@ -89,14 +89,6 @@ resource "aws_security_group" "alb" {
     cidr_blocks = var.allowed_ingress_cidrs
   }
 
-  egress {
-    description = "Forward only within the selected VPC toward private UAT tasks"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [data.aws_vpc.selected.cidr_block]
-  }
-
   tags = local.tags
 }
 
@@ -112,23 +104,34 @@ resource "aws_security_group" "tasks" {
     security_groups = [aws_security_group.alb.id]
   }
 
-  egress {
-    description = "Reach private interface endpoints and targets within the selected VPC"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [data.aws_vpc.selected.cidr_block]
-  }
-
-  egress {
-    description     = "HTTPS to the regional S3 prefix list through the gateway endpoint"
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    prefix_list_ids = [aws_vpc_endpoint.s3.prefix_list_id]
-  }
-
   tags = local.tags
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_to_tasks" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.tasks.id
+  description                  = "Allow HTTPS ALB traffic to API targets only"
+  ip_protocol                 = "tcp"
+  from_port                   = 8080
+  to_port                     = 8080
+}
+
+resource "aws_vpc_security_group_egress_rule" "tasks_to_interface_endpoints" {
+  security_group_id            = aws_security_group.tasks.id
+  referenced_security_group_id = aws_security_group.vpc_endpoints.id
+  description                  = "Allow HTTPS only to required private AWS interface endpoints"
+  ip_protocol                 = "tcp"
+  from_port                   = 443
+  to_port                     = 443
+}
+
+resource "aws_vpc_security_group_egress_rule" "tasks_to_s3" {
+  security_group_id = aws_security_group.tasks.id
+  description       = "Allow HTTPS to S3 gateway endpoint prefix list only"
+  ip_protocol      = "tcp"
+  from_port        = 443
+  to_port          = 443
+  prefix_list_id   = aws_vpc_endpoint.s3.prefix_list_id
 }
 
 resource "aws_security_group" "vpc_endpoints" {
