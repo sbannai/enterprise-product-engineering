@@ -40,8 +40,11 @@ def audit_records(checklist, gates, capture, gaps):
     req_ids = [r.get("requirement_id", "").strip() for r in checklist]
     if len(set(case_ids)) != len(case_ids):
         integrity_errors.append("B01 case checklist contains duplicate or blank case IDs")
-    if len(set(req_ids)) != len(req_ids):
+    expected_b01_ids = {f"REQ-{chapter}{seq:02d}" for chapter in range(463, 471) for seq in range(1, 7)}
+    if len(set(req_ids)) != len(req_ids) or any(not item for item in req_ids):
         integrity_errors.append("B01 case checklist contains duplicate or blank requirement IDs")
+    if set(req_ids) != expected_b01_ids:
+        integrity_errors.append("B01 case checklist requirement IDs do not exactly cover REQ-46301 through REQ-47006")
 
     missing_sources = [r.get("requirement_id", "") for r in checklist
                        if not (r.get("requirement_specific_acceptance_source") or "").strip()
@@ -57,7 +60,8 @@ def audit_records(checklist, gates, capture, gaps):
                      if (r.get("status") or "").strip().upper() not in {"PASS", "VERIFIED", "COMPLETE"}
                      or not (r.get("evidence_reference") or "").strip()]
     not_run = [r.get("requirement_id", "") for r in capture
-               if (r.get("outcome") or "").strip().upper() in {"", "NOT_RUN", "NOT RUN"}]
+               if (r.get("outcome") or "").strip().upper() in
+               {"", "NOT_RUN", "NOT RUN", "NOT_EXECUTED", "NOT EXECUTED", "BLOCKED"}]
     accepted = [r.get("requirement_id", "") for r in capture
                 if (r.get("outcome") or "").strip().upper() in {"PASS", "ACCEPTED"}
                 and (r.get("business_decision") or "").strip().upper() in {"ACCEPT", "ACCEPTED", "APPROVED"}
@@ -65,8 +69,11 @@ def audit_records(checklist, gates, capture, gaps):
                 and (r.get("approval_date") or "").strip()
                 and (r.get("evidence_archive_reference") or "").strip()]
     capture_ids = [r.get("requirement_id", "").strip() for r in capture]
-    if len(set(capture_ids)) != len(capture_ids):
+    if len(set(capture_ids)) != len(capture_ids) or any(not item for item in capture_ids):
         integrity_errors.append("228 requirement execution capture contains duplicate or blank requirement IDs")
+    expected_capture_ids = {f"REQ-{chapter}{seq:02d}" for chapter in range(463, 501) for seq in range(1, 7)}
+    if set(capture_ids) != expected_capture_ids:
+        integrity_errors.append("228 requirement execution capture does not exactly cover REQ-46301 through REQ-50006")
 
     if missing_sources:
         blockers.append({"gate": "E13/source baseline", "count": len(missing_sources),
@@ -92,7 +99,8 @@ def audit_records(checklist, gates, capture, gaps):
         "report": "eper-b01-business-uat-readiness-audit",
         "mode": "READ_ONLY",
         "readiness": "BLOCKED" if blockers or integrity_errors else "READY_FOR_AUTHORIZED_OWNER_CONFIRMATION",
-        "businessUatExecuted": len(capture) == 228 and len(accepted) == 228 and not not_run,
+        "businessUatExecuted": len(capture) == 228 and set(capture_ids) == expected_capture_ids
+                               and len(set(capture_ids)) == 228 and len(accepted) == 228 and not not_run,
         "counts": {
             "b01Cases": len(checklist),
             "b01Gaps": len(gaps),
