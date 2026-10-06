@@ -37,6 +37,23 @@ aws ec2 describe-internet-gateways --region "$REGION" \
   --output table
 
 echo
+echo "== Route tables and routes (JSON for nested route details) =="
+aws ec2 describe-route-tables --region "$REGION" \
+  --query 'RouteTables[].{RouteTableId:RouteTableId,VpcId:VpcId,Associations:Associations[].{SubnetId:SubnetId,Main:Main},Routes:Routes[].{IPv4:DestinationCidrBlock,IPv6:DestinationIpv6CidrBlock,Gateway:GatewayId,NAT:NatGatewayId,Endpoint:VpcEndpointId,Peering:VpcPeeringConnectionId,State:State}}' \
+  --output json
+
+echo
+echo "== VPC endpoints =="
+aws ec2 describe-vpc-endpoints --region "$REGION" \
+  --query 'VpcEndpoints[].{EndpointId:VpcEndpointId,VpcId:VpcId,Service:ServiceName,Type:VpcEndpointType,State:State,PrivateDNS:PrivateDnsEnabled,SubnetIds:SubnetIds,RouteTableIds:RouteTableIds}' \
+  --output json
+
+echo
+echo "== VPC DNS settings =="
+aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[0].VpcId' --output text)" --attribute enableDnsSupport --output json 2>/dev/null || true
+aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[0].VpcId' --output text)" --attribute enableDnsHostnames --output json 2>/dev/null || true
+
+echo
 echo "== ACM certificates in ${REGION} =="
 aws acm list-certificates --region "$REGION" \
   --query 'CertificateSummaryList[].{Domain:DomainName,ARN:CertificateArn,Status:Status}' \
