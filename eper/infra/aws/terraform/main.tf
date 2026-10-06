@@ -108,11 +108,19 @@ resource "aws_security_group" "tasks" {
   }
 
   egress {
-    description = "Reach only private addresses within the selected VPC, including required VPC endpoints"
+    description = "Reach private interface endpoints and targets within the selected VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = [data.aws_vpc.selected.cidr_block]
+  }
+
+  egress {
+    description     = "HTTPS to the regional S3 prefix list through the gateway endpoint"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [aws_vpc_endpoint.s3.prefix_list_id]
   }
 
   tags = local.tags
