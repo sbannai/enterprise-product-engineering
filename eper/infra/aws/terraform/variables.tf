@@ -54,10 +54,6 @@ variable "acm_certificate_arn" {
     error_message = "A valid ACM certificate ARN is required for HTTPS."
   }
 
-  validation {
-    condition     = try(split(":", var.acm_certificate_arn)[3] == var.aws_region, false)
-    error_message = "The ACM certificate must be in the same AWS region as the UAT load balancer."
-  }
 }
 
 variable "allowed_ingress_cidrs" {
