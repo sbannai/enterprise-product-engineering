@@ -80,10 +80,11 @@ resource "aws_security_group" "alb" {
   }
 
   egress {
+    description = "Forward only within the selected VPC toward private UAT tasks"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.selected.cidr_block]
   }
 
   tags = local.tags
