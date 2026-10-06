@@ -116,17 +116,17 @@ resource "aws_lb" "eper_uat" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets = var.alb_subnet_ids
+  subnets            = var.alb_subnet_ids
 
   lifecycle {
     precondition {
-      condition = length(distinct([
+      condition     = length(distinct([
         for subnet in values(data.aws_subnet.alb) : subnet.availability_zone
       ])) >= 2
       error_message = "ALB subnets must span at least two distinct Availability Zones."
     }
     precondition {
-      condition = alltrue([
+      condition     = alltrue([
         for subnet in values(data.aws_subnet.alb) : subnet.vpc_id == data.aws_vpc.default.id
       ])
       error_message = "All ALB subnets must belong to the selected VPC."
