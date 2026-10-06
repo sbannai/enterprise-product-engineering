@@ -42,6 +42,13 @@ jobs:
       - name: Execute verification tests
         run: npm test
 
+      - name: Build UAT container image (no push)
+        run: |
+          docker build \
+            --build-arg EPER_BUILD_ID="$GITHUB_SHA" \
+            --tag "eper-uat:$GITHUB_SHA" \
+            --file Dockerfile .
+
       - name: Package immutable release candidate
         run: |
           mkdir -p release-candidate
