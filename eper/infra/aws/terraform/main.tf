@@ -120,6 +120,10 @@ resource "aws_lb" "eper_uat" {
 
   lifecycle {
     precondition {
+      condition     = length(var.alb_subnet_ids) == length(toset(var.alb_subnet_ids))
+      error_message = "ALB subnet IDs must be unique."
+    }
+    precondition {
       condition = length(distinct([
         for subnet in values(data.aws_subnet.alb) : subnet.availability_zone
       ])) >= 2
@@ -266,6 +270,14 @@ resource "aws_ecs_service" "eper_uat" {
   ]
 
   lifecycle {
+    precondition {
+      condition     = length(var.task_subnet_ids) == length(toset(var.task_subnet_ids))
+      error_message = "Fargate task subnet IDs must be unique."
+    }
+    precondition {
+      condition     = length(setintersection(toset(var.alb_subnet_ids), toset(var.task_subnet_ids))) == 0
+      error_message = "ALB and Fargate task subnets must be separate subnet sets."
+    }
     precondition {
       condition = alltrue([
         for subnet in values(data.aws_subnet.tasks) : subnet.vpc_id == data.aws_vpc.default.id
