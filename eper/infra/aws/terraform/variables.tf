@@ -35,6 +35,16 @@ variable "alb_subnet_ids" {
   }
 }
 
+variable "alb_route_table_ids" {
+  description = "Route table IDs for ALB subnets; each must have a default route through an internet gateway."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.alb_route_table_ids) >= 2
+    error_message = "Provide at least two ALB route table IDs."
+  }
+}
+
 variable "task_subnet_ids" {
   description = "Private subnet IDs for Fargate tasks; provide egress via NAT or required VPC endpoints."
   type        = list(string)
