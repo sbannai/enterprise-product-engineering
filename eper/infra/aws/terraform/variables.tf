@@ -15,6 +15,26 @@ variable "name_prefix" {
   }
 }
 
+variable "alb_subnet_ids" {
+  description = "At least two ALB subnet IDs in different Availability Zones."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.alb_subnet_ids) >= 2
+    error_message = "Provide at least two existing ALB subnets in different Availability Zones."
+  }
+}
+
+variable "task_subnet_ids" {
+  description = "Private subnet IDs for Fargate tasks; provide egress via NAT or required VPC endpoints."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.task_subnet_ids) >= 1
+    error_message = "Provide at least one existing task subnet."
+  }
+}
+
 variable "acm_certificate_arn" {
   description = "ACM certificate ARN in this region for the UAT hostname."
   type        = string
