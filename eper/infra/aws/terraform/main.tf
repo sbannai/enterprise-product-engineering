@@ -256,9 +256,40 @@ resource "aws_iam_role" "execution" {
   tags = local.tags
 }
 
-resource "aws_iam_role_policy_attachment" "execution" {
-  role       = aws_iam_role.execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+resource "aws_iam_role_policy" "execution" {
+  name = "${var.name_prefix}-execution-minimum"
+  role = aws_iam_role.execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ECRAuthorization"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "PullOnlyThisUATImage"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Resource = aws_ecr_repository.eper_uat.arn
+      },
+      {
+        Sid    = "WriteOnlyEPERUATLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.eper_uat.arn}:*"
+      }
+    ]
+  })
 }
 
 resource "aws_ecs_task_definition" "eper_uat" {
@@ -322,7 +353,7 @@ resource "aws_ecs_service" "eper_uat" {
 
   depends_on = [
     aws_lb_listener.https,
-    aws_iam_role_policy_attachment.execution,
+    aws_iam_role_policy.execution,
   ]
 
   lifecycle {
