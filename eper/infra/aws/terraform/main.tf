@@ -10,22 +10,25 @@ terraform {
 provider "aws" { region = var.aws_region }
 data "aws_vpc" "default" { default = true }
 data "aws_subnets" "default" {
-  filter { name = "vpc-id", values = [data.aws_vpc.default.id] }
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 resource "aws_ecr_repository" "eper_uat" {
-  name                 = "\${var.name_prefix}-api"
+  name                 = "${var.name_prefix}-api"
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
   encryption_configuration { encryption_type = "AES256" }
   tags = local.tags
 }
 resource "aws_cloudwatch_log_group" "eper_uat" {
-  name = "/ecs/\${var.name_prefix}"
+  name = "/ecs/${var.name_prefix}"
   retention_in_days = 30
   tags = local.tags
 }
 resource "aws_security_group" "alb" {
-  name = "\${var.name_prefix}-alb"
+  name = "${var.name_prefix}-alb"
   description = "Ingress for isolated EPER UAT load balancer"
   vpc_id = data.aws_vpc.default.id
   ingress {
@@ -44,7 +47,7 @@ resource "aws_security_group" "alb" {
   tags = local.tags
 }
 resource "aws_security_group" "tasks" {
-  name = "\${var.name_prefix}-tasks"
+  name = "${var.name_prefix}-tasks"
   description = "Only the EPER UAT load balancer may reach the API"
   vpc_id = data.aws_vpc.default.id
   ingress {
@@ -62,7 +65,7 @@ resource "aws_security_group" "tasks" {
   tags = local.tags
 }
 resource "aws_lb" "eper_uat" {
-  name = substr("\${var.name_prefix}-alb", 0, 32)
+  name = substr("${var.name_prefix}-alb", 0, 32)
   internal = false
   load_balancer_type = "application"
   security_groups = [aws_security_group.alb.id]
@@ -70,7 +73,7 @@ resource "aws_lb" "eper_uat" {
   tags = local.tags
 }
 resource "aws_lb_target_group" "eper_uat" {
-  name = substr("\${var.name_prefix}-tg", 0, 32)
+  name = substr("${var.name_prefix}-tg", 0, 32)
   port = 8080
   protocol = "HTTP"
   vpc_id = data.aws_vpc.default.id
@@ -98,11 +101,14 @@ resource "aws_lb_listener" "https" {
 }
 resource "aws_ecs_cluster" "eper_uat" {
   name = var.name_prefix
-  setting { name = "containerInsights", value = "enabled" }
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
   tags = local.tags
 }
 resource "aws_iam_role" "execution" {
-  name = "\${var.name_prefix}-execution"
+  name = "${var.name_prefix}-execution"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -126,7 +132,7 @@ resource "aws_ecs_task_definition" "eper_uat" {
   execution_role_arn = aws_iam_role.execution.arn
   container_definitions = jsonencode([{
     name = "eper-api"
-    image = "\${aws_ecr_repository.eper_uat.repository_url}:\${var.image_tag}"
+    image = "${aws_ecr_repository.eper_uat.repository_url}:${var.image_tag}"
     essential = true
     portMappings = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
     # EPER_BUILD_ID is baked into the image during its build. Do not override it here.
@@ -148,7 +154,7 @@ resource "aws_ecs_task_definition" "eper_uat" {
   tags = local.tags
 }
 resource "aws_ecs_service" "eper_uat" {
-  name = "\${var.name_prefix}-service"
+  name = "${var.name_prefix}-service"
   cluster = aws_ecs_cluster.eper_uat.id
   task_definition = aws_ecs_task_definition.eper_uat.arn
   desired_count = var.desired_count
