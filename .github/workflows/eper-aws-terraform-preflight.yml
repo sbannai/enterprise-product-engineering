@@ -29,7 +29,7 @@ jobs:
 
       - name: Check formatting
         working-directory: eper/infra/aws/terraform
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -diff -recursive
 
       - name: Initialize without backend
         working-directory: eper/infra/aws/terraform
