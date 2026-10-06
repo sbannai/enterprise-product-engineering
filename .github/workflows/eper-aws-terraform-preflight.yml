@@ -9,6 +9,7 @@ on:
       - main
     paths:
       - "eper/infra/aws/terraform/**"
+      - "eper/infra/aws/scripts/**"
       - ".github/workflows/eper-aws-terraform-preflight.yml"
   workflow_dispatch:
 
@@ -26,6 +27,9 @@ jobs:
         with:
           terraform_version: "1.6.6"
           terraform_wrapper: false
+
+      - name: Test read-only inventory script with mocked AWS CLI
+        run: bash eper/infra/aws/scripts/test-read-only-inventory.sh
 
       - name: Check formatting
         working-directory: eper/infra/aws/terraform
