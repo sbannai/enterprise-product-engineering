@@ -22,8 +22,8 @@ data "aws_subnet" "alb" {
 }
 
 data "aws_route_table" "alb" {
-  for_each       = toset(var.alb_route_table_ids)
-  route_table_id = each.value
+  for_each  = toset(var.alb_subnet_ids)
+  subnet_id = each.value
 }
 
 data "aws_subnet" "tasks" {
@@ -197,7 +197,7 @@ resource "aws_lb" "eper_uat" {
       error_message = "All ALB subnets must belong to the selected VPC."
     }
     precondition {
-      condition = length(var.alb_route_table_ids) >= 2 && alltrue([
+      condition = alltrue([
         for route_table in values(data.aws_route_table.alb) :
         route_table.vpc_id == data.aws_vpc.selected.id &&
         anytrue([for route in route_table.routes : can(regex("^igw-", route.gateway_id))])
