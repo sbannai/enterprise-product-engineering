@@ -58,6 +58,15 @@ def audit_records(checklist, gates, capture, gaps):
                      or not (r.get("evidence_reference") or "").strip()]
     not_run = [r.get("requirement_id", "") for r in capture
                if (r.get("outcome") or "").strip().upper() in {"", "NOT_RUN", "NOT RUN"}]
+    accepted = [r.get("requirement_id", "") for r in capture
+                if (r.get("outcome") or "").strip().upper() in {"PASS", "ACCEPTED"}
+                and (r.get("business_decision") or "").strip().upper() in {"ACCEPT", "ACCEPTED", "APPROVED"}
+                and (r.get("business_approver") or "").strip()
+                and (r.get("approval_date") or "").strip()
+                and (r.get("evidence_archive_reference") or "").strip()]
+    capture_ids = [r.get("requirement_id", "").strip() for r in capture]
+    if len(set(capture_ids)) != len(capture_ids):
+        integrity_errors.append("228 requirement execution capture contains duplicate or blank requirement IDs")
 
     if missing_sources:
         blockers.append({"gate": "E13/source baseline", "count": len(missing_sources),
@@ -80,7 +89,7 @@ def audit_records(checklist, gates, capture, gaps):
         "report": "eper-b01-business-uat-readiness-audit",
         "mode": "READ_ONLY",
         "readiness": "BLOCKED" if blockers or integrity_errors else "READY_FOR_AUTHORIZED_OWNER_CONFIRMATION",
-        "businessUatExecuted": False if not_run else True,
+        "businessUatExecuted": len(capture) == 228 and len(accepted) == 228 and not not_run,
         "counts": {
             "b01Cases": len(checklist),
             "b01Gaps": len(gaps),
@@ -91,6 +100,7 @@ def audit_records(checklist, gates, capture, gaps):
             "casesNotExplicitlyAuthorized": len(unauthorized_cases),
             "entryGatesPendingOrWithoutEvidence": len(pending_gates),
             "requirementsNotRun": len(not_run),
+            "requirementsWithCompleteBusinessAcceptance": len(accepted),
         },
         "integrityErrors": integrity_errors,
         "blockers": blockers,
