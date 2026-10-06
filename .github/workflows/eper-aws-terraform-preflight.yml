@@ -69,6 +69,7 @@ jobs:
               "internet gateway default-route destination": (main, r'destination_cidr_block\s*==\s*"0\.0\.0\.0/0"'),
               "internet gateway target check": (main, r'can\(regex\("\^igw-",\s*route\.gateway_id\)\)'),
               "task subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"tasks"'),
+              "task subnets reject direct IGW default routes": (main, r'Fargate task subnets must not use an internet gateway as their default route'),
               "S3 endpoint route tables derived from task subnets": (main, r'route_table_ids\s*=\s*distinct\(\[for route_table in values\(data\.aws_route_table\.tasks\) : route_table\.id\]\)'),
           }
           failed = []
