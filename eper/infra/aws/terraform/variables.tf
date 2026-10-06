@@ -40,8 +40,8 @@ variable "acm_certificate_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:acm:${var.aws_region}:", var.acm_certificate_arn))
-    error_message = "An ACM certificate ARN in the configured AWS region is required for HTTPS."
+    condition     = can(regex("^arn:aws:acm:[a-z0-9-]+:", var.acm_certificate_arn))
+    error_message = "A valid ACM certificate ARN is required for HTTPS."
   }
 }
 
