@@ -120,13 +120,13 @@ resource "aws_lb" "eper_uat" {
 
   lifecycle {
     precondition {
-      condition     = length(distinct([
+      condition = length(distinct([
         for subnet in values(data.aws_subnet.alb) : subnet.availability_zone
       ])) >= 2
       error_message = "ALB subnets must span at least two distinct Availability Zones."
     }
     precondition {
-      condition     = alltrue([
+      condition = alltrue([
         for subnet in values(data.aws_subnet.alb) : subnet.vpc_id == data.aws_vpc.default.id
       ])
       error_message = "All ALB subnets must belong to the selected VPC."
