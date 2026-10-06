@@ -78,6 +78,14 @@ jobs:
               "S3 endpoint route tables derived from task subnets": (main, r'route_table_ids\s*=\s*distinct\(\[for route_table in values\(data\.aws_route_table\.tasks\) : route_table\.id\]\)'),
           }
           failed = []
+          security_group_count = len(re.findall(r'resource\s+"aws_security_group"\s+"[^"]+"', main))
+          empty_egress_count = len(re.findall(r'egress\s*=\s*\[\s*\]', main))
+          if security_group_count != 3:
+              failed.append("exactly three reviewed security groups")
+          if empty_egress_count != security_group_count:
+              failed.append("all security groups disable provider-default egress")
+          if re.search(r'cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0/0"\s*\]', main):
+              failed.append("no unrestricted security-group ingress")
           for name, (source, pattern) in checks.items():
               if not re.search(pattern, source, re.S):
                   failed.append(name)
