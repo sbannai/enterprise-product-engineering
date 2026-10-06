@@ -16,13 +16,6 @@ data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
-
 resource "aws_ecr_repository" "eper_uat" {
   name                 = "${var.name_prefix}-api"
   image_tag_mutability = "IMMUTABLE"
@@ -36,6 +29,25 @@ resource "aws_ecr_repository" "eper_uat" {
   }
 
   tags = local.tags
+}
+
+resource "aws_ecr_lifecycle_policy" "eper_uat" {
+  repository = aws_ecr_repository.eper_uat.name
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Retain the newest 10 tagged release images"
+      selection = {
+        tagStatus     = "tagged"
+        tagPrefixList = ["a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        countType     = "imageCountMoreThan"
+        countNumber   = 10
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+  })
 }
 
 resource "aws_cloudwatch_log_group" "eper_uat" {
@@ -94,7 +106,7 @@ resource "aws_lb" "eper_uat" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = data.aws_subnets.default.ids
+  subnets            = var.alb_subnet_ids
   tags               = local.tags
 }
 
@@ -211,9 +223,9 @@ resource "aws_ecs_service" "eper_uat" {
   health_check_grace_period_seconds = 60
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = var.task_subnet_ids
     security_groups  = [aws_security_group.tasks.id]
-    assign_public_ip = true
+    assign_public_ip = false
   }
 
   load_balancer {
