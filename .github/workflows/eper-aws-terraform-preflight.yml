@@ -63,7 +63,6 @@ jobs:
               "no unrestricted tester CIDR": (variables, r'cidr\s*!=\s*"0\.0\.0\.0/0"'),
               "ALB egress scoped to tasks": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"alb_to_tasks"'),
               "ALB egress restricted to task subnet CIDRs": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"alb_to_tasks"\s*\{[^}]*for_each\s*=\s*data\.aws_subnet\.tasks[^}]*cidr_ipv4\s*=\s*each\.value\.cidr_block'),
-              "no reciprocal ALB/task security-group reference cycle": (main, r'referenced_security_group_id\s*=\s*aws_security_group\.tasks\.id'),
               "task egress scoped to interface endpoints": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"tasks_to_interface_endpoints"'),
               "task egress scoped to S3": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"tasks_to_s3"'),
               "ECR API endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"ecr_api"'),
@@ -84,6 +83,8 @@ jobs:
                   failed.append(name)
           if re.search(r'default\s*=\s*true', main):
               failed.append("no implicit default-VPC assumption")
+          if re.search(r"referenced_security_group_id\\s*=\\s*aws_security_group\\.tasks\\.id", main):
+              failed.append("no reciprocal ALB-to-task security-group reference cycle")
           if failed:
               print("Failed security invariants:")
               for name in failed:
