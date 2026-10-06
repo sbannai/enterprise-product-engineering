@@ -53,8 +53,14 @@ jobs:
           grep -Fq 'variable "vpc_id"' "$vars"
           grep -Fq 'length(var.alb_subnet_ids) >= 2' "$vars"
           grep -Fq 'cidr != "0.0.0.0/0"' "$vars"
+          grep -Fq 'cidr_blocks = [data.aws_vpc.selected.cidr_block]' "$main"
+          grep -Fq 'resource "aws_vpc_endpoint" "ecr_api"' "$main"
+          grep -Fq 'resource "aws_vpc_endpoint" "ecr_dkr"' "$main"
+          grep -Fq 'resource "aws_vpc_endpoint" "logs"' "$main"
+          grep -Fq 'resource "aws_vpc_endpoint" "s3"' "$main"
+          grep -Fq 'variable "task_route_table_ids"' "$vars"
           ! grep -Fq 'default = true' "$main"
-          echo "Security invariants present: immutable image tags, private tasks, matching build identity, explicit VPC, multi-subnet ALB, no unrestricted ingress or default-VPC assumption."
+          echo "Security invariants present: immutable image tags, private tasks, matching build identity, explicit VPC, restricted task egress, required private AWS endpoints, multi-subnet ALB, no unrestricted ingress or default-VPC assumption."
 
       - name: Verify deployment remains gated
         shell: bash
