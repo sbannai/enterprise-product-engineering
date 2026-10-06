@@ -39,6 +39,20 @@ def capture(i=1, outcome="NOT_RUN", accepted=False):
 
 
 class B01ReadinessAuditTests(unittest.TestCase):
+    def test_checked_in_registers_report_current_blocked_baseline(self):
+        checklist = audit.read_csv(audit.CHECKLIST)
+        gates = audit.read_csv(audit.GATES)
+        capture_rows = audit.read_csv(audit.CAPTURE)
+        gaps = audit.read_csv(audit.GAP_REGISTER)
+        report = audit.audit_records(checklist, gates, capture_rows, gaps)
+        self.assertEqual(report["counts"]["b01Cases"], 48)
+        self.assertEqual(report["counts"]["b01Gaps"], 48)
+        self.assertEqual(report["counts"]["entryGates"], 13)
+        self.assertEqual(report["counts"]["requirementsInCaptureRegister"], 228)
+        self.assertEqual(report["readiness"], "BLOCKED")
+        self.assertFalse(report["businessUatExecuted"])
+        self.assertEqual(report["integrityErrors"], [])
+
     def test_pending_records_are_reported_blocked_not_approved(self):
         report = audit.audit_records(
             [case()], [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
