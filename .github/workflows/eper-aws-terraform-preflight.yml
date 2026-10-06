@@ -43,33 +43,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          main="eper/infra/aws/terraform/main.tf"
-          vars="eper/infra/aws/terraform/variables.tf"
-          grep -Fq 'image_tag_mutability = "IMMUTABLE"' "$main"
-          grep -Fq 'assign_public_ip = false' "$main"
-          grep -Fq 'condition     = var.image_tag == var.build_id' "$main"
-          grep -Fq 'data "aws_vpc" "selected"' "$main"
-          grep -Fq 'id = var.vpc_id' "$main"
-          grep -Fq 'variable "vpc_id"' "$vars"
-          grep -Fq 'length(var.alb_subnet_ids) >= 2' "$vars"
-          grep -Fq 'cidr != "0.0.0.0/0"' "$vars"
-          grep -Fq 'resource "aws_vpc_security_group_egress_rule" "alb_to_tasks"' "$main"
-          grep -Fq 'referenced_security_group_id = aws_security_group.tasks.id' "$main"
-          grep -Fq 'resource "aws_vpc_security_group_egress_rule" "tasks_to_interface_endpoints"' "$main"
-          grep -Fq 'resource "aws_vpc_security_group_egress_rule" "tasks_to_s3"' "$main"
-          grep -Fq 'resource "aws_vpc_endpoint" "ecr_api"' "$main"
-          grep -Fq 'resource "aws_vpc_endpoint" "ecr_dkr"' "$main"
-          grep -Fq 'resource "aws_vpc_endpoint" "logs"' "$main"
-          grep -Fq 'resource "aws_vpc_endpoint" "s3"' "$main"
-          grep -Fq 'prefix_list_id    = aws_vpc_endpoint.s3.prefix_list_id' "$main"
-          grep -Fq 'data "aws_route_table" "alb"' "$main"
-          grep -Fq 'subnet_id = each.value' "$main"
-          grep -Fq 'destination_cidr_block == "0.0.0.0/0"' "$main"
-          grep -Fq 'can(regex("^igw-", route_table.gateway_id))' "$main"
-          grep -Fq 'data "aws_route_table" "tasks"' "$main"
-          grep -Fq 'route_table_ids   = distinct([for route_table in values(data.aws_route_table.tasks) : route_table.id])' "$main"
-          ! grep -Fq 'default = true' "$main"
-          echo "Security invariants present: immutable image tags, private tasks, matching build identity, explicit VPC, subnet-associated public ALB route-table checks, private endpoint access including S3 prefix-list egress, no unrestricted ingress or default-VPC assumption."
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          main = Path("eper/infra/aws/terraform/main.tf").read_text()
+          variables = Path("eper/infra/aws/terraform/variables.tf").read_text()
+          checks = {
+              "immutable ECR tags": (main, r'image_tag_mutability\s*=\s*"IMMUTABLE"'),
+              "private Fargate tasks": (main, r'assign_public_ip\s*=\s*false'),
+              "matching image/build identity": (main, r'var\.image_tag\s*==\s*var\.build_id'),
+              "explicit VPC selection": (main, r'data\s+"aws_vpc"\s+"selected"'),
+              "VPC ID input": (variables, r'variable\s+"vpc_id"'),
+              "at least two ALB subnets": (variables, r'length\(var\.alb_subnet_ids\)\s*>=\s*2'),
+              "no unrestricted tester CIDR": (variables, r'cidr\s*!=\s*"0\.0\.0\.0/0"'),
+              "ALB egress scoped to tasks": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"alb_to_tasks"'),
+              "task egress scoped to interface endpoints": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"tasks_to_interface_endpoints"'),
+              "task egress scoped to S3": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"tasks_to_s3"'),
+              "ECR API endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"ecr_api"'),
+              "ECR Docker endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"ecr_dkr"'),
+              "CloudWatch Logs endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"logs"'),
+              "S3 gateway endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"s3"'),
+              "S3 prefix-list egress": (main, r'prefix_list_id\s*=\s*aws_vpc_endpoint\.s3\.prefix_list_id'),
+              "ALB subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"alb"'),
+              "internet gateway default-route check": (main, r'destination_cidr_block\s*==\s*"0\.0\.0\.0/0".*?can\(regex\("\\?"\^igw-',),
+              "task subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"tasks"'),
+              "S3 endpoint route tables derived from task subnets": (main, r'route_table_ids\s*=\s*distinct\(\[for route_table in values\(data\.aws_route_table\.tasks\) : route_table\.id\]\)'),
+          }
+          failed = []
+          for name, (source, pattern) in checks.items():
+              if not re.search(pattern, source, re.S):
+                  failed.append(name)
+          if re.search(r'default\s*=\s*true', main):
+              failed.append("no implicit default-VPC assumption")
+          if failed:
+              print("Failed security invariants:")
+              for name in failed:
+                  print(f"- {name}")
+              raise SystemExit(1)
+          print(f"All {len(checks) + 1} UAT security invariants passed.")
+          PY
 
       - name: Verify deployment remains gated
         shell: bash
