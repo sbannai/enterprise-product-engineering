@@ -84,6 +84,9 @@ def audit_records(checklist, gates, capture, gaps):
         blockers.append({"gate": "E1-E13 evidence", "count": len(pending_gates),
                          "detail": "Gate status is not verified/complete or its evidence reference is missing.",
                          "gate_ids": pending_gates})
+    if len(accepted) != 228:
+        blockers.append({"gate": "requirement-level business acceptance", "count": 228 - len(accepted),
+                         "detail": "Each requirement needs an accepted outcome, named business approver, approval date, and evidence archive reference."})
     return {
         "schemaVersion": 1,
         "report": "eper-b01-business-uat-readiness-audit",
