@@ -56,7 +56,7 @@ while IFS= read -r VPC_ID; do
   echo "-- $VPC_ID --"
   aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$VPC_ID" --attribute enableDnsSupport --query 'EnableDnsSupport.Value' --output text
   aws ec2 describe-vpc-attribute --region "$REGION" --vpc-id "$VPC_ID" --attribute enableDnsHostnames --query 'EnableDnsHostnames.Value' --output text
-done < <(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[].VpcId' --output text | tr '\\t' '\\n')
+done < <(aws ec2 describe-vpcs --region "$REGION" --query 'Vpcs[].VpcId' --output text | tr '\t' '\n')
 
 echo
 echo "== ACM certificates in ${REGION} =="
