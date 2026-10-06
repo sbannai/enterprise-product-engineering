@@ -111,18 +111,18 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_tasks" {
   security_group_id            = aws_security_group.alb.id
   referenced_security_group_id = aws_security_group.tasks.id
   description                  = "Allow HTTPS ALB traffic to API targets only"
-  ip_protocol                 = "tcp"
-  from_port                   = 8080
-  to_port                     = 8080
+  ip_protocol                  = "tcp"
+  from_port                    = 8080
+  to_port                      = 8080
 }
 
 resource "aws_vpc_security_group_egress_rule" "tasks_to_interface_endpoints" {
   security_group_id            = aws_security_group.tasks.id
   referenced_security_group_id = aws_security_group.vpc_endpoints.id
   description                  = "Allow HTTPS only to required private AWS interface endpoints"
-  ip_protocol                 = "tcp"
-  from_port                   = 443
-  to_port                     = 443
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
 }
 
 resource "aws_vpc_security_group_egress_rule" "tasks_to_s3" {
