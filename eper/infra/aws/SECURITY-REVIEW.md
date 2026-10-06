@@ -18,11 +18,11 @@
 ## Deployment blockers / required checks
 
 1. **Subnet suitability is assumed, not proven.** Terraform selects every subnet in the default VPC. Before apply, verify the VPC exists in `ap-south-2`, the ALB has subnets in at least two Availability Zones, and ECS subnets have a valid egress path for ECR image pulls and CloudWatch Logs. Do not assume all default-VPC subnets are public.
-2. **Public IP assignment is enabled for Fargate tasks.** Task security-group ingress is restricted to the ALB, but public IP assignment increases exposure surface. Prefer private subnets with appropriate VPC endpoints/NAT where available; document the cost/security trade-off before choosing a topology.
-3. **No ECR lifecycle policy is defined.** Add an approved retention policy before publishing repeated images, so old images do not accumulate indefinitely.
+2. **Private task subnet routing must be verified.** Fargate tasks set `assign_public_ip = false`. Terraform now rejects task subnets whose associated route table has a default route directly through an internet gateway. This does not prove every subnet is otherwise private; review NAT routes, NACLs, endpoint DNS, and route tables in the target account before apply.
+3. **ECR lifecycle retention is configured.** The repository has an immutable-tag lifecycle policy retaining the newest 10 tagged images. Confirm this retention is sufficient for audit/rollback needs before publishing.
 4. **No account-level budget/alert is provisioned by this configuration.** Establish a cost limit and alerts in the AWS account before creating an ALB, Fargate service, public IPv4 addresses, ECR storage, or logs. A budget alert is not a hard spending cap.
 5. **Certificate and ingress values remain unresolved.** Verify the ACM certificate is in `ap-south-2`, is issued, covers the approved hostname, and that ingress CIDRs are the testers' current public IP ranges. Do not widen ingress to `0.0.0.0/0`.
-6. **Terraform has not been validated against the target AWS account.** Run `terraform fmt -check`, `terraform validate`, and a reviewed `terraform plan` using non-secret variables after prerequisites are known. A plan is not authorization to apply.
+6. **Terraform has not been validated against the target AWS account.** CI checks formatting, configuration validation, and source-level security invariants; it does not query the user's AWS account. Run a reviewed `terraform plan` with non-secret inputs after prerequisites are known. A plan is not authorization to apply.
 
 ## Release identity control
 
