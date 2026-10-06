@@ -47,6 +47,17 @@ echo "== VPC endpoints =="
 aws ec2 describe-vpc-endpoints --region "$REGION" \
   --query 'VpcEndpoints[].{EndpointId:VpcEndpointId,VpcId:VpcId,Service:ServiceName,Type:VpcEndpointType,State:State,PrivateDNS:PrivateDnsEnabled,SubnetIds:SubnetIds,RouteTableIds:RouteTableIds}' \
   --output json
+echo
+echo "== NAT gateways =="
+aws ec2 describe-nat-gateways --region "$REGION" \
+  --query 'NatGateways[].{NatGatewayId:NatGatewayId,VpcId:VpcId,SubnetId:SubnetId,State:State,ConnectivityType:ConnectivityType,PublicIPs:NatGatewayAddresses[].PublicIp}' \
+  --output json
+
+echo
+echo "== Network ACLs =="
+aws ec2 describe-network-acls --region "$REGION" \
+  --query 'NetworkAcls[].{NetworkAclId:NetworkAclId,VpcId:VpcId,IsDefault:IsDefault,Associations:Associations[].{SubnetId:SubnetId},Entries:Entries[].{RuleNumber:RuleNumber,Egress:Egress,Protocol:Protocol,Action:RuleAction,CIDR:CidrBlock,IPv6CIDR:Ipv6CidrBlock,FromPort:PortRange.From,ToPort:PortRange.To}}' \
+  --output json
 
 echo
 echo "== VPC DNS settings (all VPCs) =="
