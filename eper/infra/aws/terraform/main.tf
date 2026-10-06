@@ -140,11 +140,11 @@ resource "aws_security_group" "vpc_endpoints" {
   vpc_id      = data.aws_vpc.selected.id
 
   ingress {
-    description     = "HTTPS from EPER UAT tasks"
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.tasks.id]
+    description = "HTTPS from the dedicated Fargate task subnet CIDRs"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [for subnet in values(data.aws_subnet.tasks) : subnet.cidr_block]
   }
 
   tags = local.tags
