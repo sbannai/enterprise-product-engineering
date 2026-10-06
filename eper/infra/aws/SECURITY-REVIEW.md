@@ -17,7 +17,7 @@
 
 ## Deployment blockers / required checks
 
-1. **Subnet suitability is assumed, not proven.** Terraform selects every subnet in the default VPC. Before apply, verify the VPC exists in `ap-south-2`, the ALB has subnets in at least two Availability Zones, and ECS subnets have a valid egress path for ECR image pulls and CloudWatch Logs. Do not assume all default-VPC subnets are public.
+1. **Subnet suitability is supplied as input but not verified against the target account yet.** Terraform requires an explicit VPC ID, at least two ALB subnet IDs, and one or more task subnet IDs; it does not automatically select the default VPC or all its subnets. CI validates configuration and checks declared routing invariants, but only an account-backed plan can confirm that the supplied VPC/subnets exist in `ap-south-2`, have the intended AZ coverage, and provide the required endpoint connectivity.
 2. **Private task subnet routing must be verified.** Fargate tasks set `assign_public_ip = false`. Terraform now rejects task subnets whose associated route table has a default route directly through an internet gateway. This does not prove every subnet is otherwise private; review NAT routes, NACLs, endpoint DNS, and route tables in the target account before apply.
 3. **ECR lifecycle retention is configured.** The repository has an immutable-tag lifecycle policy retaining the newest 10 tagged images. Confirm this retention is sufficient for audit/rollback needs before publishing.
 4. **No account-level budget/alert is provisioned by this configuration.** Establish a cost limit and alerts in the AWS account before creating an ALB, Fargate service, public IPv4 addresses, ECR storage, or logs. A budget alert is not a hard spending cap.
