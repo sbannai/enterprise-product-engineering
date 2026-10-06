@@ -16,6 +16,16 @@ data "aws_vpc" "default" {
   default = true
 }
 
+data "aws_subnet" "alb" {
+  for_each = toset(var.alb_subnet_ids)
+  id       = each.value
+}
+
+data "aws_subnet" "tasks" {
+  for_each = toset(var.task_subnet_ids)
+  id       = each.value
+}
+
 resource "aws_ecr_repository" "eper_uat" {
   name                 = "${var.name_prefix}-api"
   image_tag_mutability = "IMMUTABLE"
@@ -106,8 +116,24 @@ resource "aws_lb" "eper_uat" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = var.alb_subnet_ids
-  tags               = local.tags
+  subnets = var.alb_subnet_ids
+
+  lifecycle {
+    precondition {
+      condition = length(distinct([
+        for subnet in values(data.aws_subnet.alb) : subnet.availability_zone
+      ])) >= 2
+      error_message = "ALB subnets must span at least two distinct Availability Zones."
+    }
+    precondition {
+      condition = alltrue([
+        for subnet in values(data.aws_subnet.alb) : subnet.vpc_id == data.aws_vpc.default.id
+      ])
+      error_message = "All ALB subnets must belong to the selected VPC."
+    }
+  }
+
+  tags = local.tags
 }
 
 resource "aws_lb_target_group" "eper_uat" {
@@ -238,6 +264,15 @@ resource "aws_ecs_service" "eper_uat" {
     aws_lb_listener.https,
     aws_iam_role_policy_attachment.execution,
   ]
+
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for subnet in values(data.aws_subnet.tasks) : subnet.vpc_id == data.aws_vpc.default.id
+      ])
+      error_message = "All Fargate task subnets must belong to the selected VPC."
+    }
+  }
 
   tags = local.tags
 }
