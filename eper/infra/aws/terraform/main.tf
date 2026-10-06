@@ -112,12 +112,13 @@ resource "aws_security_group" "tasks" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_tasks" {
-  security_group_id            = aws_security_group.alb.id
-  referenced_security_group_id = aws_security_group.tasks.id
-  description                  = "Allow HTTPS ALB traffic to API targets only"
-  ip_protocol                  = "tcp"
-  from_port                    = 8080
-  to_port                      = 8080
+  for_each          = data.aws_subnet.tasks
+  security_group_id = aws_security_group.alb.id
+  cidr_ipv4         = each.value.cidr_block
+  description       = "Allow ALB HTTPS listener to reach API targets on port 8080 in task subnets"
+  ip_protocol       = "tcp"
+  from_port         = 8080
+  to_port           = 8080
 }
 
 resource "aws_vpc_security_group_egress_rule" "tasks_to_interface_endpoints" {
