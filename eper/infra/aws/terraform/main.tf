@@ -251,6 +251,13 @@ resource "aws_lb_listener" "https" {
   certificate_arn   = var.acm_certificate_arn
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
+  lifecycle {
+    precondition {
+      condition     = try(split(":", var.acm_certificate_arn)[3] == var.aws_region, false)
+      error_message = "The ACM certificate must be in the same AWS region as the UAT load balancer."
+    }
+  }
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.eper_uat.arn
