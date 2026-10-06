@@ -45,16 +45,6 @@ variable "task_subnet_ids" {
   }
 }
 
-variable "task_route_table_ids" {
-  description = "Route table IDs associated with private Fargate subnets; used for the S3 gateway endpoint."
-  type        = list(string)
-
-  validation {
-    condition     = length(var.task_route_table_ids) >= 1
-    error_message = "Provide at least one route table associated with the private task subnets."
-  }
-}
-
 variable "acm_certificate_arn" {
   description = "ACM certificate ARN in this region for the UAT hostname."
   type        = string
