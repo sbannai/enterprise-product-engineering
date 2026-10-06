@@ -16,6 +16,10 @@ cat > "$MOCK_BIN/aws" <<'MOCK_AWS'
 set -euo pipefail
 printf '%s\n' "$*" >> "$AWS_MOCK_LOG"
 case "$*" in
+  *" create-"*|*" modify-"*|*" delete-"*|*" run-instances"*|*" terminate-instances"*|*" authorize-"*|*" revoke-"*|*" put-"*|*" start-"*|*" stop-"*|*" update-"*|*" register-"*|*" deregister-"*)
+    echo "FAIL: mutating AWS CLI operation attempted: $*" >&2
+    exit 90
+    ;;
   "sts get-caller-identity --output json")
     printf '{}\n'
     ;;
@@ -57,4 +61,4 @@ for expected in \
   fi
 done
 
-echo "PASS: inventory checks DNS support and hostnames for every discovered VPC."
+echo "PASS: inventory checks DNS support and hostnames for every discovered VPC, includes NAT/ACL inventory, and attempts no detected mutating AWS CLI operations."
