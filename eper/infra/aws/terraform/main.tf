@@ -80,6 +80,8 @@ resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb"
   description = "Ingress for isolated EPER UAT load balancer"
   vpc_id      = data.aws_vpc.selected.id
+  # Prevent the AWS provider's default allow-all egress rule; use explicit standalone egress rules only.
+  egress = []
 
   ingress {
     description = "HTTPS from explicitly approved source CIDRs"
@@ -96,6 +98,8 @@ resource "aws_security_group" "tasks" {
   name        = "${var.name_prefix}-tasks"
   description = "Only the EPER UAT load balancer may reach the API"
   vpc_id      = data.aws_vpc.selected.id
+  # Prevent the AWS provider's default allow-all egress rule; use explicit standalone egress rules only.
+  egress = []
 
   ingress {
     from_port       = 8080
@@ -138,6 +142,8 @@ resource "aws_security_group" "vpc_endpoints" {
   name        = "${var.name_prefix}-vpce"
   description = "HTTPS access to required private AWS service endpoints from EPER UAT tasks"
   vpc_id      = data.aws_vpc.selected.id
+  # Prevent the AWS provider's default allow-all egress rule; use explicit standalone egress rules only.
+  egress = []
 
   ingress {
     description = "HTTPS from the dedicated Fargate task subnet CIDRs"
