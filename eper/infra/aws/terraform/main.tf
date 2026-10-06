@@ -129,7 +129,7 @@ resource "aws_ecs_task_definition" "eper_uat" {
     image = "\${aws_ecr_repository.eper_uat.repository_url}:\${var.image_tag}"
     essential = true
     portMappings = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
-    environment = [{ name = "EPER_BUILD_ID", value = var.build_id }]
+    # EPER_BUILD_ID is baked into the image during its build. Do not override it here.
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -139,6 +139,12 @@ resource "aws_ecs_task_definition" "eper_uat" {
       }
     }
   }])
+  lifecycle {
+    precondition {
+      condition     = var.image_tag == var.build_id
+      error_message = "The ECR image tag must match the build ID embedded in the image."
+    }
+  }
   tags = local.tags
 }
 resource "aws_ecs_service" "eper_uat" {
