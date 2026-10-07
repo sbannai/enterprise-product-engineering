@@ -57,6 +57,8 @@ For each case in B01_48_CASE_APPROVAL_CHECKLIST.csv, record:
 - approved test data and evidence capture plan;
 - reviewer identity, decision date, approval reference and any change request.
 
+**Current D3 readiness checkpoint (evidence assessment only):** 48/48 existing requirement-level cases are READY FOR D3 REVIEW. Consolidated EM-LLD-001 v1.0 provides design targets for all 48 rows, but the LLD is marked CONTROLLED DETAILED-DESIGN DRAFT — PENDING FORMAL APPROVAL and the detailed-design register marks the rows SUPPORTING DESIGN — EXACT BINDING PENDING. This checkpoint does not constitute D3 approval.
+
 **D3 rationale / required changes:**  
 Owner entry:
 
