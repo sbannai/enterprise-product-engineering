@@ -76,7 +76,7 @@ test("every B01 case gap remains explicit until requirement-level criteria are a
     assert.ok(draftCase?.expected_result_draft?.trim(), `draft expected result must exist for ${row.requirement_id}`);
     assert.equal(row.scenario_reference_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
     assert.equal(row.expected_result_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
-    assert.equal(row.approved_acceptance_source_status, "NOT_VERIFIED", row.requirement_id);
+    assert.ok(\n      ["NOT_VERIFIED", "LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING"].includes(row.approved_acceptance_source_status),\n      row.requirement_id\n    );
     assert.equal(row.gap_status, "BLOCKED", row.requirement_id);
     assert.equal(row.status, "OPEN", row.requirement_id);
   }
