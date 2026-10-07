@@ -56,7 +56,7 @@ test("B01 draft cases cover each of the 48 scoped requirements exactly once", ()
     assert.ok(sequence >= 1 && sequence <= 6, row.requirement_id);
     assert.equal(row.srs_id, expectedSrs(chapter, sequence), row.requirement_id);
     assert.equal(row.case_status, "DRAFT_TEMPLATE_NOT_APPROVED", row.requirement_id);
-    assert.equal(row.baseline_approval_status, "REQUIREMENTS_BASELINE_APPROVAL_PENDING", row.requirement_id);
+    assert.ok(["REQUIREMENTS_BASELINE_APPROVAL_PENDING", "LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING"].includes(row.baseline_approval_status), row.requirement_id);
     assert.equal(row.business_review_status, "REVIEW_REQUIRED", row.requirement_id);
     assert.equal(row.execution_status, "NOT_RUN", row.requirement_id);
   }
@@ -76,7 +76,10 @@ test("every B01 case gap remains explicit until requirement-level criteria are a
     assert.ok(draftCase?.expected_result_draft?.trim(), `draft expected result must exist for ${row.requirement_id}`);
     assert.equal(row.scenario_reference_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
     assert.equal(row.expected_result_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
-    assert.ok(\n      ["NOT_VERIFIED", "LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING"].includes(row.approved_acceptance_source_status),\n      row.requirement_id\n    );
+    assert.ok(
+      ["NOT_VERIFIED", "LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING"].includes(row.approved_acceptance_source_status),
+      row.requirement_id
+    );
     assert.equal(row.gap_status, "BLOCKED", row.requirement_id);
     assert.equal(row.status, "OPEN", row.requirement_id);
   }
