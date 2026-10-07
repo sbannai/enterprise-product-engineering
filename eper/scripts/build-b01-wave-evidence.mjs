@@ -1,0 +1,19 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const repoRoot = resolve(import.meta.dirname, '..', '..');
+const sourcePath = resolve(repoRoot, 'eper/uat-evidence/B01/B01-technical-preflight.json');
+const outputDir = resolve(repoRoot, 'eper/uat-evidence/B01/waves');
+mkdirSync(outputDir, { recursive: true });
+const evidence = JSON.parse(readFileSync(sourcePath, 'utf8'));
+const waveNames = { XX01:'W1 — Authoritative Records', XX02:'W2 — Authorization', XX03:'W3 — Business Validation', XX04:'W4 — Audit & Evidence', XX05:'W5 — Exception Handling', XX06:'W6 — Governed Reporting' };
+const requirements = evidence.requirements ?? [];
+const chapters = [...new Set(requirements.map(r => r.chapter))].sort((a,b) => a-b);
+const mdCell = v => String(v ?? '').replaceAll('|','\\|').replaceAll('\n',' ');
+for (const [family,waveName] of Object.entries(waveNames)) {
+ const rows=requirements.filter(r=>r.srsPattern===family).sort((a,b)=>a.chapter-b.chapter);
+ const lines=['# EPER B01 '+waveName+' Evidence Record','','**Classification:** CONTROLLED AUTOMATED EXECUTION EVIDENCE — NOT BUSINESS ACCEPTANCE','',`**Batch:** B01 | **Chapters:** 463–470 | **Requirements:** ${rows.length}`,`**Source execution:** ${evidence.program} | **Run:** ${evidence.runId} | **Commit:** ${evidence.commit}`,`**Execution window:** ${evidence.startedAt} → ${evidence.completedAt}`,'','## Evidence boundary','','This record aggregates actual controlled pilot-test results for this capability family. It does not convert automated execution into business UAT acceptance, formal sign-off, release approval, G9 freeze, or G10 certification.','','## Requirement evidence mapping','','| Chapter | Requirement | Family | Automated result | Tests | Evidence source | Business UAT | Acceptance |','|---:|---|---|---|---:|---|---|---|',...rows.map(r=>`| ${r.chapter} | ${r.requirementId} | ${r.srsPattern} | ${mdCell(r.status)} | ${r.observedTestCount} | B01-technical-preflight.json / ${r.requirementId} | NOT EXECUTED | PENDING |`),'','## Transition to closure','','1. Bind this wave to the authorized UAT target/session if business UAT is required.','2. Record actual business outcome and business evidence reference.','3. Obtain authorized acceptance decision.','4. Reconcile accepted rows into the B01/G9 chain.',''];
+ writeFileSync(resolve(outputDir,family+'-'+waveName.slice(0,2)+'-EVIDENCE.md'),lines.join('\n'));
+}
+const summary=['# EPER B01 Six-Wave Evidence Summary','','**Classification:** CONTROLLED EVIDENCE AGGREGATION — NOT BUSINESS ACCEPTANCE','',`**Run:** ${evidence.runId} | **Commit:** ${evidence.commit}`,`**Scope:** B01 / Chapters ${chapters[0]}–${chapters.at(-1)} / 48 requirements`,'','| Wave | Capability | Requirements | Automated status | Business UAT | Acceptance |','|---|---|---:|---|---|---|',...Object.entries(waveNames).map(([family,name])=>{const rows=requirements.filter(r=>r.srsPattern===family);const pass=rows.every(r=>r.status==='AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT');return `| ${name.split(' — ')[0]} | ${name.split(' — ')[1]} | ${rows.length} | ${pass?'PASS':'REVIEW'} | NOT EXECUTED | PENDING |`; }),'','**Closure rule:** The six wave records are a controlled execution bundle. They do not fabricate business outcomes. Batch acceptance is permitted only if the governing acceptance rules authorize it.',''];
+writeFileSync(resolve(outputDir,'B01-SIX-WAVE-EVIDENCE-SUMMARY.md'),summary.join('\n'));
+console.log(JSON.stringify({batch:'B01',waves:6,requirements:requirements.length,outputDirectory:'eper/uat-evidence/B01/waves'},null,2));
