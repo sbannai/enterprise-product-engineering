@@ -72,3 +72,12 @@ Candidate event IDs are retained as candidates only. For example, an EVT-DOC-* e
 ### Next validation action
 
 Perform a controlled six-row join for REQ-46301–REQ-46306 against the exact entity catalogue rows in EM-DATA-001, representative endpoint catalogue rows in EM-API-001, and event catalogue rows in EM-EVT-001. For every candidate, record exact source section/catalogue ID, applicability rationale and baseline status. Leave the binding OPEN where the shared contract spec explicitly says exact Chapter 463 detail is unresolved; do not infer a business domain object, endpoint or event.
+
+
+## Owner direction — 2026-10-09
+
+The requester has selected **SPECIFY** as the contract-handling decision. The next engineering work is to draft governed, versioned DATA schemas, API operation contracts and EVENT payload specifications for the six capability families, with explicit ownership, validation, authorization, errors, compatibility and event delivery semantics as applicable. Each artifact must identify its source baseline and exact requirement bindings, then be reviewed and approved through the controlled design process.
+
+This direction does not convert the existing `DATA:*`, `API:*`, or `EVENT:*` registry descriptors into complete contracts. It also does not authorize invented procurement-domain fields. For Chapter 463, the owner confirmed that an **existing** authoritative procurement domain model should be used; its exact source artifact, version and locator remain to be identified before the REQ-46301 model/schema can be finalized.
+
+**Disposition remains:** implementation-derived gap matrix; contract specifications not yet authored/approved; SRC-003/G3 OPEN / NO-GO; no business UAT authorized.
