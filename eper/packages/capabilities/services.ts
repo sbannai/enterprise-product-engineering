@@ -5,7 +5,7 @@ import { InMemoryAuthoritativeRecordStore, type AuthoritativeRecord } from "./au
 import { InMemoryAuthorizationService, type AuthorizationPolicy, type AuthorizationRequest } from "./authorization.js";
 import { BusinessValidationEngine, type ValidationRule } from "./business-validation.js";
 import { InMemoryAuditEvidenceStore, type AuditEvidence, type AuditEvidenceStore } from "./audit-evidence.js";
-import { InMemoryExceptionStore, type ExceptionPatch, type WorkflowException } from "./exception-handling.js";
+import { InMemoryExceptionStore, type ExceptionPatch, type ExceptionStore, type WorkflowException } from "./exception-handling.js";
 import { InMemoryGovernedReportingService, type ReportQuery, type ReportRow } from "./governed-reporting.js";
 
 export interface CapabilityInput {
@@ -166,7 +166,7 @@ export class AuditEvidenceService implements CapabilityService {
 }
 
 export class ExceptionHandlingService implements CapabilityService {
-  private readonly store = new InMemoryExceptionStore();
+  constructor(private readonly store: ExceptionStore = new InMemoryExceptionStore()) {}
   private readonly lifecycleEvidence = new InMemoryAuditEvidenceStore();
   private lifecycleSequence = 0;
 
