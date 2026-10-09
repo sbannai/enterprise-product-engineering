@@ -61,6 +61,62 @@ export function createAppServer(): Server {
       return;
     }
 
+    // Publicly reachable, controlled UAT route. It is separate from the local-only route below.
+    const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
+    if (request.method === "POST" && uatCapabilityMatch) {
+      if (process.env.EPER_UAT_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+
+      const token = process.env.EPER_UAT_API_TOKEN ?? "";
+      const tenantId = process.env.EPER_UAT_TENANT_ID ?? "";
+      const principalId = process.env.EPER_UAT_PRINCIPAL_ID ?? "";
+      const publicAck = process.env.EPER_UAT_PUBLIC_ENDPOINT_ACK ?? "";
+      if (token.length < 32 || !tenantId || !principalId || publicAck !== "I_ACCEPT_PUBLIC_BEARER_UAT_RISK") {
+        sendJson(response, 503, { error: "uat_api_unconfigured" });
+        return;
+      }
+      if (!bearerMatches(request, token)) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+
+      let requirementId: string;
+      try {
+        requirementId = decodeURIComponent(uatCapabilityMatch[1]);
+      } catch {
+        sendJson(response, 400, { error: "invalid_requirement_id_encoding" });
+        return;
+      }
+      const requirement = requirementBindings.find((binding) => binding.id === requirementId);
+      if (!requirement) {
+        sendJson(response, 404, { error: "requirement_not_found" });
+        return;
+      }
+
+      try {
+        const body = await readJson(request);
+        if (!Object.prototype.hasOwnProperty.call(body, "payload")) {
+          sendJson(response, 400, { error: "payload_required" });
+          return;
+        }
+        const result = await executeIntegratedRequirement(requirement, {
+          context: { tenantId, principalId, correlationId: randomUUID() },
+          payload: body.payload,
+        }, services);
+        sendJson(response, 200, { result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "CAPABILITY_EXECUTION_FAILED";
+        const status = message === "REQUEST_BODY_TOO_LARGE" ? 413
+          : message === "TENANT_CONTEXT_MISMATCH" ? 403
+          : error instanceof SyntaxError || message === "CAPABILITY_OPERATION_REQUIRED" || message.endsWith("_UNSUPPORTED") || message === "JSON_OBJECT_REQUIRED" ? 400
+          : 422;
+        sendJson(response, status, { error: status === 422 ? "capability_execution_failed" : message });
+      }
+      return;
+    }
+
     const capabilityMatch = /^\/internal\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
     if (request.method === "POST" && capabilityMatch) {
       if (process.env.EPER_LOCAL_CAPABILITY_API !== "true") {
