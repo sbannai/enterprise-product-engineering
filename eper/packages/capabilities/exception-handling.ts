@@ -20,7 +20,7 @@ export interface ExceptionPatch {
   message?: string;
 }
 
-type ExceptionCreateInput = Omit<WorkflowException, "state" | "retryCount" | "updatedAt">;
+export type ExceptionCreateInput = Omit<WorkflowException, "state" | "retryCount" | "updatedAt">;
 
 export interface ExceptionStore {
   create(input: ExceptionCreateInput, beforeCommit?: (created: WorkflowException) => void): WorkflowException;
