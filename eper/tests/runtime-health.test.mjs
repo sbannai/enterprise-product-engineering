@@ -61,3 +61,86 @@ test("unknown routes return 404 without exposing implementation details", async 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });
 });
+
+test("local capability API is disabled by default", async () => {
+  const previous = process.env.EPER_LOCAL_CAPABILITY_API;
+  delete process.env.EPER_LOCAL_CAPABILITY_API;
+  try {
+    const response = await fetch(`${await startServer()}/internal/requirements/REQ-46303/execute`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: { operation: "validate", input: {} } }),
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    if (previous !== undefined) process.env.EPER_LOCAL_CAPABILITY_API = previous;
+  }
+});
+
+test("local capability API authenticates and routes a requirement to its concrete service", async () => {
+  const keys = ["EPER_LOCAL_CAPABILITY_API", "EPER_LOCAL_CAPABILITY_TOKEN", "EPER_LOCAL_TENANT_ID", "EPER_LOCAL_PRINCIPAL_ID"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_LOCAL_CAPABILITY_API: "true",
+    EPER_LOCAL_CAPABILITY_TOKEN: "local-test-token-0123456789-0123456789",
+    EPER_LOCAL_TENANT_ID: "test-tenant",
+    EPER_LOCAL_PRINCIPAL_ID: "test-operator",
+  });
+  try {
+    const base = await startServer();
+    const denied = await fetch(`${base}/internal/requirements/REQ-46303/execute`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: { operation: "validate", input: { ok: true } } }),
+    });
+    assert.equal(denied.status, 401);
+
+    const response = await fetch(`${base}/internal/requirements/REQ-46303/execute`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer local-test-token-0123456789-0123456789",
+      },
+      body: JSON.stringify({ payload: { operation: "validate", input: { ok: true } } }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.result.requirementId, "REQ-46303");
+    assert.equal(body.result.pattern, "XX03");
+    assert.equal(body.result.status, "EXECUTED");
+    assert.equal(body.result.data.payload.operation, "validate");
+    assert.equal(body.result.data.payload.validation.valid, true);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test("local capability API rejects unknown requirement IDs", async () => {
+  const keys = ["EPER_LOCAL_CAPABILITY_API", "EPER_LOCAL_CAPABILITY_TOKEN", "EPER_LOCAL_TENANT_ID", "EPER_LOCAL_PRINCIPAL_ID"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_LOCAL_CAPABILITY_API: "true",
+    EPER_LOCAL_CAPABILITY_TOKEN: "local-test-token-0123456789-0123456789",
+    EPER_LOCAL_TENANT_ID: "test-tenant",
+    EPER_LOCAL_PRINCIPAL_ID: "test-operator",
+  });
+  try {
+    const response = await fetch(`${await startServer()}/internal/requirements/REQ-NOT-REAL/execute`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer local-test-token-0123456789-0123456789",
+      },
+      body: JSON.stringify({ payload: { operation: "validate", input: {} } }),
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
