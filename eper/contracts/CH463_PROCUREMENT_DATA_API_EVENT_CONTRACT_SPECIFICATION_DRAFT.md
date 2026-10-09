@@ -75,3 +75,21 @@ Before any contract is promoted to approved:
 ## 6. Disposition
 
 **Contract specification work authorized as draft work; no contract is approved by this document.** Existing baseline conventions can be reused, but procurement-specific domain facts and requirement-level bindings must come from the authoritative source. SRC-003/G3 remains OPEN / NO-GO; B01 remains HOLD / NOT EXECUTED; business acceptance remains pending; G9 is not frozen.
+
+
+## 7. Recovery from already-submitted sources — domain identity conflict
+
+The Library source recovery found existing domain material; no additional upload is requested.
+
+### Source hierarchy and evidence found
+- `EM-BRD-001_Consolidated_BRD_Chapters_463-500_v1.0` and `HLD_463_470_Controlled_Traceability_Recovery_Matrix_46301_46306_v1.9` identify Chapter 463 as **Enterprise Event & Message Management**. Its six BRD requirements are the recurring control patterns: authoritative records/lifecycle, authorization, business validation, audit evidence, exception handling and governed reporting.
+- `EM-LLD-001_Consolidated_LLD_Chapters_463-500_v1.0` provides detailed-design targets for those six requirement patterns, while explicitly marking exact binding pending and formal approval pending.
+- `HLD_463_470_Detailed_Candidate_v0.2` labels HLD-463 **Enterprise Procurement & Source-to-Pay** and lists a procurement digital thread and candidate objects. The same document says the exact Chapter-463 object names require confirmation against the final chapter source before approval.
+- Existing procurement business context is available in `EM-BRD-001_Volume-I_Chapter-50_Procurement-Supplier-Vendor-and-Source-to-Pay-Management-Requirements-Framework_v1.0` and the Chapter 274 procurement traceability framework. These are useful domain references, but they do not override the Chapter 463 requirement-source identity or independently prove that Chapter 463 is procurement.
+
+### Reconciliation decision
+**Do not promote procurement entities, APIs or events to REQ-46301–REQ-46306 yet.** The current evidence contains a domain-identity conflict between the requirement-source chain and the HLD candidate. The controlling source for Chapter 463 requirement identity is the detailed Chapter 463 BRD, cross-checked with the consolidated BRD/recovery matrix; the HLD candidate remains supporting/candidate evidence until reconciled.
+
+Required action: reconcile the Chapter 463 title/domain against the detailed BRD and approved HLD baseline, then select the applicable existing domain model and record exact source locators. If the intended Chapter 463 domain is Event & Message Management, use the existing event/message domain model and do not force the procurement model into these six requirements. If a controlled approved source establishes that Chapter 463 is Procurement & Source-to-Pay, record the correction and its authority before promoting procurement contracts.
+
+This recovery changes the next action from “request another document” to **reconcile existing submitted sources and their authority**. No owner upload is currently required. SRC-003/G3 remains OPEN / NO-GO until this discrepancy and the requirement-level bindings are resolved.
