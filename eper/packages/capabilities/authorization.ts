@@ -21,8 +21,22 @@ export interface AuthorizationDecision {
   request: AuthorizationRequest;
 }
 
-export class InMemoryAuthorizationService {
+export interface AuthorizationPolicyStore {
+  addPolicy(policy: AuthorizationPolicy): void;
+  decide(request: AuthorizationRequest): AuthorizationDecision;
+  snapshot(): readonly AuthorizationPolicy[];
+}
+
+export class InMemoryAuthorizationService implements AuthorizationPolicyStore {
   private readonly policies: AuthorizationPolicy[] = [];
+
+  constructor(seed: readonly AuthorizationPolicy[] = []) {
+    for (const policy of seed) this.addPolicy(policy);
+  }
+
+  snapshot(): readonly AuthorizationPolicy[] {
+    return this.policies.map(policy => ({ ...policy, actions: [...policy.actions], resources: [...policy.resources] }));
+  }
 
   addPolicy(policy: AuthorizationPolicy): void {
     this.policies.push({ ...policy, actions: [...policy.actions], resources: [...policy.resources] });
