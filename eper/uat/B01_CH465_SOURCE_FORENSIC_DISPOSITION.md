@@ -2,27 +2,28 @@
 **Status:** HOLD — exact requirement-level design bindings not evidenced  
 **Scope:** Chapter 465 — Enterprise Inventory, Warehouse & Stock Management  
 **Batch:** REQ-46501–REQ-46506 (6 requirements)  
-**Branch:** `docs/record-lld-approval-disposition`
+**Disposition revision:** 2026-10-09; recovery-pass sources v1.1 checked
 
 ## Decision
 Retain all six requirements on HOLD for design traceability. The available recovery records consistently report exact approved HLD and LLD locators as **NOT EVIDENCED / OPEN**. Candidate HLD mappings and supporting LLD component/pattern references are context only; do not promote them to authoritative bindings. Approval of consolidated EM-LLD-001 v1.0 as the governing design baseline does not, by itself, establish each requirement's exact locator or acceptance oracle.
 
 ## Requirement-level disposition
 
-| Requirement | SRS | Trace ID | Pattern | Supporting LLD context | Exact HLD | Exact LLD | Disposition |
+| Requirement | SRS | Trace ID | Pattern / intent | Candidate HLD (not approved) | Supporting LLD (not exact) | Exact HLD | Exact LLD | Disposition |
 |---|---|---|---|---|---|---|---|
-| REQ-46501 | SRS-FR-2335 | TRC-46501 | XX01 / LLD-PAT-01 | LLD-CMP-008, LLD-CMP-007 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
-| REQ-46502 | SRS-FR-2336 | TRC-46502 | XX02 / LLD-PAT-02 | LLD-CMP-003, LLD-CMP-004, LLD-CMP-005 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
-| REQ-46503 | SRS-FR-2337 | TRC-46503 | XX03 / LLD-PAT-03 | LLD-CMP-007, LLD-CMP-010 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
-| REQ-46504 | SRS-FR-2338 | TRC-46504 | XX04 / LLD-PAT-04 | LLD-CMP-017 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
-| REQ-46505 | SRS-FR-2339 | TRC-46505 | XX05 / LLD-PAT-05 | LLD-CMP-009, LLD-CMP-010 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
-| REQ-46506 | SRS-FR-2340 | TRC-46506 | XX06 / LLD-PAT-06 | LLD-CMP-016, LLD-CMP-014 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46501 | SRS-FR-2335 | TRC-46501 | XX01 — authoritative records/lifecycle | HLD-CAND-465-01 / HLD-CAP-01 | LLD-CMP-008, LLD-CMP-007 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46502 | SRS-FR-2336 | TRC-46502 | XX02 — role-based authorization | HLD-CAND-465-02 / HLD-CAP-02 | LLD-CMP-003, LLD-CMP-004, LLD-CMP-005 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46503 | SRS-FR-2337 | TRC-46503 | XX03 — mandatory-condition validation | HLD-CAND-465-03 / HLD-CAP-04 (candidate labels vary by source version) | LLD-CMP-007, LLD-CMP-010 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46504 | SRS-FR-2338 | TRC-46504 | XX04 — audit evidence | HLD-CAND-465-04 / HLD-CAP-05 | LLD-CMP-017 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46505 | SRS-FR-2339 | TRC-46505 | XX05 — controlled exceptions | HLD-CAND-465-05 / HLD-CAP-03 / HLD-CAP-04 (candidate labels vary by source version) | LLD-CMP-009, LLD-CMP-010 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46506 | SRS-FR-2340 | TRC-46506 | XX06 — governed reporting | HLD-CAND-465-06 / HLD-CAP-06 | LLD-CMP-016, LLD-CMP-014 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
 
 ## Forensic findings
 - **Coverage:** 6/6 requirement identities and supporting pattern/component references recovered.
 - **Exact HLD binding:** 0/6 evidenced.
 - **Exact LLD binding:** 0/6 evidenced.
-- **Data/API/event contract closure:** Not evidenced at exact requirement-level locators; do not invent entity/schema names, API/event names, versions, or N/A decisions.
+- **HLD→LLD pair, baseline/approval and reviewer acceptance:** 0/6 evidenced.
+- **Data/API/event contract closure:** 0/6 closed at exact requirement-level locators; do not invent entity/schema names, API/event names, versions, or N/A decisions.
 - **Acceptance oracle:** Not approved by this disposition. Draft scenarios remain proposals until the authorized business/requirements reviewers approve expected results and their BRD/SRS source locators.
 - **UAT:** This document is a source-reconciliation artifact, not execution evidence or business acceptance. It does not authorize B01 execution or change the UAT gate status.
 
