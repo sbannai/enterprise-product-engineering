@@ -1,7 +1,7 @@
 # B01 Chapter 488 — Source Forensic Disposition
 **Status:** HOLD — exact requirement-level design bindings not established  
 **Scope:** Chapter 488, six requirements (REQ-48801–REQ-48806)  
-**Batch:** B01, Chapters 463–470; this disposition is a chapter-level source-reconciliation record  
+**Scope basis:** Aggregate controlled evidence for Chapters 463–500; this chapter-level disposition does not claim individual source reconciliation for every requirement.  
 **Branch:** `docs/record-lld-approval-disposition`
 
 ## Decision
