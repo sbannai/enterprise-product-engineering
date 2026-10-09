@@ -77,3 +77,26 @@ Suggested evidence filename: `EPER-LOCAL-RUNTIME-SMOKE-<buildId>-<YYYYMMDD>.md`.
 ## What this does not unblock
 
 A real authorized HTTPS preflight still requires the owner-approved HTTPS base URL, exact allowed hostname, expected deployed build ID, and configured protected GitHub Environment. Business UAT additionally requires approved test data, verified identity/session, named tester and role mapping, and audit/report access evidence. No AWS resource is created by this runbook.
+
+## Exercise all six capability families from Windows PowerShell
+
+The health-only container command above intentionally does not enable the capability execution API. To run the six-family runner, start the same verified image with the opt-in API enabled. Keep the port bound to loopback; do not expose this local test API to a network.
+
+In PowerShell, set $BuildId to the exact 40-character build ID verified above. Run these commands from the extracted artifact directory:
+
+    $BuildId = "<exact-40-character-build-id>"
+    $ImageTag = "eper-runtime-smoke:$BuildId"
+    $env:EPER_LOCAL_CAPABILITY_TOKEN = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+    $env:EPER_LOCAL_TENANT_ID = "uat-test-tenant"
+    $env:EPER_LOCAL_PRINCIPAL_ID = "uat-test-operator"
+    docker rm --force eper-local-uat-smoke 2>$null
+    docker run --detach --rm --name eper-local-uat-smoke --publish 127.0.0.1:18080:8080 --env "EPER_BUILD_ID=$BuildId" --env "EPER_LOCAL_CAPABILITY_API=true" --env "EPER_LOCAL_CAPABILITY_TOKEN=$env:EPER_LOCAL_CAPABILITY_TOKEN" --env "EPER_LOCAL_TENANT_ID=$env:EPER_LOCAL_TENANT_ID" --env "EPER_LOCAL_PRINCIPAL_ID=$env:EPER_LOCAL_PRINCIPAL_ID" $ImageTag
+    Invoke-RestMethod http://127.0.0.1:18080/health
+    .\run-six-family-local-uat.ps1 -Token $env:EPER_LOCAL_CAPABILITY_TOKEN -EvidencePath ".\EPER-SIX-FAMILY-HTTP-SMOKE.json"
+
+Run the script from the directory where run-six-family-local-uat.ps1 is present (for example, copy it from the repository's eper/uat directory into the extracted artifact directory). Review all six rows in the JSON evidence file. On completion, stop the container and clear the shell token:
+
+    docker stop eper-local-uat-smoke
+    Remove-Item Env:EPER_LOCAL_CAPABILITY_TOKEN
+
+Expected: six PASS results and a build ID matching the verified image. A passing result is local technical smoke evidence only; it does not constitute business UAT or acceptance of any requirement.
