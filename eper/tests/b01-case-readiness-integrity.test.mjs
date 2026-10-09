@@ -77,7 +77,7 @@ test("every B01 case gap remains explicit until requirement-level criteria are a
     assert.equal(row.scenario_reference_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
     assert.equal(row.expected_result_status, "DRAFT_PRESENT_NOT_APPROVED", row.requirement_id);
     assert.ok(
-      ["NOT_VERIFIED", "LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING"].includes(row.approved_acceptance_source_status),
+      ["NOT_VERIFIED", "LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING", "LLD_BASELINE_APPROVED_EXACT_BINDING_PENDING"].includes(row.approved_acceptance_source_status),
       row.requirement_id
     );
     assert.equal(row.gap_status, "BLOCKED", row.requirement_id);
