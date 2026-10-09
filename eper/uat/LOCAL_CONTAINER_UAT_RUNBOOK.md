@@ -10,9 +10,8 @@ A successful run is **local runtime evidence only**. It is not business UAT, an 
 
 - Repository: `sbannai/enterprise-product-engineering`
 - Select the latest successful **EPER Container Runtime Smoke Test** run for the commit you intend to validate; do not assume an older artifact is current.
-- Latest verified main build at the time of this update: `8d66aa63c7cd02d359b6d8edda6b54a9530cef14`.
-- Latest main runtime smoke run: https://github.com/sbannai/enterprise-product-engineering/actions/runs/37928280657
-- Latest main EPER CI run: https://github.com/sbannai/enterprise-product-engineering/actions/runs/37928280679
+- Choose a successful runtime-smoke artifact for the exact full commit SHA you intend to test. The artifact name must be `eper-runtime-image-<full-commit-sha>`.
+- Open the [runtime smoke workflow runs](https://github.com/sbannai/enterprise-product-engineering/actions/workflows/eper-container-runtime-smoke.yml) and select the successful run for that commit.
 - Artifact name follows `eper-runtime-image-<full-commit-sha>`.
 - Artifact retention is seven days from upload; if it expires, rerun the workflow on the desired commit.
 
@@ -28,9 +27,16 @@ cat BUILD-METADATA.txt
 sha256sum --check SHA256SUMS
 IMAGE_TAR="$(find . -maxdepth 1 -type f -name 'eper-runtime-*.tar.gz' -print -quit)"
 test -n "$IMAGE_TAR"
-gzip -dc "$IMAGE_TAR" | docker load
+# Set this to the exact artifact name selected in GitHub Actions.
+ARTIFACT_NAME="${ARTIFACT_NAME:?Set ARTIFACT_NAME to eper-runtime-image-<full-commit-sha>}"
+EXPECTED_BUILD_ID="${ARTIFACT_NAME#eper-runtime-image-}"
+test "$EXPECTED_BUILD_ID" != "$ARTIFACT_NAME"
+test "${#EXPECTED_BUILD_ID}" -eq 40
+case "$EXPECTED_BUILD_ID" in *[!0-9a-f]*) echo "Invalid SHA in ARTIFACT_NAME" >&2; exit 1;; esac
 BUILD_ID="$(sed -n 's/^buildId=//p' BUILD-METADATA.txt)"
-test "$BUILD_ID" = "$(sed -n 's/^buildId=//' BUILD-METADATA.txt)"
+test -n "$BUILD_ID"
+test "$BUILD_ID" = "$EXPECTED_BUILD_ID"
+gzip -dc "$IMAGE_TAR" | docker load
 IMAGE_TAG="eper-runtime-smoke:$BUILD_ID"
 docker image inspect "$IMAGE_TAG" >/dev/null
 docker run --detach --rm --name eper-local-uat-smoke \
