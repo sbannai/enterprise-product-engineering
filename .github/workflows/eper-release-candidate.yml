@@ -1,5 +1,8 @@
 name: EPER Release Candidate Build
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches:
@@ -18,6 +21,7 @@ on:
 jobs:
   release-candidate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: eper
@@ -41,6 +45,51 @@ jobs:
 
       - name: Execute verification tests
         run: npm test
+
+      - name: Build UAT container image (no push)
+        run: |
+          docker build \
+            --build-arg EPER_BUILD_ID="$GITHUB_SHA" \
+            --tag "eper-uat:$GITHUB_SHA" \
+            --file Dockerfile .
+
+      - name: Smoke-test container health and build identity
+        env:
+          EXPECTED_BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          container_name="eper-uat-smoke-$GITHUB_RUN_ID"
+          cleanup() {
+            docker logs "$container_name" || true
+            docker rm -f "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run -d --name "$container_name" \
+            -p 127.0.0.1:18080:8080 "eper-uat:$GITHUB_SHA"
+
+          ready=0
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --fail http://127.0.0.1:18080/health >/tmp/eper-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const body = JSON.parse(fs.readFileSync("/tmp/eper-health.json", "utf8"));
+            if (body.status !== "ok" || body.service !== "eper-api" || body.buildId !== process.env.EXPECTED_BUILD_ID) {
+              console.error("Unexpected health response:", body);
+              process.exit(1);
+            }
+            console.log("Container health and build identity verified:", body.buildId);
+          '
+
+          status_code="$(curl --silent --output /dev/null --write-out "%{http_code}" http://127.0.0.1:18080/not-a-route)"
+          test "$status_code" = "404"
 
       - name: Package immutable release candidate
         run: |
