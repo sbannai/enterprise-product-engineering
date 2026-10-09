@@ -4,7 +4,7 @@ import type { CapabilityService, CapabilityResult } from "./index.js";
 import { InMemoryAuthoritativeRecordStore, type AuthoritativeRecord } from "./authoritative-records.js";
 import { InMemoryAuthorizationService, type AuthorizationPolicy, type AuthorizationRequest } from "./authorization.js";
 import { BusinessValidationEngine, type ValidationRule } from "./business-validation.js";
-import { InMemoryAuditEvidenceStore, type AuditEvidence } from "./audit-evidence.js";
+import { InMemoryAuditEvidenceStore, type AuditEvidence, type AuditEvidenceStore } from "./audit-evidence.js";
 import { InMemoryExceptionStore, type ExceptionPatch, type WorkflowException } from "./exception-handling.js";
 import { InMemoryGovernedReportingService, type ReportQuery, type ReportRow } from "./governed-reporting.js";
 
@@ -138,7 +138,7 @@ export class BusinessValidationService implements CapabilityService {
 }
 
 export class AuditEvidenceService implements CapabilityService {
-  private readonly store = new InMemoryAuditEvidenceStore();
+  constructor(private readonly store: AuditEvidenceStore = new InMemoryAuditEvidenceStore()) {}
 
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     const { value, contracts } = prepare(requirement, input, "XX04", "audit-evidence");
@@ -254,7 +254,7 @@ export class ExceptionHandlingService implements CapabilityService {
 }
 
 export class GovernedReportingService implements CapabilityService {
-  private readonly reporting = new InMemoryGovernedReportingService();
+  constructor(private readonly reporting: Pick<InMemoryGovernedReportingService, "publish" | "query"> = new InMemoryGovernedReportingService()) {}
 
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     const { value, contracts } = prepare(requirement, input, "XX06", "governed-reporting");
