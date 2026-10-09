@@ -4,7 +4,7 @@
 **Batch:** B01 — Chapters 463–470  
 **Requirement scope:** 48 requirements (REQ-46301–REQ-47006)  
 **SRS scope:** SRS-FR-2323–SRS-FR-2370  
-**Current state:** PENDING — owner completion required
+**Current state:** OWNER DECISIONS CAPTURED — CONTROLLED SOURCE REFERENCES AND FORMAL METADATA STILL REQUIRED
 
 > Complete this record only by an authorized owner/reviewer. Attach or link controlled evidence. This template is not an approval.
 
@@ -97,3 +97,22 @@ Complete only after D1–D3 are recorded and every applicable E1–E13 gate has 
 **Approval reference:**  
 **Evidence package / archive reference:**  
 **Signature or approved electronic attestation reference:**  
+
+
+## Owner decisions received — 2026-10-09
+
+**Decision source:** user-submitted EPER/EM-OPS decisions in ChatGPT, message timestamp 2026-10-09T04:29:05Z (09:59:05 IST). Record this as a captured owner decision; it is not a separate change-control ticket or cryptographic/electronic signature.
+
+| Decision | Owner response | Applied disposition |
+|---|---|---|
+| Design authority | User states they are the design authority | Recorded as self-declared by the requester; formal authority/role evidence is not attached in this repository |
+| EM-LLD-001 v1.0 | APPROVE | Owner approval decision received for the document baseline; approval/change reference, effective date in the controlled system, and signature/attestation reference still need to be recorded |
+| Procurement domain model for REQ-46301 | Existing model | Do not invent a new model; the exact authoritative source artifact/version/locator must be identified before promoting the domain model binding |
+| DATA/API/EVENT | Specify contracts | Define the missing governed schemas/contracts and route them for approval; do not treat registry descriptors as full contracts |
+| Business acceptance owner | User states they are the business acceptance owner | Recorded as self-declared by the requester; formal authority/role evidence is not attached in this repository |
+| B01 acceptance source | Existing criteria only | Use existing approved BRD/SRS criteria where explicit; do not derive or invent criteria. Exact source/version/locator and approval reference must be verified per requirement |
+| UAT environment | Not hosted | No live target preflight or business UAT can be executed yet |
+| Tester | User | Tester selection recorded, subject to access/session authorization and environment controls |
+| Priority | B01 | Resolve Chapter 463 design/source and B01 acceptance prerequisites first |
+
+**Effect on gates:** these choices are now captured, but they do not complete D1/D2/D3/D4. In particular, the existing procurement model source and its exact locator have not been supplied; approved acceptance sources have not been evidenced row-by-row; DATA/API/EVENT specifications remain to be authored and approved; and no UAT target exists. Keep B01 **HOLD / NOT EXECUTED**, business decisions pending per requirement, G9 not frozen, and G10 not issued until the required source references, controlled approvals, and real execution evidence are present.
