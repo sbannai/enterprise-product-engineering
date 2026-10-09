@@ -5,10 +5,8 @@ import { InMemoryAuthoritativeRecordStore, type AuthoritativeRecord } from "./au
 import { InMemoryAuthorizationService, type AuthorizationPolicy, type AuthorizationRequest } from "./authorization.js";
 import { BusinessValidationEngine, type ValidationRule } from "./business-validation.js";
 import { InMemoryAuditEvidenceStore, type AuditEvidence, type AuditEvidenceStore } from "./audit-evidence.js";
-import { JsonFileAuditEvidenceStore } from "./json-file-audit-evidence-store.js";
 import { InMemoryExceptionStore, type ExceptionPatch, type WorkflowException } from "./exception-handling.js";
 import { InMemoryGovernedReportingService, type ReportQuery, type ReportRow } from "./governed-reporting.js";
-import { JsonFileGovernedReportingStore } from "./json-file-governed-reporting-store.js";
 
 export interface CapabilityInput {
   context?: {
