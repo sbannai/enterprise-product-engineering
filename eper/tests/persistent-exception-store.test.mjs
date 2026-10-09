@@ -38,3 +38,28 @@ test("exception transitions persist and reject invalid lifecycle transitions", (
     assert.throws(()=>store.transition("tenant-a","exception-1",{state:"RETRYING"}),/EXCEPTION_INVALID_TRANSITION/);
   } finally { rmSync(dir,{recursive:true,force:true}); }
 });
+
+import { requirementBindings } from "../dist/packages/requirements/registry.js";
+import { ExceptionHandlingService } from "../dist/packages/capabilities/services.js";
+
+test("exception lifecycle evidence and state survive recreation in the same file-backed store", async () => {
+  const dir=mkdtempSync(join(tmpdir(),"eper-exception-audit-")); const path=join(dir,"state.json");
+  try {
+    const store=new JsonFileExceptionStore(path);
+    const service=new ExceptionHandlingService(store,store);
+    const requirement=requirementBindings.find(r=>r.pattern==="XX05");
+    const context={tenantId:"tenant-a",principalId:"operator-a",correlationId:"atomic-lifecycle"};
+    await service.execute(requirement,{context,payload:{operation:"create",exception:{
+      id:"exception-atomic",tenantId:"tenant-a",requirementId:requirement.id,code:"TEST",
+      message:"Test atomic lifecycle persistence",idempotencyKey:"idem-atomic",createdAt:"2026-10-09T00:00:00.000Z"
+    }}});
+    await service.execute(requirement,{context,payload:{operation:"transition",tenantId:"tenant-a",id:"exception-atomic",patch:{state:"RETRYING"}}});
+    const reopened=new JsonFileExceptionStore(path);
+    const reopenedService=new ExceptionHandlingService(reopened,reopened);
+    assert.equal(reopenedService.getException("tenant-a","exception-atomic")?.state,"RETRYING");
+    const events=reopenedService.listLifecycleEvidence("tenant-a",requirement.id);
+    assert.equal(events.length,2);
+    assert.deepEqual(events.map(e=>e.action),["EXCEPTION_CREATED","EXCEPTION_TRANSITIONED"]);
+    assert.equal(events.every(e=>reopenedService.verifyLifecycleEvidence(e)),true);
+  } finally { rmSync(dir,{recursive:true,force:true}); }
+});
