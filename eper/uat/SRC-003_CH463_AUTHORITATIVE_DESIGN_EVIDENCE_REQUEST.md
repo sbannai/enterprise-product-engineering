@@ -84,3 +84,18 @@ Automated Chapter 463 pilot execution is evidenced, but this request is independ
 ## Routing note
 
 This document is **ready to route** to the actual design authority/source custodian. No external request is claimed as sent by this repository change. Once the controlled response package is supplied, process REQ-46301 through REQ-46306 first, capture exact locators and approval metadata, and update the crosswalk only for evidence that passes verification.
+
+
+## Owner decision captured — 2026-10-09
+
+The requester has selected the following dispositions in the conversation timestamped 2026-10-09T04:29:05Z (09:59:05 IST): the requester states they are the design authority; approves EM-LLD-001 v1.0; states an existing authoritative procurement domain model should be used; and directs the team to specify the DATA/API/EVENT contracts. This is a recorded owner decision, not a substitute for a formal change-control reference, effective-date record, signature/attestation, or exact source locator.
+
+### Application and remaining verification
+
+- **LLD baseline:** owner approval decision received for EM-LLD-001 v1.0. Formal approval metadata must be added to the controlled baseline register before claiming that the repository contains a fully controlled approved baseline.
+- **REQ-46301 domain model:** use the existing authoritative model; do not invent procurement aggregates. The source document, version and exact locator are still required from the owner/source custodian.
+- **DATA/API/EVENT:** specification work is now the chosen path. Produce governed, versioned schemas/operations/event payloads with ownership and compatibility/error semantics, then obtain controlled approval. Current registry IDs alone do not satisfy this requirement.
+- **UAT:** environment is not hosted. Live target preflight and B01 business UAT remain not executed; tester choice does not bypass E1–E13.
+- **SRC-003/G3:** remains OPEN / NO-GO until six requirement rows are reconciled against authoritative locators, contract specifications or separately approved N/A decisions, and formal approval metadata.
+
+This decision does not authorize live UAT, promote any candidate locator, or change business acceptance / G9 / G10 statuses.
