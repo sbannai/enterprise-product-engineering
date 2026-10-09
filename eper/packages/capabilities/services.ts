@@ -63,7 +63,7 @@ function result(
 }
 
 export class AuthoritativeRecordService implements CapabilityService {
-  private readonly store = new InMemoryAuthoritativeRecordStore();
+  constructor(private readonly store: import("./authoritative-records.js").AuthoritativeRecordStore = new InMemoryAuthoritativeRecordStore()) {}
 
   execute(requirement: RequirementBinding, input: unknown): Promise<CapabilityResult> {
     const { value, contracts } = prepare(requirement, input, "XX01", "authoritative-records");
