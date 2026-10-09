@@ -80,7 +80,13 @@ export function createAppServer(): Server {
         return;
       }
 
-      const requirementId = decodeURIComponent(capabilityMatch[1]);
+      let requirementId: string;
+      try {
+        requirementId = decodeURIComponent(capabilityMatch[1]);
+      } catch {
+        sendJson(response, 400, { error: "invalid_requirement_id_encoding" });
+        return;
+      }
       const requirement = requirementBindings.find((binding) => binding.id === requirementId);
       if (!requirement) {
         sendJson(response, 404, { error: "requirement_not_found" });
@@ -102,7 +108,7 @@ export function createAppServer(): Server {
         const message = error instanceof Error ? error.message : "CAPABILITY_EXECUTION_FAILED";
         const status = message === "REQUEST_BODY_TOO_LARGE" ? 413
           : message === "TENANT_CONTEXT_MISMATCH" ? 403
-          : message === "CAPABILITY_OPERATION_REQUIRED" || message.endsWith("_UNSUPPORTED") || message === "JSON_OBJECT_REQUIRED" || message === "Unexpected end of JSON input" ? 400
+          : error instanceof SyntaxError || message === "CAPABILITY_OPERATION_REQUIRED" || message.endsWith("_UNSUPPORTED") || message === "JSON_OBJECT_REQUIRED" ? 400
           : 422;
         sendJson(response, status, { error: status === 422 ? "capability_execution_failed" : message });
       }
