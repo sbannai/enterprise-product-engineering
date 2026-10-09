@@ -83,3 +83,24 @@ jobs:
       - name: Stop container
         if: always()
         run: docker stop eper-runtime-smoke || true
+
+      - name: Package verified runtime image
+        if: github.event_name != 'pull_request'
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/eper-runtime-artifact
+          docker save "eper-runtime-smoke:${BUILD_ID}" | gzip -1 > "/tmp/eper-runtime-artifact/eper-runtime-${BUILD_ID}.tar.gz"
+          cd /tmp/eper-runtime-artifact
+          sha256sum "eper-runtime-${BUILD_ID}.tar.gz" > SHA256SUMS
+          printf 'buildId=%s\nimage=eper-runtime-%s.tar.gz\n' "${BUILD_ID}" "${BUILD_ID}" > BUILD-METADATA.txt
+
+      - name: Upload verified runtime image artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eper-runtime-image-${{ github.sha }}
+          path: /tmp/eper-runtime-artifact/
+          if-no-files-found: error
+          retention-days: 7
