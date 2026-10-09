@@ -166,8 +166,10 @@ export class AuditEvidenceService implements CapabilityService {
 }
 
 export class ExceptionHandlingService implements CapabilityService {
-  constructor(private readonly store: ExceptionStore = new InMemoryExceptionStore()) {}
-  private readonly lifecycleEvidence = new InMemoryAuditEvidenceStore();
+  constructor(
+    private readonly store: ExceptionStore = new InMemoryExceptionStore(),
+    private readonly lifecycleEvidence: Pick<AuditEvidenceStore, "append" | "listByRequirement" | "verify"> = new InMemoryAuditEvidenceStore(),
+  ) {}
   private lifecycleSequence = 0;
 
   private recordLifecycleEvent(
