@@ -12,3 +12,5 @@ services:
         value: production
       - key: EPER_LOCAL_CAPABILITY_API
         value: "false"
+      - key: EPER_UAT_API_ENABLED
+        value: "false"
