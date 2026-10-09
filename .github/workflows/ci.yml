@@ -35,3 +35,7 @@ jobs:
         run: npm test
       - name: UAT preflight regression tests
         run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
+      - name: Read-only business UAT readiness audit
+        run: |
+          python3 uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
+          python3 -c "import json; d=json.load(open('/tmp/b01-readiness.json')); print(json.dumps({'readiness': d['readiness'], 'counts': d['counts'], 'blockers': [{'gate': b['gate'], 'count': b['count']} for b in d['blockers']], 'integrityErrors': d['integrityErrors']}, indent=2))"
