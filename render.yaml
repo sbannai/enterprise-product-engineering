@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: eper-b01-uat
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./eper/Dockerfile
+    dockerContext: ./eper
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: EPER_LOCAL_CAPABILITY_API
+        value: "false"
