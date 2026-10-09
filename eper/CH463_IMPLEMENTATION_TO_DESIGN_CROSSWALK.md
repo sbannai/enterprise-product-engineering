@@ -251,3 +251,12 @@ The LLD is explicitly marked CONTROLLED DETAILED-DESIGN DRAFT — PENDING FORMAL
 
 This update does not promote generic LLD module names into approved requirement locators and does not infer procurement-domain objects, contracts, approval authority or UAT acceptance from the LLD.
 
+
+
+## Owner direction — 2026-10-09
+
+The requester has confirmed that an existing authoritative procurement domain model should be used for REQ-46301, rather than inventing a new domain model. The source artifact, version and exact locator have not yet been identified, so the model is **not yet bound** in this crosswalk.
+
+The requester also approved EM-LLD-001 v1.0 as design authority decision and directed the team to specify governed DATA/API/EVENT contracts. The repository must still record formal approval/change reference, effective date and attestation metadata before representing the baseline as fully controlled/approved. Existing implementation references remain evidence of code paths, not substitutes for approved design locators or contracts.
+
+**Next engineering action:** locate the existing procurement model in the controlled source set; then draft and review the missing contract specifications and requirement-level joins. SRC-003/G3 remains OPEN / NO-GO until evidence is verified.
