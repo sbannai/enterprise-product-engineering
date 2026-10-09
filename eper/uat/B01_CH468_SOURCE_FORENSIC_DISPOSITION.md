@@ -1,51 +1,69 @@
 # B01 Chapter 468 — Source Forensic Disposition
+
 **Status:** HOLD — exact requirement-level design bindings not evidenced  
-**Scope:** Chapter 468 (requirement batch REQ-46801–REQ-46806)  
-**Branch:** `docs/record-lld-approval-disposition`
+**Scope:** Chapter 468 — Enterprise Manufacturing, Production Planning, Scheduling, Shop Floor Execution & Traceability  
+**Batch:** REQ-46801–REQ-46806 (6 requirements)  
+**Date:** 2026-10-09
 
 ## Decision
-Retain all six requirements on HOLD for design traceability. The controlled EM-OPS Evidence Retrieval Linkage Register and final evidence retrieval matrices mark the relevant design-reference recovery as not exact-linked / not established and require exact HLD, LLD, data/schema and API/event references. Generic patterns, component names, or the approved consolidated EM-LLD-001 v1.0 baseline do not independently establish exact requirement-level locators.
 
-## Requirement-level disposition
+Recovery-pass v1.1 records were located for REQ-46801 through REQ-46805. The Library search also found the cross-chapter evidence-retrieval registers identifying REQ-46801 onward and SRS-FR-2353 onward. The six requirement rows are consolidated below as a recovery disposition; the exact approved requirement-level HLD and LLD bindings remain OPEN / HOLD. Candidate HLD mappings and supporting LLD component references must not be promoted to exact approved locators.
 
-| Requirement | SRS | Trace ID | Pattern | Supporting LLD context | Exact HLD | Exact LLD | Disposition |
-|---|---|---|---|---|---|---|---|
-| REQ-46801 | SRS-FR-2353 | TRC-46801 | XX01 / LLD-PAT-01 | LLD-CMP-008, LLD-CMP-007 | NOT ESTABLISHED | NOT ESTABLISHED | HOLD |
-| REQ-46802 | SRS-FR-2354 | TRC-46802 | XX02 / LLD-PAT-02 | LLD-CMP-003, LLD-CMP-004, LLD-CMP-005 | NOT ESTABLISHED | NOT ESTABLISHED | HOLD |
-| REQ-46803 | SRS-FR-2355 | TRC-46803 | XX03 / LLD-PAT-03 | LLD-CMP-007, LLD-CMP-010 | NOT ESTABLISHED | NOT ESTABLISHED | HOLD |
-| REQ-46804 | SRS-FR-2356 | TRC-46804 | XX04 / LLD-PAT-04 | LLD-CMP-017 | NOT ESTABLISHED | NOT ESTABLISHED | HOLD |
-| REQ-46805 | SRS-FR-2357 | TRC-46805 | XX05 / LLD-PAT-05 | LLD-CMP-009, LLD-CMP-010 | NOT ESTABLISHED | NOT ESTABLISHED | HOLD |
-| REQ-46806 | SRS-FR-2358 | TRC-46806 | XX06 / LLD-PAT-06 | LLD-CMP-016, LLD-CMP-014 | NOT ESTABLISHED | NOT ESTABLISHED | HOLD |
+## Requirement-level matrix
 
-> Supporting LLD component context above follows the six reusable XX01–XX06 capability patterns. It is not a claim that individual component references were independently proven for each Chapter 468 requirement.
+| Requirement | SRS / trace | Intent / pattern | Supporting LLD context (not exact) | Exact HLD | Exact LLD | Decision |
+|---|---|---|---|---|---|---|
+| REQ-46801 | SRS-FR-2353 / TRC-46801 | XX01 — maintain authoritative records and lifecycle history | LLD-CMP-008, LLD-CMP-007 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46802 | SRS-FR-2354 / TRC-46802 | XX02 — enforce role-based authorization before material actions | LLD-CMP-003, LLD-CMP-004, LLD-CMP-005 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46803 | SRS-FR-2355 / TRC-46803 | XX03 — validate mandatory business conditions before material changes | LLD-CMP-007, LLD-CMP-010 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46804 | SRS-FR-2356 / TRC-46804 | XX04 — preserve audit evidence for material events | LLD-CMP-017 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46805 | SRS-FR-2357 / TRC-46805 | XX05 — support controlled exception handling | LLD-CMP-009, LLD-CMP-010 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
+| REQ-46806 | SRS-FR-2358 / TRC-46806 | XX06 — provide governed reporting for status, exceptions and performance | LLD-CMP-016, LLD-CMP-014 | NOT EVIDENCED | NOT EVIDENCED | HOLD |
 
-## Forensic findings
-- **Exact HLD binding:** 0/6 established in the retrieved linkage register.
-- **Exact LLD binding:** 0/6 established in the retrieved linkage register.
-- **Data/schema and API/event contracts:** open; the source register requires exact schema/entity/table/model and ownership, plus exact endpoint/operation or event/topic/type/version references. Use an explicitly approved N/A where applicable; do not infer it.
-- **Implementation, build, test, UAT, operations and acceptance:** these are separate evidence legs and remain open unless backed by their own controlled records.
-- **Acceptance oracle:** not approved by this disposition. Draft scenarios remain proposals until authorized reviewers approve expected results and BRD/SRS source locators.
-- **UAT:** this is a forensic source-reconciliation artifact, not execution evidence or business acceptance, and does not authorize B01 execution.
+## Recovered manufacturing domain context
 
-## Evidence basis
-- `EM-OPS-Evidence-Retrieval-Linkage-Register_463_500.xlsx`: Chapter 468 rows identify REQ-46801 / SRS-FR-2353 and REQ-46803 / SRS-FR-2355 and show design-reference legs requiring exact source-level references; relevant rows are marked SOURCE NOT EXACT-LINKED / NOT ESTABLISHED.
-- `EM-OPS-Final_Evidence_Retrieval_Matrix_463_500.xlsx`: REQ-46803 design row requires exact HLD/LLD/DATA/API/EVENT references and remains OPEN.
-- `EM-OPS-463-500_ALL_228_G1-G10_Evidence_Recovery_Master_v1.xlsx`: Chapter 468 requirement entries retain unresolved design, archive and final acceptance/certification/freeze dependencies.
+Chapter 468 scope is Enterprise Manufacturing, Production Planning, Scheduling, Shop Floor Execution and Traceability. Domain-specific acceptance work should be grounded in controlled sources for production orders, planning/scheduling, work centers, operations, material consumption, shop-floor execution, genealogy/traceability, quality/production exceptions and reporting. These are context prompts, not assertions that exact data contracts or design locators have been recovered.
 
-The retrieved evidence supports a HOLD disposition; it does not establish that all six requirements have individually approved locators.
+## Closure position
 
-## Required closure evidence
-For each of the six requirements:
-1. Exact approved HLD section/capability/decision locator and controlled baseline version.
-2. Exact approved LLD module/component/section locator tied to the requirement and trace ID.
-3. Validated HLD→LLD relationship and requirement-level traceability record.
-4. Authoritative data/schema owner and applicable API/event/integration contract/version, or explicitly approved N/A.
-5. Requirement-specific implementation/build/test/UAT evidence where required, with controlled evidence archive locator.
-6. Authorized reviewer approval of acceptance oracle and source BRD/SRS locator.
+| Control | Result |
+|---|---:|
+| Requirement → SRS identity | 6/6 mapped in the source sequence |
+| Exact approved HLD locator | 0/6 evidenced |
+| Exact approved LLD locator | 0/6 evidenced |
+| Requirement-level HLD → LLD relationship | 0/6 evidenced |
+| DATA entity/schema ownership or approved N/A | 0/6 closed |
+| API/event/integration contract + version or approved N/A | 0/6 closed |
+| Controlled baseline/version and approval authority | 0/6 evidenced |
+| Requirement-level reviewer acceptance | 0/6 evidenced |
+
+## Source records located
+
+Recovery-pass v1.1 documents found:
+- `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch468_REQ46801_SRS-FR-2353_v1.1.docx`
+- `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch468_REQ46802_SRS-FR-2354_v1.1.docx`
+- `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch468_REQ46803_SRS-FR-2355_v1.1.docx`
+- `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch468_REQ46804_SRS-FR-2356_v1.1.docx`
+- `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch468_REQ46805_SRS-FR-2357_v1.1.docx`
+
+The sixth requirement's identity is also represented in the 228-row EM-OPS evidence retrieval register; a matching Chapter 468 REQ-46806 v1.1 document was not returned in the search result used for this consolidation. That locator must be confirmed before calling the source set complete.
+
+## Required closure evidence per requirement
+
+1. Exact approved HLD section/capability/decision locator tied to requirement and SRS ID.
+2. Exact approved LLD module/component/section locator tied to requirement.
+3. Evidence of the requirement-relevant HLD→LLD relationship.
+4. Authoritative DATA entity/schema ownership, or explicitly approved N/A.
+5. Applicable API/event/integration contract and version, or explicitly approved N/A.
+6. Controlled design baseline/version and approval authority.
+7. Requirement-level reviewer acceptance and reproducible evidence locator.
 
 ## Non-promotion controls
-- Do not promote candidate HLD-CAND/HLD-CAP references, generic component IDs or patterns into exact design evidence.
-- Do not invent schema, API/event, implementation, test or approval identifiers.
-- Preserve the 228-requirement registry, 38-chapter structure and six-wave B01 scope unchanged.
+
+- Supporting LLD component IDs are not exact requirement-level design bindings.
+- Do not infer traceability from generic manufacturing architecture, naming similarity or document proximity.
+- Do not invent DATA/API/EVENT contract names or versions, and do not silently assign N/A.
+- Preserve the 228-requirement registry, 38 chapters, six capability families and execution router unchanged.
+- This artifact is source reconciliation only; no implementation, business UAT, release, production or certification is asserted.
 
 **Next batch:** Chapter 469 — REQ-46901–REQ-46906.
