@@ -96,6 +96,55 @@ jobs:
           sha256sum "eper-runtime-${BUILD_ID}.tar.gz" > SHA256SUMS
           printf 'buildId=%s\nimage=eper-runtime-%s.tar.gz\n' "${BUILD_ID}" "${BUILD_ID}" > BUILD-METADATA.txt
 
+      - name: Verify packaged image can be reloaded and run
+        if: github.event_name != 'pull_request'
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd /tmp/eper-runtime-artifact
+          sha256sum --check SHA256SUMS
+          gzip --test "eper-runtime-${BUILD_ID}.tar.gz"
+          docker load --input "eper-runtime-${BUILD_ID}.tar.gz"
+          docker image inspect "eper-runtime-smoke:${BUILD_ID}" >/dev/null
+
+          docker run --detach --rm --name eper-packaged-image-smoke \
+            --publish 127.0.0.1:18081:8080 \
+            --env EPER_BUILD_ID=${BUILD_ID} \
+            "eper-runtime-smoke:${BUILD_ID}"
+          cleanup() { docker stop eper-packaged-image-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18081/health --output /tmp/eper-packaged-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "${ready}" -ne 1 ]; then
+            docker logs eper-packaged-image-smoke
+            echo "Packaged image did not become healthy within 30 seconds" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os
+          with open("/tmp/eper-packaged-health.json", encoding="utf-8") as f:
+              payload = json.load(f)
+          expected = {
+              "status": "ok",
+              "service": "eper-api",
+              "buildId": os.environ["BUILD_ID"],
+          }
+          if payload != expected:
+              raise SystemExit(f"Packaged image health mismatch: expected {expected!r}, got {payload!r}")
+          print(json.dumps({"packagedImageRoundTrip": "PASS", "health": payload}, indent=2))
+          PY
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18081/not-a-real-route)"
+          test "${status}" = "404"
+          echo "PASS: packaged artifact checksum, gzip integrity, image reload, health identity, and 404"
+
       - name: Upload verified runtime image artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
