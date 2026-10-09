@@ -2,7 +2,7 @@ import type { RequirementBinding, RequirementPattern } from "../requirements/reg
 import { validateRequirementContracts } from "../../contracts/index.js";
 import type { CapabilityService, CapabilityResult } from "./index.js";
 import { InMemoryAuthoritativeRecordStore, type AuthoritativeRecord } from "./authoritative-records.js";
-import { InMemoryAuthorizationService, type AuthorizationPolicy, type AuthorizationRequest } from "./authorization.js";
+import { InMemoryAuthorizationService, type AuthorizationPolicy, type AuthorizationPolicyStore, type AuthorizationRequest } from "./authorization.js";
 import { BusinessValidationEngine, type ValidationRule } from "./business-validation.js";
 import { InMemoryAuditEvidenceStore, type AuditEvidence, type AuditEvidenceStore } from "./audit-evidence.js";
 import { InMemoryExceptionStore, type ExceptionPatch, type ExceptionStore, type WorkflowException } from "./exception-handling.js";
@@ -93,7 +93,7 @@ export class AuthoritativeRecordService implements CapabilityService {
 }
 
 export class AuthorizationService implements CapabilityService {
-  private readonly policyService = new InMemoryAuthorizationService();
+  constructor(private readonly policyService: AuthorizationPolicyStore = new InMemoryAuthorizationService()) {}
 
   addPolicy(policy: AuthorizationPolicy): void {
     this.policyService.addPolicy(policy);
