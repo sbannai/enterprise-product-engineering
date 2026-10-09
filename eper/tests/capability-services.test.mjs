@@ -12,6 +12,48 @@ import {
   GovernedReportingService,
 } from "../dist/packages/capabilities/index.js";
 
+const contextFor = (requirement) => ({
+  tenantId: "test-tenant",
+  principalId: "test-user",
+  correlationId: `corr:${requirement.id}`,
+});
+
+function operationFor(requirement) {
+  const context = contextFor(requirement);
+  const occurredAt = "2026-10-09T00:00:00.000Z";
+  switch (requirement.pattern) {
+    case "XX01":
+      return { context, payload: { operation: "create", record: {
+        id: `record:${requirement.id}`, version: 1, state: "OPEN", data: { requirementId: requirement.id },
+      } } };
+    case "XX02":
+      return { context, payload: { operation: "decide", request: {
+        tenantId: context.tenantId, principalId: context.principalId, action: "read", resource: requirement.id,
+      } } };
+    case "XX03":
+      return { context, payload: { operation: "validate", input: { requirementId: requirement.id } } };
+    case "XX04":
+      return { context, payload: { operation: "append", evidence: {
+        id: `audit:${requirement.id}`, tenantId: context.tenantId, requirementId: requirement.id,
+        action: "CAPABILITY_EXECUTED", principalId: context.principalId, correlationId: context.correlationId,
+        occurredAt, payload: { requirementId: requirement.id },
+      } } };
+    case "XX05":
+      return { context, payload: { operation: "create", exception: {
+        id: `exception:${requirement.id}`, tenantId: context.tenantId, requirementId: requirement.id,
+        code: "TEST_EXECUTION", message: `Capability exercise for ${requirement.id}`,
+        idempotencyKey: `idem:${requirement.id}`, createdAt: occurredAt,
+      } } };
+    case "XX06":
+      return { context, payload: { operation: "publish", row: {
+        tenantId: context.tenantId, reportId: `report:${requirement.id}`,
+        values: { requirementId: requirement.id }, sourceRequirementIds: [requirement.id], generatedAt: occurredAt,
+      } } };
+    default:
+      throw new Error(`UNSUPPORTED_TEST_PATTERN:${requirement.pattern}`);
+  }
+}
+
 test("six concrete capability services are instantiated", () => {
   const services = createCapabilityServices();
   assert.ok(services.XX01 instanceof AuthoritativeRecordService);
@@ -22,21 +64,44 @@ test("six concrete capability services are instantiated", () => {
   assert.ok(services.XX06 instanceof GovernedReportingService);
 });
 
-test("all 228 requirements execute through the six concrete services", async () => {
+test("all 228 requirements perform a real operation through the six concrete services", async () => {
   const services = createCapabilityServices();
   const seen = new Set();
   for (const requirement of requirementBindings) {
-    const result = await executeIntegratedRequirement(
-      requirement,
-      { context: { tenantId: "test-tenant", principalId: "test-user", correlationId: requirement.id }, payload: { test: true } },
-      services,
-    );
+    const result = await executeIntegratedRequirement(requirement, operationFor(requirement), services);
     assert.equal(result.requirementId, requirement.id);
     assert.equal(result.pattern, requirement.pattern);
     assert.equal(result.status, "EXECUTED");
+    const operationResult = result.data.payload;
+    switch (requirement.pattern) {
+      case "XX01":
+        assert.equal(operationResult.operation, "create");
+        assert.equal(operationResult.record.id, `record:${requirement.id}`);
+        break;
+      case "XX02":
+        assert.equal(operationResult.operation, "decide");
+        assert.equal(operationResult.decision.effect, "DENY");
+        break;
+      case "XX03":
+        assert.equal(operationResult.operation, "validate");
+        assert.equal(operationResult.validation.valid, true);
+        break;
+      case "XX04":
+        assert.equal(operationResult.operation, "append");
+        assert.match(operationResult.evidence.integrityHash, /^[a-f0-9]{64}$/);
+        break;
+      case "XX05":
+        assert.equal(operationResult.operation, "create");
+        assert.equal(operationResult.exception.state, "OPEN");
+        break;
+      case "XX06":
+        assert.equal(operationResult.operation, "publish");
+        assert.equal(operationResult.published, true);
+        break;
+    }
     seen.add(result.pattern);
   }
-  assert.deepEqual([...seen].sort(), ["XX01","XX02","XX03","XX04","XX05","XX06"]);
+  assert.deepEqual([...seen].sort(), ["XX01", "XX02", "XX03", "XX04", "XX05", "XX06"]);
 });
 
 test("services reject a requirement routed to the wrong capability", () => {
@@ -54,6 +119,19 @@ test("services reject incomplete execution context when supplied", () => {
     () => service.execute(requirement, { context: { tenantId: "", principalId: "user", correlationId: "c" } }),
     /CAPABILITY_CONTEXT_REQUIRED/,
   );
+});
+
+test("services reject generic payload passthrough instead of reporting a false execution", () => {
+  const services = createCapabilityServices();
+  for (const requirement of requirementBindings.slice(0, 6)) {
+    assert.throws(
+      () => services[requirement.pattern].execute(requirement, {
+        context: contextFor(requirement),
+        payload: { test: true },
+      }),
+      /CAPABILITY_OPERATION_REQUIRED/,
+    );
+  }
 });
 
 test("exception create and transitions emit tenant-scoped lifecycle audit evidence", async () => {
