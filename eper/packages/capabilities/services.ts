@@ -84,7 +84,7 @@ export class AuthoritativeRecordService implements CapabilityService {
           throw new Error("RECORD_OPERATION_UNSUPPORTED");
       }
     }
-    return Promise.resolve(result(requirement, contracts, value.payload ?? input ?? null));
+    throw new Error("CAPABILITY_OPERATION_REQUIRED");
   }
 
   getRecord(tenantId: string, id: string): AuthoritativeRecord | undefined {
@@ -113,7 +113,7 @@ export class AuthorizationService implements CapabilityService {
         decision: this.policyService.decide(request),
       }));
     }
-    return Promise.resolve(result(requirement, contracts, value.payload ?? input ?? null));
+    throw new Error("CAPABILITY_OPERATION_REQUIRED");
   }
 }
 
@@ -133,7 +133,7 @@ export class BusinessValidationService implements CapabilityService {
         validation: this.engine.validate(payload.input),
       }));
     }
-    return Promise.resolve(result(requirement, contracts, value.payload ?? input ?? null));
+    throw new Error("CAPABILITY_OPERATION_REQUIRED");
   }
 }
 
@@ -161,7 +161,7 @@ export class AuditEvidenceService implements CapabilityService {
       }
       throw new Error("AUDIT_OPERATION_UNSUPPORTED");
     }
-    return Promise.resolve(result(requirement, contracts, value.payload ?? input ?? null));
+    throw new Error("CAPABILITY_OPERATION_REQUIRED");
   }
 }
 
@@ -245,7 +245,7 @@ export class ExceptionHandlingService implements CapabilityService {
       }
       throw new Error("EXCEPTION_OPERATION_UNSUPPORTED");
     }
-    return Promise.resolve(result(requirement, contracts, value.payload ?? input ?? null));
+    throw new Error("CAPABILITY_OPERATION_REQUIRED");
   }
 
   getException(tenantId: string, id: string): WorkflowException | undefined {
@@ -274,7 +274,7 @@ export class GovernedReportingService implements CapabilityService {
       }
       throw new Error("REPORT_OPERATION_UNSUPPORTED");
     }
-    return Promise.resolve(result(requirement, contracts, value.payload ?? input ?? null));
+    throw new Error("CAPABILITY_OPERATION_REQUIRED");
   }
 }
 
