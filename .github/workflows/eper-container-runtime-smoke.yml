@@ -1,0 +1,85 @@
+name: EPER Container Runtime Smoke Test
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-container-runtime-smoke.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-container-runtime-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-health-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build runtime image
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          docker build --file eper/Dockerfile --tag eper-runtime-smoke:${BUILD_ID} --build-arg EPER_BUILD_ID=${BUILD_ID} eper
+
+      - name: Start container
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          docker run --detach --rm --name eper-runtime-smoke \
+            --publish 127.0.0.1:18080:8080 \
+            --env EPER_BUILD_ID=${BUILD_ID} \
+            eper-runtime-smoke:${BUILD_ID}
+
+      - name: Verify health response and build identity
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health --output /tmp/eper-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "${ready}" -ne 1 ]; then
+            docker logs eper-runtime-smoke
+            echo "EPER container did not become healthy within 30 seconds" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os
+          with open("/tmp/eper-health.json", encoding="utf-8") as f:
+              payload = json.load(f)
+          expected = {
+              "status": "ok",
+              "service": "eper-api",
+              "buildId": os.environ["BUILD_ID"],
+          }
+          if payload != expected:
+              raise SystemExit(f"Health response mismatch: expected {expected!r}, got {payload!r}")
+          print(json.dumps({"smokeTest": "PASS", "health": payload}, indent=2))
+          PY
+
+      - name: Verify unknown route returns 404
+        run: |
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/not-a-real-route)"
+          test "${status}" = "404"
+
+      - name: Container diagnostics on failure
+        if: failure()
+        run: docker logs eper-runtime-smoke || true
+
+      - name: Stop container
+        if: always()
+        run: docker stop eper-runtime-smoke || true
