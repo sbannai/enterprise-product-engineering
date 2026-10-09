@@ -144,3 +144,92 @@ test("local capability API rejects unknown requirement IDs", async () => {
     }
   }
 });
+
+
+test("public UAT capability API stays disabled unless explicitly acknowledged", async () => {
+  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  for (const key of keys) delete process.env[key];
+  try {
+    const response = await fetch(`${await startServer()}/uat/requirements/REQ-46303/execute`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: { operation: "validate", input: { ok: true } } }),
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test("public UAT capability API requires bearer token and explicit public-endpoint acknowledgement", async () => {
+  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_UAT_API_ENABLED: "true",
+    EPER_UAT_API_TOKEN: "uat-test-token-0123456789-0123456789",
+    EPER_UAT_TENANT_ID: "uat-test-tenant",
+    EPER_UAT_PRINCIPAL_ID: "uat-test-operator",
+    EPER_UAT_PUBLIC_ENDPOINT_ACK: "I_ACCEPT_PUBLIC_BEARER_UAT_RISK",
+  });
+  try {
+    const base = await startServer();
+    const denied = await fetch(`${base}/uat/requirements/REQ-46303/execute`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: { operation: "validate", input: { ok: true } } }),
+    });
+    assert.equal(denied.status, 401);
+
+    const response = await fetch(`${base}/uat/requirements/REQ-46303/execute`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer uat-test-token-0123456789-0123456789",
+      },
+      body: JSON.stringify({ payload: { operation: "validate", input: { ok: true } } }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.result.requirementId, "REQ-46303");
+    assert.equal(body.result.pattern, "XX03");
+    assert.equal(body.result.status, "EXECUTED");
+    assert.equal(body.result.data.payload.validation.valid, true);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test("public UAT capability API rejects unknown requirement IDs", async () => {
+  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_UAT_API_ENABLED: "true",
+    EPER_UAT_API_TOKEN: "uat-test-token-0123456789-0123456789",
+    EPER_UAT_TENANT_ID: "uat-test-tenant",
+    EPER_UAT_PRINCIPAL_ID: "uat-test-operator",
+    EPER_UAT_PUBLIC_ENDPOINT_ACK: "I_ACCEPT_PUBLIC_BEARER_UAT_RISK",
+  });
+  try {
+    const response = await fetch(`${await startServer()}/uat/requirements/REQ-NOT-REAL/execute`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer uat-test-token-0123456789-0123456789",
+      },
+      body: JSON.stringify({ payload: { operation: "validate", input: {} } }),
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
