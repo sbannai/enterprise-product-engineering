@@ -22,10 +22,32 @@ export interface ExceptionPatch {
 
 type ExceptionCreateInput = Omit<WorkflowException, "state" | "retryCount" | "updatedAt">;
 
-export class InMemoryExceptionStore {
+export interface ExceptionStore {
+  create(input: ExceptionCreateInput, beforeCommit?: (created: WorkflowException) => void): WorkflowException;
+  get(tenantId: string, id: string): WorkflowException | undefined;
+  transition(tenantId: string, id: string, patch: ExceptionPatch, beforeCommit?: (next: WorkflowException, current: WorkflowException) => void): WorkflowException;
+  snapshot(): readonly WorkflowException[];
+}
+
+export class InMemoryExceptionStore implements ExceptionStore {
   private readonly exceptions = new Map<string, WorkflowException>();
   private readonly idempotency = new Map<string, string>();
   private readonly idempotencyFingerprints = new Map<string, string>();
+
+  constructor(seed: readonly WorkflowException[] = []) {
+    for (const value of seed) {
+      const key = this.key(value.tenantId, value.id);
+      const idem = this.idempotencyKey(value.tenantId, value.idempotencyKey);
+      if (this.exceptions.has(key) || this.idempotency.has(idem)) throw new Error("EXCEPTION_SNAPSHOT_INVALID");
+      this.exceptions.set(key, { ...value });
+      this.idempotency.set(idem, value.id);
+      this.idempotencyFingerprints.set(idem, this.fingerprint({ id: value.id, tenantId: value.tenantId, requirementId: value.requirementId, code: value.code, message: value.message, idempotencyKey: value.idempotencyKey, owner: value.owner, createdAt: value.createdAt }));
+    }
+  }
+
+  snapshot(): readonly WorkflowException[] {
+    return [...this.exceptions.values()].map(value => ({ ...value }));
+  }
 
   private key(tenantId: string, id: string): string {
     return JSON.stringify([tenantId, id]);
