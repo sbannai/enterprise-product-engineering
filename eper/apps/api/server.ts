@@ -50,7 +50,7 @@ export function createAppServer(): Server {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
 
     if (request.method === "GET" && requestUrl.pathname === "/health") {
-      const buildId = process.env.EPER_BUILD_ID ?? "";
+      const buildId = process.env.EPER_BUILD_ID || process.env.RENDER_GIT_COMMIT || "";
       const buildIdIsCommit = /^[a-f0-9]{40}$/i.test(buildId);
 
       sendJson(response, buildIdIsCommit ? 200 : 503, {
