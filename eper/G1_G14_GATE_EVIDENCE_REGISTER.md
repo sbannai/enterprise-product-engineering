@@ -96,3 +96,18 @@ Required evidence includes frozen traceability baseline, evidence archive/index,
 The repository establishes the engineering baseline for G1, G2, G4, G5, G6 and G10 within their stated boundaries. G3 remains source-controlled where exact authoritative locators are not evidenced. G8 is prepared but not executed. **G9 CI verification is PASS, while G9 traceability freeze remains NOT FROZEN.** G7 and G11–G14 remain pending authoritative downstream evidence.
 
 No production, final business acceptance, certification or audit-submission closure is asserted by this register.
+
+
+## B01 Six-Wave Evidence Bridge — 2026-10-11
+
+- Workflow run: [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232)
+- Artifact: [EPER-B01-SIX-WAVE-EVIDENCE-38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383)
+- Artifact ID: 11700363383; SHA-256: `fbdfab80f88e768ec514cc4a9274ac72b5607fb591432861d121f0404fb72985`
+- Commit tested: `3768e4060b223bbce9dab16be332d1f2cbadd7f8`
+- Technical preflight: 8 suites passed; 63 tests passed; 0 failed.
+- Pilot population: Chapters 463–470 / 48 requirements; classification `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`.
+- Evidence bundle: six waves; 48 requirements represented; 19 files uploaded; 90-day artifact retention.
+- Recorded business state: `NOT_EXECUTED`; business acceptance `PENDING`; G9 `NOT_FROZEN`; G10 `NOT_ISSUED`.
+- Readiness result from the run: 5 blockers. The artifact is technical evidence only and does not close any requirement's business acceptance.
+- Closure action: link this artifact to the existing B01/48-requirement acceptance register; validate requirement-level evidence and authorized decisions before promoting any status.
+

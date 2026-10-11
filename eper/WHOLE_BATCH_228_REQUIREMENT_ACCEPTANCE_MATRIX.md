@@ -279,3 +279,85 @@ A row may move beyond **ACCEPTANCE-PENDING** only when the applicable authoritat
 8. Final acceptance decision and traceability freeze recorded.
 
 This matrix is intentionally conservative: shared capability verification establishes reusable engineering behavior, but does not by itself constitute requirement-specific business acceptance.
+
+
+## B01 Technical Evidence Reconciliation — 2026-10-11
+
+**Evidence source:** [B01 six-wave bridge run 38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232)  
+**Artifact:** [EPER-B01-SIX-WAVE-EVIDENCE-38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383)  
+**Tested commit:** `3768e4060b223bbce9dab16be332d1f2cbadd7f8`  
+**Artifact SHA-256:** `fbdfab80f88e768ec514cc4a9274ac72b5607fb591432861d121f0404fb72985`
+
+| B01 reconciliation control | Observed result | Closure interpretation |
+|---|---|---|
+| Population | Chapters 463–470; 48 requirements | Scope confirmed for technical pilot |
+| Automated suites | 8 passed; 0 failed | Engineering evidence only |
+| Automated tests | 63 passed; 0 failed | Does not replace business UAT |
+| Evidence bundle | Six waves; 48 requirements; artifact uploaded | Link artifact to requirement-level evidence records |
+| Readiness blockers | 5 | Remain open until authoritative evidence clears or formally dispositions each blocker |
+| Business UAT | NOT EXECUTED | No business acceptance inferred |
+| Business acceptance | PENDING | No requirement promoted to ACCEPTED |
+| G9 traceability freeze | NOT FROZEN | Freeze remains blocked by downstream evidence |
+| G10 | NOT ISSUED in bridge metadata | No certification/closure claim inferred |
+
+**Required reconciliation:** for each of the 48 B01 requirements, link the exact acceptance criterion, business-UAT execution record (when authorized), observed result, defect/retest disposition, evidence reference, approver and date. Where these are absent, retain `ACCEPTANCE-PENDING`; do not infer acceptance from the pilot test result.
+
+This section records batch-level technical evidence and does not alter requirement identities, source mappings, or the 228-row baseline.
+
+
+### B01 Requirement-Level Evidence Links
+
+The six-wave artifact is linked as **technical pilot evidence** to every B01 requirement below. This is a batch-level link, not a claim that each business acceptance criterion was executed or accepted.
+
+| Requirement | Technical evidence reference | Business UAT | Acceptance disposition |
+|---|---|---|---|
+| REQ-46301 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46302 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46303 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46304 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46305 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46306 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46401 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46402 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46403 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46404 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46405 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46406 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46501 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46502 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46503 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46504 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46505 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46506 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46601 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46602 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46603 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46604 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46605 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46606 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46701 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46702 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46703 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46704 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46705 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46706 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46801 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46802 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46803 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46804 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46805 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46806 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46901 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46902 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46903 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46904 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46905 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-46906 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-47001 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-47002 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-47003 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-47004 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-47005 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+| REQ-47006 | Run [38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232) · artifact [11700363383](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383) | NOT EXECUTED | ACCEPTANCE-PENDING |
+
+**Promotion rule:** replace `NOT EXECUTED` / `ACCEPTANCE-PENDING` only when requirement-specific execution evidence, result, defect/retest disposition where applicable, authorized approver and date are recorded. The shared artifact alone is not sufficient for acceptance.
