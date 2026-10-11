@@ -2,8 +2,17 @@
 
 **Decision request:** B01-AC-DECISION-001  
 **Scope:** Chapters 463–470; 48 requirements  
-**Status:** Awaiting authorized business/requirements owner decisions  
+**Status:** BRD/SRS controlled baseline approved; requirement-specific acceptance-source decisions still pending  
 **Current gate:** HOLD — do not execute business UAT until approval and entry evidence exist.
+
+## Baseline approval decision recorded
+
+- **Decision reference:** B01-BASELINE-APPROVAL-001
+- **Decision:** APPROVED — EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx and EM-SRS-001_Consolidated_SRS_Chapters_463-500_v1.0.docx are the controlled requirements baseline for B01.
+- **Approving authority:** Design authority decision recorded in the project conversation.
+- **Decision timestamp:** 2026-10-11 18:17:09 Asia/Kolkata (12:47:09 UTC).
+- **Scope boundary:** Baseline identity/version control only. This does not approve missing requirement-specific acceptance criteria, exact HLD–LLD bindings, test cases, or UAT execution.
+- **Open controls:** Record an approved acceptance source and measurable oracle for each requirement; complete exact HLD/LLD bindings and DATA/API/EVENT dispositions where not evidenced; satisfy D1–D4 and E1–E13 entry gates before execution.
 
 ## Requested owner action
 
@@ -41,4 +50,4 @@ Then update the corresponding case in `B01_48_CASE_APPROVAL_CHECKLIST.csv`. Case
 
 ## Control statement
 
-This request is not itself approval. No acceptance criteria, reviewer decision, test outcome, UAT sign-off, release authorization, or production readiness may be inferred from completion of the matrix. B01 remains HOLD until the authorized decisions and required evidence are recorded.
+The recorded baseline decision approves the controlled BRD/SRS versions only. It is not approval of requirement-specific acceptance criteria, reviewer decisions, test outcomes, UAT sign-off, release authorization, or production readiness. B01 remains HOLD until remaining requirement-level decisions and entry evidence are recorded.
