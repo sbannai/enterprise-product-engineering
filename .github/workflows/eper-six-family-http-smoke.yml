@@ -1,0 +1,110 @@
+name: EPER Six-Family Capability HTTP Smoke
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-six-family-http-smoke.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-six-family-http-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  six-family-http-smoke:
+    name: Exercise all six capability services over local HTTP
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build exact-commit runtime image
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build --file eper/Dockerfile \
+            --tag "eper-runtime-smoke:${BUILD_ID}" \
+            --build-arg "EPER_BUILD_ID=${BUILD_ID}" eper
+
+      - name: Configure isolated local test identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EPER_LOCAL_CAPABILITY_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "EPER_LOCAL_TENANT_ID=uat-test-tenant" >> "$GITHUB_ENV"
+          echo "EPER_LOCAL_PRINCIPAL_ID=uat-test-operator" >> "$GITHUB_ENV"
+
+      - name: Start API with loopback-only port binding
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name eper-six-family-smoke \
+            --publish 127.0.0.1:18080:8080 \
+            --env "EPER_BUILD_ID=${BUILD_ID}" \
+            --env "EPER_LOCAL_CAPABILITY_API=true" \
+            --env "EPER_LOCAL_CAPABILITY_TOKEN=${EPER_LOCAL_CAPABILITY_TOKEN}" \
+            --env "EPER_LOCAL_TENANT_ID=${EPER_LOCAL_TENANT_ID}" \
+            --env "EPER_LOCAL_PRINCIPAL_ID=${EPER_LOCAL_PRINCIPAL_ID}" \
+            "eper-runtime-smoke:${BUILD_ID}"
+
+      - name: Verify health and exact build identity
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health --output /tmp/eper-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            docker logs eper-six-family-smoke
+            echo "EPER API did not become healthy within 30 seconds" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os
+          with open("/tmp/eper-health.json", encoding="utf-8") as handle:
+              actual = json.load(handle)
+          expected = {"status": "ok", "service": "eper-api", "buildId": os.environ["BUILD_ID"]}
+          if actual != expected:
+              raise SystemExit(f"Expected {expected!r}, got {actual!r}")
+          print(json.dumps({"health": "PASS", "buildId": actual["buildId"]}, indent=2))
+          PY
+
+      - name: Exercise all six capability families
+        shell: pwsh
+        run: |
+          ./eper/uat/run-six-family-local-uat.ps1 `
+            -BaseUrl "http://127.0.0.1:18080" `
+            -Token $env:EPER_LOCAL_CAPABILITY_TOKEN `
+            -EvidencePath "./EPER-SIX-FAMILY-HTTP-SMOKE.json"
+
+      - name: Collect container diagnostics on failure
+        if: failure()
+        run: docker logs eper-six-family-smoke || true
+
+      - name: Upload six-family smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eper-six-family-http-smoke-${{ github.sha }}
+          path: EPER-SIX-FAMILY-HTTP-SMOKE.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop local test container
+        if: always()
+        run: docker stop eper-six-family-smoke || true
