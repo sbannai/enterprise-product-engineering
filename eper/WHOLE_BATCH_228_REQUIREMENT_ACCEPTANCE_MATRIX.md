@@ -279,3 +279,20 @@ A row may move beyond **ACCEPTANCE-PENDING** only when the applicable authoritat
 8. Final acceptance decision and traceability freeze recorded.
 
 This matrix is intentionally conservative: shared capability verification establishes reusable engineering behavior, but does not by itself constitute requirement-specific business acceptance.
+
+
+## Authorized UAT Target Preflight Reconciliation — 2026-10-10
+
+| Control | Evidence / result |
+|---|---|
+| Workflow | [Run 38030487356](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38030487356) — SUCCESS |
+| Artifact | [Artifact 11662112392](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38030487356/artifacts/11662112392) |
+| Allowlisted HTTPS target | PASS — `eper-b01-uat-lj3n.onrender.com` |
+| Health endpoint | PASS — HTTP 200, JSON `buildId` |
+| Artifact expected / actual build ID | `b61b725ea6f68328bb8ce4e018bf6264578b79c5` / same |
+| B01 bridge tested commit | `3768e4060b223bbce9dab16be332d1f2cbadd7f8` |
+| Target-to-bridge build match | **NOT RECONCILED** — identifiers differ |
+| Business UAT / requirement acceptance | NOT EXECUTED / ACCEPTANCE-PENDING |
+| G9 / G10 | NOT FROZEN / NOT ISSUED |
+
+This preflight proves reachability and exact identity against the build ID supplied to that run; it does not prove that the target matches the B01 bridge commit. Re-run preflight against the bridge commit only after confirming the target deployment. Keep `EPER_UAT_API_ENABLED=false`. Do not change any of the 228 requirement-level acceptance statuses based on this technical preflight.
