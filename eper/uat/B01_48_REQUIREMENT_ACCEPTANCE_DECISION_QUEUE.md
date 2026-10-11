@@ -1,8 +1,8 @@
 # B01 48 Requirement-Level Acceptance Decision Queue
 
 **Scope:** Chapters 463–470, 48 requirements  
-**Disposition:** PENDING OWNER DECISIONS — NOT APPROVED TEST ORACLES  
-**Source identity:** The source document and section locators below are transcribed from the repository checklist; baseline approval remains pending.
+**Disposition:** BRD/SRS BASELINE APPROVED — REQUIREMENT-LEVEL OWNER DECISIONS PENDING; NOT APPROVED TEST ORACLES  
+**Source identity:** EM-BRD-001 and EM-SRS-001 controlled baseline approved under `B01-BASELINE-APPROVAL-001` on 2026-10-11. Requirement-specific acceptance sources and measurable test oracles remain pending.
 
 This queue turns the six capability-pattern topics into 48 individually actionable owner decisions. It intentionally does not invent business thresholds, role mappings, lifecycle rules, metric formulas, or expected values. For each row, the authorized owner must either cite an approved source and measurable outcome or return the requirement for clarification. A decision in this queue does not by itself authorize UAT.
 
