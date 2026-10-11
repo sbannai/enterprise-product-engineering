@@ -28,7 +28,7 @@ test("health path and network request are bounded and redirects are not followed
   assert.match(script, /health_path\.startswith\(["']\/["']\)/);
   assert.match(script, /not health_path\.startswith\(["']\/\/["']\)/);
   assert.match(script, /MAX_RESPONSE_BYTES = 1024 \* 1024/);
-  assert.match(script, /TIMEOUT_SECONDS = 15/);
+  assert.match(script, /TIMEOUT_SECONDS = 20/);
   assert.match(script, /class NoRedirect\(urllib\.request\.HTTPRedirectHandler\)/);
   assert.match(script, /return None/);
 });
@@ -49,5 +49,5 @@ test("behavior-level Python tests cover validation and simulated health response
   const output = (result.stdout ?? "") + (result.stderr ?? "");
   assert.equal(result.status, 0, output);
   assert.match(output, /OK/);
-  assert.match(output, /Ran 8 tests/);
+  assert.match(output, /Ran 11 tests/);
 });
