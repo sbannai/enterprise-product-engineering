@@ -123,3 +123,13 @@ No production, final business acceptance, certification or audit-submission clos
 - Reconciliation: the B01 six-wave evidence bridge was tested against commit `3768e4060b223bbce9dab16be332d1f2cbadd7f8`. The preflight artifact does **not** establish that the deployed target was that commit; its expected ID was the older/different value above. Therefore target reachability is evidenced for the recorded deployment, but target-to-bridge build identity is **NOT RECONCILED**.
 - Evidence boundary: reachability and the recorded build identity only. This is not OAuth, role/tenant, functional business UAT, acceptance, release authorization, G9 freeze, or G10 certification evidence.
 - Next closure action: rerun the authorized preflight with expected build ID `3768e4060b223bbce9dab16be332d1f2cbadd7f8` after confirming Render has deployed that commit. Preserve `EPER_UAT_API_ENABLED=false`.
+
+
+## B01 Controlled Requirements Baseline Approval — 2026-10-11
+
+- Decision reference: B01-BASELINE-APPROVAL-001.
+- Decision: APPROVED — EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx and EM-SRS-001_Consolidated_SRS_Chapters_463-500_v1.0.docx are the controlled requirements baseline for B01.
+- Authority: Design authority decision explicitly given in the project conversation.
+- Decision timestamp: 2026-10-11 18:17:09 Asia/Kolkata (12:47:09 UTC).
+- Scope boundary: This approves baseline document identity/version control only. It does not approve requirement-specific acceptance criteria, exact HLD–LLD bindings, test cases, or business UAT execution.
+- Remaining B01 holds: measurable acceptance criteria/source locator per requirement; exact approved HLD–LLD pair and DATA/API/EVENT disposition where not evidenced; test-case approval; and all D1–D4 / E1–E13 entry gates. Business UAT remains NOT AUTHORIZED until these gates are satisfied.
