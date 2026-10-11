@@ -46,3 +46,10 @@ This is a **data-integrity check only**. It does not validate the business truth
 6. Business UAT execution, defect disposition, and formal acceptance decision after authorization.
 
 **Gate status: HOLD — NOT AUTHORIZED FOR BUSINESS UAT.**
+
+
+## Follow-up reconciliation — 2026-10-11
+
+The controlled BRD/SRS baseline approval was recorded as `B01-BASELINE-APPROVAL-001` on 2026-10-11. The checklist baseline status is reconciled to this decision; requirement-specific acceptance criteria, measurable test oracles, exact approved HLD–LLD bindings, case approvals, and execution authorization remain pending. The original 2026-10-04 structural validation results above are historical and are not represented as a new post-change validation run.
+
+Business UAT remains **HOLD — NOT AUTHORIZED**. All 48 execution-authorized fields remain `NO`.
