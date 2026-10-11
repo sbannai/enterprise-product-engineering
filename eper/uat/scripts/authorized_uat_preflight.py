@@ -4,7 +4,9 @@ import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
 RESULT_PATH = "uat-target-health-result.json"
 MAX_RESPONSE_BYTES = 1024 * 1024
-TIMEOUT_SECONDS = 15
+TIMEOUT_SECONDS = 20
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (1, 3)
 def finish(result, code):
     with open(RESULT_PATH, "w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2, sort_keys=True); handle.write("\n")
@@ -46,33 +48,64 @@ def run_preflight(env=None):
     url=urllib.parse.urlunsplit(("https",parsed.netloc,hp.path,"",""))
     request=urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"EPER-UAT-Preflight/1.0"},method="GET")
     started=time.monotonic()
+    opener=urllib.request.build_opener(NoRedirect)
+    last_error=None
+    body=None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        result["attempts"] = attempt
+        try:
+            with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
+                status_code,content_type=response.status,response.headers.get("Content-Type","")
+                body=response.read(MAX_RESPONSE_BYTES+1)
+            result["httpStatus"]=status_code
+            result["responseContentType"]=content_type.split(";")[0].strip()
+            if status_code >= 500 and attempt < MAX_ATTEMPTS:
+                time.sleep(RETRY_BACKOFF_SECONDS[attempt-1])
+                continue
+            break
+        except urllib.error.HTTPError as exc:
+            result["httpStatus"]=exc.code
+            # Retry transient throttling and server errors only; never follow redirects.
+            if (exc.code == 429 or 500 <= exc.code <= 599) and attempt < MAX_ATTEMPTS:
+                last_error = type(exc).__name__
+                time.sleep(RETRY_BACKOFF_SECONDS[attempt-1])
+                continue
+            result["elapsedMs"]=int((time.monotonic()-started)*1000)
+            result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health endpoint returned HTTP error or redirect; redirects are not followed"}
+            return finish(result,1)
+        except (TimeoutError, urllib.error.URLError, OSError) as exc:
+            last_error=type(exc).__name__
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(RETRY_BACKOFF_SECONDS[attempt-1])
+                continue
+            result["elapsedMs"]=int((time.monotonic()-started)*1000)
+            result["checks"]["healthResponse"]={"status":"FAIL","reason":last_error+": request failed after bounded retries"}
+            return finish(result,1)
+        except Exception as exc:
+            result["elapsedMs"]=int((time.monotonic()-started)*1000)
+            result["checks"]["healthResponse"]={"status":"FAIL","reason":type(exc).__name__+": response could not be processed"}
+            return finish(result,1)
+    result["elapsedMs"]=int((time.monotonic()-started)*1000)
+    if body is None:
+        result["checks"]["healthResponse"]={"status":"FAIL","reason":(last_error or "No response")+" after bounded retries"}
+        return finish(result,1)
+    if result.get("httpStatus",0)<200 or result.get("httpStatus",0)>=300:
+        result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health endpoint did not return 2xx after bounded retries"}
+        return finish(result,1)
+    if len(body)>MAX_RESPONSE_BYTES:
+        result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health response exceeded the 1 MiB safety limit"}; return finish(result,1)
     try:
-        opener=urllib.request.build_opener(NoRedirect)
-        with opener.open(request,timeout=TIMEOUT_SECONDS) as response:
-            status_code,content_type=response.status,response.headers.get("Content-Type","")
-            body=response.read(MAX_RESPONSE_BYTES+1)
-        result["httpStatus"]=status_code; result["responseContentType"]=content_type.split(";")[0].strip()
-        result["elapsedMs"]=int((time.monotonic()-started)*1000)
-        if status_code<200 or status_code>=300:
-            result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health endpoint did not return 2xx"}; return finish(result,1)
-        if len(body)>MAX_RESPONSE_BYTES:
-            result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health response exceeded the 1 MiB safety limit"}; return finish(result,1)
         payload=json.loads(body.decode("utf-8"))
-        if not isinstance(payload,dict):
-            result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health response JSON root must be an object"}; return finish(result,1)
-        result["checks"]["healthResponse"]={"status":"PASS"}
-        actual=payload.get(field); result["buildIdField"],result["expectedBuildId"]=field,expected
-        result["actualBuildId"]=actual if isinstance(actual,str) else None
-        if not isinstance(actual,str) or actual!=expected:
-            result["checks"]["buildIdentity"]={"status":"FAIL","reason":"Health response build identifier did not exactly match expected value"}; return finish(result,1)
-        result["checks"]["buildIdentity"]={"status":"PASS"}; result["status"]="PASS"
-        result["evidenceBoundary"]="Reachability and build identity only; not OAuth, roles, tenant scope, functional UAT, acceptance, release authorization, or certification."
-        return finish(result,0)
-    except urllib.error.HTTPError as exc:
-        result["httpStatus"]=exc.code
-        result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health endpoint returned an HTTP error or redirect; redirects are not followed"}
-        return finish(result,1)
-    except Exception as exc:
-        result["checks"]["healthResponse"]={"status":"FAIL","reason":type(exc).__name__+": request failed or response was not valid JSON"}
-        return finish(result,1)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health response was not valid UTF-8 JSON"}; return finish(result,1)
+    if not isinstance(payload,dict):
+        result["checks"]["healthResponse"]={"status":"FAIL","reason":"Health response JSON root must be an object"}; return finish(result,1)
+    result["checks"]["healthResponse"]={"status":"PASS"}
+    actual=payload.get(field); result["buildIdField"],result["expectedBuildId"]=field,expected
+    result["actualBuildId"]=actual if isinstance(actual,str) else None
+    if not isinstance(actual,str) or actual!=expected:
+        result["checks"]["buildIdentity"]={"status":"FAIL","reason":"Health response build identifier did not exactly match expected value"}; return finish(result,1)
+    result["checks"]["buildIdentity"]={"status":"PASS"}; result["status"]="PASS"
+    result["evidenceBoundary"]="Reachability and build identity only; not OAuth, roles, tenant scope, functional UAT, acceptance, release authorization, or certification."
+    return finish(result,0)
 if __name__=="__main__": sys.exit(run_preflight())
