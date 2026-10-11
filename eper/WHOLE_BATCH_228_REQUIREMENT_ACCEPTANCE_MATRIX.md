@@ -279,3 +279,27 @@ A row may move beyond **ACCEPTANCE-PENDING** only when the applicable authoritat
 8. Final acceptance decision and traceability freeze recorded.
 
 This matrix is intentionally conservative: shared capability verification establishes reusable engineering behavior, but does not by itself constitute requirement-specific business acceptance.
+
+
+## B01 Technical Evidence Reconciliation — 2026-10-11
+
+**Evidence source:** [B01 six-wave bridge run 38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232)  
+**Artifact:** [EPER-B01-SIX-WAVE-EVIDENCE-38135373232](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38135373232/artifacts/11700363383)  
+**Tested commit:** `3768e4060b223bbce9dab16be332d1f2cbadd7f8`  
+**Artifact SHA-256:** `fbdfab80f88e768ec514cc4a9274ac72b5607fb591432861d121f0404fb72985`
+
+| B01 reconciliation control | Observed result | Closure interpretation |
+|---|---|---|
+| Population | Chapters 463–470; 48 requirements | Scope confirmed for technical pilot |
+| Automated suites | 8 passed; 0 failed | Engineering evidence only |
+| Automated tests | 63 passed; 0 failed | Does not replace business UAT |
+| Evidence bundle | Six waves; 48 requirements; artifact uploaded | Link artifact to requirement-level evidence records |
+| Readiness blockers | 5 | Remain open until authoritative evidence clears or formally dispositions each blocker |
+| Business UAT | NOT EXECUTED | No business acceptance inferred |
+| Business acceptance | PENDING | No requirement promoted to ACCEPTED |
+| G9 traceability freeze | NOT FROZEN | Freeze remains blocked by downstream evidence |
+| G10 | NOT ISSUED in bridge metadata | No certification/closure claim inferred |
+
+**Required reconciliation:** for each of the 48 B01 requirements, link the exact acceptance criterion, business-UAT execution record (when authorized), observed result, defect/retest disposition, evidence reference, approver and date. Where these are absent, retain `ACCEPTANCE-PENDING`; do not infer acceptance from the pilot test result.
+
+This section records batch-level technical evidence and does not alter requirement identities, source mappings, or the 228-row baseline.
