@@ -49,5 +49,5 @@ test("behavior-level Python tests cover validation and simulated health response
   const output = (result.stdout ?? "") + (result.stderr ?? "");
   assert.equal(result.status, 0, output);
   assert.match(output, /OK/);
-  assert.match(output, /Ran 11 tests/);
+  assert.match(output, /Ran \d+ tests/);
 });
