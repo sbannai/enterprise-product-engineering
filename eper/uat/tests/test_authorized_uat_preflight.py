@@ -13,6 +13,13 @@ class FakeOpener:
         self.calls.append((request,timeout))
         if self.error: raise self.error
         return self.response
+class SequenceOpener:
+    def __init__(self, outcomes): self.outcomes,self.calls=list(outcomes),[]
+    def open(self,request,timeout):
+        self.calls.append((request,timeout))
+        outcome=self.outcomes.pop(0)
+        if isinstance(outcome,BaseException): raise outcome
+        return outcome
 class AuthorizedUatPreflightTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.cwd=os.getcwd(); os.chdir(self.temp.name)
@@ -28,6 +35,26 @@ class AuthorizedUatPreflightTests(unittest.TestCase):
         opener=FakeOpener(FakeResponse(b'{"buildId":"abc123"}')); code,result,_=self.run_check(opener=opener)
         self.assertEqual(code,0); self.assertEqual(result["status"],"PASS"); self.assertEqual(result["checks"]["buildIdentity"]["status"],"PASS")
         self.assertEqual(opener.calls[0][1],preflight.TIMEOUT_SECONDS); self.assertEqual(opener.calls[0][0].full_url,"https://uat.example.test/health")
+    def test_retries_transient_network_failure_then_passes(self):
+        opener=SequenceOpener([urllib.error.URLError("temporary"),FakeResponse(b'{"buildId":"abc123"}')])
+        with mock.patch.object(preflight.time,"sleep") as sleep:
+            code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,0); self.assertEqual(result["attempts"],2); self.assertEqual(len(opener.calls),2)
+        self.assertEqual(result["status"],"PASS"); sleep.assert_called_once_with(1)
+    def test_retries_http_503_then_passes(self):
+        unavailable=urllib.error.HTTPError("https://uat.example.test/health",503,"Unavailable",{},None)
+        opener=SequenceOpener([unavailable,FakeResponse(b'{"buildId":"abc123"}')])
+        with mock.patch.object(preflight.time,"sleep") as sleep:
+            code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,0); self.assertEqual(result["attempts"],2); self.assertEqual(len(opener.calls),2)
+        sleep.assert_called_once_with(1)
+    def test_transient_failure_stops_after_max_attempts(self):
+        opener=SequenceOpener([urllib.error.URLError("temporary") for _ in range(preflight.MAX_ATTEMPTS)])
+        with mock.patch.object(preflight.time,"sleep"):
+            code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,1); self.assertEqual(result["attempts"],preflight.MAX_ATTEMPTS)
+        self.assertEqual(len(opener.calls),preflight.MAX_ATTEMPTS)
+        self.assertIn("after bounded retries",result["checks"]["healthResponse"]["reason"])
     def test_rejects_host_not_on_allowlist_without_network_call(self):
         code,result,build=self.run_check(dict(BASE_ENV,UAT_BASE_URL="https://attacker.example.test"),FakeOpener())
         self.assertEqual(code,1); self.assertEqual(result["checks"]["targetValidation"]["status"],"FAIL"); build.assert_not_called()
