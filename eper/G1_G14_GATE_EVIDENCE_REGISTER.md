@@ -96,3 +96,15 @@ Required evidence includes frozen traceability baseline, evidence archive/index,
 The repository establishes the engineering baseline for G1, G2, G4, G5, G6 and G10 within their stated boundaries. G3 remains source-controlled where exact authoritative locators are not evidenced. G8 is prepared but not executed. **G9 CI verification is PASS, while G9 traceability freeze remains NOT FROZEN.** G7 and G11–G14 remain pending authoritative downstream evidence.
 
 No production, final business acceptance, certification or audit-submission closure is asserted by this register.
+
+
+## Authorized UAT Target Preflight — Evidence Reconciliation (2026-10-10)
+
+- Workflow run: [38030487356](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38030487356) — completed successfully.
+- Artifact: [eper-uat-target-preflight, artifact 11662112392](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38030487356/artifacts/11662112392).
+- Artifact outcome: `PASS`; target allowlist validation `PASS`; HTTPS health response `PASS` (HTTP 200); build identity comparison `PASS`.
+- Target: `https://eper-b01-uat-lj3n.onrender.com`; JSON build field: `buildId`.
+- Actual and expected build ID recorded by the artifact: `b61b725ea6f68328bb8ce4e018bf6264578b79c5`.
+- Reconciliation: the B01 six-wave evidence bridge was tested against commit `3768e4060b223bbce9dab16be332d1f2cbadd7f8`. The preflight artifact does **not** establish that the deployed target was that commit; its expected ID was the older/different value above. Therefore target reachability is evidenced for the recorded deployment, but target-to-bridge build identity is **NOT RECONCILED**.
+- Evidence boundary: reachability and the recorded build identity only. This is not OAuth, role/tenant, functional business UAT, acceptance, release authorization, G9 freeze, or G10 certification evidence.
+- Next closure action: rerun the authorized preflight with expected build ID `3768e4060b223bbce9dab16be332d1f2cbadd7f8` after confirming Render has deployed that commit. Preserve `EPER_UAT_API_ENABLED=false`.
