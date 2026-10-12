@@ -44,3 +44,21 @@ The procurement BRD describes transparency, evidence-based supplier selection, d
 ## Gate status
 
 No candidate oracle is approved or executable from this document. Preserve all requirement IDs and the approved baseline. Keep all 48 case execution-authorization values `NO`; Business UAT remains on HOLD until the controlled BRD/HLD correction is completed and row-level mappings, measurable acceptance criteria, exact design/interface traceability, target/build identity, test data/roles and applicable gate evidence are approved.
+
+
+## Source-locator crosswalk — proposed only, not requirement approval
+
+Prepared 2026-10-12 from the retrieved Volume XIII Chapter 463 BRD v1.0 (cover status: **In Development**). The section references below are source-supported candidate locators to accelerate review; they are **not** approved one-to-one requirement mappings and do not supersede the controlled source-correction process. The source contains chapter-level criteria and checks, not all measurable values needed for executable tests.
+
+| Requirement | Candidate BRD locator(s) for reviewer verification | Why this is a candidate | Gap that prevents promotion |
+|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | §§463.7–463.8; relevant object lifecycle section to be confirmed against the row’s approved scope | Requisition creation, approval and status are explicit in the source; the actual authoritative object for this requirement is not yet owner-confirmed | Confirm canonical object/system of record, lifecycle states/transitions, required fields, history/retention and exact requirement-to-rule binding |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | §§463.3, 463.8, 463.46 criterion 2, §463.47 checks 8 and 12 | The source explicitly describes delegated authority, segregation of duties and approval controls | Approve role/permission matrix, thresholds, delegation rules, tenant/entity scope and exact denial result |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | §§463.7–463.8; §463.47 checks 8 and 10 | The source describes budget/sourcing validation, approval routing and threshold/exception checks | Approve exact policy/rule IDs, boundary values, currency/category/entity semantics, overrides and validation result contract |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | §§463.3, 463.15–463.18; §463.46 criterion 3; §463.47 checks 5–6 | The source requires evidence-based supplier selection and auditable evaluation/award rationale | Confirm the requirement’s target decision object, mandatory evidence fields, weighting/conflict rules, versioning and retention |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | §463.3; §463.47 checks 10 and 14 | The source describes documented emergency/sole-source exceptions and continuity/no-duplicate-award-or-order validation | Approve exception taxonomy/authority, retry/idempotency and compensation behavior, terminal states and measurable no-duplicate assertion |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | §§463.2, 463.45–463.46 criterion 5; §463.47 checks 10–11 | The source includes spend analytics/performance and transaction lineage into receiving, AP and financial reporting | Approve metric definitions/formulas, source-of-truth, filters, refresh/freshness, reconciliation tolerance and access rules |
+
+### Promotion rule
+
+For each row, record the approved BRD filename/version and exact rule locator, explicit approval/change reference, and measurable positive plus negative/boundary oracle. Then establish the exact approved HLD locator, LLD locator and explicit HLD→LLD pair; attach the applicable DATA/API/EVENT contract and version or separately approved N/A. Until these fields are approved and verified, retain the row as **PROPOSED / HOLD / NOT EXECUTABLE**. Do not use this crosswalk to change the 228-requirement, 38-chapter baseline or authorize Business UAT.
