@@ -3,7 +3,10 @@
 - **Record ID:** B01-CH463-SOURCE-PRECEDENCE-002
 - **Date:** 2026-10-12
 - **Baseline:** B01-BASELINE-APPROVAL-001 remains in force
-- **Disposition:** EVIDENCE ASSESSMENT ONLY — NO SOURCE REPLACEMENT OR BUSINESS APPROVAL
+- **Disposition:** SOURCE PRECEDENCE APPROVED — DOCUMENT CORRECTION AND ROW-LEVEL DESIGN/ACCEPTANCE EVIDENCE STILL OPEN
+- **Decision reference:** B01-CH463-SOURCE-CORRECTION-DECISION-001
+- **Change-control reference:** B01-CH463-CC-001
+- **Decision date:** 2026-10-12
 
 ## Question
 
@@ -19,11 +22,11 @@ Why do submitted artifacts assign two different business domains to Chapter 463,
 | `EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx`, §463.21 and `HLD_463_470_Controlled_Traceability_Recovery_Matrix_46301_46306_v1.9.docx` | The consolidated BRD's generic six-row register and the recovery matrix label Chapter 463 as Enterprise Event & Message Management. The recovery matrix maps the six rows to SRS-FR-2323..2328 and records design traceability HOLD. | Establishes a real internal conflict within the submitted artifact set and identifies the current six REQ/SRS records to preserve while investigating. | Does not make exact HLD/LLD, DATA/API/EVENT or approval evidence complete. The recovery matrix explicitly says exact bindings and contracts remain open. |
 | `EM-OPS-031_Requirement_by_Requirement_Traceability_Population_Validation_463_500_v1.docx` | The 228-requirement population validation preserves six requirements per chapter and SRS-FR-2323..2328 for Chapter 463; LLD component mappings are described as patterns, downstream evidence remains pending. | Confirms the six-row identity pattern and that generic LLD mappings are supporting only. | Does not adjudicate the chapter-domain conflict or supply exact HLD→LLD/API/event approvals. |
 
-## Evidence-based conclusion
+## Evidence-based conclusion and approved disposition
 
 The Volume XIII procurement interpretation is corroborated by the dedicated Chapter 463 procurement artifact and by chapter cross-references in both Chapters 464 and 466. The consolidated detailed BRD and the HLD recovery matrix nevertheless assign Chapter 463 to Event & Message Management. This is a material controlled-source conflict, not a wording-only discrepancy.
 
-**Recommended owner disposition:** preserve `B01-BASELINE-APPROVAL-001`; raise a controlled source-correction/change decision to determine whether the consolidated §463.21 material is misnumbered/mislabelled, whether a source version was mixed, or whether an approved change exists. Until that decision is recorded, retain the six REQ/SRS identities but do not apply procurement acceptance rules to them or relabel them as Event & Message Management.
+**Design Authority decision recorded:** Option A approved on 2026-10-12. The dedicated Volume XIII Chapter 463 Procurement & Source-to-Pay artifact is the domain source. Correct or formally supersede the conflicting consolidated §463.21 content and HLD recovery-matrix heading through `B01-CH463-CC-001`. Preserve `B01-BASELINE-APPROVAL-001` and all six existing REQ/SRS/TRC identities. This approval resolves source precedence; it does not itself establish the six procurement mappings, measurable acceptance oracles, exact HLD/LLD pairs, or DATA/API/EVENT decisions.
 
 ## Closure fields required
 
@@ -35,4 +38,4 @@ The Volume XIII procurement interpretation is corroborated by the dedicated Chap
 - DATA schema/entity owner and API/EVENT contract/version, or explicit authorized N/A per row
 - Requirement-specific measurable acceptance criteria and approval reference
 
-**Current gate:** OPEN — OWNER SOURCE-PRECEDENCE DECISION REQUIRED. Business UAT remains unauthorized. No requirement IDs, chapter boundaries, or baseline approvals are changed by this note.
+**Current gate:** SOURCE PRECEDENCE APPROVED; CONTROLLED DOCUMENT CORRECTION AND ROW-LEVEL EVIDENCE OPEN. Business UAT remains unauthorized. No requirement IDs, chapter boundaries, or baseline approvals are changed by this note.
