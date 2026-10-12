@@ -85,3 +85,28 @@ Source recovered: `EPER_Master_Repository_v35.0.xlsx`, sheets `103_PROC_API_Cata
 ### Disposition
 
 These catalogue leads improve the search path but do not close any of the six SRC-003 rows. Keep each row `PENDING / NOT_VERIFIED` until the exact data entity, API operation and event applicability (or separately approved N/A), HLD/LLD locators and approvals are evidenced. All entries remain **Draft candidate references**; do not promote them to an approved contract baseline.
+
+
+## Procurement data-entity catalogue leads recovered — draft only
+
+Source: `EPER_Master_Repository_v35.0.xlsx`, sheet `11_Data_Entities`. The rows below were surfaced by Library search and each has status **Draft**. These are catalogue candidates only; no schema/field definitions or approved REQ-to-entity joins were established by the search result.
+
+| Entity ID | Catalogue name | Candidate relevance for controlled review | Binding status |
+|---|---|---|---|
+| `ENT-PROC-001` | Supplier | Supplier lifecycle/qualification only if supported by the approved requirement text | Draft; not bound |
+| `ENT-PROC-002` | Supplier Site | Supplier site scope only if explicitly required | Draft; not bound |
+| `ENT-PROC-003` | Supplier Qualification | Qualification decisions only if explicitly required | Draft; not bound |
+| `ENT-PROC-004` | Sourcing Event | Sourcing-event lifecycle only if explicitly required | Draft; not bound |
+| `ENT-PROC-005` | Sourcing Lot | Lot-level sourcing only if explicitly required | Draft; not bound |
+| `ENT-PROC-006` | Supplier Bid | Bid handling only if explicitly required | Draft; not bound |
+| `ENT-PROC-007` | Bid Evaluation | Evaluation evidence only if explicitly required | Draft; not bound |
+| `ENT-PROC-008` | Sourcing Award | Award lifecycle only if explicitly required | Draft; not bound |
+| `ENT-PROC-009` | Purchase Requisition | Requisition lifecycle only if explicitly required | Draft; not bound |
+| `ENT-PROC-010` | Purchase Requisition Line | Requisition-line data only if explicitly required | Draft; not bound |
+| `ENT-PROC-011` | Purchase Order | PO lifecycle only if explicitly required | Draft; not bound |
+| `ENT-PROC-012` | Purchase Order Line | PO-line data only if explicitly required | Draft; not bound |
+| `ENT-PROC-013` | Purchase Order Schedule | Schedule data only if explicitly required | Draft; not bound |
+
+### Required reconciliation rule
+
+Do not assign any of these entity IDs to REQ-46301…REQ-46306 merely because the names appear relevant. The next verification must inspect the full controlled workbook row definitions and the approved requirement text, then record the exact approved HLD locator, LLD locator, HLD→LLD pairing, schema/version, owner and approval/change reference. Until then the SRC-003 tracker remains `PENDING / NOT_VERIFIED`; no DATA contract or approved N/A is claimed.
