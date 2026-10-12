@@ -1,7 +1,7 @@
 # B01 E1–E13 Existing Evidence Assessment
 
-**Assessment date:** 2026-10-04  
-**Source reviewed:** EPER-B01-TECHNICAL-PREFLIGHT run [37183899506](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37183899506), artifact `EPER-B01-TECHNICAL-PREFLIGHT-37183899506`, plus the current B01 UAT control files in `eper/uat/`.
+**Assessment date:** 2026-10-12  
+**Sources reviewed:** historical EPER-B01-TECHNICAL-PREFLIGHT run [37183899506](https://github.com/sbannai/enterprise-product-engineering/actions/runs/37183899506); current passing [QA re-execution](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38203245583), [B01 evidence bridge](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38203245614), [technical simulation](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38203245700), [228-requirement pilot matrix](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38203245689); merged PRs #112–#117; and current B01 UAT control files.
 
 ## Executive result
 
@@ -22,8 +22,8 @@ The technical preflight completed successfully: **8 suites, 63 tests passed, 0 f
 | E1 | INSUFFICIENT | No artifact reviewed here proves the protected GitHub Environment settings, required reviewers, or approved branch restrictions. A successful CI job is not environment-policy evidence. Closure: Environment settings evidence plus policy approval |
 | E2 | MISSING | Preflight artifact says actual UAT base URL is not recorded; no evidence establishes UAT_ALLOWED_HOST equals an owner-approved host. Closure: Approved host value confirmation (no secrets) |
 | E3 | MISSING | No service-owner approval for an exact HTTPS base URL and health path is evidenced. Closure: Approved change/service record with URL and health path |
-| E4 | INSUFFICIENT | Run 37183899506 passed automated pilot suites (63/63 tests) but the artifact explicitly says no verified deployed target/build; pilots use in-memory storage and simulated security context. Closure: Authorized-target preflight against approved deployed build and target identity |
-| E5 | MISSING | Business owner nomination appears only as planning input; formal authorization for B01 is absent. Closure: Signed/recorded approval for Chapters 463–470 / 48 requirements |
+| E4 | INSUFFICIENT | Historical run 37183899506 passed 63/63 tests; current QA, bridge, simulation and matrix workflows also pass. These remain automated/simulated results and do not prove an authorized deployed target/build identity or live target preflight. Closure: Authorized-target preflight against approved deployed build and target identity |
+| E5 | MISSING | The controlled BRD/SRS baseline approval is recorded as B01-BASELINE-APPROVAL-001 (2026-10-11), but that is not business execution authorization. Formal authorization for B01 remains absent. Closure: Signed/recorded approval for Chapters 463–470 / 48 requirements |
 | E6 | MISSING | No named tester/session authorization reference and planned session record evidenced. Closure: Named tester and approved session authorization |
 | E7 | MISSING | OAuth was selected as a method, but issuer/client configuration, live login verification and session reference are not recorded. Closure: Successful approved-provider login evidence; no tokens in evidence |
 | E8 | MISSING | No approved tester role/tenant matrix or verification evidence is recorded. Closure: Approved role/tenant scope and access verification |
@@ -31,7 +31,7 @@ The technical preflight completed successfully: **8 suites, 63 tests passed, 0 f
 | E10 | MISSING | Target-environment audit events and business report access have not been evidenced. Closure: Read-access evidence for required logs and reports |
 | E11 | INSUFFICIENT | CI artifacts exist and are downloadable, but no evidence confirms the controlled UAT archive, access controls, naming/version rules, or per-case evidence linkage are operational. Closure: Approved archive location/index, access and naming/version evidence |
 | E12 | INSUFFICIENT | A GitHub issue exists for blocker coordination, but no confirmed UAT defect/exception workflow, severity rules, triage owner or escalation SLA was evidenced. Closure: Approved defect/exception process, named triage owner and escalation path |
-| E13 | MISSING | The 48-case checklist and criteria matrix exist, but all owner decisions are pending; approved requirement-specific criteria and case reviews are not evidenced. Closure: All 48 cases approved against approved requirement-specific criteria |
+| E13 | MISSING | The BRD/SRS baseline approval is now recorded, and the 48-row source-linked worksheet plus proposed oracle scaffold are committed. Requirement-specific acceptance oracles remain unapproved, exact HLD/LLD bindings and DATA/API/EVENT evidence remain open, and case-owner approvals are pending. Closure: All 48 cases approved against approved requirement-specific criteria |
 
 ## What is already available
 
@@ -45,11 +45,11 @@ The CI pilot used implementation candidates with in-memory storage and simulated
 
 ## Closure order
 
-1. Approve the controlled BRD/SRS baseline and requirement-specific acceptance sources.
-2. Complete and approve all 48 test cases (E13).
+1. Controlled BRD/SRS baseline approval is recorded; reconcile the approval into controlled source manifests and resolve remaining source-level conflicts.
+2. Complete and approve all 48 requirement-specific acceptance oracles and test cases (E13).
 3. Confirm approved host/health endpoint, protected environment, and deployed-build identity (E1–E4).
 4. Approve dataset and confirm named tester, live identity session, role/tenant scope, and audit/report access (E6–E10).
 5. Confirm controlled evidence archive and defect/exception process (E11–E12).
 6. Record explicit business-owner authorization (E5) only after applicable gates pass, then execute B01 and capture actual results.
 
-**Current disposition: HOLD — 0 of 13 gates evidenced as closed in this review.**
+**Current disposition: HOLD — 0 of 13 gates evidenced as closed in this refreshed review.** Current CI runs passed, but they are not live target, business authorization, or case-acceptance evidence.
