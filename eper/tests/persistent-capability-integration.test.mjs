@@ -96,9 +96,9 @@ test("capability factory can opt into restart-persistent JSON stores without cha
     const result = await reopened.XX01.execute(recordReq, { context, payload: { operation: "get", id: "factory-record" } });
     assert.equal(result.data.payload.record.data.durable, true);
     assert.equal(existsSync(join(dir, "authorization-policies.json")), true);
-    assert.equal(require("node:fs").existsSync(join(dir, "audit-evidence.json")), true);
-    assert.equal(require("node:fs").existsSync(join(dir, "exceptions.json")), true);
-    assert.equal(require("node:fs").existsSync(join(dir, "governed-reports.json")), true);
+    assert.equal(existsSync(join(dir, "audit-evidence.json")), true);
+    assert.equal(existsSync(join(dir, "exceptions.json")), true);
+    assert.equal(existsSync(join(dir, "governed-reports.json")), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
