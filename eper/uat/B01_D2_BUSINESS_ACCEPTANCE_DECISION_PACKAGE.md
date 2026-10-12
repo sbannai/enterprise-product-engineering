@@ -13,13 +13,13 @@ This is the controlled publication point for the **D2 requirement-level business
 
 It does **not** approve the requirements, approve the UAT cases, or authorize UAT execution. It records the decision package that the accountable business/design authority must complete.
 
-The evidence assessment is complete for all 48 requirements. The newly supplied consolidated LLD provides design evidence for all 48 rows. It materially resolves the design-evidence portion of D2, but it does not itself establish formal approval, exact requirement-level binding, or the business-specific measurable acceptance oracle.
+The evidence assessment is complete for all 48 requirements. The recorded D1 decision approves the controlled BRD/SRS baseline under `B01-BASELINE-APPROVAL-001` (2026-10-11). The consolidated LLD supplies design evidence for all 48 rows, but exact requirement-level HLD/LLD binding and business-specific measurable acceptance oracles remain unresolved. The recorded EM-LLD-001 v1.0 approval decision must be reconciled with its controlled approval/change metadata; it does not by itself supply missing business acceptance criteria.
 
 ## 2. Current decision position
 
 | Decision item | Current position |
 |---|---|
-| D1 source baseline | RETURN FOR CORRECTION / CLARIFICATION REQUIRED |
+| D1 source baseline | BRD/SRS CONTROLLED BASELINE APPROVED under `B01-BASELINE-APPROVAL-001` (2026-10-11); exact HLD/LLD bindings and source-level reconciliation remain open |
 | D2 requirement-specific acceptance source | 48/48 LLD evidence received; owner approval/acceptance oracle pending |
 | D3 review of 48 UAT cases | READY FOR REVIEW, but dependent on D1/D2 decisions |
 | D4 UAT execution authorization | NOT GRANTED |
@@ -131,7 +131,7 @@ The required publication is the completed decision data for these 48 rows, using
 
 Until that response exists, the correct state remains:
 
-**D2 = 48/48 LLD_EVIDENCE_RECEIVED / APPROVAL_PENDING**  
+**D2 = 48/48 LLD design evidence received; exact binding and measurable acceptance-source decision pending**  
 **D3 = NOT APPROVED**  
 **D4 = NOT GRANTED**  
 **B01 = HOLD / NOT EXECUTED**
@@ -142,7 +142,7 @@ No additional generic technical testing campaign is requested by this package. E
 
 ## 8. Closure sequence
 
-1. Accountable owner completes D1 clarification.
+1. Reconcile the recorded D1 BRD/SRS baseline approval (`B01-BASELINE-APPROVAL-001`) into the controlled source index; resolve only remaining HLD/LLD locator and source-binding gaps.
 2. Accountable owner resolves the 48 D2 rows.
 3. D3 reviewer reviews the existing 48 UAT cases against the resolved acceptance sources.
 4. D4 authorization is considered only after D1–D3 and the required E1–E13 controls are complete.
