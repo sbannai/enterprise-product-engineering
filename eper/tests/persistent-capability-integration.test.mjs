@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requirementBindings } from "../dist/packages/requirements/registry.js";
@@ -95,7 +95,7 @@ test("capability factory can opt into restart-persistent JSON stores without cha
     const reopened = createCapabilityServices({ persistence: "json-file", dataDirectory: dir });
     const result = await reopened.XX01.execute(recordReq, { context, payload: { operation: "get", id: "factory-record" } });
     assert.equal(result.data.payload.record.data.durable, true);
-    assert.equal(require("node:fs").existsSync(join(dir, "authorization-policies.json")), true);
+    assert.equal(existsSync(join(dir, "authorization-policies.json")), true);
     assert.equal(require("node:fs").existsSync(join(dir, "audit-evidence.json")), true);
     assert.equal(require("node:fs").existsSync(join(dir, "exceptions.json")), true);
     assert.equal(require("node:fs").existsSync(join(dir, "governed-reports.json")), true);
