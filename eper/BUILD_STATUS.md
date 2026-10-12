@@ -3,7 +3,7 @@
 Source of truth: GitHub `main`
 EPER scope: EM-OPS Chapters 463–500 / 228 requirements
 Last verified: 2026-10-12
-Verified main commit: `2747fc4ba68442fac0eb14615273bf3f9fcd1b06`
+Verified main commit: `4d6d8c3ad6e54173a8e53253feeb2e2880074edf`
 
 ## Implementation and technical verification
 
@@ -20,6 +20,7 @@ Verified main commit: `2747fc4ba68442fac0eb14615273bf3f9fcd1b06`
 - Main-branch G9 reconciliation CI: PASS
 - Main-branch controlled QA re-execution: PASS
 - Main-branch controlled UAT technical simulation: PASS
+- Latest main-commit chapter pilot matrix, controlled QA re-execution, controlled UAT simulation, six-family HTTP smoke, G9 reconciliation, container runtime smoke, build-and-test, and B01 evidence bridge: PASS (commit `4d6d8c3ad6e54173a8e53253feeb2e2880074edf`)
 
 ## Governance and release state
 
