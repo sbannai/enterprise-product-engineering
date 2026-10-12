@@ -62,3 +62,26 @@ Prepared 2026-10-12 from the retrieved Volume XIII Chapter 463 BRD v1.0 (cover s
 ### Promotion rule
 
 For each row, record the approved BRD filename/version and exact rule locator, explicit approval/change reference, and measurable positive plus negative/boundary oracle. Then establish the exact approved HLD locator, LLD locator and explicit HLD→LLD pair; attach the applicable DATA/API/EVENT contract and version or separately approved N/A. Until these fields are approved and verified, retain the row as **PROPOSED / HOLD / NOT EXECUTABLE**. Do not use this crosswalk to change the 228-requirement, 38-chapter baseline or authorize Business UAT.
+
+
+## Procurement catalogue leads recovered from Library — draft only
+
+Source recovered: `EPER_Master_Repository_v35.0.xlsx`, sheets `103_PROC_API_Catalog` and `100_PROC_Domain_Events`. The catalogue entries surfaced in the Library are marked **Draft**. These are lookup leads for controlled validation, not approved contract references and not requirement-level mappings.
+
+| Catalogue lead | Source catalogue entry | Potential review relevance | Required before binding |
+|---|---|---|---|
+| API | `API-PROC-003` — supplier qualification decision | Could be relevant only if an approved REQ row covers supplier qualification | Exact data-entity row, requirement applicability, approved HLD/LLD pair, operation schema, authorization and approval status |
+| API | `API-PROC-005` — publish sourcing event | Could be relevant only if the approved requirement covers sourcing-event publication | Exact rule-to-requirement crosswalk, request/response/error schema, approved status and design pair |
+| API | `API-PROC-008` — approve sourcing award | Potential lead for an award/evaluation rule, not presumed to satisfy it | Approved award authority, measurable oracle, schema and exact requirement/design binding |
+| API | `API-PROC-009` — create requisition | Potential lead for a requisition rule, not presumed to satisfy it | Required fields/policy rules, exact requirement locator, schema and approved design pair |
+| API | `API-PROC-012` — create purchase order | Potential lead for a purchase-order rule, not presumed to satisfy it | Approved lifecycle/approval constraints, schema, exact requirement locator and design pair |
+| EVENT | `EVT-PROC-004` — `SourcingEventPublished` | Candidate domain event for sourcing publication | Approved producer/payload schema/version, trigger and requirement applicability |
+| EVENT | `EVT-PROC-006` — `SourcingAwardApproved` | Candidate domain event for award approval | Approved producer/payload schema/version, authorization/approval semantics and requirement applicability |
+| EVENT | `EVT-PROC-007` — `PurchaseRequisitionSubmitted` | Candidate domain event for requisition submission | Approved payload/schema/version, event ownership, delivery semantics and requirement applicability |
+| EVENT | `EVT-PROC-008` — `PurchaseRequisitionApproved` | Candidate domain event for requisition approval | Approved payload/schema/version, producer authority and requirement applicability |
+
+**Data catalogue limitation:** this search result did not expose a verified exact procurement entity row from `11_Data_Entities`. No DATA entity/schema ID is assigned here. Retrieve and verify the exact row before binding any requirement.
+
+### Disposition
+
+These catalogue leads improve the search path but do not close any of the six SRC-003 rows. Keep each row `PENDING / NOT_VERIFIED` until the exact data entity, API operation and event applicability (or separately approved N/A), HLD/LLD locators and approvals are evidenced. All entries remain **Draft candidate references**; do not promote them to an approved contract baseline.
