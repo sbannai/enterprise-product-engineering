@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requirementBindings } from "../dist/packages/requirements/registry.js";
-import { AuthoritativeRecordService, AuthorizationService, AuditEvidenceService, ExceptionHandlingService, GovernedReportingService } from "../dist/packages/capabilities/index.js";
+import { AuthoritativeRecordService, AuthorizationService, AuditEvidenceService, ExceptionHandlingService, GovernedReportingService, createCapabilityServices } from "../dist/packages/capabilities/index.js";
 import { JsonFileAuthoritativeRecordStore } from "../dist/packages/capabilities/json-file-authoritative-record-store.js";
 import { JsonFileAuthorizationPolicyStore } from "../dist/packages/capabilities/json-file-authorization-policy-store.js";
 import { JsonFileAuditEvidenceStore } from "../dist/packages/capabilities/json-file-audit-evidence-store.js";
@@ -77,6 +77,28 @@ test("persistent adapters are injectable into the five stateful capability servi
     });
     assert.equal(reportResult.data.payload.rows.length, 1);
     assert.deepEqual(reportResult.data.payload.rows[0].sourceRequirementIds, [reportReq.id]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("capability factory can opt into restart-persistent JSON stores without changing memory defaults", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "eper-capability-factory-"));
+  try {
+    assert.equal(typeof createCapabilityServices().XX01, "object");
+    assert.throws(() => createCapabilityServices({ persistence: "json-file" }), /CAPABILITY_DATA_DIRECTORY_REQUIRED/);
+    const services = createCapabilityServices({ persistence: "json-file", dataDirectory: dir });
+    const recordReq = requirement("XX01");
+    await services.XX01.execute(recordReq, { context, payload: { operation: "create", record: {
+      id: "factory-record", tenantId: context.tenantId, version: 1, state: "OPEN", data: { durable: true },
+    } } });
+    const reopened = createCapabilityServices({ persistence: "json-file", dataDirectory: dir });
+    const result = await reopened.XX01.execute(recordReq, { context, payload: { operation: "get", id: "factory-record" } });
+    assert.equal(result.data.payload.record.data.durable, true);
+    assert.equal(existsSync(join(dir, "authorization-policies.json")), true);
+    assert.equal(existsSync(join(dir, "audit-evidence.json")), true);
+    assert.equal(existsSync(join(dir, "exceptions.json")), true);
+    assert.equal(existsSync(join(dir, "governed-reports.json")), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

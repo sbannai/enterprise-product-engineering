@@ -1,4 +1,5 @@
 import type { RequirementBinding, RequirementPattern } from "../requirements/registry.js";
+import { join } from "node:path";
 import { validateRequirementContracts } from "../../contracts/index.js";
 import type { CapabilityService, CapabilityResult } from "./index.js";
 import { InMemoryAuthoritativeRecordStore, type AuthoritativeRecord } from "./authoritative-records.js";
@@ -7,6 +8,11 @@ import { BusinessValidationEngine, type ValidationRule } from "./business-valida
 import { InMemoryAuditEvidenceStore, type AuditEvidence, type AuditEvidenceStore } from "./audit-evidence.js";
 import { InMemoryExceptionStore, type ExceptionPatch, type ExceptionStore, type WorkflowException } from "./exception-handling.js";
 import { InMemoryGovernedReportingService, type ReportQuery, type ReportRow } from "./governed-reporting.js";
+import { JsonFileAuthoritativeRecordStore } from "./json-file-authoritative-record-store.js";
+import { JsonFileAuthorizationPolicyStore } from "./json-file-authorization-policy-store.js";
+import { JsonFileAuditEvidenceStore } from "./json-file-audit-evidence-store.js";
+import { JsonFileExceptionStore } from "./json-file-exception-store.js";
+import { JsonFileGovernedReportingStore } from "./json-file-governed-reporting-store.js";
 
 export interface CapabilityInput {
   context?: {
@@ -280,13 +286,40 @@ export class GovernedReportingService implements CapabilityService {
   }
 }
 
-export function createCapabilityServices(): Readonly<Record<RequirementPattern, CapabilityService>> {
+export interface CapabilityServiceOptions {
+  /** Opt-in local persistence for isolated development/UAT only. */
+  persistence?: "memory" | "json-file";
+  /** Required when persistence is json-file. Keep outside the repository and restrict filesystem access. */
+  dataDirectory?: string;
+}
+
+/**
+ * Memory remains the default to keep existing behavior unchanged. JSON-file
+ * mode is single-process local/UAT persistence, not a production database.
+ */
+export function createCapabilityServices(options: CapabilityServiceOptions = {}): Readonly<Record<RequirementPattern, CapabilityService>> {
+  if (!options.persistence || options.persistence === "memory") {
+    return {
+      XX01: new AuthoritativeRecordService(),
+      XX02: new AuthorizationService(),
+      XX03: new BusinessValidationService(),
+      XX04: new AuditEvidenceService(),
+      XX05: new ExceptionHandlingService(),
+      XX06: new GovernedReportingService(),
+    };
+  }
+  if (options.persistence !== "json-file") throw new Error("CAPABILITY_PERSISTENCE_MODE_UNSUPPORTED");
+  if (!options.dataDirectory?.trim()) throw new Error("CAPABILITY_DATA_DIRECTORY_REQUIRED");
+
+  const dataDirectory = options.dataDirectory;
+  const auditStore = new JsonFileAuditEvidenceStore(join(dataDirectory, "audit-evidence.json"));
+  const exceptionStore = new JsonFileExceptionStore(join(dataDirectory, "exceptions.json"));
   return {
-    XX01: new AuthoritativeRecordService(),
-    XX02: new AuthorizationService(),
+    XX01: new AuthoritativeRecordService(new JsonFileAuthoritativeRecordStore(join(dataDirectory, "authoritative-records.json"))),
+    XX02: new AuthorizationService(new JsonFileAuthorizationPolicyStore(join(dataDirectory, "authorization-policies.json"))),
     XX03: new BusinessValidationService(),
-    XX04: new AuditEvidenceService(),
-    XX05: new ExceptionHandlingService(),
-    XX06: new GovernedReportingService(),
+    XX04: new AuditEvidenceService(auditStore),
+    XX05: new ExceptionHandlingService(exceptionStore, exceptionStore),
+    XX06: new GovernedReportingService(new JsonFileGovernedReportingStore(join(dataDirectory, "governed-reports.json"))),
   };
 }
