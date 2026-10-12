@@ -3,12 +3,14 @@
 - Record ID: B01-CH463-CANDIDATE-ORACLES-001
 - Date: 2026-10-12
 - Baseline: B01-BASELINE-APPROVAL-001 preserved
-- Status: DRAFT FOR BUSINESS/DESIGN AUTHORITY REVIEW — NOT EXECUTABLE TEST CASES
+- Status: DRAFT FOR ROW-LEVEL BUSINESS/DESIGN AUTHORITY REVIEW — NOT EXECUTABLE TEST CASES
+- Domain source precedence: APPROVED OPTION A, 2026-10-12
+- Change control: B01-CH463-CC-001
 - Source context: Volume XIII Chapter 463 §§463.3–463.47, including chapter-level acceptance criteria §463.46 and validation checklist §463.47; consolidated BRD §463.21; SRS-FR-2323..2328; controlled HLD recovery matrix v1.9.
 
 ## Purpose and rule
 
-Turn the six candidate mappings into reviewable acceptance-oracle proposals without fabricating threshold values, roles, lifecycle states, response codes, data contracts or approvals. These proposals must not be run as UAT cases until the domain identity is resolved and the owner approves the rule and measurable oracle.
+Turn the six candidate mappings into reviewable acceptance-oracle proposals without fabricating threshold values, roles, lifecycle states, response codes, data contracts or approvals. Domain source precedence is now resolved in favor of Volume XIII Chapter 463 Procurement & Source-to-Pay. These proposals must not be run as UAT cases until each requirement's procurement mapping, exact rule, measurable oracle, design/interface bindings, test role/data, and applicable gate evidence are approved.
 
 | Requirement / SRS | Candidate behavior under procurement interpretation | Proposed positive verification | Proposed negative / boundary verification | Measurable oracle still requiring owner decision | Evidence to capture |
 |---|---|---|---|---|---|
@@ -25,7 +27,7 @@ The procurement BRD describes transparency, evidence-based supplier selection, d
 
 ## Required approval fields — complete separately for each row
 
-- Domain identity: `PROCUREMENT` / `EVENT_AND_MESSAGE_MANAGEMENT` / `SOURCE_CONFLICT_UNRESOLVED`
+- Domain identity: `PROCUREMENT` (source precedence approved under B01-CH463-SOURCE-CORRECTION-DECISION-001); row-level mapping approval remains pending
 - Approved canonical BRD filename/version and exact locator:
 - Exact approved rule text or rule ID:
 - Approved actor/role/tenant and test data:
@@ -41,4 +43,4 @@ The procurement BRD describes transparency, evidence-based supplier selection, d
 
 ## Gate status
 
-No candidate oracle is approved or executable from this document. Preserve all requirement IDs and the approved baseline. Keep all 48 case execution-authorization values `NO`; Business UAT remains on HOLD until source precedence, row-level mappings, measurable acceptance criteria, exact design/interface traceability, target/build identity, test data/roles and applicable gate evidence are approved.
+No candidate oracle is approved or executable from this document. Preserve all requirement IDs and the approved baseline. Keep all 48 case execution-authorization values `NO`; Business UAT remains on HOLD until the controlled BRD/HLD correction is completed and row-level mappings, measurable acceptance criteria, exact design/interface traceability, target/build identity, test data/roles and applicable gate evidence are approved.
