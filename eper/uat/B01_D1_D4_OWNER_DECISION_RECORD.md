@@ -12,10 +12,10 @@
 
 | Field | Owner entry |
 |---|---|
-| Business owner name / role | |
-| Requirements owner name / role | |
-| UAT lead name / role | |
-| Decision date and time (with timezone) | |
+| Business owner name / role |Sudheendra |
+| Requirements owner name / role |Sudheendra|
+| UAT lead name / role |Karuna |
+| Decision date and time (with timezone) |Sept 30. 2026 9:00 AM |
 | Change / approval record ID | |
 | Controlled evidence location | |
 
