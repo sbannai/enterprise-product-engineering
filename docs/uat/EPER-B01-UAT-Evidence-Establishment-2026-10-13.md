@@ -60,3 +60,11 @@ This record consolidates existing machine-generated evidence without altering th
 - `waves/XX01-W1-EVIDENCE.md` through `waves/XX06-W6-EVIDENCE.md`
 - `waves/B01-SIX-WAVE-EVIDENCE-SUMMARY.md`
 - `waves/bridge-metadata.txt`
+
+
+## 7. Evidence-record validation and live probe attempt (13 Oct 2026)
+
+- The evidence-record PR is [PR #129](https://github.com/sbannai/enterprise-product-engineering/pull/129).
+- PR-head workflow run [38401618068](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38401618068) completed successfully; the `build-and-test` job conclusion is `success`.
+- A direct GET probe of `https://eper-b01-uat-lj3n.onrender.com/health` was attempted from the available execution environment. DNS resolution failed locally with `Temporary failure in name resolution` before an HTTP request could be made. This is an **environment-side probe limitation**, not evidence that the Render service itself is down. Consequently, no live HTTP status, response body, or deployed build ID is asserted.
+- The evidence record therefore remains valid as a technical evidence consolidation, while the live target/build gate stays BLOCKED pending a successful authorized preflight run and uploaded result artifact.
