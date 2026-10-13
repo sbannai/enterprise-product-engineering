@@ -39,3 +39,17 @@ This is not a request for the user to recreate documents. The source files alrea
 **B01 technical pilot evidence: PASS. Requirement-specific case authorization: BLOCKED. Live Business UAT: NOT AUTHORIZED by the current case checklist.**
 
 Preflight workflow notes also confirm that a successful target health/build check proves reachability/build identity only; it does not itself approve test cases, authenticate a tester, or certify business behavior.
+
+
+## 2. Follow-up verification — 2026-10-13
+
+The audit commit `ad8dc30e90097565edc48caf312be19ddb891d78` completed EPER CI successfully in [run 38403515541](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38403515541). This verifies the repository change against the configured CI workflow.
+
+A separate inspection of `eper/uat/B01_48_PROPOSED_ORACLE_SCAFFOLD.csv` confirmed:
+- 48/48 rows are present across eight chapters.
+- Six capability patterns are covered, eight rows per pattern.
+- All 48 rows contain a proposed pattern oracle, explicitly marked `PROPOSED_PATTERN_SCAFFOLD_NOT_APPROVED`.
+- All 48 approved-source locators and owner-decision references remain `PENDING`.
+- All 48 rows keep `uat_execution_authorized=NO`.
+
+This means the test-oracle drafting scaffold is complete as a draft; the remaining gap is approval of requirement-specific business rules and measurable values, not missing scaffold rows. No approval or live UAT result has been inferred.
