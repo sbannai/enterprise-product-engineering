@@ -17,6 +17,12 @@ Resolve the known conflicting Chapter 463 heading in the controlled source set w
 - Dedicated Chapter 463 procurement BRD file is identified in the source intake as **In Development**, not a formally approved final baseline.
 - The correction decision does not itself prove that the master BRD or dedicated Chapter 463 BRD has been reissued, approved, or formally baselined.
 
+## Existing correction candidate located (2026-10-14)
+
+The Library contains `EM-BRD-001_Master_BRD_Consolidated_v1.0_CH463_OptionA_Correction_Candidate.docx`. Its extracted header says it was prepared from the submitted Master BRD copy for design-authority review, that the Option A source-precedence decision was approved on 2026-10-12, and that only Chapter 463 domain-label references were corrected in the candidate. It explicitly says **not a reissued or reapproved baseline**; requirement IDs, priorities, and generic wording remain unchanged pending requirement-level mapping.
+
+This is a tangible correction candidate and should be used for the controlled review rather than starting another redraft. The candidate still needs a verified Library/repository location and artifact checksum attached to the approval record, a design-authority/baseline-custodian decision, a before/after comparison confirming the scope of edits, and formal reissue metadata. The existence of this candidate does not change the source status or close the correction.
+
 ## Requested correction
 
 1. The baseline custodian locates the authoritative master BRD and the dedicated Chapter 463 source document currently in controlled circulation.
