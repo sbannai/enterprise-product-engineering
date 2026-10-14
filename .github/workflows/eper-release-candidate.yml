@@ -66,6 +66,7 @@ jobs:
           trap cleanup EXIT
 
           docker run -d --name "$container_name" \
+            -e EPER_BUILD_ID="$GITHUB_SHA" \
             -p 127.0.0.1:18080:8080 "eper-uat:$GITHUB_SHA"
 
           ready=0
