@@ -1,12 +1,12 @@
 # DATA/API/EVENT Contract Specification Gap Matrix
 
-**Assessment date:** 2026-10-04  
+**Assessment date:** 2026-10-14  
 **Scope:** Six shared capability contract sets used by 228 requirement bindings; Chapter 463 evidence detailed.  
 **Disposition:** IMPLEMENTATION-DERIVED GAP MATRIX — NOT AN APPROVED CONTRACT SPECIFICATION.
 
 ## Audit finding
 
-The repository defines six capability contract sets in `eper/contracts/index.ts`. Each set has a DATA, API and EVENT identifier labelled `v1`; `validateRequirementContracts` checks ID equality against the requirement registry. The repository contains no dedicated contract JSON Schema, OpenAPI document, or event payload specification under `eper/contracts/`—only `README.md` and `index.ts` were found in the repository tree.
+The repository defines six capability contract sets in `eper/contracts/index.ts`. Each set has a DATA, API and EVENT identifier labelled `v1`; `validateRequirementContracts` checks ID equality against the requirement registry. The repository contains draft documents (`CH463_PROCUREMENT_DATA_API_EVENT_CONTRACT_SPECIFICATION_DRAFT.md` and this matrix), but the six capability descriptors still have no approved dedicated JSON Schema, OpenAPI operation specification, or event payload specification. The draft document is not an approved contract.
 
 The capability implementation files and existing contract tests provide useful implementation-derived shapes and behavior, but do not prove an approved external interface contract. In particular, an EVENT descriptor does not demonstrate a publisher or event payload; the exception capability writes internal lifecycle evidence, which is not equivalent to a governed event bus contract.
 
@@ -81,3 +81,30 @@ The requester has selected **SPECIFY** as the contract-handling decision. The ne
 This direction does not convert the existing `DATA:*`, `API:*`, or `EVENT:*` registry descriptors into complete contracts. It also does not authorize invented procurement-domain fields. For Chapter 463, the owner confirmed that an **existing** authoritative procurement domain model should be used; its exact source artifact, version and locator remain to be identified before the REQ-46301 model/schema can be finalized.
 
 **Disposition remains:** implementation-derived gap matrix; contract specifications not yet authored/approved; SRC-003/G3 OPEN / NO-GO; no business UAT authorized.
+
+
+## 2026-10-14 P0 finding — Chapter 463 domain identity must be reconciled first
+
+**Disposition: DOMAIN IDENTITY CONFLICT — DO NOT PROMOTE PROCUREMENT CONTRACTS.**
+
+The existing contract draft itself records conflicting source identities:
+
+- The detailed Chapter 463 requirement-source chain and consolidated recovery references identify Chapter 463 as **Enterprise Event & Message Management**; the six high-level requirements are shared control patterns (records/lifecycle, authorization, validation, audit, exception handling, reporting/traceability).
+- A separate HLD candidate labels Chapter 463 **Enterprise Procurement & Source-to-Pay**, but calls its object names candidates requiring confirmation. A procurement correction candidate or procurement model catalogue marked Draft does not supersede the controlling Chapter 463 requirement source.
+- The procurement DATA/API/EVENT draft is therefore not safe to promote as the authoritative contract set for REQ-46301–REQ-46306 until the title/domain discrepancy is resolved from an approved controlled source.
+
+### Required resolution sequence
+1. Establish the authoritative Chapter 463 title/domain from the detailed Chapter 463 BRD, its controlled baseline/version and approval record, and reconcile it with the approved HLD baseline.
+2. If the authoritative domain is Event & Message Management, bind these six shared capability requirements to that domain's existing approved model and contracts; do not force procurement entities/endpoints/events into the rows.
+3. If an approved change formally corrects the domain to Procurement & Source-to-Pay, record its change/approval authority and effective version before binding procurement model entities and contracts.
+4. Only after the identity decision, record exact REQ/SRS/TRC → HLD → LLD → DATA/API/EVENT locators. Mark each contract DRAFT until its owner/design-authority approval is evidenced.
+5. Keep owner-approved measurable acceptance oracles and execution authorization as separate controls.
+
+### Current gate facts
+- Registry descriptors: present (six DATA/API/EVENT sets labelled v1).
+- Approved full contract definitions: not evidenced by the descriptors.
+- Approved Chapter 463 domain identity reconciliation: OPEN.
+- Exact approved HLD/LLD and contract bindings for the six rows: OPEN.
+- SRC-003/G3: OPEN / NO-GO; Business UAT: NOT AUTHORIZED.
+
+This is a source-precedence correction to the existing gap matrix, not a new register or a claim that the contract gap is closed.
