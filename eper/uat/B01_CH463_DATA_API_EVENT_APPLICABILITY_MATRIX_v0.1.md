@@ -28,7 +28,22 @@ Use one of these dispositions per contract type:
 | REQ-46305 / SRS-FR-2327 / TRC-46305 | EM-DATA-001 §3 includes IntegrationJob, IntegrationAttempt, ReconciliationCase, IdempotencyRecord and OutboxMessage; exact procurement exception/recovery ownership and durable state model are unverified. | EM-API-001 §§5–6, 11–12 gives generic error, idempotency and concurrency conventions; no exact procurement retry/recovery/compensation operations are evidenced. | EM-EVT-001 §§6–12 defines generic delivery/retry/DLQ/replay principles; applicable procurement event types, terminal states and compensation semantics are not established. | DATA/API/EVENT: CLARIFICATION REQUIRED |
 | REQ-46306 / SRS-FR-2328 / TRC-46306 | EM-DATA-001 §4 describes analytics as derived/non-authoritative; no approved procurement reporting data model, lineage or freshness record is established. | EM-API-001 §§9–10 provides generic pagination/filtering/search conventions; no approved procurement reporting endpoint or metric query contract is established. | EM-EVT-001 §§2, 5–13 gives generic event-to-analytics patterns; no approved reporting projection/event subscription or freshness contract is established. | DATA/API/EVENT: CLARIFICATION REQUIRED |
 
-## 3. Required evidence to promote a cell
+## 3.1 Procurement catalogue candidates located (not promoted)
+
+The existing Library workbook `EPER_Master_Repository_v57.5.xlsx` was reconciled against the six requirements. The sampled entries in the procurement catalogue tabs below are marked **Draft**. These locators narrow the next evidence retrieval, but do not establish approval, ownership, or requirement-level applicability.
+
+| Requirement | Candidate catalogue locator(s) | Candidate evidence | Why the cells remain unresolved |
+|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | `89_PROC_Object_Catalog`; `97_PROC_Lifecycle_States`; related `101_PROC_Attribute_Catalog` | Candidate supplier/sourcing/requisition/PO object families; examples include `PROC-OBJ-001` Supplier and `PROC-OBJ-006` Purchase Requisition. | No approved authoritative aggregate/lifecycle, exact DATA schema/owner, HLD→LLD pair, API operation, or event binding is established. |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | `103_PROC_API_Catalog`; `97_PROC_Lifecycle_States` | Candidate permission vocabulary such as `supplier:create`, plus actor/authority fields. | No approved role/action/resource/tenant policy binding or exact design pair is established. |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | `103_PROC_API_Catalog`; `97_PROC_Lifecycle_States` | Candidate operations include `API-PROC-009` create requisition and `API-PROC-011` requisition decision. | No approved policy/rule catalogue, thresholds, error/transaction semantics, API version, or measurable acceptance oracle is established. |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | `100_PROC_Domain_Events`; `101_PROC_Attribute_Catalog` | Candidate procurement event/attribute patterns, including `EVT-PROC-001` SupplierSubmitted. | A business-domain event candidate does not establish an approved audit catalogue, required evidence fields, retention/integrity/retrieval controls, or approved DATA/EVENT contracts. |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | `97_PROC_Lifecycle_States`; `103_PROC_API_Catalog` | Candidate lifecycle transitions and API mutation conventions. | No approved retry/idempotency/recovery/compensation policy, durable terminal states, or requirement-level contract binding is established. |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | `106_PROC_Reports`; `101_PROC_Attribute_Catalog` | Candidate procurement reports, measures, and fields. | No approved KPI formulas, lineage, freshness, access policy, read-model/API endpoint, or requirement binding is established. |
+
+**Disposition:** candidate catalogue locators found for all six rows; exact approved HLD/LLD pairs **0/6**; approved DATA/API/EVENT bindings or approved N/A decisions **0/6**; owner-approved acceptance oracles **0/6**. Do not promote the candidate IDs until a controlled source version, approval reference/effective date, accountable owner, exact locator and explicit REQ/SRS/TRC binding are evidenced.
+
+## 4. Required evidence to promote a cell
 
 For every DATA, API, and EVENT cell, record:
 1. exact source document ID, version/status and section/table/row/endpoint/event locator;
@@ -41,7 +56,7 @@ For every DATA, API, and EVENT cell, record:
 
 If a contract type is genuinely not applicable, record **APPROVED N/A** only with the named owner's rationale and approval reference. A blank, absent catalogue row, or generic platform convention is not an N/A approval.
 
-## 4. Controlled next action
+## 5. Controlled next action
 
 - Retrieve and inspect the exact Chapter 463 rows in the Library reconciliation workbook and the relevant source sections of EM-DATA-001, EM-API-001, EM-EVT-001.
 - Promote only those locators whose source/version/status and applicability are explicitly evidenced.
@@ -49,7 +64,7 @@ If a contract type is genuinely not applicable, record **APPROVED N/A** only wit
 - Then reconcile validated bindings to exact HLD and LLD locators and owner-approved measurable acceptance oracles.
 - Re-run G9 only after the source evidence has changed and been reviewed; a green CI run alone does not close the source gate.
 
-## 5. Current gate status
+## 6. Current gate status
 
 - Existing platform DATA/API/EVENT baseline documents: FOUND.
 - Exact Chapter 463 applicability/locator/approval for all 18 cells: NOT ESTABLISHED.
