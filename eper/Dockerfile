@@ -16,6 +16,8 @@ ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8080
 WORKDIR /app
+ARG EPER_BUILD_ID
+ENV EPER_BUILD_ID=${EPER_BUILD_ID}
 COPY package.json package-lock.json ./
 COPY --from=build /app/dist ./dist
 USER node
