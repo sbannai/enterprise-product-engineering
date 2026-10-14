@@ -43,6 +43,26 @@ The existing Library workbook `EPER_Master_Repository_v57.5.xlsx` was reconciled
 
 **Disposition:** candidate catalogue locators found for all six rows; exact approved HLD/LLD pairs **0/6**; approved DATA/API/EVENT bindings or approved N/A decisions **0/6**; owner-approved acceptance oracles **0/6**. Do not promote the candidate IDs until a controlled source version, approval reference/effective date, accountable owner, exact locator and explicit REQ/SRS/TRC binding are evidenced.
 
+
+## 3.2 Existing HLD/LLD recovery evidence located — supporting only
+
+The Library was searched for requirement-specific reconciliation records and the consolidated LLD. These sources help identify the next precise locator checks, but the records themselves explicitly say exact requirement-level HLD/LLD bindings are not evidenced. The consolidated LLD also labels its six-row design register `SUPPORTING DESIGN — EXACT BINDING PENDING`. Therefore this section records retrieval results without promoting component names or architecture anchors.
+
+| Requirement | Existing source-grounded HLD supporting anchors | Existing source-grounded LLD supporting anchors | Exact approved binding / disposition |
+|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | HLD §§3–5 (authoritative data ownership/tenant scope); §12 Messaging Security; §13 Event Governance; §18 Audit Architecture | LLD-CMP-008 Domain Components; LLD-CMP-007 Application Services; pattern XX01 / LLD-PAT-01 | Exact HLD **OPEN**; exact LLD **OPEN**; HLD→LLD pair **OPEN**. All listed anchors explicitly supporting-only in `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch463_REQ46301_SRS-FR-2323_v1.0.docx`. |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | Security/authorization architecture anchors require validation against the requirement-specific reconciliation record; do not infer from generic RBAC/ABAC chapters | Consolidated LLD target: LLD-05 Security & Authorization; identity/tenant context and RBAC/ABAC policy evaluator | Exact HLD **OPEN**; exact LLD **OPEN**; HLD→LLD pair **OPEN**. Consolidated LLD marks exact binding pending. |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | HLD Chapter 146 Business Validation; Chapter 145 Domain Error Model; Chapter 147 Idempotent Domain Commands; HLD Batch 003 §§3, 5 | LLD-CMP-007 Application Services; LLD-CMP-008 Domain Components; LLD-CMP-010 Rules; XX03 / LLD-PAT-03 | Exact HLD **OPEN**; exact LLD **OPEN**; HLD→LLD pair **OPEN**. All listed anchors explicitly supporting-only in `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch463_REQ46303_SRS-FR-2325_v1.0.docx`. |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | HLD §18 Audit Architecture; HLD §§3–5; HLD Batch 003 §5 | LLD-CMP-017 Protected Audit Evidence; XX04 / LLD-PAT-04 | Exact HLD **OPEN**; exact LLD **OPEN**; HLD→LLD pair **OPEN**. Supporting-only in `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch463_REQ46304_SRS-FR-2326_v1.0.docx`. |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | No authoritative Chapter 463 HLD locator explicitly bound to the requirement was evidenced in the retrieved reconciliation record; candidate HLD-CAND/HLD-CAP IDs remain unpromoted | LLD-CMP-009 Workflow Orchestration; LLD-CMP-010 Decision Rules; XX05 / LLD-PAT-05 | Exact HLD **OPEN**; exact LLD **OPEN**; HLD→LLD pair **OPEN**. Supporting-only in `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch463_REQ46305_SRS-FR-2327_v1.0.docx`. |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | HLD §15 Reporting Architecture; Chapter 044; Chapters 189–194 reporting/analytics anchors; §14 Analytics Architecture | LLD-CMP-016 and LLD-CMP-014; secondary context LLD-CMP-018 / LLD-CMP-017; XX06 / LLD-PAT-06 | Exact HLD **OPEN**; exact LLD **OPEN**; HLD→LLD pair **OPEN**. Supporting-only in `EM_HLD_LLD_EXACT_REFERENCE_RECONCILIATION_Ch463_REQ46306_SRS-FR-2328_v1.1.docx`. |
+
+**Key distinction:** the consolidated LLD's target sections (including LLD-02/03, LLD-05, LLD-06/07 and audit/observability components) describe where design responsibility is expected to live. They are not requirement-level locator proof. The dedicated recovery master and individual reconciliation records independently preserve exact HLD **0/6**, exact LLD **0/6**, and exact HLD→LLD pairs **0/6**. Do not relabel these rows VERIFIED based on this appendix.
+
+### Concrete next promotion test
+
+For each row, promotion requires the source file/version plus a stable exact section/decision/component locator that explicitly names REQ-463xx or SRS-FR-232x, the linked HLD→LLD pair, and the design-baseline approval reference. If the authoritative source package does not contain that explicit binding, leave it OPEN and raise the missing binding through the existing SRC-003 / P0 closure path; do not manufacture a locator from the supporting anchors listed above.
+
 ## 4. Required evidence to promote a cell
 
 For every DATA, API, and EVENT cell, record:
