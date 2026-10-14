@@ -43,8 +43,23 @@ function bearerMatches(request: IncomingMessage, expected: string): boolean {
  * The local route is disabled by default and is not a production identity system.
  * Do not enable it on a publicly reachable deployment.
  */
+function createConfiguredCapabilityServices() {
+  const persistence = process.env.EPER_CAPABILITY_PERSISTENCE;
+  if (persistence === undefined || persistence === "memory") {
+    return createCapabilityServices();
+  }
+  if (persistence !== "json-file") {
+    throw new Error("EPER_CAPABILITY_PERSISTENCE_UNSUPPORTED");
+  }
+  const dataDirectory = process.env.EPER_CAPABILITY_DATA_DIRECTORY;
+  if (!dataDirectory?.trim()) {
+    throw new Error("EPER_CAPABILITY_DATA_DIRECTORY_REQUIRED");
+  }
+  return createCapabilityServices({ persistence: "json-file", dataDirectory });
+}
+
 export function createAppServer(): Server {
-  const services = createCapabilityServices();
+  const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
