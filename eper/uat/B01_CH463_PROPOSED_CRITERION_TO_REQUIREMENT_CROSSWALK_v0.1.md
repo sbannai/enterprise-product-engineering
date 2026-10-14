@@ -3,7 +3,8 @@
 - Date: 2026-10-14
 - Scope: REQ-46301–REQ-46306; preserve existing REQ/SRS/TRC IDs and the 228-requirement/38-chapter baseline.
 - Status: **WORKING PROPOSAL — NOT APPROVED; NOT AN EXECUTION ORACLE**
-- Source: `EM-BRD-001_Volume-XIII_Chapter-463_..._v1.0.docx`, §463.46–§463.47. The source intake identifies this BRD as **In Development**, so these proposed associations must not be treated as approved mappings.
+- Domain source precedence: Option A was approved on 2026-10-12 under `B01-CH463-SOURCE-CORRECTION-DECISION-001`; canonical domain is Enterprise Procurement & Source-to-Pay. The legacy Event & Message Management heading remains a source-document correction/reissue issue, not an unresolved domain-selection question.
+- Source: `EM-BRD-001_Volume-XIII_Chapter-463_..._v1.0.docx`, §463.46–§463.47. The source intake identifies this BRD as **In Development**, so these proposed associations must not be treated as approved mappings. The approved Option A source-precedence decision establishes the domain label but does not itself approve the BRD's row-level criterion mappings or reissue the conflicting source document.
 
 ## Proposed mapping for owner review
 
@@ -24,6 +25,10 @@
 4. Bind each row to an exact approved HLD locator and exact approved LLD locator, with an explicit HLD-to-LLD relationship.
 5. For DATA, API and EVENT independently, provide an approved versioned schema/contract and locator, or an explicit approved N/A with rationale and authority. Descriptor IDs alone do not satisfy this.
 6. Capture owner, decision, date, evidence reference and any controlled change ID. If evidence is absent, retain **CLARIFICATION REQUIRED / HOLD**.
+
+## Source-precedence note
+
+Do **not** reopen the already-recorded Option A domain-selection decision. Use Enterprise Procurement & Source-to-Pay as the canonical domain for this recovery set, while retaining the source-document heading correction/reissue as a controlled documentation action. The source BRD's In Development status and its row-level mapping gaps remain separate blockers.
 
 ## Gate result
 
