@@ -222,3 +222,13 @@ The controlled `EM-OPS-Ch463_EPER_Shared_Contract_Specification_v1.docx`, §§3�
 For REQ-46302 / SRS-FR-2324, these shared principles are supporting design only. Before requirement-level promotion, the controlled source must establish the approved procurement actor/role set, action/resource matrix, tenant and organizational scoping attributes, separation-of-duties constraints where applicable, policy IDs/version, denial/error outcomes, and exact DATA/API locators or approved N/A decisions. Measurable negative tests must demonstrate that unauthorized and cross-tenant access is rejected; no such execution evidence is claimed here.
 
 **Disposition:** shared identity/tenant/authorization baseline = FOUND; procurement-specific policy and exact contract binding = OPEN / NOT PROMOTED. This entry does not approve a role, permission, policy identifier or acceptance result.
+
+## 17. Domain rule and validation contract evidence — REQ-46303 — 2026-10-15
+
+The controlled `EM-OPS-Ch463_EPER_Shared_Contract_Specification_v1.docx`, §6 (Application / Domain / Rules Contract), establishes that application services orchestrate approved use cases, domain components enforce authoritative business invariants and lifecycle/state transitions, reusable rules/decision components hold validations, and material state changes occur only after applicable validation and authorization conditions pass. The source maps REQ-46303 / XX03 to Application Service + Domain + Rules/Validation.
+
+The reconciliation workbook identifies `EVT-RUL-001` as a pattern-level event candidate for REQ-46303, but marks it NOT REQUIREMENT-LEVEL PROMOTED. It does not establish a procurement validation event or a business rule.
+
+Before promoting REQ-46303 / SRS-FR-2325, the approved procurement source must provide the exact rule catalogue/version, rule identifier and owner, triggering operation/state, input fields and preconditions, deterministic outcome/error mapping, side effects and event applicability, plus measurable positive/negative acceptance examples. Where DATA/API/EVENT is not applicable, record a controlled approved N/A rather than leaving implicit assumptions.
+
+**Disposition:** shared domain/rules principles = FOUND; procurement-specific rule IDs, predicates and acceptance oracles = OPEN / NOT PROMOTED. No purchase-order, requisition, supplier, approval-limit or matching rule is invented here.
