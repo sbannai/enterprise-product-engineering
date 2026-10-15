@@ -249,3 +249,19 @@ This summary consolidates the evidence gaps documented in §§8–17. It is a st
 **Promotion rule:** a row may move beyond BLOCKED only when its applicable DATA, API and EVENT layers each have an exact approved source locator and approval reference, or a controlled approved N/A decision; exact HLD→LLD binding; a measurable approved business oracle; and required contract/implementation execution evidence. Source-baseline existence, candidate IDs, code-level tests or simulated UAT alone do not satisfy this rule.
 
 **Current aggregate:** 0/6 requirements promoted to approved requirement-level contract closure by this intake; 0/6 business acceptance closures claimed. This is not a statement that no source baselines or technical checks exist. Business UAT remains NOT AUTHORIZED / NOT EXECUTED; SRC-003 remains OPEN / P0 / NO-GO; PR #148 remains draft.
+
+## 19. REQ-46304 — audit evidence contract disposition
+
+**Requirement mapping:** REQ-46304 / SRS-FR-2326 / TRC-46304. The shared contract baseline describes audit records with actor, tenant, action, resource, timestamp, correlation, and outcome; append-oriented protection; and authorization/classification-controlled retrieval and export. These are shared baseline characteristics, not an approved Chapter 463 audit schema.
+
+| Evidence dimension | Current finding | Promotion disposition |
+|---|---|---|
+| HLD → LLD | Exact approved requirement-level locator pair not evidenced in the repository intake | BLOCKED |
+| DATA | Audit entity, field types, schema/version, retention class and integrity controls are not bound to an approved Chapter 463 source locator | BLOCKED |
+| API | Exact audit write/read/export operation, request/response/error schema and permission binding are not promoted | BLOCKED |
+| EVENT | EVT-AUD-001 remains a candidate; approved event name, payload/version, producer and trigger are not evidenced | BLOCKED |
+| Acceptance oracle | Retention period, tamper/integrity expectations, retrieval authorization, export completeness and measurable negative cases require an approved source | BLOCKED |
+
+**Required promotion evidence:** approved source document/version and exact HLD/LLD section locators; audit DATA schema and retention/integrity decision; exact API operation contract; approved EVENT payload or controlled N/A; owner/approval reference and effective date; and measurable positive/negative acceptance criteria. Do not infer retention periods, invent schema IDs, or promote EVT-AUD-001 based on its candidate name.
+
+**Disposition:** REQ-46304 remains HOLD. Shared audit principles and passing technical checks do not close the requirement-level contract or business-acceptance gap.
