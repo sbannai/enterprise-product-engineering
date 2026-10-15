@@ -72,6 +72,6 @@ requirement_id,chapter,brd_id,srs_id,brd_source_document,exact_brd_section_locat
 
 ## Source basis and control boundary
 
-The Library copy of the detailed BRD shows Chapters 463–470 and the “Initial Requirement Register” section at §463.21 through §470.21, with requirement IDs such as `BRD-001-REQ-46301` and `BRD-001-REQ-47006`. The consolidated SRS confirms the corresponding SRS identifiers and states that the requirements baseline is pending approval. No page numbers are asserted because section/row locators are stable and more precise than PDF-rendered page positions.
+The Library copy of the detailed BRD shows Chapters 463–470 and the “Initial Requirement Register” section at §463.21 through §470.21, with requirement IDs such as `BRD-001-REQ-46301` and `BRD-001-REQ-47006`. The consolidated SRS confirms the corresponding SRS identifiers; its embedded working-draft wording is retained as a source-reconciliation item and does not override the recorded B01-BASELINE-APPROVAL-001 decision for baseline identity/version. No page numbers are asserted because section/row locators are stable and more precise than PDF-rendered page positions.
 
 **Next closure step:** D1—record authorized baseline approval or return; D2—approve measurable requirement-specific acceptance source or open a formal clarification for each requirement; only then complete case approval and E1–E13 execution readiness.
