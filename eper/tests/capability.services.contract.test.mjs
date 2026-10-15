@@ -55,7 +55,7 @@ test("service execution does not emit business acceptance", async () => {
     context, payload: { operation: "validate", input: { sample: true } }
   });
   assert.equal(result.requirementId, "REQ-46303");
-  assert.equal(result.status, undefined);
+  assert.equal(result.status, "EXECUTED");
   assert.equal(Object.hasOwn(result, "businessAcceptance"), false);
   assert.equal(Object.hasOwn(result, "accepted"), false);
 });
