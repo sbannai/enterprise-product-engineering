@@ -281,3 +281,19 @@ This summary consolidates the evidence gaps documented in §§8–17. It is a st
 **Required promotion evidence:** the approved lifecycle/state diagram and exact HLD/LLD locators; versioned DATA schema for state and exception history; exact API operations and concurrency/idempotency behavior; approved event contracts or controlled N/A decisions; and positive, negative, duplicate-command, recovery and audit acceptance oracles. Retry/replay must not be presumed applicable merely because a shared baseline mentions them.
 
 **Disposition:** REQ-46305 remains HOLD. Candidate event families and generic workflow patterns are not a substitute for the approved procurement lifecycle contract.
+
+## 21. REQ-46306 — procurement reporting and KPI contract disposition
+
+**Requirement mapping:** REQ-46306 / SRS-FR-2328 / TRC-46306. The existing catalogue lists `API-PROC-024` (`GET /api/v1/procurement/analytics/kpis`) as a Draft query-KPI endpoint with `procurement:analytics` permission. This is a candidate only, not an approved operation binding or proof of KPI definitions.
+
+| Evidence dimension | Current finding | Promotion disposition |
+|---|---|---|
+| HLD → LLD | Exact approved requirement-level locator pair not evidenced | BLOCKED |
+| DATA | Governed read model, source lineage, joins, tenant scope and freshness semantics are not bound to an approved schema | BLOCKED |
+| API | API-PROC-024 is Draft; exact operation version, filters, pagination, response/error schema and permission binding are not approved for REQ-46306 | BLOCKED |
+| EVENT | EVT-NOT-001..003 remain candidates; approved event purpose, payload, producer, trigger and version are not evidenced | BLOCKED |
+| Acceptance oracle | KPI formulas, aggregation windows, units, freshness/SLA, empty-data behavior, tenant isolation and export rules lack approved measurable outcomes | BLOCKED |
+
+**Required promotion evidence:** approved HLD/LLD locators; KPI dictionary with formula, units, aggregation window, source lineage and freshness target; approved read-model DATA schema; exact API operation and authorization contract; applicable event contracts or approved N/A; and reproducible positive/negative test oracles, including tenant filtering and empty/stale data behavior.
+
+**Disposition:** REQ-46306 remains HOLD. The presence of a Draft KPI endpoint and candidate notification events does not establish approved reporting semantics or business acceptance.
