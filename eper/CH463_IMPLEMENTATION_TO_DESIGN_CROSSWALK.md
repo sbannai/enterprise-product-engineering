@@ -260,3 +260,37 @@ The requester has confirmed that an existing authoritative procurement domain mo
 The requester also approved EM-LLD-001 v1.0 as design authority decision and directed the team to specify governed DATA/API/EVENT contracts. The repository must still record formal approval/change reference, effective date and attestation metadata before representing the baseline as fully controlled/approved. Existing implementation references remain evidence of code paths, not substitutes for approved design locators or contracts.
 
 **Next engineering action:** locate the existing procurement model in the controlled source set; then draft and review the missing contract specifications and requirement-level joins. SRC-003/G3 remains OPEN / NO-GO until evidence is verified.
+
+## Controlled approval/source-baseline reconciliation — 2026-10-15
+
+This section reconciles recorded owner decisions against the existing Chapter 463 crosswalk. It does not create a second tracker or promote candidate sources beyond their approved scope.
+
+### Decisions recorded
+
+| Decision/reference | Recorded disposition | Scope boundary |
+|---|---|---|
+| `B01-BASELINE-APPROVAL-001` | `EM-BRD-001` and `EM-SRS-001` approved as the B01 controlled baseline | Approves the shared BRD/SRS baseline only; it does not approve every requirement-specific acceptance oracle, HLD/LLD locator, DATA/API/EVENT contract, test case, or UAT execution |
+| `B01-CH463-SOURCE-CORRECTION-DECISION-001` / `B01-CH463-CC-001` | Option A accepted: Volume XIII, Chapter 463 — Procurement & Source-to-Pay is the authoritative domain context; reconcile conflicting consolidated BRD/HLD under change control | Preserve the 228-requirement/38-chapter baseline. This decision identifies the domain source; it does not by itself supply exact approved field-level DATA/API/EVENT schemas or approve a deployment |
+| Design-authority direction, 2026-10-09 | Use the existing procurement domain model; treat `EM-LLD-001 v1.0` as the selected detailed-design basis; specify governed DATA/API/EVENT contracts | The user direction is recorded as a decision input. Formal repository approval metadata, exact section-level bindings, effective version and contract-level approval still need controlled evidence before the G3 gate can be promoted |
+
+### Requirement-level status after reconciliation
+
+- BRD/SRS baseline: **APPROVED** under `B01-BASELINE-APPROVAL-001`.
+- Domain context for Chapter 463: **DECIDED** under `B01-CH463-SOURCE-CORRECTION-DECISION-001`; consolidated conflicting wording requires controlled correction.
+- Implementation-to-requirement links: **OBSERVED IN CODE**.
+- Exact approved HLD/LLD requirement locators: **OPEN** pending locator/version/approval metadata and reconciliation of conflicting source wording.
+- DATA/API/EVENT schemas and operations: **OPEN** unless the exact applicable specification is evidenced or an authorized N/A decision is recorded.
+- Requirement-specific measurable acceptance oracles: **OPEN** where not already approved in the controlled SRS/source baseline.
+- B01 review completion and explicit execution authorization: **OPEN**.
+- Business UAT: **NOT AUTHORIZED / NOT EXECUTED**. Do not convert automated pilot passes into business outcomes.
+- G3/SRC-003 and G9 freeze: **OPEN / NO-GO**.
+
+### Batch closure actions
+
+1. Correct the conflicting Chapter 463 procurement wording under `B01-CH463-CC-001`, retaining the prior baseline and audit history.
+2. Bind each of the six Chapter 463 requirements to exact, versioned HLD and LLD sections; do not treat generic module names as exact locators.
+3. Complete DATA/API/EVENT contract definitions against the existing controlled catalogues, or record a separately authorized N/A with rationale.
+4. Reconcile the resulting shared decisions into the existing 48-row B01 register; do not create per-requirement duplicate trackers.
+5. Recalculate readiness. Keep D3/D4 and business UAT blocked until the review and execution-authorization evidence exists.
+
+This is a controlled reconciliation update, not a claim that the above open actions are complete or that a gate has passed.
