@@ -98,3 +98,20 @@ The controlled Library search returned these exact catalogue positions in `EPER_
 These are catalogue lookup locators, not page numbers and not approved contract bindings. The two catalogues are not one-to-one equivalent: in particular, `PROC-OBJ-008` is Procurement Agreement while the entity list's `ENT-PROC-011` is Purchase Order. Do not imply identical entity/object IDs or relationships.
 
 For REQ-46301, these entries may be cited as candidate sources for review only. The controlled requirement-level join still needs the approved procurement domain model, exact field/relationship/lifecycle locators, HLD→LLD pairing, and API/event contract mapping or separately approved N/A. All entries shown here remain Draft.
+
+## 9. Existing event-candidate reconciliation — 2026-10-15
+
+The controlled workbook `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx` contains one requirement row per Chapter 463 requirement (worksheet extraction surfaced zero-based indices 0–5). It identifies the following **pattern-level event candidates**, with every row explicitly marked “NOT REQUIREMENT-LEVEL PROMOTED”:
+
+| Requirement | SRS | Candidate event IDs from reconciliation workbook | Promotion state |
+|---|---|---|---|
+| REQ-46301 | SRS-FR-2323 | EVT-DOC-001, EVT-DOC-002, EVT-DOC-003 | Candidate only |
+| REQ-46302 | SRS-FR-2324 | EVT-TEN-001, EVT-TEN-002, EVT-TEN-003, EVT-SEC-001 | Candidate only |
+| REQ-46303 | SRS-FR-2325 | EVT-RUL-001 | Candidate only |
+| REQ-46304 | SRS-FR-2326 | EVT-AUD-001 | Candidate only |
+| REQ-46305 | SRS-FR-2327 | EVT-WFL-001–EVT-WFL-007, EVT-INT-001–EVT-INT-004, EVT-CFG-001 | Candidate only |
+| REQ-46306 | SRS-FR-2328 | EVT-NOT-001, EVT-NOT-002, EVT-NOT-003 | Candidate only |
+
+**Source:** `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx`, requirement reconciliation rows for REQ-46301–REQ-46306; DATA/API/EVENT source columns identify EM-DATA-001, EM-API-001 and EM-EVT-001. The workbook states that event version/producer/consumer/delivery semantics are source-defined at baseline level, but execution/contract-test evidence is not established and requirement-level promotion remains open.
+
+This table records existing source evidence only. It does not establish that any candidate is applicable to the procurement requirement, does not approve an event binding, and does not invent a producer, payload, trigger or delivery rule. Promotion requires exact EM-EVT-001 locator plus approved requirement mapping, producer/consumer and payload/version semantics, or a separately approved N/A decision.
