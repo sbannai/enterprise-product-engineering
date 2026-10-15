@@ -50,9 +50,12 @@ test("validation engine rejects duplicate rule identifiers", () => {
   assert.throws(() => service.addRule(rule), /VALIDATION_RULE_DUPLICATE/);
 });
 
-test("service execution does not emit business acceptance", () => {
-  const result = new BusinessValidationService().execute(getRequirementBinding("REQ-46303"), {
+test("service execution does not emit business acceptance", async () => {
+  const result = await new BusinessValidationService().execute(getRequirementBinding("REQ-46303"), {
     context, payload: { operation: "validate", input: { sample: true } }
   });
-  assert.equal(result, undefined);
+  assert.equal(result.requirementId, "REQ-46303");
+  assert.equal(result.status, undefined);
+  assert.equal(Object.hasOwn(result, "businessAcceptance"), false);
+  assert.equal(Object.hasOwn(result, "accepted"), false);
 });
