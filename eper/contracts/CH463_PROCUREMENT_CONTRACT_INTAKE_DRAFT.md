@@ -115,3 +115,20 @@ The controlled workbook `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliatio
 **Source:** `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx`, requirement reconciliation rows for REQ-46301–REQ-46306; DATA/API/EVENT source columns identify EM-DATA-001, EM-API-001 and EM-EVT-001. The workbook states that event version/producer/consumer/delivery semantics are source-defined at baseline level, but execution/contract-test evidence is not established and requirement-level promotion remains open.
 
 This table records existing source evidence only. It does not establish that any candidate is applicable to the procurement requirement, does not approve an event binding, and does not invent a producer, payload, trigger or delivery rule. Promotion requires exact EM-EVT-001 locator plus approved requirement mapping, producer/consumer and payload/version semantics, or a separately approved N/A decision.
+
+## 10. API baseline versus requirement-level operations — 2026-10-15
+
+The controlled reconciliation workbook `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx` confirms that the shared API baseline exists in `EM-API-001` and identifies global conventions including `/api/v1`, security, resources/endpoints, error semantics, idempotency, concurrency and versioning. This establishes **baseline availability**, not the six Chapter 463 operation bindings.
+
+The existing `EM-API-001_OpenAPI_Specification_v1.docx` describes shared API conventions and representative platform resources. Its presence does not prove that procurement-specific operations for REQ-46301–REQ-46306 are approved or present in the OpenAPI catalogue. The procurement API catalogue in `EPER_Master_Repository_v57.5.xlsx` is marked Draft; `API-PROC-024` (Query KPIs) is only a candidate for REQ-46306 and is not approved by this intake.
+
+| Requirement | Current API evidence | Required controlled join |
+|---|---|---|
+| REQ-46301 | EM-API-001 shared baseline; draft procurement API catalogue | Approved operation ID/method/path, request/response/error schemas, authorization, lifecycle/concurrency and exact locator |
+| REQ-46302 | Shared API security conventions | Approved actor × action × resource × tenant policy and exact operation or approved N/A |
+| REQ-46303 | Shared validation/error conventions | Approved procurement command/operation, rule version, measurable outcomes and typed errors |
+| REQ-46304 | Shared audit resource/conventions | Approved audit retrieval/append operation, field disclosure, filters and retention/integrity binding |
+| REQ-46305 | Shared workflow/integration patterns | Approved recovery/exception operations, idempotency/retry/transition semantics |
+| REQ-46306 | Draft candidate `API-PROC-024` Query KPIs | Approved report catalogue, KPI formulas, lineage/freshness, access/filter/pagination contract |
+
+**Disposition:** API baseline = FOUND; Chapter 463 requirement-level API bindings = NOT PROMOTED; draft catalogue entries remain unapproved. Do not invent paths or operation IDs to fill the gap. For each row, record the exact approved EM-API-001 extension/catalogue locator and change/approval reference, or a separately approved N/A decision.
