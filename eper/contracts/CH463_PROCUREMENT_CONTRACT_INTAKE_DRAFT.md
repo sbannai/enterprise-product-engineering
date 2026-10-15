@@ -85,3 +85,16 @@ This decision does not itself reissue the legacy `EM-BRD-001` Chapter 463 headin
 For REQ-46301–REQ-46306, continue to require exact approved source locators and HLD→LLD bindings, DATA/API/EVENT specifications or separately approved N/A decisions, measurable requirement-level acceptance oracles, and applicable owner approval references. Do not infer these from implementation behavior or the source-precedence decision.
 
 **Disposition:** domain identity = RESOLVED BY APPROVED OPTION A; requirement-level contract promotion = OPEN; SRC-003/G3 = OPEN / NO-GO; Business UAT = NOT AUTHORIZED / NOT EXECUTED; G9 = NOT FROZEN.
+
+## 8. Catalogue locator precision — 2026-10-15
+
+The controlled Library search returned these exact catalogue positions in `EPER_Master_Repository_v57.5.xlsx`:
+
+| Source sheet | Row index (as surfaced by source extraction) | IDs | Catalogue meaning | Authority status |
+|---|---:|---|---|---|
+| `11_Data_Entities` | 39–42 | `ENT-PROC-009`–`ENT-PROC-012` | Purchase Requisition, Purchase Requisition Line, Purchase Order, Purchase Order Line | Draft |
+| `89_PROC_Object_Catalog` | 5–8 | `PROC-OBJ-006`–`PROC-OBJ-009` | Purchase Requisition, Purchase Order, Procurement Agreement, Procurement Match | Draft |
+
+These are catalogue lookup locators, not page numbers and not approved contract bindings. The two catalogues are not one-to-one equivalent: in particular, `PROC-OBJ-008` is Procurement Agreement while the entity list's `ENT-PROC-011` is Purchase Order. Do not imply identical entity/object IDs or relationships.
+
+For REQ-46301, these entries may be cited as candidate sources for review only. The controlled requirement-level join still needs the approved procurement domain model, exact field/relationship/lifecycle locators, HLD→LLD pairing, and API/event contract mapping or separately approved N/A. All entries shown here remain Draft.
