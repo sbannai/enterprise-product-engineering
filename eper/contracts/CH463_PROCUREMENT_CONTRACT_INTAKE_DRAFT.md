@@ -169,3 +169,18 @@ For `REQ-46304` / `SRS-FR-2326`, this is supporting design evidence, not a compl
 - measurable acceptance oracle and execution/contract-test evidence.
 
 **Disposition:** shared audit contract baseline = FOUND; requirement-level audit binding = OPEN / NOT PROMOTED. No retention period, role, endpoint, event ID or test result is asserted by this section. Promotion requires exact approved source locators and the applicable owner/change-control reference.
+
+## 13. Workflow and exception contract evidence — 2026-10-15
+
+The controlled source `EM-OPS-Ch463_EPER_Shared_Contract_Specification_v1.docx`, §7 (Workflow / Exception Contract), establishes shared design principles: workflow owns process orchestration; exceptions follow approved error, disposition, escalation and recovery behaviour; retry/replay/reconciliation apply only where the approved requirement/design requires them; material exception outcomes are auditable. The same source maps `REQ-46305 / SRS-FR-2327` to Workflow + Rules + Exception/Recovery + applicable Event/Integration.
+
+The reconciliation workbook lists pattern-level candidates for REQ-46305 (`EVT-WFL-001`–`EVT-WFL-007`, `EVT-INT-001`–`EVT-INT-004`, `EVT-CFG-001`) but marks event mapping as not requirement-level promoted. These IDs are not accepted here as approved procurement events.
+
+Still required for REQ-46305:
+- approved procurement workflow/state model and transition preconditions;
+- approved exception taxonomy, disposition/escalation owners and recovery rules;
+- explicit applicability and parameters for retry, replay, reconciliation and idempotency;
+- exact DATA/API/EVENT locators and payload/version/producer/consumer details, or approved N/A for each non-applicable layer;
+- measurable acceptance oracles and executed contract/implementation evidence.
+
+**Disposition:** shared workflow/exception baseline = FOUND; requirement-level procurement workflow contract = OPEN / NOT PROMOTED. No retry count, delay, state transition, event binding or owner is inferred from the shared pattern.
