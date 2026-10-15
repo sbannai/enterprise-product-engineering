@@ -184,3 +184,17 @@ Still required for REQ-46305:
 - measurable acceptance oracles and executed contract/implementation evidence.
 
 **Disposition:** shared workflow/exception baseline = FOUND; requirement-level procurement workflow contract = OPEN / NOT PROMOTED. No retry count, delay, state transition, event binding or owner is inferred from the shared pattern.
+
+## 14. KPI/read-model API candidate qualification — 2026-10-15
+
+The controlled master repository's `103_PROC_API_Catalog` lists `API-PROC-024` as:
+- method/path: `GET /api/v1/procurement/analytics/kpis`
+- description: Query KPIs
+- permission label: `procurement:analytics`
+- catalogue status: `Draft`
+
+This exact catalogue entry is useful for locating a candidate interface, but it is **not an approved API contract**. The catalogue status must not be overwritten by this intake or treated as permission approval.
+
+For REQ-46306 / SRS-FR-2328, before promotion the controlled contract must confirm the applicable KPI definitions/formulas, dimensions and filters, tenant/organization scope, response schema, pagination/limits, freshness/refresh semantics, source lineage, authorization policy, error behaviour and an exact approved OpenAPI locator/version. Any unused operation or contract layer requires an explicit approved N/A decision.
+
+**Disposition:** `API-PROC-024` identified at its source catalogue row as a Draft candidate; REQ-46306 API binding remains OPEN / NOT PROMOTED. No KPI formula, freshness target or report acceptance threshold is inferred here.
