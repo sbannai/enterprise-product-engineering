@@ -198,3 +198,19 @@ This exact catalogue entry is useful for locating a candidate interface, but it 
 For REQ-46306 / SRS-FR-2328, before promotion the controlled contract must confirm the applicable KPI definitions/formulas, dimensions and filters, tenant/organization scope, response schema, pagination/limits, freshness/refresh semantics, source lineage, authorization policy, error behaviour and an exact approved OpenAPI locator/version. Any unused operation or contract layer requires an explicit approved N/A decision.
 
 **Disposition:** `API-PROC-024` identified at its source catalogue row as a Draft candidate; REQ-46306 API binding remains OPEN / NOT PROMOTED. No KPI formula, freshness target or report acceptance threshold is inferred here.
+
+## 15. Reporting/read-model evidence — REQ-46306 — 2026-10-15
+
+The controlled shared contract specification, §11 (Reporting / Search Contract), establishes the general design boundary: reporting consumes governed derived/read representations; applicable tenant/organization filtering and authorization apply; search uses derived searchable representations rather than uncontrolled direct access to authoritative stores. It also explicitly leaves report definitions, metrics, freshness, lineage and export rules to approved requirement-specific contracts.
+
+For REQ-46306 / SRS-FR-2328, this baseline is supporting design, not an acceptance oracle. Before promotion, the controlled requirement-level contract must identify:
+1. The approved KPI/report catalogue and version, with each metric's definition and formula.
+2. The authoritative source and derivation/lineage for each metric, including treatment of late, missing or corrected source records.
+3. Refresh/freshness expectations and the rule for communicating stale or incomplete results.
+4. Approved dimensions, filters, pagination/limits, tenant/organization isolation and authorization.
+5. Response schema, error semantics and export behaviour, or an explicit approved N/A where export is not applicable.
+6. A measurable expected-result oracle and executed contract/implementation evidence.
+
+`API-PROC-024` remains a Draft catalogue candidate only (see §14). No metric formula, freshness threshold, filter list, export permission or acceptance result is created by this entry.
+
+**Disposition:** shared reporting/read-model principles = FOUND; approved procurement KPI definitions and requirement-level report/API binding = OPEN / NOT PROMOTED.
