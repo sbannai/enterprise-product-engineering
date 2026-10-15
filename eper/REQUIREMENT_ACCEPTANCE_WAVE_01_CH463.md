@@ -2,17 +2,19 @@
 
 ## Scope
 
-- Chapter: 463 — Enterprise Event & Message Management
+- Chapter: 463 — DOMAIN IDENTITY UNRESOLVED (conflicting sources: this wave artifact says Enterprise Event & Message Management; the cited Chapter 463 BRD says Enterprise Procurement & Source-to-Pay)
 - Requirements: REQ-46301 through REQ-46306
 - SRS: SRS-FR-2323 through SRS-FR-2328
 - Wave status: EXECUTABLE ACCEPTANCE TEST PREPARED
 - Business/UAT status: PENDING
 
-## Authoritative source basis
+## Source and domain-identity control
 
-The acceptance criteria are taken from the consolidated SRS baseline for SRS-FR-2323 through SRS-FR-2328.
+**This wave is an engineering test-preparation artifact, not an authoritative domain designation or approved business acceptance baseline.** The repository contains conflicting Chapter 463 labels: this wave has historically named Enterprise Event & Message Management, while `B01_CH463_SOURCE_VERIFIED_ACCEPTANCE_CRITERIA_INTAKE.md` cites an Enterprise Procurement & Source-to-Pay BRD marked In Development. Do not choose either label by inference. The controlling approved requirement baseline and change-control disposition must resolve the conflict before these scenarios are treated as business acceptance tests.
 
-Common acceptance criteria for each requirement:
+The common technical checks below are generic service-behavior checks only; they are not domain-specific procurement or event-management acceptance criteria.
+
+Common technical checks for each requirement:
 
 1. The capability is available to the applicable actor.
 2. Stated business rules and constraints are enforced.
@@ -48,7 +50,7 @@ The automated wave shall verify:
 
 | Evidence | Status |
 |---|---|
-| BRD/SRS acceptance criteria | SOURCE-VERIFIED |
+| Generic technical checks | PREPARED; NOT DOMAIN-APPROVED |
 | Requirement-specific automated test | ADDED IN THIS WAVE |
 | CI execution | PENDING |
 | Defect/retest | PENDING |
@@ -60,6 +62,6 @@ The automated wave shall verify:
 
 ## Promotion rule
 
-Passing this automated wave establishes requirement-specific executable verification for Chapter 463. It does not by itself establish UAT, release, production, final business acceptance, or G9 closure.
+Passing this wave establishes only the generic technical behaviors actually exercised by the tests. It does not establish domain-correct requirement acceptance while Chapter 463 identity and requirement-specific oracles remain unresolved. It does not establish UAT, release, production, final business acceptance, or G9 closure.
 
-A requirement may move to ACCEPTED only after the required authoritative acceptance evidence and decision are recorded.
+A requirement may move to ACCEPTED only after the controlling Chapter 463 domain identity, authoritative source mapping, measurable acceptance evidence, and required decision are recorded.
