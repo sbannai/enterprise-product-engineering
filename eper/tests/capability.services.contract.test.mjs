@@ -5,7 +5,7 @@ import { AuthoritativeRecordService, AuthorizationService, BusinessValidationSer
 
 const context = { tenantId: "tenant-test", principalId: "principal-test", correlationId: "corr-test" };
 
-test("all six capability services reject missing operation", async () => {
+test("all six capability services reject missing operation", () => {
   const cases = [
     [new AuthoritativeRecordService(), "REQ-46301"],
     [new AuthorizationService(), "REQ-46302"],
@@ -15,27 +15,27 @@ test("all six capability services reject missing operation", async () => {
     [new GovernedReportingService(), "REQ-46306"],
   ];
   for (const [service, id] of cases) {
-    await assert.rejects(service.execute(getRequirementBinding(id), { context, payload: {} }), /CAPABILITY_OPERATION_REQUIRED/);
+    assert.throws(() => service.execute(getRequirementBinding(id), { context, payload: {} }), /CAPABILITY_OPERATION_REQUIRED/);
   }
 });
 
-test("capability pattern mismatch is rejected", async () => {
-  await assert.rejects(
-    new AuthoritativeRecordService().execute(getRequirementBinding("REQ-46302"), { context, payload: { operation: "create" } }),
+test("capability pattern mismatch is rejected", () => {
+  assert.throws(
+    () => new AuthoritativeRecordService().execute(getRequirementBinding("REQ-46302"), { context, payload: { operation: "create" } }),
     /CAPABILITY_PATTERN_MISMATCH/
   );
 });
 
-test("authoritative record mutation requires tenant context", async () => {
-  await assert.rejects(
-    new AuthoritativeRecordService().execute(getRequirementBinding("REQ-46301"), { payload: { operation: "create", record: { id: "r1", version: 1, state: "DRAFT", data: {} } } }),
+test("authoritative record mutation requires tenant context", () => {
+  assert.throws(
+    () => new AuthoritativeRecordService().execute(getRequirementBinding("REQ-46301"), { payload: { operation: "create", record: { id: "r1", version: 1, state: "DRAFT", data: {} } } }),
     /CAPABILITY_CONTEXT_REQUIRED/
   );
 });
 
-test("authorization request principal must match context principal", async () => {
-  await assert.rejects(
-    new AuthorizationService().execute(getRequirementBinding("REQ-46302"), {
+test("authorization request principal must match context principal", () => {
+  assert.throws(
+    () => new AuthorizationService().execute(getRequirementBinding("REQ-46302"), {
       context,
       payload: { operation: "decide", request: { tenantId: context.tenantId, principalId: "different-principal", action: "read", resource: "record" } }
     }),
@@ -50,8 +50,8 @@ test("validation engine rejects duplicate rule identifiers", () => {
   assert.throws(() => service.addRule(rule), /VALIDATION_RULE_DUPLICATE/);
 });
 
-test("technical execution result is not business acceptance", async () => {
-  const result = await new BusinessValidationService().execute(getRequirementBinding("REQ-46303"), {
+test("technical execution result is not business acceptance", () => {
+  const result = new BusinessValidationService().execute(getRequirementBinding("REQ-46303"), {
     context, payload: { operation: "validate", input: { sample: true } }
   });
   assert.equal(result.status, "EXECUTED");
