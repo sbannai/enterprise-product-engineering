@@ -232,3 +232,20 @@ The reconciliation workbook identifies `EVT-RUL-001` as a pattern-level event ca
 Before promoting REQ-46303 / SRS-FR-2325, the approved procurement source must provide the exact rule catalogue/version, rule identifier and owner, triggering operation/state, input fields and preconditions, deterministic outcome/error mapping, side effects and event applicability, plus measurable positive/negative acceptance examples. Where DATA/API/EVENT is not applicable, record a controlled approved N/A rather than leaving implicit assumptions.
 
 **Disposition:** shared domain/rules principles = FOUND; procurement-specific rule IDs, predicates and acceptance oracles = OPEN / NOT PROMOTED. No purchase-order, requisition, supplier, approval-limit or matching rule is invented here.
+
+## 18. Six-requirement promotion gate summary — 2026-10-15
+
+This summary consolidates the evidence gaps documented in §§8–17. It is a status index, not an approval or closure certificate.
+
+| Requirement | DATA binding | API binding | EVENT binding | Business oracle | Current promotion disposition |
+|---|---|---|---|---|---|
+| REQ-46301 | Draft entity candidates; exact approved schema/relationships absent | Shared baseline; exact operation unpromoted | EVT-DOC candidates only | Not established | BLOCKED |
+| REQ-46302 | Exact policy/data-scope attributes unbound | Shared security baseline; exact operation/policy unpromoted | EVT-TEN/SEC candidates only | Negative cross-tenant/authorization oracle not approved/executed | BLOCKED |
+| REQ-46303 | Rule fields/constraints unbound | Exact validation operation unpromoted | EVT-RUL-001 candidate only | Rule predicates and measurable outcomes not approved | BLOCKED |
+| REQ-46304 | Audit schema/retention unbound | Exact audit operation unpromoted | EVT-AUD-001 candidate only | Retention/integrity/retrieval oracle not approved | BLOCKED |
+| REQ-46305 | Workflow/exception state schema unbound | Recovery/disposition operations unpromoted | WFL/INT/CFG candidates only | State transitions and recovery parameters not approved | BLOCKED |
+| REQ-46306 | Approved KPI/read-model lineage absent | API-PROC-024 is Draft only | EVT-NOT candidates only | KPI formulas/freshness/filter oracles not approved | BLOCKED |
+
+**Promotion rule:** a row may move beyond BLOCKED only when its applicable DATA, API and EVENT layers each have an exact approved source locator and approval reference, or a controlled approved N/A decision; exact HLD→LLD binding; a measurable approved business oracle; and required contract/implementation execution evidence. Source-baseline existence, candidate IDs, code-level tests or simulated UAT alone do not satisfy this rule.
+
+**Current aggregate:** 0/6 requirements promoted to approved requirement-level contract closure by this intake; 0/6 business acceptance closures claimed. This is not a statement that no source baselines or technical checks exist. Business UAT remains NOT AUTHORIZED / NOT EXECUTED; SRC-003 remains OPEN / P0 / NO-GO; PR #148 remains draft.
