@@ -132,3 +132,26 @@ The existing `EM-API-001_OpenAPI_Specification_v1.docx` describes shared API con
 | REQ-46306 | Draft candidate `API-PROC-024` Query KPIs | Approved report catalogue, KPI formulas, lineage/freshness, access/filter/pagination contract |
 
 **Disposition:** API baseline = FOUND; Chapter 463 requirement-level API bindings = NOT PROMOTED; draft catalogue entries remain unapproved. Do not invent paths or operation IDs to fill the gap. For each row, record the exact approved EM-API-001 extension/catalogue locator and change/approval reference, or a separately approved N/A decision.
+
+## 11. DATA baseline versus procurement entity bindings — 2026-10-15
+
+The controlled reconciliation workbook confirms that `EM-DATA-001` exists as the shared database dictionary/logical ER baseline and that the baseline covers entity ownership, tenancy, keys, relationships, integrity and indexes. The same workbook explicitly requires exact entity/schema/owner validation per requirement; baseline existence alone does not prove an applicable binding or implementation.
+
+For procurement, the catalogue candidates captured in §8 are draft entries only:
+- `ENT-PROC-009` Purchase Requisition
+- `ENT-PROC-010` Purchase Requisition Line
+- `ENT-PROC-011` Purchase Order
+- `ENT-PROC-012` Purchase Order Line
+
+These entity labels do not establish physical/logical schema names, field definitions, keys, cardinality, lifecycle constraints, tenancy, ownership, or requirement applicability. The similarly numbered `PROC-OBJ-006`–`PROC-OBJ-009` entries are business-object catalogue items and must not be substituted for entity IDs.
+
+| Requirement | DATA evidence currently established | Missing before promotion |
+|---|---|---|
+| REQ-46301 | EM-DATA-001 baseline exists; draft procurement entity candidates identified | Approved domain-model locator; exact entity/field/key/relationship/owner binding or approved N/A |
+| REQ-46302 | Shared tenancy/ownership baseline exists | Exact actor/tenant data scope and policy attributes tied to approved schema |
+| REQ-46303 | Shared integrity/validation baseline exists | Approved procurement rule fields, constraints, and measurable rule oracles |
+| REQ-46304 | Shared audit-data baseline exists | Exact audit entity/schema, protected fields, retention/integrity controls and locator |
+| REQ-46305 | Shared workflow/data-integrity baseline exists | Exact exception/workflow state model, transitions, idempotency/replay state and ownership |
+| REQ-46306 | Shared reporting/index baseline exists | Approved KPI/read model, source lineage, refresh/freshness and access/filter definitions |
+
+**Disposition:** DATA baseline = FOUND; Chapter 463 requirement-level DATA bindings = NOT PROMOTED. Do not invent table names or schema fields. Promote only from the approved procurement model with exact locators, version/effective date and owner/approval reference, or an explicitly approved N/A decision.
