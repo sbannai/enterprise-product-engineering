@@ -155,3 +155,17 @@ These entity labels do not establish physical/logical schema names, field defini
 | REQ-46306 | Shared reporting/index baseline exists | Approved KPI/read model, source lineage, refresh/freshness and access/filter definitions |
 
 **Disposition:** DATA baseline = FOUND; Chapter 463 requirement-level DATA bindings = NOT PROMOTED. Do not invent table names or schema fields. Promote only from the approved procurement model with exact locators, version/effective date and owner/approval reference, or an explicitly approved N/A decision.
+
+## 12. Audit contract baseline and requirement-level gaps — 2026-10-15
+
+The controlled source `EM-OPS-Ch463_EPER_Shared_Contract_Specification_v1.docx`, §9 (Audit Contract), establishes shared baseline principles: material actions/events preserve applicable actor, tenant, action, resource, timestamp, correlation and outcome context; audit evidence is protected and append-oriented; retrieval/export is governed by authorization and classification. It explicitly leaves exact audit entity/schema and retention values open until approved requirement-level DATA/API contracts exist.
+
+For `REQ-46304` / `SRS-FR-2326`, this is supporting design evidence, not a complete acceptance contract. The following remain unbound and must not be inferred:
+- exact audit entity and schema/field names, including immutable/append-only guarantees;
+- retention duration, legal hold, deletion/expiry and integrity verification requirements;
+- authorized roles, classification, query filters and export/redaction rules;
+- exact API operation and request/response/error schema;
+- exact event name, payload/version, producer/consumer and trigger, or an approved N/A;
+- measurable acceptance oracle and execution/contract-test evidence.
+
+**Disposition:** shared audit contract baseline = FOUND; requirement-level audit binding = OPEN / NOT PROMOTED. No retention period, role, endpoint, event ID or test result is asserted by this section. Promotion requires exact approved source locators and the applicable owner/change-control reference.
