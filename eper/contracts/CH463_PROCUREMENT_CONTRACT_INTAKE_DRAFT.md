@@ -214,3 +214,11 @@ For REQ-46306 / SRS-FR-2328, this baseline is supporting design, not an acceptan
 `API-PROC-024` remains a Draft catalogue candidate only (see §14). No metric formula, freshness threshold, filter list, export permission or acceptance result is created by this entry.
 
 **Disposition:** shared reporting/read-model principles = FOUND; approved procurement KPI definitions and requirement-level report/API binding = OPEN / NOT PROMOTED.
+
+## 16. Identity, tenant and authorization contract evidence — REQ-46302 — 2026-10-15
+
+The controlled `EM-OPS-Ch463_EPER_Shared_Contract_Specification_v1.docx`, §§3–5, establishes shared identity and authorization principles: authenticated principal context is authoritative; tenant context is established server-side; tenant/organizational scope propagates to applicable operations; cross-tenant access is prevented at the authorization/data-access boundary; decisions evaluate principal, scope, action and target resource. It explicitly says exact roles, permissions, policy identifiers and resource names are requirement-specific inputs and must not be invented.
+
+For REQ-46302 / SRS-FR-2324, these shared principles are supporting design only. Before requirement-level promotion, the controlled source must establish the approved procurement actor/role set, action/resource matrix, tenant and organizational scoping attributes, separation-of-duties constraints where applicable, policy IDs/version, denial/error outcomes, and exact DATA/API locators or approved N/A decisions. Measurable negative tests must demonstrate that unauthorized and cross-tenant access is rejected; no such execution evidence is claimed here.
+
+**Disposition:** shared identity/tenant/authorization baseline = FOUND; procurement-specific policy and exact contract binding = OPEN / NOT PROMOTED. This entry does not approve a role, permission, policy identifier or acceptance result.
