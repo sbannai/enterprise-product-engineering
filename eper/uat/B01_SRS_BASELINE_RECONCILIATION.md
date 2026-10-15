@@ -3,11 +3,11 @@
 **Review date:** 2026-10-04  
 **Scope:** 48 requirements, REQ-46301–REQ-47006  
 **Controlled source reviewed:** `EM-SRS-001_FINAL_Consolidated_Software_Requirements_Baseline_v1.0.docx`, dated 2026-09-22  
-**Disposition:** Traceability mapping confirmed; baseline approval and requirement-level acceptance remain blocked.
+**Disposition:** BRD/SRS baseline approval recorded under `B01-BASELINE-APPROVAL-001` on 2026-10-11; traceability mapping confirmed; requirement-level acceptance remains blocked.
 
 ## 1. What was verified
 
-The consolidated SRS explicitly identifies Batch 010 as Chapters 451–500 and states that Batch 010 remains **WORKING DRAFT — REQUIREMENTS BASELINE PENDING APPROVAL**. The consolidation itself does not constitute formal SRS approval.
+The consolidated SRS source contains an embedded statement that Batch 010 remains **WORKING DRAFT — REQUIREMENTS BASELINE PENDING APPROVAL**. A later controlled decision record, `B01-BASELINE-APPROVAL-001` (2026-10-11), records approval of `EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx` and `EM-SRS-001_Consolidated_SRS_Chapters_463-500_v1.0.docx` as the controlled B01 requirements baseline. The decision is limited to baseline identity/version control; it does not approve requirement-specific acceptance criteria, exact HLD/LLD bindings, test cases, or UAT execution. The embedded source status and later decision must remain visible together until the controlled source is reconciled.
 
 The SRS inventory contains direct parent mappings for all 48 B01 requirements:
 
@@ -25,7 +25,7 @@ For each row, the mapping is one-to-one and follows six requirements per chapter
 | SRS IDs mapped | 48/48 | SRS-FR-2323 through SRS-FR-2370 |
 | Parent BRD IDs mapped | 48/48 | BRD-001-REQ-46301 through BRD-001-REQ-47006 |
 | Mapping disposition | CONFIRMED AGAINST SRS INVENTORY | Traceability mapping only |
-| Source approval | PENDING | Batch 010 is explicitly approval-pending |
+| Source approval | RECORDED — `B01-BASELINE-APPROVAL-001` (2026-10-11) | Later decision approves the named BRD/SRS versions for B01; embedded SRS status wording remains a source-reconciliation item |
 | Requirement-specific acceptance criteria | INSUFFICIENT / PENDING OWNER APPROVAL | Generic criteria refer back to rules and outcomes that are not specified at requirement level |
 | Business UAT execution | NOT RUN | No execution or outcome is inferred |
 | Formal UAT sign-off | NOT RECORDED | No acceptance decision is inferred |
@@ -38,7 +38,7 @@ Consequently, the SRS-to-BRD mapping can be confirmed, but **the acceptance base
 
 ## 4. Required owner decisions to unblock B01
 
-1. **D1 — Baseline:** Requirements owner records the approved/rejected/returned disposition for the exact BRD and SRS versions, with approval reference and effective date. Confirm whether the 2026-09-22 consolidated SRS may be used despite Batch 010's embedded approval-pending status.
+1. **D1 — Baseline:** The baseline identity/version decision is recorded as `B01-BASELINE-APPROVAL-001` (2026-10-11) for the named BRD/SRS versions. Reconcile the embedded approval-pending statement in the SRS against that later decision in the controlled source; do not treat this source wording conflict as a reason to erase the recorded decision or as approval of missing acceptance criteria.
 2. **D2 — Acceptance rules:** Business owner supplies or approves requirement-specific actors, preconditions, valid/invalid data, state/business rules, measurable expected outcomes, exception paths, and evidence requirements for all 48 requirements. An approved source locator is required for each rule.
 3. **D3 — Cases:** Reviewer approves, returns, or rejects each of the 48 draft cases after D1 and D2 are resolved. Record reviewer, date, decision, and reference.
 4. **D4 — Execution authority:** UAT coordinator/business owner confirms E1–E13 entry evidence and authorizes the B01 execution window/environment/testers. Only then may cases move from NOT_RUN to executed status.
@@ -47,4 +47,4 @@ Consequently, the SRS-to-BRD mapping can be confirmed, but **the acceptance base
 
 This reconciliation confirms source identity, SRS inventory mapping, and the known approval/acceptance gap. It does **not** establish baseline approval, business acceptance, execution, pass/fail outcomes, release authorization, production readiness, certification, or traceability freeze.
 
-**Current gate:** B01 remains **HOLD — BASELINE / ACCEPTANCE CRITERIA / CASE APPROVAL PENDING**.
+**Current gate:** B01 remains **HOLD — REQUIREMENT-LEVEL ACCEPTANCE / CASE APPROVAL / ENTRY EVIDENCE PENDING**.
