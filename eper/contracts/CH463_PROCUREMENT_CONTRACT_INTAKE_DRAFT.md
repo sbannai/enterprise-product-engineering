@@ -75,3 +75,13 @@ Until those fields are verified, the status must remain DRAFT or OPEN.
 - G9 traceability freeze: NOT FROZEN.
 
 **This is a controlled draft for review, not a baseline, approval, or UAT authorization.**
+
+## 7. Domain source precedence — controlled update (2026-10-15)
+
+The earlier source-recovery discussion in this draft is superseded on the domain-label question by the approved decision `B01-CH463-SOURCE-CORRECTION-DECISION-001` (Option A, approved 2026-10-12): **Volume XIII, Chapter 463 — Enterprise Procurement & Source-to-Pay is the canonical domain source.** Do not reopen the domain choice as an unresolved two-way conflict.
+
+This decision does not itself reissue the legacy `EM-BRD-001` Chapter 463 heading, approve the procurement catalogue entries, or complete requirement-level design/contract mappings. The procurement catalogue sections identified above remain Draft unless a separate controlled source proves otherwise. The correction candidate is not the approved final baseline.
+
+For REQ-46301–REQ-46306, continue to require exact approved source locators and HLD→LLD bindings, DATA/API/EVENT specifications or separately approved N/A decisions, measurable requirement-level acceptance oracles, and applicable owner approval references. Do not infer these from implementation behavior or the source-precedence decision.
+
+**Disposition:** domain identity = RESOLVED BY APPROVED OPTION A; requirement-level contract promotion = OPEN; SRC-003/G3 = OPEN / NO-GO; Business UAT = NOT AUTHORIZED / NOT EXECUTED; G9 = NOT FROZEN.
