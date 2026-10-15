@@ -265,3 +265,19 @@ This summary consolidates the evidence gaps documented in §§8–17. It is a st
 **Required promotion evidence:** approved source document/version and exact HLD/LLD section locators; audit DATA schema and retention/integrity decision; exact API operation contract; approved EVENT payload or controlled N/A; owner/approval reference and effective date; and measurable positive/negative acceptance criteria. Do not infer retention periods, invent schema IDs, or promote EVT-AUD-001 based on its candidate name.
 
 **Disposition:** REQ-46304 remains HOLD. Shared audit principles and passing technical checks do not close the requirement-level contract or business-acceptance gap.
+
+## 20. REQ-46305 — workflow and exception contract disposition
+
+**Requirement mapping:** REQ-46305 / SRS-FR-2327 / TRC-46305. The shared workflow baseline supports exception disposition, escalation and recovery; retry, replay and reconciliation only where the approved requirement/design calls for them; and auditable material exception outcomes. It does not establish the authoritative procurement lifecycle or Chapter 463 transition model.
+
+| Evidence dimension | Current finding | Promotion disposition |
+|---|---|---|
+| HLD → LLD | Exact approved requirement-level locator pair not evidenced | BLOCKED |
+| DATA | Workflow instance/state, transition history, exception payload and versioned schema are not bound to an approved Chapter 463 source | BLOCKED |
+| API | Exact command/query operations, transition preconditions, idempotency and conflict/error responses remain unpromoted | BLOCKED |
+| EVENT | EVT-WFL-001..007, EVT-INT-001..004 and EVT-CFG-001 are candidates only; exact names, payloads, producer, trigger and version are not approved bindings | BLOCKED |
+| Acceptance oracle | Permitted state transitions, denied transitions, exception ownership, escalation thresholds, retry/replay limits and terminal outcomes lack approved measurable criteria | BLOCKED |
+
+**Required promotion evidence:** the approved lifecycle/state diagram and exact HLD/LLD locators; versioned DATA schema for state and exception history; exact API operations and concurrency/idempotency behavior; approved event contracts or controlled N/A decisions; and positive, negative, duplicate-command, recovery and audit acceptance oracles. Retry/replay must not be presumed applicable merely because a shared baseline mentions them.
+
+**Disposition:** REQ-46305 remains HOLD. Candidate event families and generic workflow patterns are not a substitute for the approved procurement lifecycle contract.
