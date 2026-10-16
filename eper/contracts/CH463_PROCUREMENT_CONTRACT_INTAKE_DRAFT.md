@@ -297,3 +297,25 @@ This summary consolidates the evidence gaps documented in §§8–17. It is a st
 **Required promotion evidence:** approved HLD/LLD locators; KPI dictionary with formula, units, aggregation window, source lineage and freshness target; approved read-model DATA schema; exact API operation and authorization contract; applicable event contracts or approved N/A; and reproducible positive/negative test oracles, including tenant filtering and empty/stale data behavior.
 
 **Disposition:** REQ-46306 remains HOLD. The presence of a Draft KPI endpoint and candidate notification events does not establish approved reporting semantics or business acceptance.
+
+
+## 22. Implementation-derived shape inventory (review aid only)
+
+The following observations are taken from the capability service source on this branch. They make the existing gap concrete for the contract reviewer; they are **not** approved procurement schemas, public API definitions, event contracts, or business rules.
+
+| Capability | Shape present in implementation | Observable validation / behavior | Contract gap that remains |
+|---|---|---|---|
+| authoritative-records | Record fields: `id`, `tenantId`, `version`, `state`, `data`; store operations create/get/update/delete | Duplicate create → `RECORD_ALREADY_EXISTS`; missing record → `RECORD_NOT_FOUND`; stale expected version → `RECORD_VERSION_CONFLICT`; JSON-cloned data | Procurement aggregate types/fields, lifecycle enum, persistence guarantees, audit/history, authorization and API serialization are not specified by this interface |
+| authorization | Request: tenant, principal, action, resource; policy: tenant, optional principal, action/resource lists, ALLOW/DENY | Missing context → `AUTHORIZATION_CONTEXT_REQUIRED`; explicit DENY wins; no matching ALLOW defaults to DENY | Procurement role catalogue, delegated limits, SoD, policy administration/versioning, externally stable response and audit/event semantics remain unapproved |
+| business-validation | Generic rule id/evaluator; issues have code/message and ERROR/WARNING severity; result has valid/issues | Empty/duplicate rule IDs rejected; result invalid when any issue has ERROR severity | Procurement-specific rules, rule versions/effective dates, applicability/order, stable error catalogue and boundary oracles are absent from the generic engine |
+| audit-evidence | Evidence fields include id, tenant, requirement, action, principal, correlation, occurredAt, payload and integrityHash | Required context/fields and parseable timestamp are checked; integrity material is SHA-256 based | Approved material-event coverage, canonicalization/chain guarantees, retention, access, redaction and retrieval API contract remain open |
+| exception-handling | Exception includes tenant/requirement, code/message, state, retryCount, idempotencyKey, optional owner and timestamps; states OPEN/RETRYING/RESOLVED/ESCALATED | Tenant-scoped idempotency and state-transition logic are implemented in the in-memory store | Approved procurement exception taxonomy, transition graph, retry/backoff/compensation policy, durable delivery and event publisher/payload remain open |
+| governed-reporting | Report row includes tenant, reportId, values, sourceRequirementIds and generatedAt; query has tenant/report, optional filters/limit | Provenance required; default limit 100; positive integer limit; exact-value filters and tenant/report scoping | KPI definitions, source lineage semantics, freshness, sorting/pagination contract, empty/stale behavior and approved report catalogue remain open |
+
+### Cross-capability event boundary
+
+The registry's `EVENT:...` descriptors are identifiers only. The service interfaces inspected here do not by themselves establish a governed event publisher, named event payload schema, delivery/replay semantics, compatibility policy or a Chapter 463 event catalogue. No event should be inferred from a descriptor or from internal audit/exception state.
+
+### Review action
+
+Use these implementation shapes to seed schema and contract-test proposals, then reconcile each field/error/transition with the approved procurement source and exact HLD→LLD locators. Mark each proposal as implementation-derived until an accountable owner approves the semantics and records the approval reference. Do not promote this section to a baseline or change any UAT/gate disposition based on it.
