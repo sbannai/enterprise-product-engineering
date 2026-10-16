@@ -116,3 +116,33 @@ Complete only after D1–D3 are recorded and every applicable E1–E13 gate has 
 | Priority | B01 | Resolve Chapter 463 design/source and B01 acceptance prerequisites first |
 
 **Effect on gates:** these choices are now captured, but they do not complete D1/D2/D3/D4. In particular, the existing procurement model source and its exact locator have not been supplied; approved acceptance sources have not been evidenced row-by-row; DATA/API/EVENT specifications remain to be authored and approved; and no UAT target exists. Keep B01 **HOLD / NOT EXECUTED**, business decisions pending per requirement, G9 not frozen, and G10 not issued until the required source references, controlled approvals, and real execution evidence are present.
+
+## Closure reconciliation — 2026-10-16
+
+This section reconciles subsequent explicit owner decisions with the 2026-10-09 captured choices above. It records decisions already supplied by the requester; it does not fabricate a separate electronic signature, change-control ticket, test result, or approval artifact.
+
+| Control | Latest explicit decision/evidence | Closure disposition |
+|---|---|---|
+| D1 BRD/SRS baseline | `B01-BASELINE-APPROVAL-001`, dated 2026-10-11; requester approved EM-BRD-001 and EM-SRS-001 as the controlled B01 baseline | D1 baseline identity/version decision recorded. This does not approve every requirement-level acceptance oracle. |
+| Chapter 463 source precedence | `B01-CH463-SOURCE-CORRECTION-DECISION-001`, Option A, approved 2026-10-12: Volume XIII, Chapter 463 — Enterprise Procurement & Source-to-Pay is the canonical domain source | Domain precedence resolved. The legacy EM-BRD-001 “Enterprise Event & Message Management” heading remains correction debt until reissued under change control; do not silently rewrite the approved baseline. |
+| Design authority / LLD | `EM-LLD-001-DESIGN-AUTH-APPROVAL-001`, dated 2026-10-05; requester stated design-authority decision = APPROVE | Authority-level decision is recorded. It does not supply exact requirement-level HLD→LLD locator pairs or procurement interface contracts. |
+| Procurement domain model | Requester selected “existing model” | No new model may be invented. Exact authoritative model artifact/version/locator remains to be evidenced before requirement bindings are promoted. |
+| DATA/API/EVENT | Requester directed “specify contracts” | Draft contract definitions and tests are engineering proposals until governed approval. An absent contract must not be marked approved N/A. |
+| Business acceptance source | Requester directed “existing criteria only” | Use only criteria explicitly supported by the approved BRD/SRS. Where the existing source does not provide actor, precondition, boundary behavior and a measurable oracle, retain `CLARIFICATION_REQUIRED`; do not infer acceptance criteria from generic capability behavior. |
+| UAT environment / execution | Environment is not hosted; requester is the intended tester | Live target preflight and business UAT cannot be completed yet. No real execution or D4 authorization is recorded. |
+
+### Closure gate snapshot
+
+- **D1:** controlled BRD/SRS identity/version approval recorded; source-correction and design-binding follow-through remains.
+- **D2:** 48/48 rows remain subject to row-level acceptance-source sufficiency; retain clarification status wherever an existing approved source does not yield a measurable oracle.
+- **D3:** not approved; case-level review/decision metadata and acceptance-oracle coverage are not complete.
+- **D4:** not granted; no hosted target, approved target/build/test-data/session package, or complete E1–E13 authorization package is evidenced.
+- **SRC-003/G3:** remains OPEN / P0 / NO-GO until the six Chapter 463 requirements have exact approved HLD and LLD locators/pairs plus DATA/API/EVENT contracts or explicit approved N/A dispositions.
+- **Business UAT:** HOLD / NOT EXECUTED. CI and local/automated simulation are technical evidence, not business UAT.
+
+### Next executable closure actions
+
+1. Preserve the existing 48-row matrix and case checklist; do not bulk-change dispositions to APPROVED.
+2. Reconcile each row against existing approved BRD/SRS text and populate an approved-source locator only when that source actually specifies testable behavior. Leave unsupported rows as clarification-required.
+3. Finish the six Chapter 463 contract proposals from implementation evidence, explicitly label them draft, and route them through the already recorded design/business authority decision process; do not label candidate schemas as approved.
+4. Once a hosted UAT target and E1–E13 evidence package exist, complete D3 case review and obtain explicit D4 authorization before any business execution.
