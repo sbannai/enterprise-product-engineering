@@ -281,3 +281,49 @@ test("REQ-46306 / SRS-FR-2328: governed reporting publishes, queries and isolate
   });
   assert.equal(other.data.payload.rows.length, 0);
 });
+
+
+test("capability boundary rejects a requirement routed to the wrong service family", () => {
+  const wrongRequirement = req("REQ-46302");
+  const records = new AuthoritativeRecordService();
+
+  assert.throws(
+    () => records.execute(wrongRequirement, {
+      context: context("boundary-wrong-family"),
+      payload: {
+        operation: "create",
+        record: {
+          id: "boundary-record",
+          tenantId: "wave-01-ch463",
+          version: 1,
+          state: "OPEN",
+          data: {},
+        },
+      },
+    }),
+    /CAPABILITY_PATTERN_MISMATCH|CAPABILITY_BINDING_MISMATCH/,
+  );
+});
+
+test("state-changing authoritative-record operation rejects missing tenant context", () => {
+  const requirement = req("REQ-46301");
+  const records = new AuthoritativeRecordService();
+
+  assert.throws(
+    () => records.execute(requirement, {
+      payload: {
+        operation: "create",
+        record: {
+          id: "missing-context-record",
+          tenantId: "wave-01-ch463",
+          version: 1,
+          state: "OPEN",
+          data: {},
+        },
+      },
+    }),
+    /CAPABILITY_CONTEXT_REQUIRED/,
+  );
+
+  assert.equal(records.getRecord("wave-01-ch463", "missing-context-record"), undefined);
+});
