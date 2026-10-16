@@ -329,12 +329,12 @@ test("state-changing authoritative-record operation rejects missing tenant conte
 });
 
 
-test("authorization capability rejects a request for a different principal than the execution context", async () => {
+test("authorization capability rejects a request for a different principal than the execution context", () => {
   const requirement = req("REQ-46302");
   const service = new AuthorizationService();
 
-  await assert.rejects(
-    service.execute(requirement, {
+  assert.throws(
+    () => service.execute(requirement, {
       context: context("req-46302-principal-mismatch"),
       payload: {
         operation: "decide",
