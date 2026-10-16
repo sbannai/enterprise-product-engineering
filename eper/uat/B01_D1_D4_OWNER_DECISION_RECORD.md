@@ -146,3 +146,16 @@ This section reconciles subsequent explicit owner decisions with the 2026-10-09 
 2. Reconcile each row against existing approved BRD/SRS text and populate an approved-source locator only when that source actually specifies testable behavior. Leave unsupported rows as clarification-required.
 3. Finish the six Chapter 463 contract proposals from implementation evidence, explicitly label them draft, and route them through the already recorded design/business authority decision process; do not label candidate schemas as approved.
 4. Once a hosted UAT target and E1–E13 evidence package exist, complete D3 case review and obtain explicit D4 authorization before any business execution.
+
+## Latest controlled technical re-execution — 2026-10-16
+
+Evidence source: GitHub Actions workflow **EPER 228 Requirement Pilot Test Matrix**, run [38892734771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38892734771), commit `e2752204380fa623a4ea06c3089e119c41dc3e84`. The uploaded run artifact is `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-38892734771` (artifact ID `12042516737`).
+
+Observed results from the run artifact:
+- Chapter suites: **38/38 PASS**.
+- Pilot test assertions: **248/248 PASS**, 0 failed.
+- Requirement matrix: **228/228 automated pilot rows PASS**.
+- Local HTTP smoke: **28/28 checks PASS** across the nine chapter pilot HTTP apps.
+- The artifact explicitly labels these results **AUTOMATED PILOT / NOT BUSINESS UAT** and sets `businessAcceptance=NOT_EXECUTED` and `formalUatSignoff=NOT_EXECUTED`.
+
+The workflow is successful technical evidence for the checked-in pilot suites. It is not evidence that a business tester executed the 48 B01 cases against an approved hosted environment, and it does not approve missing business oracles or authorize D4. Keep the formal Business UAT disposition unchanged until those separate controls are completed.
