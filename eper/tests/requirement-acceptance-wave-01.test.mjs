@@ -327,3 +327,34 @@ test("state-changing authoritative-record operation rejects missing tenant conte
 
   assert.equal(records.getRecord("wave-01-ch463", "missing-context-record"), undefined);
 });
+
+
+test("authorization capability rejects a request for a different principal than the execution context", async () => {
+  const requirement = req("REQ-46302");
+  const service = new AuthorizationService();
+
+  await assert.rejects(
+    service.execute(requirement, {
+      context: context("req-46302-principal-mismatch"),
+      payload: {
+        operation: "decide",
+        request: {
+          tenantId: "wave-01-ch463",
+          principalId: "different-principal",
+          action: "material.update",
+          resource: "authoritative-record",
+        },
+        policies: [
+          {
+            tenantId: "wave-01-ch463",
+            principalId: "different-principal",
+            actions: ["material.update"],
+            resources: ["authoritative-record"],
+            effect: "ALLOW",
+          },
+        ],
+      },
+    }),
+    /AUTHORIZATION_PRINCIPAL_MISMATCH/,
+  );
+});
