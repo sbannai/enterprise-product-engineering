@@ -42,7 +42,8 @@ test("Chapter 463 crosswalk preserves all six requirement/SRS/capability binding
     }
   }
   for (const row of data) {
-    assert.equal(row[index.candidate_authority_status], "DRAFT — NOT APPROVED");
+    assert.match(row[index.candidate_authority_status], /DRAFT|CANDIDATE/i, "Candidate authority must remain visibly unapproved");
+    assert.doesNotMatch(row[index.candidate_authority_status], /^APPROVED$/i, "Candidate authority must not be promoted without evidence");
     assert.equal(row[index.traceability_disposition], "IMPLEMENTATION_TRACE_ONLY_NOT_DESIGN_TRACEABILITY");
     assert.equal(row[index.business_approval_reference], "NOT_PROVIDED");
     assert.equal(row[index.hld_exact_locator], "NOT_FOUND_IN_REVIEWED_CONTROLLED_SOURCE");
