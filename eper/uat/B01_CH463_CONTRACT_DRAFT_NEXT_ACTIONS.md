@@ -144,3 +144,12 @@ The existing acceptance resolution matrix still has all six Chapter 463 rows at 
 5. Complete E1–E13 and record explicit D4 authorization before any live Business UAT.
 
 No additional CI-only documentation commits are required unless a source record or actual workflow result changes. No AWS provisioning, no UAT execution, no requirement ID or baseline changes.
+
+
+## HLD source inspection — exact reason D7 cannot close yet (2026-10-17)
+
+Reviewed the controlled Library source `EM-HLD-001_Consolidated_HLD_Chapters_463-500_v1.0.docx`. Its own control page states `CONTROLLED DESIGN DRAFT — PENDING FORMAL ARCHITECTURE APPROVAL`. Section 2 says the supplied HLD baseline's direct numbered chapter coverage is 001–250; Chapters 463–500 must be linked through the BRD→SRS→HLD/architecture→LLD traceability chain and are not themselves direct HLD chapters in that baseline. The document provides six recurring architecture-pattern mappings, but these are not requirement-specific approved HLD section locators or formal release evidence.
+
+**Disposition for D7:** no exact HLD→LLD pair is promoted. The missing evidence is not just a locator typo: the source itself is a pending-approval design extension. To close D7, the architecture authority/document controller must provide the formally approved HLD baseline/version and explicit six-row mappings to approved LLD modules/sections, or formally approve and release this extension with those mappings. Do not cite the generic six requirement-type patterns as approved requirement-specific bindings.
+
+**Sequencing refinement:** D1–D6 require design/business/policy decisions; D7 requires architecture release and exact mappings; D8–D9 require data/API/event owners; D10 is controlled release after D1–D9. The current Library `B01_CH463_Approval_Decision_Register_v0.1.csv` lists all D1–D10 as OPEN. Existing `B01_CH463_Business_Rule_and_Acceptance_Register_v0.5.xlsx` also confirms no approved field/state catalogue, thresholds, authority/SoD matrix, audit control, exception policy or KPI contract in reviewed sources. These remain explicit approval gaps, not tasks to fill with inferred defaults.
