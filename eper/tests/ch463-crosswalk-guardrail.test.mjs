@@ -48,6 +48,6 @@ test("Chapter 463 crosswalk preserves all six requirement/SRS/capability binding
     assert.equal(row[index.business_approval_reference], "NOT_PROVIDED");
     assert.equal(row[index.hld_exact_locator], "NOT_FOUND_IN_REVIEWED_CONTROLLED_SOURCE");
     assert.match(row[index.promotion_blocker], /approved versioned HLD\/LLD exact locators/i);
-    assert.match(row[index.candidate_disposition], /Candidate only/i);
+    assert.match(row[index.candidate_disposition], /candidate(?:s)? only/i);
   }
 });
