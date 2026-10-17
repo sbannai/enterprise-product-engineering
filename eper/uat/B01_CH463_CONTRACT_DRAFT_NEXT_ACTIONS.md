@@ -48,3 +48,21 @@ The existing D1–D10 register is the authoritative decision queue. It records d
 - Business UAT: NOT AUTHORIZED / NOT EXECUTED.
 - G9: NOT FROZEN. G10: NOT ISSUED.
 - No AWS provisioning, deployment, merge or business acceptance is authorized by this draft.
+
+
+## Row-by-row evidence request for closure
+
+The approved Option A source-precedence decision is already resolved. The requests below are the remaining source-backed decisions; they must be answered from controlled artifacts, not inferred from implementation.
+
+| Requirement | Existing technical evidence (not business approval) | Controlled evidence needed to close the row |
+|---|---|---|
+| REQ-46301 / SRS-FR-2323 | Record create/read/update, lifecycle result, expected-version conflict and tenant isolation tests | Approved procurement object/field catalogue; lifecycle/state transitions and uniqueness/history rules; exact approved HLD and LLD locators; DATA schema; API concurrency/error/idempotency semantics; material-change event schema or approved N/A; measurable create/update/conflict oracles |
+| REQ-46302 / SRS-FR-2324 | Allow/deny, deny precedence and default-deny implementation tests | Approved actor-role-tenant-resource-action matrix including delegation and segregation of duties; exact approved HLD/LLD locators; policy reference DATA; allow/deny API and denial error model; audit event schema or approved N/A; negative/no-side-effect oracle |
+| REQ-46303 / SRS-FR-2325 | Registered validation-rule execution and invalid-result handling | Approved rule catalogue, mandatory fields and threshold/boundary values; exact approved HLD/LLD locators; versioned rule DATA schema; command validation/error and atomicity semantics; validation outcome event policy/schema or approved N/A; positive, negative and boundary oracles |
+| REQ-46304 / SRS-FR-2326 | Audit append/retrieval/list and SHA-256 integrity check | Approved material-event taxonomy, mandatory attribution fields, retention and access policy; exact approved HLD/LLD locators; audit record schema; retrieval filters/paging/error semantics; event envelope/schema; integrity, tenant isolation and retrieval measurable oracles |
+| REQ-46305 / SRS-FR-2327 | Idempotency and controlled exception state transitions; no scheduler/backoff/escalation-delivery proof | Approved exception taxonomy/state model, retry/backoff/compensation/escalation and terminal-state rules; exact approved HLD/LLD locators; exception DATA schema; recovery API and duplicate-effect semantics; lifecycle event schema or approved N/A; retry/terminal-state/no-duplicate oracles |
+| REQ-46306 / SRS-FR-2328 | Tenant/report-scoped query, filters and limit | Approved report catalogue, formulas, source lineage, access filters, freshness and expected totals; exact approved HLD/LLD locators; derived-report DATA definition; query API/paging/error semantics; refresh event schema or approved N/A; known-input/expected-total and cross-tenant oracles |
+
+### Promotion rule
+
+A row remains `CANDIDATE_NOT_APPROVED` until each required artifact has an exact locator, version/baseline, accountable approver and explicit disposition. A contract component may be marked approved N/A only with a recorded owner decision and rationale. Do not treat a code test passing as a business rule approval. Do not change the 228-requirement / 38-chapter baseline, requirement IDs, service boundaries, router or UI journeys.
