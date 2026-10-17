@@ -25,3 +25,28 @@
 5. Define measurable positive, negative and boundary oracles from approved sources before authorizing business UAT.
 
 **Gate decision:** SRC-003/G3 remains OPEN / NO-GO. Business UAT remains NOT AUTHORIZED. No baseline requirements or chapter identities were changed; no AWS resources or deployment are involved.
+
+
+## Closure execution queue — reconciled 2026-10-17
+
+This queue translates the existing six-row evidence matrix and D1–D10 decision register into the next actionable evidence requests. It does **not** mark any approval complete.
+
+| Row | Evidence that can be carried forward now | Exact missing closure item | Existing decision dependency | Next verification action |
+|---|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 | Requirement identity; Option A source precedence; observed generic authoritative-record service and version-conflict tests | Approved procurement object/field catalogue, lifecycle/state model, exact approved HLD/LLD pair and DATA/API/EVENT contract or approved N/A | D1, D2, D7, D8, D9 | Reconcile candidate requisition/PO entities to approved source; record exact versioned section/schema/operation/event locators only after approval |
+| REQ-46302 / SRS-FR-2324 | Requirement identity; observed deny precedence/default-deny technical behavior | Approved actor × role × tenant × resource × action matrix, delegation and SoD rules; exact design/contract locators | D1, D3, D4, D7, D8, D9 | Compare implementation behavior against an approved authority matrix; do not treat default-deny tests as proof that the business matrix is approved |
+| REQ-46303 / SRS-FR-2325 | Requirement identity; observed registered-rule execution and ERROR invalidation | Approved validation rule catalogue, requiredness/conditionality, boundary values, stable error semantics and transaction invariants | D1, D2, D5, D7, D8, D9 | Convert source-listed candidate fields into an approved field-level catalogue; leave requiredness/threshold values open until approved |
+| REQ-46304 / SRS-FR-2326 | Requirement identity; observed append/retrieve/list and SHA-256 integrity checks | Approved material-event coverage, mandatory audit fields, access/retention/failure policy and exact contracts | D4, D7, D8, D9 | Map each approved material event to the audit envelope, retention/access rules and a reproducible retrieval oracle |
+| REQ-46305 / SRS-FR-2327 | Requirement identity; observed idempotency and controlled exception state transitions | Approved exception taxonomy, retry/backoff/compensation/escalation policy, terminal-state semantics and exact contracts | D2, D3, D5, D7, D8, D9 | Trace each exception class to approved owner, allowed transitions, retry/recovery behavior and duplicate-effect test |
+| REQ-46306 / SRS-FR-2328 | Requirement identity; observed tenant/report-scoped query, filters and limit | Approved report catalogue, KPI formulas, source lineage, as-of/freshness semantics, reconciliation tolerances and exact contracts | D6, D7, D8, D9 | Bind each report to approved source fields/formula, access scope, freshness target and expected-total oracle |
+
+### Cross-row release conditions
+
+1. **D1–D6:** capture source-backed business decisions in the existing decision register with approval reference, approver/role, effective version/date and controlled evidence locator. A blank field or inferred role is not approval.
+2. **D7:** record exact approved HLD and LLD section/module locators for each row; generic pattern references and candidate labels do not count.
+3. **D8–D9:** record exact approved DATA/API/EVENT contract IDs, versions and source locators, or an explicitly authorized N/A with rationale.
+4. **Acceptance:** create measurable positive, negative and boundary oracles from approved decisions, then tie test results to exact commit/build and archived evidence.
+5. **D10:** only after the preceding evidence is complete, issue the controlled BRD/SRS/HLD/LLD/test baseline and update traceability.
+6. **Gate separation:** green CI and technical simulation are engineering evidence; they do not authorize Business UAT, freeze G9, or issue G10.
+
+**Current disposition unchanged:** D1–D10 OPEN; exact approved HLD/LLD bindings 0/6; six acceptance oracles BLOCKED; Business UAT NOT AUTHORIZED / NOT EXECUTED; G9 NOT FROZEN; G10 NOT ISSUED. No requirements, IDs, baseline counts, UI journeys, or architecture boundaries are changed.
