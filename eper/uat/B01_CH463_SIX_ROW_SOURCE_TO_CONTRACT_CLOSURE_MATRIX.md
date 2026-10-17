@@ -50,3 +50,28 @@ This queue translates the existing six-row evidence matrix and D1–D10 decision
 6. **Gate separation:** green CI and technical simulation are engineering evidence; they do not authorize Business UAT, freeze G9, or issue G10.
 
 **Current disposition unchanged:** D1–D10 OPEN; exact approved HLD/LLD bindings 0/6; six acceptance oracles BLOCKED; Business UAT NOT AUTHORIZED / NOT EXECUTED; G9 NOT FROZEN; G10 NOT ISSUED. No requirements, IDs, baseline counts, UI journeys, or architecture boundaries are changed.
+
+
+## Authoritative locator intake reconciliation — 2026-10-17
+
+Reviewed against the existing Library intake artifacts:
+- `B01_CH463_AUTHORITATIVE_HLD_LLD_SOURCE_INTAKE_v0.1.docx`: explicitly reports 0/6 exact HLD and 0/6 exact LLD locators captured; all six rows HOLD.
+- `B01_CH463_LOCATOR_CAPTURE_AND_PROMOTION_DELTA_v0.1.csv`: records candidate anchors per requirement, but classifies all as **Supporting only**, with exact HLD/LLD locators and HLD/LLD pair **NOT EVIDENCED / NOT VALIDATED**.
+- `B01_CH463_Business_Rule_and_Acceptance_Register_v0.5.xlsx`: confirms the source-listed procurement themes are useful evidence, but approved field/state catalogue, policy thresholds, authority/SoD matrix, audit control, exception policy and KPI formula contract remain absent from reviewed sources.
+
+### Candidate anchors found (do not promote)
+
+| Requirement | Candidate HLD anchor | Candidate LLD anchor | Intake disposition |
+|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | HLD-CAP-001 / HLD-463-CAP-01 | LLD-CMP-008 / LLD-CMP-007 | Supporting only; HOLD |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | HLD-CAP-002 / HLD-463-CAP-02 | LLD-CMP-003 / LLD-CMP-004 / LLD-CMP-005 | Supporting only; HOLD |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | HLD-CAP-003 / HLD-463-CAP-03 | LLD-CMP-007 / LLD-CMP-010 | Supporting only; HOLD |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | HLD-CAP-004 / HLD-463-CAP-04 | LLD-CMP-017 | Supporting only; HOLD |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | HLD-CAP-005 / HLD-463-CAP-05 | LLD-CMP-009 / LLD-CMP-010 | Supporting only; HOLD |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | HLD-CAP-006 / HLD-463-CAP-06 | LLD-CMP-016 / LLD-CMP-014 | Supporting only; HOLD |
+
+### Reconciliation result
+
+This closes the **search/reconciliation task** for the currently reviewed locator-intake artifacts, but does not close D7 or promote design traceability. The existing candidate anchor set is now explicitly visible beside each requirement in this matrix; no exact approved binding is evidenced. D7 can move only when the design authority provides an approved final HLD/LLD source or publishes requirement-specific design content through controlled change, with exact REQ/SRS/TRC links and baseline approval. Missing evidence is not an approved N/A.
+
+**Status:** D7 remains OPEN; exact approved HLD/LLD pairs 0/6; all six rows HOLD. Business UAT remains NOT AUTHORIZED / NOT EXECUTED. No requirement IDs, baseline counts, or architectural boundaries changed.
