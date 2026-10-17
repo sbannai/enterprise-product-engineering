@@ -36,6 +36,11 @@ test("Chapter 463 crosswalk preserves all six requirement/SRS/capability binding
   const [header, ...data] = rows;
   const index = Object.fromEntries(header.map((name, i) => [name, i]));
   assert.equal(data.length, 6, "Crosswalk must contain exactly six Chapter 463 rows");
+  assert.equal(new Set(data.map((row) => row[0])).size, 6, "Requirement IDs must be unique");
+  assert.equal(header.length, 32, "Crosswalk column count changed; review schema intentionally");
+  for (const requiredColumn of ["requirement_id", "srs_id", "pattern", "capability", "candidate_authority_status", "business_approval_reference", "hld_exact_locator", "traceability_disposition", "promotion_blocker", "candidate_disposition"]) {
+    assert.ok(index[requiredColumn] !== undefined, `Missing required crosswalk column: ${requiredColumn}`);
+  }
   for (let i = 0; i < expected.length; i++) {
     for (let j = 0; j < expected[i].length; j++) {
       assert.equal(data[i][j], expected[i][j], `Unexpected binding at row ${i + 1}, column ${j + 1}`);
