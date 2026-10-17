@@ -1,5 +1,7 @@
 # B01 UAT Execution Gate — Fail-Closed Decision
 
+**Technical evidence refresh — 2026-10-17.** The status document's source commit `11ae1118d15053f499903e4e27b2b133d99f2475` is verified by six successful workflows: EPER CI [38946832992](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38946832992), G9 reconciliation [38946832999](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38946832999), six-family HTTP smoke [38946833021](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38946833021), container runtime smoke [38946832996](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38946832996), 228-requirement pilot matrix [38946832988](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38946832988), and release-candidate build [38946833100](https://github.com/sbannai/enterprise-product-engineering/actions/runs/38946833100). The release job built and smoke-tested the UAT container image without pushing or deploying it. These results support technical readiness of the candidate artifact only; they do not satisfy E1–E13 target/session controls or authorize Business UAT.
+
 **Current decision: DO NOT START BUSINESS UAT.** This is a readiness disposition based on the existing Library register, not a new business-owner approval.
 
 ## Evidence basis
