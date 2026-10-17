@@ -66,3 +66,8 @@ The approved Option A source-precedence decision is already resolved. The reques
 ### Promotion rule
 
 A row remains `CANDIDATE_NOT_APPROVED` until each required artifact has an exact locator, version/baseline, accountable approver and explicit disposition. A contract component may be marked approved N/A only with a recorded owner decision and rationale. Do not treat a code test passing as a business rule approval. Do not change the 228-requirement / 38-chapter baseline, requirement IDs, service boundaries, router or UI journeys.
+
+
+## Existing owner-record reconciliation (2026-10-17)
+
+The existing `B01_D1_D4_OWNER_DECISION_RECORD.md` already names the Business Owner and Requirements Owner as `Sudheendra` and the UAT Lead as `Karuna`, with a decision date entered as 30 September 2026, 09:00 AM. The change/approval record ID and controlled evidence location are blank. D1 source selections and D2 summary are blank; D3 has only a readiness checkpoint, explicitly not approval; D4 authorization fields (named testers, target URL/environment, expected build, approved test data, session window, E1–E13 package and authorization reference) are blank. Accordingly, these entries identify the existing accountable roles but do not evidence D1/D2 approval, D3 case approval or D4 authorization. Reuse this record; do not ask the user to recreate it or fill fields already available elsewhere. Search existing controlled artifacts for the missing approval references and exact design bindings; if no authoritative record exists, retain the relevant hold and record the missing evidence as a blocker. Do not infer policy or change any requirement status from the names/date alone.
