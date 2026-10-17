@@ -1,0 +1,19 @@
+requirement_id,contract_boundary,check_id,check_type,expected_behavior,source_support_status,approval_dependency,implementation_status
+REQ-46301,authoritative-record-lifecycle,CT-46301-01,schema,Required envelope/schema fields validate and unknown versions reject,CANDIDATE_PATTERN_ONLY,Approved schema and exact HLD/LLD locator,NOT_RUN
+REQ-46301,authoritative-record-lifecycle,CT-46301-02,behavior,Successful mutation produces committed state and one corresponding material-change event,CANDIDATE_PATTERN_ONLY,Approved lifecycle transitions and event policy,NOT_RUN
+REQ-46301,authoritative-record-lifecycle,CT-46301-03,negative,Stale version or duplicate idempotency key does not silently overwrite or duplicate effects,CANDIDATE_PATTERN_ONLY,Approved concurrency/idempotency semantics,NOT_RUN
+REQ-46302,authorization-decision,CT-46302-01,behavior,Authorized actor/action/scope is allowed only by an explicit policy result,CANDIDATE_PATTERN_ONLY,Approved role/permission matrix,NOT_RUN
+REQ-46302,authorization-decision,CT-46302-02,negative,Missing/unknown policy or denied action defaults to deny with no business side effects,CANDIDATE_PATTERN_ONLY,Approved default-deny and denial semantics,NOT_RUN
+REQ-46302,authorization-decision,CT-46302-03,audit,Decision carries approved actor/scope/policy attribution without sensitive values,CANDIDATE_PATTERN_ONLY,Approved audit schema and privacy policy,NOT_RUN
+REQ-46303,validated-command,CT-46303-01,behavior,Approved valid command passes deterministic validation and commits atomically,CANDIDATE_PATTERN_ONLY,Approved rule catalogue and transaction invariants,NOT_RUN
+REQ-46303,validated-command,CT-46303-02,negative,Invalid command returns stable error classification and causes no partial commit,CANDIDATE_PATTERN_ONLY,Approved error catalogue and validation rules,NOT_RUN
+REQ-46303,validated-command,CT-46303-03,boundary,Threshold boundary cases follow the approved rule version exactly,CANDIDATE_PATTERN_ONLY,Approved numeric thresholds and rule ordering,NOT_RUN
+REQ-46304,audit-evidence,CT-46304-01,schema,Material audit event satisfies approved required attribution and correlation fields,CANDIDATE_PATTERN_ONLY,Approved event catalogue/schema/retention,NOT_RUN
+REQ-46304,audit-evidence,CT-46304-02,integrity,Audit evidence is retrievable and integrity-verifiable under approved access controls,CANDIDATE_PATTERN_ONLY,Approved integrity and retrieval contract,NOT_RUN
+REQ-46304,audit-evidence,CT-46304-03,negative,Unauthorized or cross-tenant retrieval is rejected,CANDIDATE_PATTERN_ONLY,Approved tenant/access policy,NOT_RUN
+REQ-46305,exception-recovery,CT-46305-01,behavior,Allowed exception state transitions emit only policy-approved lifecycle events,CANDIDATE_PATTERN_ONLY,Approved exception taxonomy and state model,NOT_RUN
+REQ-46305,exception-recovery,CT-46305-02,negative,Retry/replay does not cause duplicate business effects and obeys approved limits,CANDIDATE_PATTERN_ONLY,Approved retry/idempotency/compensation policy,NOT_RUN
+REQ-46305,exception-recovery,CT-46305-03,recovery,Terminal failures are visible and recoverable according to approved escalation/dead-letter policy,CANDIDATE_PATTERN_ONLY,Approved escalation and recovery policy,NOT_RUN
+REQ-46306,governed-report-query,CT-46306-01,behavior,Report result matches approved metric definition and source lineage for a fixed fixture,CANDIDATE_PATTERN_ONLY,Approved KPI formula and lineage,NOT_RUN
+REQ-46306,governed-report-query,CT-46306-02,negative,Queries enforce tenant access and approved filter/as-of semantics,CANDIDATE_PATTERN_ONLY,Approved report access and query contract,NOT_RUN
+REQ-46306,governed-report-query,CT-46306-03,freshness,Freshness and reconciliation indicators obey the approved SLA and tolerance,CANDIDATE_PATTERN_ONLY,Approved freshness SLA and reconciliation tolerance,NOT_RUN
