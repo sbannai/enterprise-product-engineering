@@ -128,3 +128,19 @@ All six workflows passed for the technical-test-to-closure document commit `c945
 | P1 | Complete E1–E13 target/session/test-data/evidence readiness controls | UAT environment owner + security/IAM + business owner | Approved HTTPS target/build, protected environment, tester/session/OAuth/tenant roles, data, audit/report access and evidence archive | Required before D4 authorization and live UAT |
 
 **Sequencing rule:** execute P0 source/design/data/API/event closure first; then approve measurable oracles; then complete E1–E13 and obtain explicit D4 authorization. Do not run Business UAT early or claim G9 freeze/G10 certificate. Option A, all requirement IDs, six service boundaries/router, and the 228/38 baseline remain unchanged. No AWS resource provisioning.
+
+
+## Current verification and next handoff — 2026-10-17 05:02 IST
+
+The prioritized-closure commit `36c4ef4bc5372888df9d83b6c9f3727848e90d7f` is partially green at this check: G9 reconciliation passed [39004750573], EPER CI passed [39004750585], 228 requirement pilot matrix passed [39004750595], and container runtime smoke passed [39004750572]. Six-family HTTP smoke [39004750587] and release-candidate build [39004750569] remain in progress. Do not call the commit fully green until both finish.
+
+The existing acceptance resolution matrix still has all six Chapter 463 rows at `CLARIFICATION_REQUIRED` / `LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING`; it does not contain owner-approved measurable oracles. Do not convert the candidate oracle CSV into approved acceptance criteria or fill the matrix by inference.
+
+**Immediate next handoff (no duplicate tracker):**
+1. Use the existing CH463 approval decision register D1–D10 as the controlling register.
+2. Ask the design authority/document controller for one controlled release packet covering corrected/reissued Chapter 463 BRD, formal EM-LLD-001 release, and six exact HLD→LLD pairs.
+3. Ask the procurement data/API/event owners to annotate the same six rows with exact schema/operation/event versions or explicitly approved N/A, with source locator and approver reference.
+4. Ask the business owner/UAT lead to approve measurable oracles against those released sources; only then clear D2/D3 review.
+5. Complete E1–E13 and record explicit D4 authorization before any live Business UAT.
+
+No additional CI-only documentation commits are required unless a source record or actual workflow result changes. No AWS provisioning, no UAT execution, no requirement ID or baseline changes.
