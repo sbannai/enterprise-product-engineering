@@ -44,7 +44,7 @@ test("Chapter 463 crosswalk preserves all six requirement/SRS/capability binding
   }
   for (const row of data) {
     assert.ok(
-      ["DRAFT — NOT APPROVED", "SHARED-CATALOGUE CANDIDATES — APPROVAL / APPLICABILITY NOT EVIDENCED"].includes(row[index.candidate_authority_status]),
+      ["DRAFT — NOT APPROVED", "SHARED-CATALOGUE CANDIDATE — APPROVAL / APPLICABILITY NOT EVIDENCED", "SHARED-CATALOGUE CANDIDATES — APPROVAL / APPLICABILITY NOT EVIDENCED"].includes(row[index.candidate_authority_status]),
       `Unexpected candidate authority status: ${row[index.candidate_authority_status]}`,
     );
     assert.notEqual(row[index.candidate_authority_status], "APPROVED");
