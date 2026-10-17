@@ -75,3 +75,27 @@ Reviewed against the existing Library intake artifacts:
 This closes the **search/reconciliation task** for the currently reviewed locator-intake artifacts, but does not close D7 or promote design traceability. The existing candidate anchor set is now explicitly visible beside each requirement in this matrix; no exact approved binding is evidenced. D7 can move only when the design authority provides an approved final HLD/LLD source or publishes requirement-specific design content through controlled change, with exact REQ/SRS/TRC links and baseline approval. Missing evidence is not an approved N/A.
 
 **Status:** D7 remains OPEN; exact approved HLD/LLD pairs 0/6; all six rows HOLD. Business UAT remains NOT AUTHORIZED / NOT EXECUTED. No requirement IDs, baseline counts, or architectural boundaries changed.
+
+
+## DATA/API/EVENT source reconciliation — 2026-10-17
+
+Reviewed the existing `B01_CH463_DATA_API_EVENT_APPLICABILITY_MATRIX_v0.1.md` and `SRC-003_CH463_AUTHORITATIVE_DESIGN_EVIDENCE_RESPONSE_TRACKER.csv` on the current branch.
+
+- The applicability matrix confirms platform source packages `EM-DATA-001`, `EM-API-001`, and `EM-EVT-001` exist, but says the exact requirement-level join is open and contract-test evidence is not established.
+- The matrix marks DATA/API/EVENT applicability for each REQ-46301–REQ-46306 as **CLARIFICATION REQUIRED**; generic platform entities, endpoints and event types are candidates only.
+- The response tracker has six requirement rows, but required HLD/LLD locators, pairing, DATA/API/EVENT contract-or-approved-N/A fields, approval authority/reference, effective date, source version and owner fields are blank; response status remains PENDING and verification NOT_VERIFIED for all six rows.
+
+### Row-level next action
+
+For each requirement, retain the generic platform source as supporting evidence only. The accountable design/data/API/event owners must supply the exact source version and locator, declare applicability or explicitly approve N/A with rationale, and provide approval reference/effective date. Do not turn blank fields into inferred contract names or N/A decisions.
+
+| Requirement | DATA/API/EVENT state from existing matrix | Tracker disposition |
+|---|---|---|
+| REQ-46301 / SRS-FR-2323 | Clarification required: procurement aggregate, lifecycle operations and event producer/consumer binding unverified | Pending / not verified |
+| REQ-46302 / SRS-FR-2324 | Clarification required: procurement actor/resource/tenant authorization join and security-event applicability unverified | Pending / not verified |
+| REQ-46303 / SRS-FR-2325 | Clarification required: approved procurement rule model, validation operation and rule-published event applicability unverified | Pending / not verified |
+| REQ-46304 / SRS-FR-2326 | Clarification required: audit field schema, procurement audit operation and event payload/scope unverified | Pending / not verified |
+| REQ-46305 / SRS-FR-2327 | Clarification required: exception/recovery schema, command and lifecycle event binding unverified | Pending / not verified |
+| REQ-46306 / SRS-FR-2328 | Clarification required: reporting read model, query contract and refresh event applicability unverified | Pending / not verified |
+
+**Disposition unchanged:** D8–D9 remain OPEN. No DATA/API/EVENT contract is VERIFIED, and no approved N/A is evidenced. Exact approved HLD/LLD locators remain 0/6; Business UAT remains NOT AUTHORIZED / NOT EXECUTED.
