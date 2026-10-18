@@ -40,7 +40,8 @@ test("Chapter 463 owner disposition worksheet has six preserved IDs and no infer
   ];
   for (let i = 0; i < expected.length; i++) {
     for (let j = 0; j < expected[i].length; j++) {
-      assert.equal(data[i][j], expected[i][j], `Unexpected mapping at worksheet row ${i + 2}`);
+      const expectedField = ["requirement_id", "srs_id", "trc_id", "candidate_capability"][j];
+      assert.equal(data[i][idx[expectedField]], expected[i][j], `Unexpected mapping at worksheet row ${i + 2}, field ${expectedField}`);
     }
   }
   for (const name of [
