@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { JsonFileAuditEvidenceStore } from "../dist/packages/capabilities/json-file-audit-evidence-store.js";
 import { InMemoryAuditEvidenceStore } from "../dist/packages/capabilities/audit-evidence.js";
 
 const evidence = {
@@ -84,4 +88,19 @@ test("audit evidence rejects non-string context and action fields before storage
   assert.throws(() => store.append({ ...evidence, action: 9 }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
   assert.throws(() => store.append({ ...evidence, occurredAt: null }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
   assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
+});
+
+
+test("JSON-file audit store rejects malformed fields before persistence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-"));
+  try {
+    const store = new JsonFileAuditEvidenceStore(join(directory, "audit.json"));
+    assert.throws(() => store.append({ ...evidence, id: 42 }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+    assert.throws(() => store.append({ ...evidence, tenantId: null }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+    assert.throws(() => store.append({ ...evidence, action: 9 }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
+    assert.throws(() => store.append({ ...evidence, occurredAt: "not-a-date" }), /AUDIT_EVIDENCE_TIMESTAMP_INVALID/);
+    assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
