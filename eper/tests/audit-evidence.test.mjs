@@ -155,6 +155,28 @@ test("audit integrity verification and read isolation match across adapters", ()
   }
 });
 
+test("audit evidence IDs are unique within a tenant but isolated across tenants", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-tenant-identity-"));
+  try {
+    const stores = [
+      new InMemoryAuditEvidenceStore(),
+      new JsonFileAuditEvidenceStore(join(directory, "audit.json")),
+    ];
+    for (const store of stores) {
+      const tenantA = store.append(evidence);
+      const tenantB = store.append({ ...evidence, tenantId: "tenant-b", payload: { recordId: "r2" } });
+      assert.equal(tenantA.id, tenantB.id);
+      assert.equal(store.get("tenant-a", evidence.id).tenantId, "tenant-a");
+      assert.equal(store.get("tenant-b", evidence.id).tenantId, "tenant-b");
+      assert.throws(() => store.append(evidence), /AUDIT_EVIDENCE_ALREADY_EXISTS/);
+      assert.equal(store.listByRequirement("tenant-a", evidence.requirementId).length, 1);
+      assert.equal(store.listByRequirement("tenant-b", evidence.requirementId).length, 1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file audit store rejects malformed fields before persistence", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-audit-"));
   try {
