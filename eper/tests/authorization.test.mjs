@@ -79,3 +79,31 @@ test("authorization rejects incomplete context", () => {
     /AUTHORIZATION_CONTEXT_REQUIRED/,
   );
 });
+
+
+test("authorization rejects malformed policies without mutating policy store", () => {
+  const service = new InMemoryAuthorizationService();
+  const invalidPolicies = [
+    { tenantId: "", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+    { tenantId: "tenant-a", actions: [], resources: ["record:r1"], effect: "ALLOW" },
+    { tenantId: "tenant-a", actions: [" "], resources: ["record:r1"], effect: "ALLOW" },
+    { tenantId: "tenant-a", actions: ["READ"], resources: [], effect: "ALLOW" },
+    { tenantId: "tenant-a", actions: ["READ"], resources: ["record:r1"], effect: "MAYBE" },
+    { tenantId: "tenant-a", principalId: " ", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+  ];
+  for (const policy of invalidPolicies) {
+    assert.throws(() => service.addPolicy(policy), /AUTHORIZATION_POLICY_INVALID/);
+  }
+  assert.deepEqual(service.snapshot(), []);
+});
+
+test("authorization rejects malformed runtime request fields", () => {
+  const service = new InMemoryAuthorizationService();
+  for (const request of [
+    null,
+    { tenantId: "tenant-a", principalId: "user-a", action: " ", resource: "record:r1" },
+    { tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "" },
+  ]) {
+    assert.throws(() => service.decide(request), /AUTHORIZATION_CONTEXT_REQUIRED/);
+  }
+});
