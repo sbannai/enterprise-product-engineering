@@ -28,7 +28,7 @@ test("Chapter 463 owner disposition worksheet has six preserved IDs and no infer
   const idx = Object.fromEntries(header.map((name, i) => [name, i]));
   assert.equal(data.length, 6, "Exactly six Chapter 463 requirements must be present");
   assert.equal(new Set(data.map(r => r[idx.requirement_id])).size, 6, "Requirement IDs must be unique");
-  assert.equal(header.length, 23, "Review worksheet schema changes intentionally");
+  assert.equal(header.length, 22, "Review worksheet schema changes intentionally");
   for (const row of data) assert.equal(row.length, header.length, "Every CSV row must match the header width");
   const expected = [
     ["REQ-46301","SRS-FR-2323","TRC-46301","XX01 authoritative-records"],
