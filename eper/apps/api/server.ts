@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
+import { handlePaymentRoute } from "./payments.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -80,7 +81,9 @@ export function createAppServer(): Server {
     const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
     if (request.method === "POST" && uatCapabilityMatch) {
       if (process.env.EPER_UAT_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        if (await handlePaymentRoute(request, response, requestUrl.pathname)) return;
+
+    sendJson(response, 404, { error: "not_found" });
         return;
       }
 
