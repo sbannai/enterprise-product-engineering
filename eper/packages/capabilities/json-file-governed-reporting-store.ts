@@ -22,6 +22,7 @@ export class JsonFileGovernedReportingStore {
             typeof row.generatedAt !== "string" || Number.isNaN(Date.parse(row.generatedAt)) ||
             !Array.isArray(row.sourceRequirementIds) || row.sourceRequirementIds.length === 0 ||
             !row.sourceRequirementIds.every(id => typeof id === "string" && id.trim().length > 0) ||
+            new Set(row.sourceRequirementIds).size !== row.sourceRequirementIds.length ||
             !row.values || typeof row.values !== "object" || Array.isArray(row.values)) throw new Error();
       }
       return parsed as ReportRow[];
@@ -47,6 +48,9 @@ export class JsonFileGovernedReportingStore {
     if (!Array.isArray(row.sourceRequirementIds) || row.sourceRequirementIds.length === 0 ||
         !row.sourceRequirementIds.every(id => typeof id === "string" && id.trim().length > 0)) {
       throw new Error("REPORT_PROVENANCE_REQUIRED");
+    }
+    if (new Set(row.sourceRequirementIds).size !== row.sourceRequirementIds.length) {
+      throw new Error("REPORT_PROVENANCE_DUPLICATE");
     }
     if (!row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
       throw new Error("REPORT_VALUES_INVALID");
