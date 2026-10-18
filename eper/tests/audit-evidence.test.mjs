@@ -91,6 +91,17 @@ test("audit evidence rejects non-string context and action fields before storage
 });
 
 
+test("in-memory audit store matches JSON-file payload validation errors", () => {
+  const store = new InMemoryAuditEvidenceStore();
+  assert.throws(() => store.append({ ...evidence, payload: null }), /AUDIT_PAYLOAD_INVALID/);
+  assert.throws(() => store.append({ ...evidence, payload: [] }), /AUDIT_PAYLOAD_INVALID/);
+  assert.throws(() => store.append({ ...evidence, payload: "not-an-object" }), /AUDIT_PAYLOAD_INVALID/);
+  const circular = {};
+  circular.self = circular;
+  assert.throws(() => store.append({ ...evidence, payload: circular }), /AUDIT_PAYLOAD_NOT_SERIALIZABLE/);
+  assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
+});
+
 test("JSON-file audit store rejects malformed fields before persistence", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-audit-"));
   try {
