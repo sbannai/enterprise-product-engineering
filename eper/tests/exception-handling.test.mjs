@@ -207,3 +207,24 @@ test("JSON-file exception store rejects duplicate audit IDs in one tenant", () =
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("JSON-file exception store rejects malformed audit inputs before persistence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-input-"));
+  const file = join(directory, "state.json");
+  try {
+    const store = new JsonFileExceptionStore(file);
+    const valid = {
+      id: "audit-1", tenantId: "tenant-a", requirementId: "REQ-46305",
+      principalId: "tester-1", correlationId: "corr-1", action: "EXCEPTION_CREATED",
+      occurredAt: "2026-10-18T11:00:00Z", payload: { exceptionId: "ex-1" },
+    };
+    assert.throws(() => store.append({ ...valid, id: 42 }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+    assert.throws(() => store.append({ ...valid, action: " " }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
+    assert.throws(() => store.append({ ...valid, occurredAt: "not-a-date" }), /AUDIT_EVIDENCE_TIMESTAMP_INVALID/);
+    assert.throws(() => store.append({ ...valid, payload: [] }), /AUDIT_PAYLOAD_INVALID/);
+    assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46305"), []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
