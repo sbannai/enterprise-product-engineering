@@ -32,3 +32,17 @@ Do not execute any business scenario until the controlled session record referen
 ## Current disposition
 
 **BLOCKED — DO NOT EXECUTE.** No current evidence supports changing the seven readiness controls to closed. This file does not authorize UAT, change the 228-requirement/38-chapter baseline, provision infrastructure, or certify a gate.
+
+## Operator-supplied hosted health evidence — 2026-10-18 13:08 UTC
+
+The operator supplied the following live health response for the documented Render target:
+
+```json
+{"status":"ok","service":"eper-api","buildId":"8825c0f8b9cf8a523e2943dbf2ce0a5a2d74b959"}
+```
+
+Disposition: health endpoint response is reported as OK. The reported build ID is `8825c0f8b9cf8a523e2943dbf2ce0a5a2d74b959`, which does **not** match the current PR #151 head commit `89527aff8e61f16994a3fe766924878cb6dff123`. Do not infer that the approved candidate is deployed. Obtain a fresh target health/build response after the approved deployment and reconcile it to the exact approved commit. This operator-supplied response is not independently fetched by this workflow and does not prove allowlist, OAuth, synthetic-data, audit/report access, or session authorization.
+
+The six repository workflows completed successfully for PR #151 head `89527aff8e61f16994a3fe766924878cb6dff123`: EPER CI, G9 reconciliation, six-family capability HTTP smoke, container runtime smoke, 228-requirement pilot matrix, and release-candidate build. These remain CI evidence, not hosted Business UAT.
+
+**Updated disposition:** target health reported OK; candidate-build reconciliation **MISMATCH / OPEN**; B01 remains **BLOCKED — DO NOT EXECUTE**. Do not change any other readiness control on the basis of this health response alone.
