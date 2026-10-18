@@ -59,3 +59,43 @@ test("service execution does not emit business acceptance", async () => {
   assert.equal(Object.hasOwn(result, "businessAcceptance"), false);
   assert.equal(Object.hasOwn(result, "accepted"), false);
 });
+
+
+test("audit capability binds tenant, principal, and correlation to execution context", async () => {
+  const service = new AuditEvidenceService();
+  const supplied = {
+    id: "audit-context-1",
+    tenantId: context.tenantId,
+    requirementId: "REQ-46304",
+    action: "CREATE",
+    principalId: "caller-supplied-principal",
+    correlationId: "caller-supplied-correlation",
+    occurredAt: "2026-10-18T10:00:00Z",
+    payload: { recordId: "record-1" },
+  };
+  const result = await service.execute(getRequirementBinding("REQ-46304"), {
+    context,
+    payload: { operation: "append", evidence: supplied },
+  });
+  assert.equal(result.data.payload.evidence.tenantId, context.tenantId);
+  assert.equal(result.data.payload.evidence.principalId, context.principalId);
+  assert.equal(result.data.payload.evidence.correlationId, context.correlationId);
+});
+
+test("audit capability rejects a caller-supplied tenant mismatch and missing evidence", () => {
+  const service = new AuditEvidenceService();
+  assert.throws(
+    () => service.execute(getRequirementBinding("REQ-46304"), {
+      context,
+      payload: { operation: "append", evidence: { tenantId: "other-tenant" } },
+    }),
+    /TENANT_CONTEXT_MISMATCH/
+  );
+  assert.throws(
+    () => service.execute(getRequirementBinding("REQ-46304"), {
+      context,
+      payload: { operation: "append" },
+    }),
+    /AUDIT_EVIDENCE_REQUIRED/
+  );
+});
