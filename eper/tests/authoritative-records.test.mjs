@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileAuthoritativeRecordStore } from "../dist/packages/capabilities/json-file-authoritative-record-store.js";
@@ -116,12 +116,14 @@ test("JSON-file record store enforces in-memory validation before persistence", 
 
 test("JSON-file record store rejects malformed persisted records on read", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-records-corrupt-"));
+  const file = join(directory, "records.json");
   try {
-    const file = join(directory, "records.json");
     const store = new JsonFileAuthoritativeRecordStore(file);
     store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} });
-    // Corruption is covered by the persistence adapter's read contract in the dedicated malformed-file test.
-    assert.equal(store.get("tenant-a", "r1").version, 1);
+    const persisted = JSON.parse(readFileSync(file, "utf8"));
+    persisted[0].version = 1.5;
+    writeFileSync(file, JSON.stringify(persisted));
+    assert.throws(() => store.get("tenant-a", "r1"), /PERSISTENCE_DATA_INVALID/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
