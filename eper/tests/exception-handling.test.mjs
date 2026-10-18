@@ -56,6 +56,29 @@ test("exception workflow enforces idempotency and valid transitions", () => {
   );
 });
 
+test("exception identity and idempotency are tenant-scoped in both adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-tenant-parity-"));
+  try {
+    const stores = [
+      new InMemoryExceptionStore(),
+      new JsonFileExceptionStore(join(directory, "exceptions.json")),
+    ];
+    for (const store of stores) {
+      const tenantA = store.create({ ...base, tenantId: "tenant-a" });
+      const tenantARetry = store.create({ ...base, tenantId: "tenant-a" });
+      const tenantB = store.create({ ...base, tenantId: "tenant-b", requirementId: "REQ-46306" });
+      assert.equal(tenantARetry.id, tenantA.id);
+      assert.equal(tenantB.id, tenantA.id);
+      assert.equal(store.get("tenant-a", "ex-1").requirementId, "REQ-46305");
+      assert.equal(store.get("tenant-b", "ex-1").requirementId, "REQ-46306");
+      assert.equal(store.get("tenant-c", "ex-1"), undefined);
+      assert.equal(store.snapshot().length, 2);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("exception workflow rejects cross-tenant access and incomplete context", () => {
   const store = new InMemoryExceptionStore();
   store.create(base);
