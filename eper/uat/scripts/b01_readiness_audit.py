@@ -94,13 +94,22 @@ def audit_records(checklist, gates, capture, gaps):
     if len(accepted) != 228:
         blockers.append({"gate": "requirement-level business acceptance", "count": 228 - len(accepted),
                          "detail": "Each requirement needs an accepted outcome, named business approver, approval date, and evidence archive reference."})
+
+    business_uat_executed = (
+        len(capture) == 228
+        and set(capture_ids) == expected_capture_ids
+        and len(set(capture_ids)) == 228
+        and len(accepted) == 228
+        and not not_run
+        and not integrity_errors
+        and not blockers
+    )
     return {
         "schemaVersion": 1,
         "report": "eper-b01-business-uat-readiness-audit",
         "mode": "READ_ONLY",
         "readiness": "BLOCKED" if blockers or integrity_errors else "READY_FOR_AUTHORIZED_OWNER_CONFIRMATION",
-        "businessUatExecuted": len(capture) == 228 and set(capture_ids) == expected_capture_ids
-                               and len(set(capture_ids)) == 228 and len(accepted) == 228 and not not_run,
+        "businessUatExecuted": business_uat_executed,
         "counts": {
             "b01Cases": len(checklist),
             "b01Gaps": len(gaps),
