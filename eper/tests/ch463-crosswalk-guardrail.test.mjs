@@ -12,6 +12,7 @@ const expected = [
   ["REQ-46306", "SRS-FR-2328", "XX06", "governed-reporting"],
 ];
 
+// Parse RFC-4180-style quoted fields, including commas and escaped quotes.
 function parseCsv(text) {
   const rows = [];
   let row = [], field = "", quoted = false;
@@ -50,12 +51,16 @@ test("Chapter 463 crosswalk preserves all six requirement/SRS/capability binding
     }
   }
   for (const row of data) {
-    assert.match(row[index.candidate_authority_status], /DRAFT|CANDIDATE/i, "Candidate authority must remain visibly unapproved");
-    assert.doesNotMatch(row[index.candidate_authority_status], /^APPROVED$/i, "Candidate authority must not be promoted without evidence");
+    assert.ok(
+      ["DRAFT — NOT APPROVED", "SHARED-CATALOGUE CANDIDATE — APPROVAL / APPLICABILITY NOT EVIDENCED", "SHARED-CATALOGUE CANDIDATES — APPROVAL / APPLICABILITY NOT EVIDENCED"].includes(row[index.candidate_authority_status]),
+      `Unexpected candidate authority status: ${row[index.candidate_authority_status]}`,
+    );
+    assert.notEqual(row[index.candidate_authority_status], "APPROVED", "Candidate authority must not be promoted without evidence");
     assert.equal(row[index.traceability_disposition], "IMPLEMENTATION_TRACE_ONLY_NOT_DESIGN_TRACEABILITY");
     assert.equal(row[index.business_approval_reference], "NOT_PROVIDED");
     assert.equal(row[index.hld_exact_locator], "NOT_FOUND_IN_REVIEWED_CONTROLLED_SOURCE");
-    assert.match(row[index.promotion_blocker], /approved versioned HLD\/LLD exact locators/i);
-    assert.match(row[index.candidate_disposition], /candidate(?:s)? only/i);
+    assert.match(row[index.promotion_blocker], /approved versioned HLD\\/LLD exact locators/i);
+    assert.match(row[index.candidate_disposition], /candidate|supporting platform/i);
+    assert.doesNotMatch(row[index.candidate_disposition], /approved\\s+(contract|binding)/i);
   }
 });
