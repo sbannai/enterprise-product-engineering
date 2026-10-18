@@ -240,3 +240,16 @@ test("JSON-file exception store validates legacy array rows instead of bypassing
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("JSON-file exception store preserves valid legacy array compatibility", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-legacy-valid-exceptions-"));
+  const file = join(directory, "state.json");
+  try {
+    writeFileSync(file, JSON.stringify([{ ...base, state: "OPEN", retryCount: 0, updatedAt: base.createdAt }]));
+    const store = new JsonFileExceptionStore(file);
+    assert.equal(store.snapshot().length, 1);
+    assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
