@@ -85,6 +85,38 @@ test("exception callback failures preserve identical pre-commit behavior across 
   }
 });
 
+test("exception create and transition validation errors match across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-validation-parity-"));
+  try {
+    const stores = [
+      new InMemoryExceptionStore(),
+      new JsonFileExceptionStore(join(directory, "exceptions.json")),
+    ];
+    const invalidCreates = [
+      [{ ...base, tenantId: " " }, /EXCEPTION_CONTEXT_REQUIRED/],
+      [{ ...base, message: " " }, /EXCEPTION_INPUT_INVALID/],
+      [{ ...base, createdAt: "not-a-date" }, /EXCEPTION_INPUT_INVALID/],
+      [{ ...base, owner: " " }, /EXCEPTION_INPUT_INVALID/],
+    ];
+    const invalidPatches = [
+      [{ state: "UNKNOWN" }, /EXCEPTION_STATE_INVALID/],
+      [{ owner: " " }, /EXCEPTION_OWNER_INVALID/],
+      [{ message: " " }, /EXCEPTION_MESSAGE_INVALID/],
+      [null, /EXCEPTION_PATCH_INVALID/],
+      [[], /EXCEPTION_PATCH_INVALID/],
+    ];
+    for (const store of stores) {
+      for (const [input, error] of invalidCreates) assert.throws(() => store.create(input), error);
+      store.create(base);
+      for (const [patch, error] of invalidPatches) assert.throws(() => store.transition("tenant-a", "ex-1", patch), error);
+      assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+      assert.equal(store.get("tenant-a", "ex-1").retryCount, 0);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("exception lifecycle transition rules and retry counts match across adapters", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-exception-transition-parity-"));
   try {
