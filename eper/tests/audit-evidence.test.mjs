@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileAuditEvidenceStore } from "../dist/packages/capabilities/json-file-audit-evidence-store.js";
@@ -100,6 +100,26 @@ test("JSON-file audit store rejects malformed fields before persistence", () => 
     assert.throws(() => store.append({ ...evidence, action: 9 }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
     assert.throws(() => store.append({ ...evidence, occurredAt: "not-a-date" }), /AUDIT_EVIDENCE_TIMESTAMP_INVALID/);
     assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("JSON-file audit store rejects tampered and duplicate persisted evidence on read", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-corrupt-"));
+  const file = join(directory, "audit.json");
+  try {
+    const store = new JsonFileAuditEvidenceStore(file);
+    store.append(evidence);
+    const persisted = JSON.parse(readFileSync(file, "utf8"));
+    persisted[0].payload.recordId = "tampered";
+    writeFileSync(file, JSON.stringify(persisted));
+    assert.throws(() => store.get("tenant-a", "ev-1"), /PERSISTENCE_DATA_INVALID/);
+    persisted[0].payload.recordId = "r1";
+    persisted.push({ ...persisted[0] });
+    writeFileSync(file, JSON.stringify(persisted));
+    assert.throws(() => store.listByRequirement("tenant-a", "REQ-46304"), /PERSISTENCE_DATA_INVALID/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
