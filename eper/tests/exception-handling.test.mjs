@@ -91,17 +91,17 @@ test("retry count increments only on retry transitions", () => {
 });
 
 
-test("exception creation rejects malformed fields and timestamps", () => {
+test("exception creation rejects malformed fields and timestamps with stable error codes", () => {
   const store = new InMemoryExceptionStore();
   for (const input of [
-    { ...base, id: "" },
-    { ...base, message: " " },
-    { ...base, code: "" },
-    { ...base, idempotencyKey: "" },
-    { ...base, createdAt: "not-a-date" },
-    { ...base, owner: "" },
+    { input: { ...base, id: "" }, error: /EXCEPTION_CONTEXT_REQUIRED/ },
+    { input: { ...base, message: " " }, error: /EXCEPTION_INPUT_INVALID/ },
+    { input: { ...base, code: "" }, error: /EXCEPTION_CONTEXT_REQUIRED/ },
+    { input: { ...base, idempotencyKey: "" }, error: /EXCEPTION_CONTEXT_REQUIRED/ },
+    { input: { ...base, createdAt: "not-a-date" }, error: /EXCEPTION_INPUT_INVALID/ },
+    { input: { ...base, owner: "" }, error: /EXCEPTION_INPUT_INVALID/ },
   ]) {
-    assert.throws(() => store.create(input), /EXCEPTION_INPUT_INVALID/);
+    assert.throws(() => store.create(input.input), input.error);
   }
 });
 
