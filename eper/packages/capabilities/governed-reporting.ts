@@ -46,6 +46,9 @@ export class InMemoryGovernedReportingService {
         !row.sourceRequirementIds.every((id) => typeof id === "string" && id.trim().length > 0)) {
       throw new Error("REPORT_PROVENANCE_REQUIRED");
     }
+    if (new Set(row.sourceRequirementIds).size !== row.sourceRequirementIds.length) {
+      throw new Error("REPORT_PROVENANCE_DUPLICATE");
+    }
     if (!row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
       throw new Error("REPORT_VALUES_INVALID");
     }
