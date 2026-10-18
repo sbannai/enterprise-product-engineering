@@ -64,3 +64,29 @@ test("authoritative records reject circular data instead of storing partial evid
   circular.self = circular;
   assert.throws(() => store.create({ id: "bad", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: circular }), /RECORD_DATA_NOT_SERIALIZABLE/);
 });
+
+
+test("authoritative records reject structurally invalid create fields", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  for (const record of [
+    { id: "", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} },
+    { id: "r2", tenantId: "", version: 1, state: "ACTIVE", data: {} },
+    { id: "r3", tenantId: "tenant-a", version: 0, state: "ACTIVE", data: {} },
+    { id: "r4", tenantId: "tenant-a", version: 1.5, state: "ACTIVE", data: {} },
+    { id: "r5", tenantId: "tenant-a", version: 1, state: "", data: {} },
+    { id: "r6", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: [] },
+  ]) {
+    assert.throws(() => store.create(record), /RECORD_FIELDS_INVALID/);
+  }
+});
+
+test("authoritative record updates reject malformed versions and patches without mutation", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 } });
+  assert.throws(() => store.update("tenant-a", "r1", 0, { state: "REVISED" }), /RECORD_EXPECTED_VERSION_INVALID/);
+  assert.throws(() => store.update("tenant-a", "r1", 1, { state: "" }), /RECORD_STATE_INVALID/);
+  assert.throws(() => store.update("tenant-a", "r1", 1, { data: [] }), /RECORD_DATA_INVALID/);
+  assert.deepEqual(store.get("tenant-a", "r1"), {
+    id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 }
+  });
+});
