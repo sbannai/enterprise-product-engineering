@@ -48,6 +48,20 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
             !Number.isSafeInteger(item.retryCount) || item.retryCount < 0 ||
             (item.owner !== undefined && (typeof item.owner !== "string" || !item.owner.trim()))) throw new Error();
       }
+      for (const entry of state.lifecycleEvidence) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry) ||
+            typeof entry.id !== "string" || !entry.id.trim() ||
+            typeof entry.tenantId !== "string" || !entry.tenantId.trim() ||
+            typeof entry.requirementId !== "string" || !entry.requirementId.trim() ||
+            typeof entry.principalId !== "string" || !entry.principalId.trim() ||
+            typeof entry.correlationId !== "string" || !entry.correlationId.trim() ||
+            typeof entry.action !== "string" || !entry.action.trim() ||
+            typeof entry.occurredAt !== "string" || Number.isNaN(Date.parse(entry.occurredAt)) ||
+            !entry.payload || typeof entry.payload !== "object" || Array.isArray(entry.payload) ||
+            typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) throw new Error();
+        const { integrityHash, ...material } = entry;
+        if (createHash("sha256").update(this.auditMaterial(material)).digest("hex") !== integrityHash) throw new Error();
+      }
       return state;
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
