@@ -102,6 +102,36 @@ test("in-memory audit store matches JSON-file payload validation errors", () => 
   assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
 });
 
+test("audit input error codes and no-mutation guarantees match across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-adapter-parity-"));
+  try {
+    const stores = [
+      new InMemoryAuditEvidenceStore(),
+      new JsonFileAuditEvidenceStore(join(directory, "audit.json")),
+    ];
+    const invalidInputs = [
+      [{ ...evidence, id: 42 }, /AUDIT_EVIDENCE_CONTEXT_REQUIRED/],
+      [{ ...evidence, tenantId: null }, /AUDIT_EVIDENCE_CONTEXT_REQUIRED/],
+      [{ ...evidence, action: 9 }, /AUDIT_EVIDENCE_FIELDS_REQUIRED/],
+      [{ ...evidence, occurredAt: "not-a-date" }, /AUDIT_EVIDENCE_TIMESTAMP_INVALID/],
+      [{ ...evidence, payload: null }, /AUDIT_PAYLOAD_INVALID/],
+      [{ ...evidence, payload: [] }, /AUDIT_PAYLOAD_INVALID/],
+    ];
+    for (const store of stores) {
+      for (const [input, expectedError] of invalidInputs) {
+        assert.throws(() => store.append(input), expectedError);
+      }
+      assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
+      const accepted = store.append(evidence);
+      assert.equal(accepted.id, evidence.id);
+      assert.throws(() => store.append(evidence), /AUDIT_EVIDENCE_ALREADY_EXISTS/);
+      assert.equal(store.listByRequirement("tenant-a", "REQ-46304").length, 1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file audit store rejects malformed fields before persistence", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-audit-"));
   try {
