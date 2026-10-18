@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { JsonFileGovernedReportingStore } from "../dist/packages/capabilities/json-file-governed-reporting-store.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -97,6 +101,35 @@ test("JSON-file governed reporting enforces the same row and query guards", () =
     assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: [] }), /REPORT_FILTERS_INVALID/);
     assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1", limit: Number.MAX_SAFE_INTEGER + 1 }), /REPORT_LIMIT_INVALID/);
     assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("JSON-file reporting rejects malformed persisted rows on query", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-reporting-corrupt-"));
+  const file = join(directory, "reports.json");
+  try {
+    const store = new JsonFileGovernedReportingStore(file);
+    store.publish(serviceRow);
+    const rows = JSON.parse(readFileSync(file, "utf8"));
+    rows[0].sourceRequirementIds = [" "];
+    writeFileSync(file, JSON.stringify(rows));
+    assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1" }), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("JSON-file reporting rejects duplicate tenant/report/source row identities", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-reporting-duplicates-"));
+  const file = join(directory, "reports.json");
+  try {
+    const store = new JsonFileGovernedReportingStore(file);
+    store.publish(serviceRow);
+    store.publish({ ...serviceRow, values: { metric: 2 } });
+    assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 2);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
