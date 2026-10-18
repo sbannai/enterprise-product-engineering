@@ -86,6 +86,31 @@ test("governed reporting rejects malformed query and filter inputs", () => {
 });
 
 
+test("governed reporting query semantics match across in-memory and JSON-file adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-report-query-parity-"));
+  try {
+    const stores = [
+      new InMemoryGovernedReportingService(),
+      new JsonFileGovernedReportingStore(join(directory, "reports.json")),
+    ];
+    for (const store of stores) {
+      store.publish(serviceRow);
+      store.publish({ ...serviceRow, values: { status: "INACTIVE", count: 3 } });
+      store.publish({ ...serviceRow, tenantId: "tenant-b", values: { status: "ACTIVE", count: 99 } });
+
+      assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 2);
+      assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: { status: "ACTIVE" } }).length, 1);
+      assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: { count: 3 } })[0].values.status, "INACTIVE");
+      assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1", limit: 1 }).length, 1);
+      assert.equal(store.query({ tenantId: "tenant-b", reportId: "rpt-1" }).length, 1);
+      assert.equal(store.query({ tenantId: "tenant-c", reportId: "rpt-1" }).length, 0);
+      assert.equal(store.query({ tenantId: "tenant-a", reportId: "missing" }).length, 0);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file governed reporting enforces the same row and query guards", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-reporting-"));
   try {
