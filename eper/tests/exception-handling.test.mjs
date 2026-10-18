@@ -171,3 +171,39 @@ test("JSON-file exception store detects tampered persisted lifecycle evidence", 
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("JSON-file exception store rejects duplicate persisted audit IDs and exception idempotency keys", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-duplicate-state-"));
+  const file = join(directory, "state.json");
+  try {
+    const store = new JsonFileExceptionStore(file);
+    store.create(base);
+    const state = JSON.parse(readFileSync(file, "utf8"));
+    state.exceptions.push({ ...state.exceptions[0], id: "ex-2" });
+    writeFileSync(file, JSON.stringify(state));
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("JSON-file exception store rejects duplicate audit IDs in one tenant", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-duplicate-audit-"));
+  const file = join(directory, "state.json");
+  try {
+    const store = new JsonFileExceptionStore(file);
+    const entry = {
+      id: "audit-duplicate", tenantId: "tenant-a", requirementId: "REQ-46305",
+      principalId: "tester-1", correlationId: "corr-1", action: "EXCEPTION_CREATED",
+      occurredAt: "2026-10-18T11:00:00Z", payload: { exceptionId: "ex-1" },
+    };
+    store.append(entry);
+    const state = JSON.parse(readFileSync(file, "utf8"));
+    state.lifecycleEvidence.push(state.lifecycleEvidence[0]);
+    writeFileSync(file, JSON.stringify(state));
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
