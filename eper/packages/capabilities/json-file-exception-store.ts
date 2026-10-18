@@ -29,10 +29,15 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
   private readState(): StateDocument {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
-      if (Array.isArray(parsed)) return { schemaVersion: 1, exceptions: parsed as WorkflowException[], lifecycleEvidence: [] };
-      if (!parsed || typeof parsed !== "object") throw new Error();
-      const state = parsed as StateDocument;
-      if (state.schemaVersion !== 1 || !Array.isArray(state.exceptions) || !Array.isArray(state.lifecycleEvidence)) throw new Error();
+      let state: StateDocument;
+      if (Array.isArray(parsed)) {
+        // Legacy array files are normalized, then pass through the same integrity checks.
+        state = { schemaVersion: 1, exceptions: parsed as WorkflowException[], lifecycleEvidence: [] };
+      } else {
+        if (!parsed || typeof parsed !== "object") throw new Error();
+        state = parsed as StateDocument;
+        if (state.schemaVersion !== 1 || !Array.isArray(state.exceptions) || !Array.isArray(state.lifecycleEvidence)) throw new Error();
+      }
       const allowedStates = ["OPEN", "RETRYING", "RESOLVED", "ESCALATED"];
       for (const item of state.exceptions) {
         if (!item || typeof item !== "object" || Array.isArray(item) ||
