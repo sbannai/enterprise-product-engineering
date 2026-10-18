@@ -111,6 +111,38 @@ test("governed reporting query semantics match across in-memory and JSON-file ad
   }
 });
 
+test("governed reporting input and result mutations are isolated across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-report-mutation-parity-"));
+  try {
+    const stores = [
+      new InMemoryGovernedReportingService(),
+      new JsonFileGovernedReportingStore(join(directory, "reports.json")),
+    ];
+    for (const store of stores) {
+      const row = {
+        ...serviceRow,
+        values: { nested: { labels: ["original"] } },
+        sourceRequirementIds: ["REQ-46306"],
+      };
+      store.publish(row);
+      row.values.nested.labels.push("input-mutation");
+      row.sourceRequirementIds.push("REQ-46301");
+
+      const result = store.query({ tenantId: "tenant-a", reportId: "rpt-1" });
+      assert.deepEqual(result[0].values, { nested: { labels: ["original"] } });
+      assert.deepEqual(result[0].sourceRequirementIds, ["REQ-46306"]);
+      result[0].values.nested.labels.push("result-mutation");
+      result[0].sourceRequirementIds.push("REQ-46302");
+
+      const reread = store.query({ tenantId: "tenant-a", reportId: "rpt-1" })[0];
+      assert.deepEqual(reread.values, { nested: { labels: ["original"] } });
+      assert.deepEqual(reread.sourceRequirementIds, ["REQ-46306"]);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file governed reporting enforces the same row and query guards", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-reporting-"));
   try {
