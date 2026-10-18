@@ -38,8 +38,15 @@ function prepare(
 
   const contracts = validateRequirementContracts(requirement);
   const value = (input ?? {}) as CapabilityInput;
-  if (value.context) {
-    if (!value.context.tenantId || !value.context.principalId || !value.context.correlationId) {
+  if (value.context !== undefined) {
+    const context: unknown = value.context;
+    if (!context || typeof context !== "object" || Array.isArray(context)) {
+      throw new Error("CAPABILITY_CONTEXT_REQUIRED");
+    }
+    const candidate = context as Record<string, unknown>;
+    if (typeof candidate.tenantId !== "string" || !candidate.tenantId.trim() ||
+        typeof candidate.principalId !== "string" || !candidate.principalId.trim() ||
+        typeof candidate.correlationId !== "string" || !candidate.correlationId.trim()) {
       throw new Error("CAPABILITY_CONTEXT_REQUIRED");
     }
   }
