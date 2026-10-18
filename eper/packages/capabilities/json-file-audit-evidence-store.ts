@@ -65,6 +65,11 @@ export class JsonFileAuditEvidenceStore implements AuditEvidenceStore {
       throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
     }
     if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
+    if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) {
+      throw new Error("AUDIT_PAYLOAD_INVALID");
+    }
+    const serializedPayload = JSON.stringify(input.payload);
+    if (serializedPayload === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
     const entries = this.read();
     if (entries.some(e => this.key(e.tenantId,e.id)===this.key(input.tenantId,input.id))) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
     const integrityHash = createHash("sha256").update(this.material(input)).digest("hex");
