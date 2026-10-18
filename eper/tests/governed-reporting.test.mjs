@@ -118,7 +118,7 @@ test("JSON-file reporting rejects malformed persisted rows on query", () => {
   }
 });
 
-test("JSON-file reporting rejects duplicate tenant/report/source row identities", () => {
+test("JSON-file reporting retains multiple snapshots for the same tenant and report", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-reporting-duplicates-"));
   const file = join(directory, "reports.json");
   try {
