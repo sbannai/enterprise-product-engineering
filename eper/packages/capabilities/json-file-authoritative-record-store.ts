@@ -32,6 +32,7 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
       throw new Error("PERSISTENCE_DATA_INVALID");
     }
     if (!Array.isArray(parsed)) throw new Error("PERSISTENCE_DATA_INVALID");
+    const identities = new Set<string>();
     for (const record of parsed as AuthoritativeRecord[]) {
       if (!record || typeof record !== "object" || Array.isArray(record) ||
           typeof record.id !== "string" || !record.id.trim() ||
@@ -41,6 +42,9 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
           !record.data || typeof record.data !== "object" || Array.isArray(record.data)) {
         throw new Error("PERSISTENCE_DATA_INVALID");
       }
+      const identity = this.key(record.tenantId, record.id);
+      if (identities.has(identity)) throw new Error("PERSISTENCE_DATA_INVALID");
+      identities.add(identity);
     }
     return parsed as AuthoritativeRecord[];
   }
