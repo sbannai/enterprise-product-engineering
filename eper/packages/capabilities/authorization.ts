@@ -49,6 +49,10 @@ export class InMemoryAuthorizationService implements AuthorizationPolicyStore {
         (policy.effect !== "ALLOW" && policy.effect !== "DENY")) {
       throw new Error("AUTHORIZATION_POLICY_INVALID");
     }
+    const identity = JSON.stringify([policy.tenantId, policy.principalId ?? null, policy.effect, [...policy.actions].sort(), [...policy.resources].sort()]);
+    const duplicate = this.policies.some(existing =>
+      JSON.stringify([existing.tenantId, existing.principalId ?? null, existing.effect, [...existing.actions].sort(), [...existing.resources].sort()]) === identity);
+    if (duplicate) throw new Error("AUTHORIZATION_POLICY_ALREADY_EXISTS");
     this.policies.push({ ...policy, actions: [...policy.actions], resources: [...policy.resources] });
   }
 
