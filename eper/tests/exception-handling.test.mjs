@@ -56,6 +56,35 @@ test("exception workflow enforces idempotency and valid transitions", () => {
   );
 });
 
+test("exception callback failures preserve identical pre-commit behavior across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-callback-parity-"));
+  try {
+    const stores = [
+      new InMemoryExceptionStore(),
+      new JsonFileExceptionStore(join(directory, "exceptions.json")),
+    ];
+    for (const store of stores) {
+      assert.throws(
+        () => store.create(base, () => { throw new Error("AUDIT_WRITE_FAILED"); }),
+        /AUDIT_WRITE_FAILED/,
+      );
+      assert.equal(store.get("tenant-a", "ex-1"), undefined);
+      assert.equal(store.snapshot().length, 0);
+
+      const created = store.create(base);
+      assert.equal(created.state, "OPEN");
+      assert.throws(
+        () => store.transition("tenant-a", "ex-1", { state: "ESCALATED" }, () => { throw new Error("AUDIT_WRITE_FAILED"); }),
+        /AUDIT_WRITE_FAILED/,
+      );
+      assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+      assert.equal(store.get("tenant-a", "ex-1").retryCount, 0);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("exception lifecycle transition rules and retry counts match across adapters", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-exception-transition-parity-"));
   try {
