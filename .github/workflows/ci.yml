@@ -33,6 +33,8 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
+      - name: Focused persistence regression suite
+        run: npm run test:persistence
       - name: UAT preflight regression tests
         run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
       - name: Read-only business UAT readiness audit
