@@ -61,6 +61,10 @@ export class JsonFileAuthorizationPolicyStore implements AuthorizationPolicyStor
       throw new Error("AUTHORIZATION_POLICY_INVALID");
     }
     const policies = this.read();
+    const identity = JSON.stringify([policy.tenantId, policy.principalId ?? null, policy.effect, [...policy.actions].sort(), [...policy.resources].sort()]);
+    const duplicate = policies.some(existing =>
+      JSON.stringify([existing.tenantId, existing.principalId ?? null, existing.effect, [...existing.actions].sort(), [...existing.resources].sort()]) === identity);
+    if (duplicate) throw new Error("AUTHORIZATION_POLICY_ALREADY_EXISTS");
     policies.push({ ...policy, actions: [...policy.actions], resources: [...policy.resources] });
     this.commit(policies);
   }
