@@ -55,8 +55,10 @@ export class JsonFileAuthorizationPolicyStore implements AuthorizationPolicyStor
       (policy.principalId !== undefined && (typeof policy.principalId !== "string" || !policy.principalId.trim())) ||
       !Array.isArray(policy.actions) || !policy.actions.length ||
       !policy.actions.every(v => typeof v === "string" && v.trim().length > 0) ||
+      new Set(policy.actions).size !== policy.actions.length ||
       !Array.isArray(policy.resources) || !policy.resources.length ||
       !policy.resources.every(v => typeof v === "string" && v.trim().length > 0) ||
+      new Set(policy.resources).size !== policy.resources.length ||
       (policy.effect !== "ALLOW" && policy.effect !== "DENY")) {
       throw new Error("AUTHORIZATION_POLICY_INVALID");
     }
