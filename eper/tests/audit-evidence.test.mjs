@@ -102,6 +102,9 @@ test("JSON-file audit store rejects malformed fields before persistence", () => 
     assert.throws(() => store.append({ ...evidence, payload: null }), /AUDIT_PAYLOAD_INVALID/);
     assert.throws(() => store.append({ ...evidence, payload: [] }), /AUDIT_PAYLOAD_INVALID/);
     assert.throws(() => store.append({ ...evidence, payload: "not-an-object" }), /AUDIT_PAYLOAD_INVALID/);
+    const circular = {};
+    circular.self = circular;
+    assert.throws(() => store.append({ ...evidence, payload: circular }), /AUDIT_PAYLOAD_NOT_SERIALIZABLE/);
     assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
   } finally {
     rmSync(directory, { recursive: true, force: true });
