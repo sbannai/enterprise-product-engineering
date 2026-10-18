@@ -27,7 +27,12 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
   }
 
   private integrityMaterial(entry: Omit<AuditEvidence, "integrityHash">): string {
-    const serializedPayload = JSON.stringify(entry.payload);
+    let serializedPayload: string | undefined;
+    try {
+      serializedPayload = JSON.stringify(entry.payload);
+    } catch {
+      throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
+    }
     if (serializedPayload === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
     let payload: unknown;
     try {
@@ -66,6 +71,9 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
     }
     if (Number.isNaN(Date.parse(input.occurredAt))) {
       throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
+    }
+    if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) {
+      throw new Error("AUDIT_PAYLOAD_INVALID");
     }
     const material = this.integrityMaterial(input);
     const clonedPayload = JSON.parse(JSON.stringify(input.payload)) as unknown;
