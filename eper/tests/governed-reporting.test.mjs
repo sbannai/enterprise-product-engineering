@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { JsonFileGovernedReportingStore } from "../dist/packages/capabilities/json-file-governed-reporting-store.js";
 import { InMemoryGovernedReportingService } from "../dist/packages/capabilities/governed-reporting.js";
 
 const serviceRow = {
@@ -78,4 +82,22 @@ test("governed reporting rejects malformed query and filter inputs", () => {
   assert.throws(() => service.query(null), /REPORT_QUERY_CONTEXT_REQUIRED/);
   assert.throws(() => service.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: [] }), /REPORT_FILTERS_INVALID/);
   assert.throws(() => service.query({ tenantId: "tenant-a", reportId: "rpt-1", limit: Number.MAX_SAFE_INTEGER + 1 }), /REPORT_LIMIT_INVALID/);
+});
+
+
+test("JSON-file governed reporting enforces the same row and query guards", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-reporting-"));
+  try {
+    const store = new JsonFileGovernedReportingStore(join(directory, "reports.json"));
+    assert.throws(() => store.publish(null), /REPORT_CONTEXT_REQUIRED/);
+    assert.throws(() => store.publish({ ...serviceRow, generatedAt: "not-a-date" }), /REPORT_TIMESTAMP_INVALID/);
+    assert.throws(() => store.publish({ ...serviceRow, sourceRequirementIds: [" "] }), /REPORT_PROVENANCE_REQUIRED/);
+    assert.throws(() => store.publish({ ...serviceRow, values: [] }), /REPORT_VALUES_INVALID/);
+    assert.throws(() => store.query(null), /REPORT_QUERY_CONTEXT_REQUIRED/);
+    assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: [] }), /REPORT_FILTERS_INVALID/);
+    assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1", limit: Number.MAX_SAFE_INTEGER + 1 }), /REPORT_LIMIT_INVALID/);
+    assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
