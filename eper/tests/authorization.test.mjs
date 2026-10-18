@@ -160,6 +160,28 @@ test("JSON-file authorization store rejects duplicate policies without corruptin
   }
 });
 
+test("authorization rejects duplicate action and resource entries before mutation in both adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-authz-duplicate-members-"));
+  try {
+    const stores = [
+      new InMemoryAuthorizationService(),
+      new JsonFileAuthorizationPolicyStore(join(directory, "policies.json")),
+    ];
+    const invalid = [
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ", "READ"], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1", "record:r1"], effect: "ALLOW" },
+    ];
+    for (const store of stores) {
+      for (const policy of invalid) assert.throws(() => store.addPolicy(policy), /AUTHORIZATION_POLICY_INVALID/);
+      assert.deepEqual(store.snapshot(), []);
+      store.addPolicy({ tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" });
+      assert.equal(store.snapshot().length, 1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("authorization decision and request-validation behavior matches across adapters", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-authz-decision-parity-"));
   try {
