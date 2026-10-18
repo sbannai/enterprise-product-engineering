@@ -132,6 +132,29 @@ test("audit input error codes and no-mutation guarantees match across adapters",
   }
 });
 
+test("audit integrity verification and read isolation match across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-integrity-parity-"));
+  try {
+    const stores = [
+      new InMemoryAuditEvidenceStore(),
+      new JsonFileAuditEvidenceStore(join(directory, "audit.json")),
+    ];
+    for (const store of stores) {
+      const entry = store.append(evidence);
+      assert.equal(store.verify(entry), true);
+      assert.equal(store.verify({ ...entry, action: "DELETE" }), false);
+      assert.equal(store.verify({ ...entry, payload: { recordId: "tampered" } }), false);
+      assert.equal(store.verify({ ...entry, integrityHash: "bad" }), false);
+      assert.equal(store.get("tenant-b", entry.id), undefined);
+      assert.equal(store.listByRequirement("tenant-b", "REQ-46304").length, 0);
+      assert.equal(store.get("tenant-a", entry.id).integrityHash, entry.integrityHash);
+      assert.equal(store.listByRequirement("tenant-a", "REQ-46304").length, 1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file audit store rejects malformed fields before persistence", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-audit-"));
   try {
