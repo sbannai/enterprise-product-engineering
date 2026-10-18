@@ -143,6 +143,31 @@ test("exception lifecycle transition rules and retry counts match across adapter
   }
 });
 
+test("exception idempotency conflicts match across adapters without mutating state", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-idempotency-conflict-"));
+  try {
+    const stores = [
+      new InMemoryExceptionStore(),
+      new JsonFileExceptionStore(join(directory, "exceptions.json")),
+    ];
+    for (const store of stores) {
+      const first = store.create(base);
+      assert.throws(
+        () => store.create({ ...base, id: "ex-conflict", message: "Changed payload" }),
+        /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST/,
+      );
+      assert.equal(store.snapshot().length, 1);
+      assert.equal(store.get("tenant-a", first.id).message, base.message);
+      assert.equal(store.get("tenant-a", "ex-conflict"), undefined);
+      const otherTenant = store.create({ ...base, tenantId: "tenant-b", requirementId: "REQ-46306" });
+      assert.equal(otherTenant.id, base.id);
+      assert.equal(store.snapshot().length, 2);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("exception identity and idempotency are tenant-scoped in both adapters", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-exception-tenant-parity-"));
   try {
