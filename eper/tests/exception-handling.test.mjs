@@ -89,3 +89,28 @@ test("retry count increments only on retry transitions", () => {
   assert.equal(store.transition("tenant-a", "ex-1", { state: "RESOLVED" }).retryCount, 2);
   assert.equal(store.get("tenant-a", "ex-1").retryCount, 2);
 });
+
+
+test("exception creation rejects malformed fields and timestamps", () => {
+  const store = new InMemoryExceptionStore();
+  for (const input of [
+    { ...base, id: "" },
+    { ...base, message: " " },
+    { ...base, code: "" },
+    { ...base, idempotencyKey: "" },
+    { ...base, createdAt: "not-a-date" },
+    { ...base, owner: "" },
+  ]) {
+    assert.throws(() => store.create(input), /EXCEPTION_INPUT_INVALID/);
+  }
+});
+
+test("exception transitions reject invalid runtime patches without mutation", () => {
+  const store = new InMemoryExceptionStore();
+  store.create(base);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { state: "BOGUS" }), /EXCEPTION_STATE_INVALID/);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { owner: " " }), /EXCEPTION_OWNER_INVALID/);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { message: "" }), /EXCEPTION_MESSAGE_INVALID/);
+  assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+  assert.equal(store.get("tenant-a", "ex-1").owner, undefined);
+});
