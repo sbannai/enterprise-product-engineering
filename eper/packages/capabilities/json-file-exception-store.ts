@@ -33,6 +33,21 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
       if (!parsed || typeof parsed !== "object") throw new Error();
       const state = parsed as StateDocument;
       if (state.schemaVersion !== 1 || !Array.isArray(state.exceptions) || !Array.isArray(state.lifecycleEvidence)) throw new Error();
+      const allowedStates = ["OPEN", "RETRYING", "RESOLVED", "ESCALATED"];
+      for (const item of state.exceptions) {
+        if (!item || typeof item !== "object" || Array.isArray(item) ||
+            typeof item.id !== "string" || !item.id.trim() ||
+            typeof item.tenantId !== "string" || !item.tenantId.trim() ||
+            typeof item.requirementId !== "string" || !item.requirementId.trim() ||
+            typeof item.code !== "string" || !item.code.trim() ||
+            typeof item.message !== "string" || !item.message.trim() ||
+            typeof item.idempotencyKey !== "string" || !item.idempotencyKey.trim() ||
+            typeof item.createdAt !== "string" || Number.isNaN(Date.parse(item.createdAt)) ||
+            typeof item.updatedAt !== "string" || Number.isNaN(Date.parse(item.updatedAt)) ||
+            !allowedStates.includes(item.state) ||
+            !Number.isSafeInteger(item.retryCount) || item.retryCount < 0 ||
+            (item.owner !== undefined && (typeof item.owner !== "string" || !item.owner.trim()))) throw new Error();
+      }
       return state;
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
