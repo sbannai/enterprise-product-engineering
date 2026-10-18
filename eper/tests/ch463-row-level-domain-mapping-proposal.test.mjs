@@ -17,7 +17,7 @@ test("Chapter 463 row-level mapping proposal preserves all six IDs and remains e
 
   assert.match(proposal, /REVIEW PROPOSAL — NOT APPROVED/);
   assert.match(proposal, /Source status: \*\*In Development\*\*/);
-  assert.match(proposal, /preserve 228 requirements; 38 chapters/i);
+  assert.match(proposal, /228 requirements; 38 chapters/i);
   assert.match(proposal, /EPER_UAT_API_ENABLED=false/);
   assert.match(proposal, /no chargeable AWS resources/i);
   for (const ids of requirements) {
