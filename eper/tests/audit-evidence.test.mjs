@@ -99,6 +99,9 @@ test("JSON-file audit store rejects malformed fields before persistence", () => 
     assert.throws(() => store.append({ ...evidence, tenantId: null }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
     assert.throws(() => store.append({ ...evidence, action: 9 }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
     assert.throws(() => store.append({ ...evidence, occurredAt: "not-a-date" }), /AUDIT_EVIDENCE_TIMESTAMP_INVALID/);
+    assert.throws(() => store.append({ ...evidence, payload: null }), /AUDIT_PAYLOAD_INVALID/);
+    assert.throws(() => store.append({ ...evidence, payload: [] }), /AUDIT_PAYLOAD_INVALID/);
+    assert.throws(() => store.append({ ...evidence, payload: "not-an-object" }), /AUDIT_PAYLOAD_INVALID/);
     assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
   } finally {
     rmSync(directory, { recursive: true, force: true });
