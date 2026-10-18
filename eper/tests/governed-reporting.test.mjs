@@ -92,6 +92,7 @@ test("JSON-file governed reporting enforces the same row and query guards", () =
     assert.throws(() => store.publish(null), /REPORT_CONTEXT_REQUIRED/);
     assert.throws(() => store.publish({ ...serviceRow, generatedAt: "not-a-date" }), /REPORT_TIMESTAMP_INVALID/);
     assert.throws(() => store.publish({ ...serviceRow, sourceRequirementIds: [" "] }), /REPORT_PROVENANCE_REQUIRED/);
+    assert.throws(() => store.publish({ ...serviceRow, sourceRequirementIds: ["REQ-46306", "REQ-46306"] }), /REPORT_PROVENANCE_DUPLICATE/);
     assert.throws(() => store.publish({ ...serviceRow, values: [] }), /REPORT_VALUES_INVALID/);
     assert.throws(() => store.query(null), /REPORT_QUERY_CONTEXT_REQUIRED/);
     assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: [] }), /REPORT_FILTERS_INVALID/);
@@ -111,6 +112,21 @@ test("JSON-file reporting rejects malformed persisted rows on query", () => {
     store.publish(serviceRow);
     const rows = JSON.parse(readFileSync(file, "utf8"));
     rows[0].sourceRequirementIds = [" "];
+    writeFileSync(file, JSON.stringify(rows));
+    assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1" }), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("JSON-file reporting rejects duplicate persisted provenance on query", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-reporting-duplicate-provenance-"));
+  const file = join(directory, "reports.json");
+  try {
+    const store = new JsonFileGovernedReportingStore(file);
+    store.publish(serviceRow);
+    const rows = JSON.parse(readFileSync(file, "utf8"));
+    rows[0].sourceRequirementIds = ["REQ-46306", "REQ-46306"];
     writeFileSync(file, JSON.stringify(rows));
     assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "rpt-1" }), /PERSISTENCE_DATA_INVALID/);
   } finally {
