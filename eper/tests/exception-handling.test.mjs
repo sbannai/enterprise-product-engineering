@@ -228,3 +228,15 @@ test("JSON-file exception store rejects malformed audit inputs before persistenc
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("JSON-file exception store validates legacy array rows instead of bypassing integrity checks", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-legacy-exceptions-"));
+  const file = join(directory, "state.json");
+  try {
+    writeFileSync(file, JSON.stringify([{ ...base, state: "UNKNOWN", retryCount: -1, updatedAt: base.createdAt }]));
+    const store = new JsonFileExceptionStore(file);
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
