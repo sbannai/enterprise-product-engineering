@@ -56,6 +56,32 @@ test("exception workflow enforces idempotency and valid transitions", () => {
   );
 });
 
+test("exception lifecycle transition rules and retry counts match across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-transition-parity-"));
+  try {
+    const stores = [
+      new InMemoryExceptionStore(),
+      new JsonFileExceptionStore(join(directory, "exceptions.json")),
+    ];
+    for (const store of stores) {
+      store.create(base);
+      const retry1 = store.transition("tenant-a", "ex-1", { state: "RETRYING" });
+      assert.equal(retry1.retryCount, 1);
+      const retry2 = store.transition("tenant-a", "ex-1", { state: "RETRYING" });
+      assert.equal(retry2.retryCount, 2);
+      const escalated = store.transition("tenant-a", "ex-1", { state: "ESCALATED" });
+      assert.equal(escalated.retryCount, 2);
+      const resolved = store.transition("tenant-a", "ex-1", { state: "RESOLVED" });
+      assert.equal(resolved.state, "RESOLVED");
+      assert.equal(resolved.retryCount, 2);
+      assert.throws(() => store.transition("tenant-a", "ex-1", { state: "RETRYING" }), /EXCEPTION_INVALID_TRANSITION/);
+      assert.equal(store.get("tenant-a", "ex-1").state, "RESOLVED");
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("exception identity and idempotency are tenant-scoped in both adapters", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-exception-tenant-parity-"));
   try {
