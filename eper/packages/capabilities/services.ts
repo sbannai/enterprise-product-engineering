@@ -151,8 +151,19 @@ export class AuditEvidenceService implements CapabilityService {
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "append") {
-        requireTenantContext(value, payload.evidence?.tenantId);
-        return Promise.resolve(result(requirement, contracts, { operation: "append", evidence: this.store.append(payload.evidence) }));
+        const tenantId = requireTenantContext(value, payload.evidence?.tenantId);
+        if (!payload.evidence || typeof payload.evidence !== "object" || Array.isArray(payload.evidence)) {
+          throw new Error("AUDIT_EVIDENCE_REQUIRED");
+        }
+        // Security identity and tenant scope come from the authenticated execution context,
+        // never from caller-controlled audit payload fields.
+        const evidence = this.store.append({
+          ...payload.evidence,
+          tenantId,
+          principalId: value.context!.principalId,
+          correlationId: value.context!.correlationId,
+        });
+        return Promise.resolve(result(requirement, contracts, { operation: "append", evidence }));
       }
       if (payload.operation === "get") {
         requireTenantContext(value, payload.tenantId);
