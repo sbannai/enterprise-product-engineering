@@ -123,9 +123,24 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
   }
 
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
-    if (!input.action || !input.occurredAt) throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+        typeof input.id !== "string" || !input.id.trim() ||
+        typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+        typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+        typeof input.principalId !== "string" || !input.principalId.trim() ||
+        typeof input.correlationId !== "string" || !input.correlationId.trim()) {
+      throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
+    }
+    if (typeof input.action !== "string" || !input.action.trim() ||
+        typeof input.occurredAt !== "string" || !input.occurredAt.trim()) {
+      throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    }
     if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
+    if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) {
+      throw new Error("AUDIT_PAYLOAD_INVALID");
+    }
+    const serializedPayload = JSON.stringify(input.payload);
+    if (serializedPayload === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
     const state = this.readState();
     if (state.lifecycleEvidence.some(entry => entry.tenantId === input.tenantId && entry.id === input.id)) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
     const integrityHash = createHash("sha256").update(this.auditMaterial(input)).digest("hex");
