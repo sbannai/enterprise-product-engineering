@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { JsonFileExceptionStore } from "../dist/packages/capabilities/json-file-exception-store.js";
 import { InMemoryExceptionStore } from "../dist/packages/capabilities/exception-handling.js";
 
 const base = {
@@ -113,4 +117,32 @@ test("exception transitions reject invalid runtime patches without mutation", ()
   assert.throws(() => store.transition("tenant-a", "ex-1", { message: "" }), /EXCEPTION_MESSAGE_INVALID/);
   assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
   assert.equal(store.get("tenant-a", "ex-1").owner, undefined);
+});
+
+
+test("JSON-file exception store rejects malformed persisted lifecycle rows", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exceptions-corrupt-"));
+  const file = join(directory, "state.json");
+  try {
+    writeFileSync(file, JSON.stringify({
+      schemaVersion: 1,
+      exceptions: [{ ...base, state: "UNKNOWN", retryCount: -1, updatedAt: base.createdAt }],
+      lifecycleEvidence: [],
+    }));
+    const store = new JsonFileExceptionStore(file);
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("JSON-file exception store rejects malformed create input without persisting", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exceptions-"));
+  try {
+    const store = new JsonFileExceptionStore(join(directory, "state.json"));
+    assert.throws(() => store.create({ ...base, message: " " }), /EXCEPTION_INPUT_INVALID/);
+    assert.deepEqual(store.snapshot(), []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
