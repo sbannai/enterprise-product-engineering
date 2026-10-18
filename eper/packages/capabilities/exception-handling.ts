@@ -76,9 +76,12 @@ export class InMemoryExceptionStore implements ExceptionStore {
         typeof input.tenantId !== "string" || !input.tenantId.trim() ||
         typeof input.requirementId !== "string" || !input.requirementId.trim() ||
         typeof input.code !== "string" || !input.code.trim() ||
-        typeof input.message !== "string" || !input.message.trim() ||
         typeof input.idempotencyKey !== "string" || !input.idempotencyKey.trim() ||
-        typeof input.createdAt !== "string" || Number.isNaN(Date.parse(input.createdAt)) ||
+        typeof input.createdAt !== "string" || !input.createdAt.trim()) {
+      throw new Error("EXCEPTION_CONTEXT_REQUIRED");
+    }
+    if (typeof input.message !== "string" || !input.message.trim() ||
+        Number.isNaN(Date.parse(input.createdAt)) ||
         (input.owner !== undefined && (typeof input.owner !== "string" || !input.owner.trim()))) {
       throw new Error("EXCEPTION_INPUT_INVALID");
     }
