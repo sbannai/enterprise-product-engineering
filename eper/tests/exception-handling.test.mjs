@@ -136,6 +136,39 @@ test("JSON-file exception store rejects malformed persisted lifecycle rows", () 
   }
 });
 
+test("JSON-file exception callbacks fail before state commit and preserve idempotency", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-callback-"));
+  try {
+    const store = new JsonFileExceptionStore(join(directory, "state.json"));
+    assert.throws(
+      () => store.create(base, () => { throw new Error("AUDIT_WRITE_FAILED"); }),
+      /AUDIT_WRITE_FAILED/,
+    );
+    assert.deepEqual(store.snapshot(), []);
+    const created = store.create(base);
+    assert.equal(created.id, "ex-1");
+    assert.equal(created.state, "OPEN");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("JSON-file exception transition callback failure leaves persisted state unchanged", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-transition-callback-"));
+  try {
+    const store = new JsonFileExceptionStore(join(directory, "state.json"));
+    store.create(base);
+    assert.throws(
+      () => store.transition("tenant-a", "ex-1", { state: "ESCALATED" }, () => { throw new Error("AUDIT_WRITE_FAILED"); }),
+      /AUDIT_WRITE_FAILED/,
+    );
+    assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+    assert.equal(store.get("tenant-a", "ex-1").retryCount, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file exception store rejects malformed create input without persisting", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-exceptions-"));
   try {
