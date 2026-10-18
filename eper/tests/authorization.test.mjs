@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { JsonFileAuthorizationPolicyStore } from "../dist/packages/capabilities/json-file-authorization-policy-store.js";
 import { InMemoryAuthorizationService } from "../dist/packages/capabilities/authorization.js";
 
 test("authorization allows a matching tenant principal action and resource", () => {
@@ -105,5 +109,29 @@ test("authorization rejects malformed runtime request fields", () => {
     { tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "" },
   ]) {
     assert.throws(() => service.decide(request), /AUTHORIZATION_CONTEXT_REQUIRED/);
+  }
+});
+
+
+test("JSON-file authorization store matches in-memory policy validation", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-authz-"));
+  try {
+    const store = new JsonFileAuthorizationPolicyStore(join(directory, "policies.json"));
+    const invalidPolicies = [
+      null,
+      { tenantId: " ", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", actions: [" "], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", actions: ["READ"], resources: [" "], effect: "ALLOW" },
+      { tenantId: "tenant-a", principalId: " ", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", actions: ["READ"], resources: ["record:r1"], effect: "MAYBE" },
+    ];
+    for (const policy of invalidPolicies) {
+      assert.throws(() => store.addPolicy(policy), /AUTHORIZATION_POLICY_INVALID/);
+    }
+    assert.deepEqual(store.snapshot(), []);
+    store.addPolicy({ tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" });
+    assert.equal(store.decide({ tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "record:r1" }).effect, "ALLOW");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
