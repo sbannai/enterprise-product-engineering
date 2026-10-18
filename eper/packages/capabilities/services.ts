@@ -53,11 +53,16 @@ function prepare(
   return { value, contracts };
 }
 
-function requireTenantContext(value: CapabilityInput, requestedTenantId?: string): string {
+function requireTenantContext(value: CapabilityInput, requestedTenantId?: unknown): string {
   const tenantId = value.context?.tenantId;
   if (!tenantId) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
-  if (requestedTenantId && requestedTenantId !== tenantId) {
-    throw new Error("TENANT_CONTEXT_MISMATCH");
+  if (requestedTenantId !== undefined) {
+    if (typeof requestedTenantId !== "string" || !requestedTenantId.trim()) {
+      throw new Error("TENANT_CONTEXT_INVALID");
+    }
+    if (requestedTenantId !== tenantId) {
+      throw new Error("TENANT_CONTEXT_MISMATCH");
+    }
   }
   return tenantId;
 }
