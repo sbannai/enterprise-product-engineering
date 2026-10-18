@@ -12,8 +12,22 @@ export class JsonFileGovernedReportingStore {
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; this.commit([]); }
   }
   private read(): ReportRow[] {
-    try { const parsed: unknown=JSON.parse(readFileSync(this.filePath,"utf8")); if(!Array.isArray(parsed)) throw new Error(); return parsed as ReportRow[]; }
-    catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
+      if (!Array.isArray(parsed)) throw new Error();
+      for (const row of parsed as ReportRow[]) {
+        if (!row || typeof row !== "object" || Array.isArray(row) ||
+            typeof row.tenantId !== "string" || !row.tenantId.trim() ||
+            typeof row.reportId !== "string" || !row.reportId.trim() ||
+            typeof row.generatedAt !== "string" || Number.isNaN(Date.parse(row.generatedAt)) ||
+            !Array.isArray(row.sourceRequirementIds) || row.sourceRequirementIds.length === 0 ||
+            !row.sourceRequirementIds.every(id => typeof id === "string" && id.trim().length > 0) ||
+            !row.values || typeof row.values !== "object" || Array.isArray(row.values)) throw new Error();
+      }
+      return parsed as ReportRow[];
+    } catch {
+      throw new Error("PERSISTENCE_DATA_INVALID");
+    }
   }
   private commit(rows: ReportRow[]): void {
     const temporary=`${this.filePath}.${randomUUID()}.tmp`;
