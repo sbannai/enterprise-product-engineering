@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileAuthorizationPolicyStore } from "../dist/packages/capabilities/json-file-authorization-policy-store.js";
@@ -131,6 +131,23 @@ test("JSON-file authorization store matches in-memory policy validation", () => 
     assert.deepEqual(store.snapshot(), []);
     store.addPolicy({ tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" });
     assert.equal(store.decide({ tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "record:r1" }).effect, "ALLOW");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("JSON-file authorization store rejects malformed persisted policies on read", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-authz-corrupt-"));
+  const file = join(directory, "policies.json");
+  try {
+    writeFileSync(file, JSON.stringify([
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", principalId: "user-b", actions: [" "], resources: ["record:r2"], effect: "ALLOW" },
+    ]));
+    const store = new JsonFileAuthorizationPolicyStore(file);
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
+    assert.throws(() => store.decide({ tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "record:r1" }), /PERSISTENCE_DATA_INVALID/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
