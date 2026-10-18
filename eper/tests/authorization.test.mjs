@@ -137,6 +137,15 @@ test("JSON-file authorization store matches in-memory policy validation", () => 
 });
 
 
+test("in-memory authorization store rejects duplicate policies with the same identity", () => {
+  const service = new InMemoryAuthorizationService();
+  const policy = { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" };
+  service.addPolicy(policy);
+  assert.throws(() => service.addPolicy({ ...policy, actions: ["READ"], resources: ["record:r1"] }), /AUTHORIZATION_POLICY_ALREADY_EXISTS/);
+  assert.equal(service.snapshot().length, 1);
+  assert.equal(service.decide({ tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "record:r1" }).effect, "ALLOW");
+});
+
 test("JSON-file authorization store rejects duplicate policies without corrupting persisted state", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-authz-duplicate-"));
   try {
