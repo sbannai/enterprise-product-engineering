@@ -179,7 +179,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     });
     if (!gatewayResponse.ok) { json(res, 502, { error: "gateway_payment_verification_failed" }); return true; }
     const gatewayPayment: any = await gatewayResponse.json();
-    if (gatewayPayment.order_id !== orderId || Number(gatewayPayment.amount) !== record.amountPaise || gatewayPayment.currency !== record.currency || !["authorized", "captured"].includes(gatewayPayment.status)) {
+    if (gatewayPayment.order_id !== orderId || Number(gatewayPayment.amount) !== record.amountPaise || gatewayPayment.currency !== record.currency || gatewayPayment.status !== "captured") {
       json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
     }
     if (record.status !== "PAID") {
