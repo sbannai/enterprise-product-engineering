@@ -124,6 +124,10 @@ test("JSON-file record store rejects malformed persisted records on read", () =>
     persisted[0].version = 1.5;
     writeFileSync(file, JSON.stringify(persisted));
     assert.throws(() => store.get("tenant-a", "r1"), /PERSISTENCE_DATA_INVALID/);
+    persisted[0].version = 1;
+    persisted.push({ ...persisted[0], state: "REVISED" });
+    writeFileSync(file, JSON.stringify(persisted));
+    assert.throws(() => store.get("tenant-a", "r1"), /PERSISTENCE_DATA_INVALID/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
