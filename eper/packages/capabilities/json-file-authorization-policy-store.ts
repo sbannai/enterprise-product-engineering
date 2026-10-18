@@ -22,9 +22,14 @@ export class JsonFileAuthorizationPolicyStore implements AuthorizationPolicyStor
       const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
       if (!Array.isArray(parsed)) throw new Error();
       for (const p of parsed as AuthorizationPolicy[]) {
-        if (!p || !p.tenantId || !Array.isArray(p.actions) || !p.actions.length ||
-          !Array.isArray(p.resources) || !p.resources.length || !["ALLOW", "DENY"].includes(p.effect)) throw new Error();
-        if (p.principalId !== undefined && typeof p.principalId !== "string") throw new Error();
+        if (!p || typeof p !== "object" || Array.isArray(p) ||
+          typeof p.tenantId !== "string" || !p.tenantId.trim() ||
+          (p.principalId !== undefined && (typeof p.principalId !== "string" || !p.principalId.trim())) ||
+          !Array.isArray(p.actions) || !p.actions.length ||
+          !p.actions.every(action => typeof action === "string" && action.trim().length > 0) ||
+          !Array.isArray(p.resources) || !p.resources.length ||
+          !p.resources.every(resource => typeof resource === "string" && resource.trim().length > 0) ||
+          (p.effect !== "ALLOW" && p.effect !== "DENY")) throw new Error();
       }
       return parsed as AuthorizationPolicy[];
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
@@ -38,12 +43,14 @@ export class JsonFileAuthorizationPolicyStore implements AuthorizationPolicyStor
     return this.read().map(p => ({ ...p, actions: [...p.actions], resources: [...p.resources] }));
   }
   addPolicy(policy: AuthorizationPolicy): void {
-    if (!policy.tenantId || !Array.isArray(policy.actions) || !policy.actions.length ||
-      !policy.actions.every(v => typeof v === "string" && v.length > 0) ||
+    if (!policy || typeof policy !== "object" || Array.isArray(policy) ||
+      typeof policy.tenantId !== "string" || !policy.tenantId.trim() ||
+      (policy.principalId !== undefined && (typeof policy.principalId !== "string" || !policy.principalId.trim())) ||
+      !Array.isArray(policy.actions) || !policy.actions.length ||
+      !policy.actions.every(v => typeof v === "string" && v.trim().length > 0) ||
       !Array.isArray(policy.resources) || !policy.resources.length ||
-      !policy.resources.every(v => typeof v === "string" && v.length > 0) ||
-      !["ALLOW", "DENY"].includes(policy.effect) ||
-      (policy.principalId !== undefined && !policy.principalId)) {
+      !policy.resources.every(v => typeof v === "string" && v.trim().length > 0) ||
+      (policy.effect !== "ALLOW" && policy.effect !== "DENY")) {
       throw new Error("AUTHORIZATION_POLICY_INVALID");
     }
     const policies = this.read();
