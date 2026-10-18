@@ -48,6 +48,7 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
             !Number.isSafeInteger(item.retryCount) || item.retryCount < 0 ||
             (item.owner !== undefined && (typeof item.owner !== "string" || !item.owner.trim()))) throw new Error();
       }
+      const evidenceKeys = new Set<string>();
       for (const entry of state.lifecycleEvidence) {
         if (!entry || typeof entry !== "object" || Array.isArray(entry) ||
             typeof entry.id !== "string" || !entry.id.trim() ||
@@ -59,8 +60,20 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
             typeof entry.occurredAt !== "string" || Number.isNaN(Date.parse(entry.occurredAt)) ||
             !entry.payload || typeof entry.payload !== "object" || Array.isArray(entry.payload) ||
             typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) throw new Error();
+        const uniqueKey = JSON.stringify([entry.tenantId, entry.id]);
+        if (evidenceKeys.has(uniqueKey)) throw new Error();
+        evidenceKeys.add(uniqueKey);
         const { integrityHash, ...material } = entry;
         if (createHash("sha256").update(this.auditMaterial(material)).digest("hex") !== integrityHash) throw new Error();
+      }
+      const exceptionKeys = new Set<string>();
+      const idempotencyKeys = new Set<string>();
+      for (const item of state.exceptions) {
+        const exceptionKey = JSON.stringify([item.tenantId, item.id]);
+        const idempotencyKey = JSON.stringify([item.tenantId, item.idempotencyKey]);
+        if (exceptionKeys.has(exceptionKey) || idempotencyKeys.has(idempotencyKey)) throw new Error();
+        exceptionKeys.add(exceptionKey);
+        idempotencyKeys.add(idempotencyKey);
       }
       return state;
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
