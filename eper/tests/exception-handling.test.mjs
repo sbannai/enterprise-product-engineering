@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileExceptionStore } from "../dist/packages/capabilities/json-file-exception-store.js";
@@ -142,6 +142,31 @@ test("JSON-file exception store rejects malformed create input without persistin
     const store = new JsonFileExceptionStore(join(directory, "state.json"));
     assert.throws(() => store.create({ ...base, message: " " }), /EXCEPTION_INPUT_INVALID/);
     assert.deepEqual(store.snapshot(), []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("JSON-file exception store detects tampered persisted lifecycle evidence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-evidence-tamper-"));
+  const file = join(directory, "state.json");
+  try {
+    const store = new JsonFileExceptionStore(file);
+    store.append({
+      id: "audit-1",
+      tenantId: "tenant-a",
+      requirementId: "REQ-46305",
+      principalId: "tester-1",
+      correlationId: "corr-1",
+      action: "EXCEPTION_CREATED",
+      occurredAt: "2026-10-18T11:00:00Z",
+      payload: { exceptionId: "ex-1" },
+    });
+    const state = JSON.parse(readFileSync(file, "utf8"));
+    state.lifecycleEvidence[0].payload.exceptionId = "ex-tampered";
+    writeFileSync(file, JSON.stringify(state));
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
