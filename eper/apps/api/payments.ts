@@ -91,6 +91,7 @@ function config(): { keyId: string; keySecret: string; webhookSecret: string; to
   if (!keyId || !keySecret || !webhookSecret || token.length < 32) return null;
   return { keyId, keySecret, webhookSecret, token, ledgerFile: resolve(process.env.EPER_PAYMENT_LEDGER_FILE ?? "./data/payments.json") };
 }
+function tenantMatches(req: IncomingMessage, tenantId: string): boolean { return req.headers["x-tenant-id"] === tenantId; }
 function bearer(req: IncomingMessage, token: string): boolean {
   const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
   if (!match) return false;
@@ -172,6 +173,15 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.razorpayOrderId === orderId);
     if (!record) { json(res, 404, { error: "order_not_found" }); return true; }
+    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    const gatewayResponse = await fetch("https://api.razorpay.com/v1/payments/" + encodeURIComponent(paymentId), {
+      headers: { authorization: "Basic " + Buffer.from(cfg.keyId + ":" + cfg.keySecret).toString("base64") },
+    });
+    if (!gatewayResponse.ok) { json(res, 502, { error: "gateway_payment_verification_failed" }); return true; }
+    const gatewayPayment: any = await gatewayResponse.json();
+    if (gatewayPayment.order_id !== orderId || Number(gatewayPayment.amount) !== record.amountPaise || gatewayPayment.currency !== record.currency || !["authorized", "captured"].includes(gatewayPayment.status)) {
+      json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
+    }
     if (record.status !== "PAID") {
       record.status = "PAID"; record.razorpayPaymentId = paymentId;
       record.receiptNumber = "EPER-" + new Date().getUTCFullYear() + "-" + randomUUID().slice(0, 8).toUpperCase();
@@ -185,6 +195,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.id === decodeURIComponent(receiptMatch[1]));
     if (!record) { json(res, 404, { error: "payment_not_found" }); return true; }
+    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     const pdf = receiptPdf(record);
     res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptNumber + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
