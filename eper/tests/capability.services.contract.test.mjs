@@ -99,3 +99,28 @@ test("audit capability rejects a caller-supplied tenant mismatch and missing evi
     /AUDIT_EVIDENCE_REQUIRED/
   );
 });
+
+
+test("capability services reject malformed supplied execution context", () => {
+  const service = new BusinessValidationService();
+  const requirement = getRequirementBinding("REQ-46303");
+  for (const context of [
+    null,
+    [],
+    "not-an-object",
+    { tenantId: "tenant-a", principalId: "principal-a", correlationId: " " },
+    { tenantId: 12, principalId: "principal-a", correlationId: "corr-a" },
+  ]) {
+    assert.throws(
+      () => service.execute(requirement, { context, payload: { operation: "validate", input: {} } }),
+      /CAPABILITY_CONTEXT_REQUIRED/
+    );
+  }
+});
+
+test("capability service permits omitted context for non-tenant-scoped validation", async () => {
+  const result = await new BusinessValidationService().execute(getRequirementBinding("REQ-46303"), {
+    payload: { operation: "validate", input: {} }
+  });
+  assert.equal(result.status, "EXECUTED");
+});
