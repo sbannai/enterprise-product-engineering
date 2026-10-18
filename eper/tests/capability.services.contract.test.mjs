@@ -124,3 +124,29 @@ test("capability service permits omitted context for non-tenant-scoped validatio
   });
   assert.equal(result.status, "EXECUTED");
 });
+
+
+test("tenant-scoped capabilities reject malformed requested tenant identifiers", () => {
+  const service = new AuthoritativeRecordService();
+  const requirement = getRequirementBinding("REQ-46301");
+  for (const tenantId of [" ", 0, null, {}]) {
+    assert.throws(
+      () => service.execute(requirement, {
+        context,
+        payload: { operation: "create", tenantId, record: { id: "r-invalid", version: 1, state: "DRAFT", data: {} } }
+      }),
+      /TENANT_CONTEXT_INVALID/
+    );
+  }
+});
+
+test("tenant-scoped capabilities reject a valid but different tenant identifier", () => {
+  const service = new AuthoritativeRecordService();
+  assert.throws(
+    () => service.execute(getRequirementBinding("REQ-46301"), {
+      context,
+      payload: { operation: "create", tenantId: "tenant-other", record: { id: "r-other", version: 1, state: "DRAFT", data: {} } }
+    }),
+    /TENANT_CONTEXT_MISMATCH/
+  );
+});
