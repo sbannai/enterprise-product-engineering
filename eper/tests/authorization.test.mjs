@@ -148,6 +148,17 @@ test("JSON-file authorization store rejects malformed persisted policies on read
     const store = new JsonFileAuthorizationPolicyStore(file);
     assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
     assert.throws(() => store.decide({ tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "record:r1" }), /PERSISTENCE_DATA_INVALID/);
+
+    writeFileSync(file, JSON.stringify([
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ", "READ"], resources: ["record:r1"], effect: "ALLOW" },
+    ]));
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
+
+    writeFileSync(file, JSON.stringify([
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+    ]));
+    assert.throws(() => store.snapshot(), /PERSISTENCE_DATA_INVALID/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
