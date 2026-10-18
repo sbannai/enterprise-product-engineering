@@ -61,3 +61,21 @@ test("governed reports reject circular values", () => {
   circular.self = circular;
   assert.throws(() => service.publish({ ...serviceRow, values: circular }), /REPORT_DATA_NOT_SERIALIZABLE/);
 });
+
+
+test("governed reporting rejects malformed row shapes before storage", () => {
+  const service = new InMemoryGovernedReportingService();
+  assert.throws(() => service.publish(null), /REPORT_CONTEXT_REQUIRED/);
+  assert.throws(() => service.publish({ ...serviceRow, generatedAt: "not-a-date" }), /REPORT_TIMESTAMP_INVALID/);
+  assert.throws(() => service.publish({ ...serviceRow, sourceRequirementIds: [" "] }), /REPORT_PROVENANCE_REQUIRED/);
+  assert.throws(() => service.publish({ ...serviceRow, values: [] }), /REPORT_VALUES_INVALID/);
+  assert.throws(() => service.publish({ ...serviceRow, values: { bad: undefined } }), /REPORT_DATA_NOT_SERIALIZABLE/);
+  assert.equal(service.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 0);
+});
+
+test("governed reporting rejects malformed query and filter inputs", () => {
+  const service = new InMemoryGovernedReportingService();
+  assert.throws(() => service.query(null), /REPORT_QUERY_CONTEXT_REQUIRED/);
+  assert.throws(() => service.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: [] }), /REPORT_FILTERS_INVALID/);
+  assert.throws(() => service.query({ tenantId: "tenant-a", reportId: "rpt-1", limit: Number.MAX_SAFE_INTEGER + 1 }), /REPORT_LIMIT_INVALID/);
+});
