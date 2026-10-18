@@ -160,6 +160,40 @@ test("JSON-file authorization store rejects duplicate policies without corruptin
   }
 });
 
+test("authorization decision and request-validation behavior matches across adapters", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-authz-decision-parity-"));
+  try {
+    const stores = [
+      new InMemoryAuthorizationService(),
+      new JsonFileAuthorizationPolicyStore(join(directory, "policies.json")),
+    ];
+    const policies = [
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+      { tenantId: "tenant-a", principalId: "user-a", actions: ["READ"], resources: ["record:r1"], effect: "DENY" },
+      { tenantId: "tenant-b", actions: ["READ"], resources: ["record:r1"], effect: "ALLOW" },
+    ];
+    const requests = [
+      [{ tenantId: "tenant-a", principalId: "user-a", action: "READ", resource: "record:r1" }, "DENY", "EXPLICIT_DENY_POLICY"],
+      [{ tenantId: "tenant-a", principalId: "user-a", action: "WRITE", resource: "record:r1" }, "DENY", "NO_ALLOW_POLICY"],
+      [{ tenantId: "tenant-b", principalId: "user-z", action: "READ", resource: "record:r1" }, "ALLOW", "ALLOW_POLICY_MATCH"],
+      [{ tenantId: "tenant-c", principalId: "user-a", action: "READ", resource: "record:r1" }, "DENY", "NO_ALLOW_POLICY"],
+    ];
+    for (const store of stores) {
+      for (const policy of policies) store.addPolicy(policy);
+      for (const [request, effect, reason] of requests) {
+        const decision = store.decide(request);
+        assert.equal(decision.effect, effect);
+        assert.equal(decision.reason, reason);
+      }
+      for (const request of [null, { tenantId: " ", principalId: "user-a", action: "READ", resource: "record:r1" }]) {
+        assert.throws(() => store.decide(request), /AUTHORIZATION_CONTEXT_REQUIRED/);
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("JSON-file authorization store rejects malformed persisted policies on read", () => {
   const directory = mkdtempSync(join(tmpdir(), "eper-authz-corrupt-"));
   const file = join(directory, "policies.json");
