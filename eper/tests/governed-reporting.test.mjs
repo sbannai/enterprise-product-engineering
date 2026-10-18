@@ -69,7 +69,7 @@ test("governed reporting rejects malformed row shapes before storage", () => {
   assert.throws(() => service.publish({ ...serviceRow, generatedAt: "not-a-date" }), /REPORT_TIMESTAMP_INVALID/);
   assert.throws(() => service.publish({ ...serviceRow, sourceRequirementIds: [" "] }), /REPORT_PROVENANCE_REQUIRED/);
   assert.throws(() => service.publish({ ...serviceRow, values: [] }), /REPORT_VALUES_INVALID/);
-  assert.throws(() => service.publish({ ...serviceRow, values: { bad: undefined } }), /REPORT_DATA_NOT_SERIALIZABLE/);
+  assert.throws(() => service.publish({ ...serviceRow, values: { bad: 1n } }), /REPORT_DATA_NOT_SERIALIZABLE/);
   assert.equal(service.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 0);
 });
 
