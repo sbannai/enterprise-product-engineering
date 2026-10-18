@@ -46,3 +46,12 @@ Disposition: health endpoint response is reported as OK. The reported build ID i
 The six repository workflows completed successfully for PR #151 head `89527aff8e61f16994a3fe766924878cb6dff123`: EPER CI, G9 reconciliation, six-family capability HTTP smoke, container runtime smoke, 228-requirement pilot matrix, and release-candidate build. These remain CI evidence, not hosted Business UAT.
 
 **Updated disposition:** target health reported OK; candidate-build reconciliation **MISMATCH / OPEN**; B01 remains **BLOCKED — DO NOT EXECUTE**. Do not change any other readiness control on the basis of this health response alone.
+
+
+## Follow-up verification — 2026-10-18 13:36 UTC
+
+PR #151 latest head at verification: `e7da4dc2d0a54fe689c087cbbca940d288aa6889`. The six pull-request workflows associated with this head completed successfully: EPER Container Runtime Smoke Test, G9 Reconciliation CI, EPER Six-Family Capability HTTP Smoke, EPER 228 Requirement Pilot Test Matrix, EPER CI, and EPER Release Candidate Build.
+
+The previously operator-supplied health response reports build `8825c0f8b9cf8a523e2943dbf2ce0a5a2d74b959`. That is a valid repository commit but is not PR #151's current head. The release-candidate workflow builds and tests a container and packages an artifact; it does not deploy to Render. No live deployment was initiated or independently verified during this check.
+
+**Disposition unchanged:** candidate deployment reconciliation remains OPEN; E1–E13 controls remain pending/incomplete; Business UAT remains **BLOCKED — DO NOT EXECUTE**. CI success must not be copied into hosted execution or business acceptance records. No chargeable AWS resources were provisioned.
