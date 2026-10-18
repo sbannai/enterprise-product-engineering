@@ -90,6 +90,19 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertTrue(any("exactly cover" in error for error in report["integrityErrors"]))
         self.assertEqual(report["counts"]["requirementsNotRun"], 1)
 
+    def test_all_acceptance_rows_cannot_override_pending_entry_gate(self):
+        cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
+                      baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
+                      approval=f"DEC-{i:03d}") for i in range(1, 49)]
+        gates = [gate(i, status="PASS", evidence=f"EVID-{i}") for i in range(1, 14)]
+        gates[-1] = gate(13, status="PENDING", evidence="")
+        captures = [capture(i, outcome="PASS", accepted=True) for i in range(1, 229)]
+        gaps = [{"requirement_id": f"REQ-{463 + (i-1)//6}{(i-1)%6+1:02d}"} for i in range(1, 49)]
+        report = audit.audit_records(cases, gates, captures, gaps)
+        self.assertEqual(report["readiness"], "BLOCKED")
+        self.assertFalse(report["businessUatExecuted"])
+        self.assertEqual(report["counts"]["entryGatesPendingOrWithoutEvidence"], 1)
+
     def test_wrong_population_and_duplicate_ids_are_integrity_errors(self):
         report = audit.audit_records([case(), case()], [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
         self.assertTrue(any("expected 48 rows" in error for error in report["integrityErrors"]))
