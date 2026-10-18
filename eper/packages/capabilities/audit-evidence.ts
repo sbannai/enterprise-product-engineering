@@ -52,10 +52,16 @@ export class InMemoryAuditEvidenceStore implements AuditEvidenceStore {
   }
 
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) {
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+        typeof input.id !== "string" || !input.id.trim() ||
+        typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+        typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+        typeof input.principalId !== "string" || !input.principalId.trim() ||
+        typeof input.correlationId !== "string" || !input.correlationId.trim()) {
       throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
     }
-    if (!input.action || !input.occurredAt) {
+    if (typeof input.action !== "string" || !input.action.trim() ||
+        typeof input.occurredAt !== "string" || !input.occurredAt.trim()) {
       throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
     }
     if (Number.isNaN(Date.parse(input.occurredAt))) {
