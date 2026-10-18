@@ -44,8 +44,10 @@ export class InMemoryAuthorizationService implements AuthorizationPolicyStore {
         (policy.principalId !== undefined && (typeof policy.principalId !== "string" || !policy.principalId.trim())) ||
         !Array.isArray(policy.actions) || policy.actions.length === 0 ||
         !policy.actions.every((action) => typeof action === "string" && action.trim().length > 0) ||
+        new Set(policy.actions).size !== policy.actions.length ||
         !Array.isArray(policy.resources) || policy.resources.length === 0 ||
         !policy.resources.every((resource) => typeof resource === "string" && resource.trim().length > 0) ||
+        new Set(policy.resources).size !== policy.resources.length ||
         (policy.effect !== "ALLOW" && policy.effect !== "DENY")) {
       throw new Error("AUTHORIZATION_POLICY_INVALID");
     }
