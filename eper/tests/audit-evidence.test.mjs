@@ -74,3 +74,14 @@ test("audit evidence rejects missing action and timestamp", () => {
     /AUDIT_EVIDENCE_TIMESTAMP_INVALID/,
   );
 });
+
+
+test("audit evidence rejects non-string context and action fields before storage", () => {
+  const store = new InMemoryAuditEvidenceStore();
+  assert.throws(() => store.append({ ...evidence, id: 42 }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, tenantId: null }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, principalId: " " }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, action: 9 }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, occurredAt: null }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
+  assert.deepEqual(store.listByRequirement("tenant-a", "REQ-46304"), []);
+});
