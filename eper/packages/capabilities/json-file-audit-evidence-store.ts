@@ -13,8 +13,32 @@ export class JsonFileAuditEvidenceStore implements AuditEvidenceStore {
   }
   private key(tenantId: string, id: string): string { return JSON.stringify([tenantId, id]); }
   private read(): AuditEvidence[] {
-    try { const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8")); if (!Array.isArray(parsed)) throw new Error(); return parsed as AuditEvidence[]; }
-    catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
+      if (!Array.isArray(parsed)) throw new Error();
+      const entries = parsed as AuditEvidence[];
+      const identities = new Set<string>();
+      for (const entry of entries) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry) ||
+            typeof entry.id !== "string" || !entry.id.trim() ||
+            typeof entry.tenantId !== "string" || !entry.tenantId.trim() ||
+            typeof entry.requirementId !== "string" || !entry.requirementId.trim() ||
+            typeof entry.principalId !== "string" || !entry.principalId.trim() ||
+            typeof entry.correlationId !== "string" || !entry.correlationId.trim() ||
+            typeof entry.action !== "string" || !entry.action.trim() ||
+            typeof entry.occurredAt !== "string" || Number.isNaN(Date.parse(entry.occurredAt)) ||
+            !entry.payload || typeof entry.payload !== "object" || Array.isArray(entry.payload) ||
+            typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) {
+          throw new Error();
+        }
+        const identity = this.key(entry.tenantId, entry.id);
+        if (identities.has(identity)) throw new Error();
+        identities.add(identity);
+        const { integrityHash, ...material } = entry;
+        if (createHash("sha256").update(this.material(material)).digest("hex") !== integrityHash) throw new Error();
+      }
+      return entries;
+    } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
   private commit(entries: AuditEvidence[]): void {
     const temporary = `${this.filePath}.${randomUUID()}.tmp`;
