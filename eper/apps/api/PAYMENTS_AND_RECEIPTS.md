@@ -24,3 +24,8 @@ If any required secret is absent, the payment routes fail closed with HTTP 503. 
 - Use Razorpay test mode and approved synthetic data first. Do not configure live credentials or deploy without explicit owner authorization.
 - Receipts are currently generic EPER receipts, not tax invoices. Business/legal owners must approve required fields, numbering policy and branding.
 - A successful CI build is not proof of a live gateway transaction. End-to-end verification requires authorized Razorpay test credentials and webhook delivery evidence.
+
+
+## Additional security gates added during review
+- HMAC values must be exactly 64 hexadecimal characters before constant-time comparison; malformed hex suffixes are rejected.
+- Order creation fails closed with `503 server_side_amount_authority_required` unless `EPER_PAYMENT_ALLOW_CLIENT_AMOUNT=true`. This flag is a temporary explicit development escape hatch only; production must replace it with server-side invoice/fee lookup and must not enable client-supplied amounts.
