@@ -148,7 +148,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const amountPaise = input?.amountPaise;
     const currency = typeof input?.currency === "string" ? input.currency.toUpperCase() : "INR";
     // Payment amount must come from a trusted server-side invoice/fee source, not an arbitrary client value.
-    if (process.env.EPER_PAYMENT_ALLOW_CLIENT_AMOUNT !== "true") {
+    if (process.env.NODE_ENV === "production" || process.env.EPER_PAYMENT_ALLOW_CLIENT_AMOUNT !== "true") {
       json(res, 503, { error: "server_side_amount_authority_required" }); return true;
     }
     if (!tenantId || !reference || !Number.isSafeInteger(amountPaise) || amountPaise <= 0 || currency !== "INR") {
