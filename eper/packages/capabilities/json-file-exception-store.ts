@@ -74,15 +74,27 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
   private auditMaterial(entry: Omit<AuditEvidence, "integrityHash">): string {
     const serialized = JSON.stringify(entry.payload);
     if (serialized === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
-    const payload = JSON.parse(serialized);
+    let payload: unknown;
+    try { payload = JSON.parse(serialized); }
+    catch { throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE"); }
     return JSON.stringify({ id: entry.id, tenantId: entry.tenantId, requirementId: entry.requirementId,
       action: entry.action, principalId: entry.principalId, correlationId: entry.correlationId,
       occurredAt: entry.occurredAt, payload });
   }
 
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
-    if (!input.action || !input.occurredAt) throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    if (!input || typeof input !== "object" ||
+      typeof input.id !== "string" || !input.id.trim() ||
+      typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+      typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+      typeof input.principalId !== "string" || !input.principalId.trim() ||
+      typeof input.correlationId !== "string" || !input.correlationId.trim()) {
+      throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
+    }
+    if (typeof input.action !== "string" || !input.action.trim() ||
+      typeof input.occurredAt !== "string" || !input.occurredAt.trim()) {
+      throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    }
     if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
     const state = this.readState();
     if (state.lifecycleEvidence.some(entry => entry.tenantId === input.tenantId && entry.id === input.id)) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
