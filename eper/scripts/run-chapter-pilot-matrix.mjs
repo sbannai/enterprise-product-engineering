@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const evidenceDir = resolve(root, "reexec-evidence");
-// Never mix checked-in or previous-run evidence into this run's artifact.
-rmSync(evidenceDir, { recursive: true, force: true });
+const evidenceRunId = process.env.GITHUB_RUN_ID ?? `local-${process.pid}`;
+// Keep every execution isolated without deleting checked-in or prior-run evidence.
+const evidenceDir = resolve(root, `reexec-evidence-${evidenceRunId}`);
 mkdirSync(evidenceDir, { recursive: true });
 
 const chapters = Array.from({ length: 38 }, (_, i) => 463 + i);
