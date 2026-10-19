@@ -111,3 +111,18 @@ Artifact ID `11306122539` was downloaded from the recorded GitHub Actions releas
 - The artifact commit is not the readiness-plan commit `3cb76ed403241504dc94d825b9f7b926b384788c` or the subsequent plan-update commit. Do not use it as evidence that the latest candidate is runnable.
 
 **Disposition:** RC4 artifact integrity is VERIFIED; artifact suitability for local HTTP UAT is NOT SUITABLE. The correct next engineering fix is to update the controlled runtime-smoke/release workflow to emit a versioned executable runtime artifact (or a deliberately supported local bundle including server + runner dependencies) for the exact intended commit, then verify checksum/build identity and execute the loopback smoke. Do not promote RC4 to business UAT, and do not change any canonical case outcome.
+
+
+## 9. PR runtime artifact now produced and integrity checked — 2026-10-19
+
+The modified container workflow on PR #165 completed successfully and published GitHub Actions artifact ID `12195063132`, named `eper-runtime-image-b6cd8c5779dcd7c081781414fe04dc268bc7623c`.
+
+- Workflow run: `39271287455` — Container Runtime Smoke Test, conclusion `success`.
+- Related PR workflows all completed successfully: EPER CI `39271287341`, pilot matrix `39271287383`, six-family HTTP smoke `39271287361`, release candidate `39271287340`, G9 reconciliation `39271287327`.
+- Downloaded outer ZIP SHA-256: `0be476062e73ff90f821094757ec323d2e9aeec7db182707e8bb649b0ca3d296`.
+- Embedded image tarball checksum: `e2e5c8a1478f8f8bfb30abfdcf318c82825475b44b31a7266b5346c18fb3c646`; local `sha256sum --check` and `gzip --test` passed.
+- Artifact metadata build ID: `b6cd8c5779dcd7c081781414fe04dc268bc7623c`. For a pull-request workflow, `github.sha` is the synthetic PR merge commit; the workflow's reported PR head SHA is `8d1a08e07f74cc88950554881ca4e33e98715255`. Record both; do not mislabel the artifact build ID as the branch head SHA.
+- GitHub-hosted smoke successfully built, ran, verified `/health` build identity and 404 behavior, reloaded the packaged image, and verified it again.
+- The assistant's current local container environment does not have Docker/a Docker daemon, so it could not independently load/run this image locally. The successful GitHub-hosted packaged-image round-trip is the current runtime evidence.
+
+**Disposition:** Runtime artifact packaging and hosted smoke are now verified. Next technical step is to make the artifact available to the approved UAT operator or run the same controlled local runbook in an environment with Docker. This does not prove the hosted Render target is healthy, enable the capability API, or authorize business acceptance. The six canonical Chapter 463 cases remain `NOT_RUN` pending safe target/session authorization and approved oracles.
