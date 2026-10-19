@@ -67,3 +67,31 @@ Therefore:
 7. Keep the six cases NOT_RUN and Business UAT NOT AUTHORIZED until technical preflight and separate D10 authorization are evidenced.
 
 **Disposition:** This file is a source-verification and non-promotion record, not a contract approval. Option A remains fixed as Volume XIII, Chapter 463 — Enterprise Procurement & Source-to-Pay. No requirement IDs change. No merge, deployment, paid AWS provisioning, G9 freeze, G10 issuance or Business UAT authorization is implied.
+
+
+## 6. Controlled technical evidence and scope discrepancy update (2026-10-19)
+
+Latest verified run for candidate commit `3080f72e6e797b5e98dee2447772e4a13500e26a`:
+
+| Evidence | Run / artifact | Result | Permitted interpretation |
+|---|---|---|---|
+| Controlled automated QA | Run `39289526503`, artifact `12203259926` | `npm test`: 371 passed, 0 failed; build completed | Fresh technical regression evidence only; metadata explicitly says Business UAT and formal sign-off NOT EXECUTED |
+| 228-requirement / 38-chapter pilot matrix | Run `39289536646`, artifact `12203568734` | 38/38 chapter pilot packages passed; 248/248 automated pilot tests passed; 228 requirements recorded as automated pilot PASS | Automated pilot coverage only; artifact explicitly labels itself NOT BUSINESS UAT / NOT ACCEPTANCE / NOT PRODUCTION EVIDENCE |
+| Six capability services over local HTTP | Run `39289536653`, artifact `12204462376` | 6/6 operations returned HTTP 200 for REQ-46301–REQ-46306 | Local synthetic HTTP smoke only; not proof of approved procurement business semantics or deployed UAT readiness |
+| Container runtime smoke | Run `39289536733` | Workflow success | Runtime/build/health smoke only |
+| Release-candidate build | Run `39289536672` | Workflow success | Candidate build only; no release approval |
+| G9 reconciliation CI | Run `39289536794` | Workflow success | Reconciliation automation succeeded; does not itself freeze G9 or certify the 228 requirement baseline |
+| Controlled UAT technical simulation | Run `39289527542`, artifact `12204507216` | Install/build/test simulation succeeded | Artifact explicitly classifies this as NOT BUSINESS UAT; no business acceptance or sign-off |
+
+All listed workflows completed successfully on the candidate commit. The test logs and metadata were inspected from the run-specific artifacts. These results improve technical confidence, but do not change the requirement acceptance register or authorize business execution. The six Chapter 463 business cases remain NOT_RUN pending the approved oracle, exact HLD→LLD bindings, contract decisions, controlled test identities/data, and D10 authorization.
+
+### Explicit scope discrepancy requiring design-authority disposition
+
+The master repository contains two distinct candidate areas relevant to REQ-46305:
+
+- **Procurement-match exception flow:** `LC-PROC-014/015` and `API-PROC-020/021` concern match evaluation and match-exception resolution.
+- **General procurement exception flow:** `ENT-PROC-018` / `TBL-PROC-019`, `API-PROC-025/026`, and `EVT-PROC-015` describe a general Procurement Exception object and its search/disposition operations.
+
+All are Draft candidates. The repository does not establish which scope the approved REQ-46305 oracle intends. Keep both as candidate mappings until the controlled BRD/SRS and design authority resolve the semantic join. Do not silently substitute one for the other.
+
+**Updated disposition:** technical CI green on the candidate commit; exact approved HLD→LLD pairs remain 0/6; full approved DATA/API/EVENT contracts or approved N/A remain 0/18; approved measurable acceptance oracles remain 0/6; Business UAT remains NOT AUTHORIZED / NOT EXECUTED; G9 remains NOT FROZEN.
