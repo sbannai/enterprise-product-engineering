@@ -33,8 +33,10 @@ async function body(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 function validSignature(expected: string, supplied: string): boolean {
+  // Reject malformed/trailing input before hex decoding; Buffer.from(hex) silently truncates invalid suffixes.
+  if (!/^[0-9a-f]{64}$/i.test(expected) || !/^[0-9a-f]{64}$/i.test(supplied)) return false;
   const a = Buffer.from(expected, "hex"); const b = Buffer.from(supplied, "hex");
-  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
+  return a.length === 32 && b.length === 32 && timingSafeEqual(a, b);
 }
 function pdfEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "?");
