@@ -126,3 +126,17 @@ The modified container workflow on PR #165 completed successfully and published 
 - The assistant's current local container environment does not have Docker/a Docker daemon, so it could not independently load/run this image locally. The successful GitHub-hosted packaged-image round-trip is the current runtime evidence.
 
 **Disposition:** Runtime artifact packaging and hosted smoke are now verified. Next technical step is to make the artifact available to the approved UAT operator or run the same controlled local runbook in an environment with Docker. This does not prove the hosted Render target is healthy, enable the capability API, or authorize business acceptance. The six canonical Chapter 463 cases remain `NOT_RUN` pending safe target/session authorization and approved oracles.
+
+
+## 10. Artifact downloaded and locally re-verified — 2026-10-19
+
+A fresh download of GitHub Actions artifact `12195063132` was extracted and checked in the available workspace:
+
+- Artifact ZIP SHA-256: `0be476062e73ff90f821094757ec323d2e9aeec7db182707e8bb649b0ca3d296` — matches the recorded artifact digest.
+- `BUILD-METADATA.txt` reports build ID `b6cd8c5779dcd7c081781414fe04dc268bc7623c`.
+- `SHA256SUMS` verification passed for `eper-runtime-b6cd8c5779dcd7c081781414fe04dc268bc7623c.tar.gz`.
+- Inner tarball SHA-256: `e2e5c8a1478f8f8bfb30abfdcf318c82825475b44b31a7266b5346c18fb3c646`.
+- `gzip -t` passed for the inner tarball.
+- Docker/Podman is not installed in the available workspace, so the image cannot be loaded or run here. This is integrity/package validation only; it is not local container runtime execution or six-family HTTP smoke.
+
+**Next handoff:** on an operator workstation with Docker Desktop, follow `LOCAL_CONTAINER_UAT_RUNBOOK.md`, verify the build ID/checksum, load the image and run the loopback-only six-family runner. Capture the JSON evidence. Keep the local API bound to `127.0.0.1`, use temporary test-only identity/token values, and do not expose the route externally. Formal Business UAT remains separate and requires approved business oracles and session authorization.
