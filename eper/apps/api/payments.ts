@@ -142,6 +142,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     try { input = JSON.parse((await body(req)).toString("utf8")); } catch { json(res, 400, { error: "invalid_json" }); return true; }
     const tenantId = typeof input?.tenantId === "string" ? input.tenantId.trim() : "";
     const reference = typeof input?.reference === "string" ? input.reference.trim() : "";
+    if (!tenantId || !tenantMatches(req, tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     const amountPaise = input?.amountPaise;
     const currency = typeof input?.currency === "string" ? input.currency.toUpperCase() : "INR";
     if (!tenantId || !reference || !Number.isSafeInteger(amountPaise) || amountPaise <= 0 || currency !== "INR") {
