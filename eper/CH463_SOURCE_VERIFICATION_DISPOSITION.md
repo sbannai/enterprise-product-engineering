@@ -95,3 +95,27 @@ The master repository contains two distinct candidate areas relevant to REQ-4630
 All are Draft candidates. The repository does not establish which scope the approved REQ-46305 oracle intends. Keep both as candidate mappings until the controlled BRD/SRS and design authority resolve the semantic join. Do not silently substitute one for the other.
 
 **Updated disposition:** technical CI green on the candidate commit; exact approved HLD→LLD pairs remain 0/6; full approved DATA/API/EVENT contracts or approved N/A remain 0/18; approved measurable acceptance oracles remain 0/6; Business UAT remains NOT AUTHORIZED / NOT EXECUTED; G9 remains NOT FROZEN.
+
+
+## 7. Pilot-matrix semantics audit (2026-10-19)
+
+The pilot generator `eper/scripts/run-chapter-pilot-matrix.mjs` was inspected against the test source `eper/chapter-463-pilot-v0.1.0/test/chapter463.test.js`.
+
+**Interpretation boundary confirmed:** the 228-row matrix is a source-mapped automated pilot register, not 228 independent tests of approved requirement semantics. For each chapter, the generator:
+1. runs that chapter's local `npm test` suite;
+2. scans test titles for requirement IDs;
+3. scans the test source for requirement IDs;
+4. assigns `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT` where the suite passes and the requirement ID appears in both places with a passing test title.
+
+The Chapter 463 pilot tests exercise a generic `RecordRepository` domain: tenant-scoped create/read, stale-update rejection, missing permission/cross-tenant denial, a generic mandatory-condition validation, audit append, generic controlled failure, and tenant-scoped reporting. They do **not** exercise the procurement requisition schema, procurement approval authority, procurement-specific validation catalogue, approved procurement audit/event contracts, approved exception recovery rules, or approved procurement KPI definitions. The tests are useful capability-family smoke coverage, but cannot be read as procurement acceptance.
+
+The current run results remain valid in their proper scope:
+- 38/38 chapter pilot suites passed.
+- 248/248 automated pilot test assertions passed.
+- 228/228 rows have mapped automated pilot coverage.
+- The matrix itself explicitly labels the result NOT BUSINESS UAT / NOT ACCEPTANCE / NOT PRODUCTION EVIDENCE.
+- Fresh controlled QA remains 371/371 passing, with metadata stating Business UAT and formal sign-off NOT EXECUTED.
+
+**Required closure action:** preserve these automated statuses as technical pilot results; do not copy them into the business UAT acceptance column. Once approved procurement oracles and source bindings exist, add/execute requirement-specific tests against the six procurement capability paths and retain their actual results independently.
+
+**Disposition:** this audit does not change the gate status: six Chapter 463 business cases remain NOT_RUN; approved oracles 0/6; exact approved HLD→LLD pairs 0/6; approved full DATA/API/EVENT bindings or N/A 0/18; Business UAT NOT AUTHORIZED / NOT EXECUTED.
