@@ -35,6 +35,18 @@ export class InMemoryAuthoritativeRecordStore implements AuthoritativeRecordStor
   }
 
   create(record: AuthoritativeRecord): AuthoritativeRecord {
+    if (!record || typeof record !== "object" ||
+      typeof record.id !== "string" || !record.id.trim() ||
+      typeof record.tenantId !== "string" || !record.tenantId.trim() ||
+      typeof record.state !== "string" || !record.state.trim()) {
+      throw new Error("RECORD_CONTEXT_REQUIRED");
+    }
+    if (!Number.isInteger(record.version) || record.version < 1) {
+      throw new Error("RECORD_VERSION_INVALID");
+    }
+    if (!record.data || typeof record.data !== "object" || Array.isArray(record.data)) {
+      throw new Error("RECORD_DATA_INVALID");
+    }
     const key = this.key(record.tenantId, record.id);
     if (this.records.has(key)) throw new Error("RECORD_ALREADY_EXISTS");
     const stored = this.cloneRecord(record);
