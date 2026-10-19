@@ -77,13 +77,14 @@ export function createAppServer(): Server {
       return;
     }
 
+    // Payment routes are independent of the opt-in UAT capability endpoint.
+    if (await handlePaymentRoute(request, response, requestUrl.pathname)) return;
+
     // Publicly reachable, controlled UAT route. It is separate from the local-only route below.
     const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
     if (request.method === "POST" && uatCapabilityMatch) {
       if (process.env.EPER_UAT_API_ENABLED !== "true") {
-        if (await handlePaymentRoute(request, response, requestUrl.pathname)) return;
-
-    sendJson(response, 404, { error: "not_found" });
+        sendJson(response, 404, { error: "not_found" });
         return;
       }
 
