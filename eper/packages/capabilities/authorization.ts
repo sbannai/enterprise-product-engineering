@@ -39,11 +39,26 @@ export class InMemoryAuthorizationService implements AuthorizationPolicyStore {
   }
 
   addPolicy(policy: AuthorizationPolicy): void {
+    if (!policy || typeof policy !== "object" ||
+      typeof policy.tenantId !== "string" || !policy.tenantId.trim() ||
+      (policy.principalId !== undefined &&
+        (typeof policy.principalId !== "string" || !policy.principalId.trim())) ||
+      !Array.isArray(policy.actions) || policy.actions.length === 0 ||
+      policy.actions.some((action) => typeof action !== "string" || !action.trim()) ||
+      !Array.isArray(policy.resources) || policy.resources.length === 0 ||
+      policy.resources.some((resource) => typeof resource !== "string" || !resource.trim()) ||
+      (policy.effect !== "ALLOW" && policy.effect !== "DENY")) {
+      throw new Error("AUTHORIZATION_POLICY_INVALID");
+    }
     this.policies.push({ ...policy, actions: [...policy.actions], resources: [...policy.resources] });
   }
 
   decide(request: AuthorizationRequest): AuthorizationDecision {
-    if (!request.tenantId || !request.principalId || !request.action || !request.resource) {
+    if (!request || typeof request !== "object" ||
+      typeof request.tenantId !== "string" || !request.tenantId.trim() ||
+      typeof request.principalId !== "string" || !request.principalId.trim() ||
+      typeof request.action !== "string" || !request.action.trim() ||
+      typeof request.resource !== "string" || !request.resource.trim()) {
       throw new Error("AUTHORIZATION_CONTEXT_REQUIRED");
     }
 
