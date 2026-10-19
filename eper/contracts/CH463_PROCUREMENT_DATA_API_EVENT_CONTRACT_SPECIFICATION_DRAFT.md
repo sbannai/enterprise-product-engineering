@@ -77,19 +77,48 @@ Before any contract is promoted to approved:
 **Contract specification work authorized as draft work; no contract is approved by this document.** Existing baseline conventions can be reused, but procurement-specific domain facts and requirement-level bindings must come from the authoritative source. SRC-003/G3 remains OPEN / NO-GO; B01 remains HOLD / NOT EXECUTED; business acceptance remains pending; G9 is not frozen.
 
 
-## 7. Recovery from already-submitted sources — domain identity conflict
+## 7. Reconciliation against the controlled Chapter 463 source-correction decision
 
-The Library source recovery found existing domain material; no additional upload is requested.
+The earlier source recovery documented conflicting legacy labels. That conflict has since been resolved by **`B01-CH463-SOURCE-CORRECTION-DECISION-001` (Option A, approved 2026-10-12)**: the canonical domain identity is **Volume XIII, Chapter 463 — Enterprise Procurement & Source-to-Pay**. The legacy “Enterprise Event & Message Management” heading is document-control correction debt and must not be treated as the current domain decision.
 
-### Source hierarchy and evidence found
-- `EM-BRD-001_Consolidated_BRD_Chapters_463-500_v1.0` and `HLD_463_470_Controlled_Traceability_Recovery_Matrix_46301_46306_v1.9` identify Chapter 463 as **Enterprise Event & Message Management**. Its six BRD requirements are the recurring control patterns: authoritative records/lifecycle, authorization, business validation, audit evidence, exception handling and governed reporting.
-- `EM-LLD-001_Consolidated_LLD_Chapters_463-500_v1.0` provides detailed-design targets for those six requirement patterns, while explicitly marking exact binding pending and formal approval pending.
-- `HLD_463_470_Detailed_Candidate_v0.2` labels HLD-463 **Enterprise Procurement & Source-to-Pay** and lists a procurement digital thread and candidate objects. The same document says the exact Chapter-463 object names require confirmation against the final chapter source before approval.
-- Existing procurement business context is available in `EM-BRD-001_Volume-I_Chapter-50_Procurement-Supplier-Vendor-and-Source-to-Pay-Management-Requirements-Framework_v1.0` and the Chapter 274 procurement traceability framework. These are useful domain references, but they do not override the Chapter 463 requirement-source identity or independently prove that Chapter 463 is procurement.
+This decision resolves **domain identity only**. It does not approve any procurement object, API operation, event name, schema, requirement-level HLD/LLD binding, acceptance oracle, or UAT execution.
 
-### Reconciliation decision
-**Do not promote procurement entities, APIs or events to REQ-46301–REQ-46306 yet.** The current evidence contains a domain-identity conflict between the requirement-source chain and the HLD candidate. The controlling source for Chapter 463 requirement identity is the detailed Chapter 463 BRD, cross-checked with the consolidated BRD/recovery matrix; the HLD candidate remains supporting/candidate evidence until reconciled.
+### Existing source evidence and its limits
 
-Required action: reconcile the Chapter 463 title/domain against the detailed BRD and approved HLD baseline, then select the applicable existing domain model and record exact source locators. If the intended Chapter 463 domain is Event & Message Management, use the existing event/message domain model and do not force the procurement model into these six requirements. If a controlled approved source establishes that Chapter 463 is Procurement & Source-to-Pay, record the correction and its authority before promoting procurement contracts.
+- `EM-BRD-001_Detailed_Chapters-461-470_v1.0`, Chapter 463 §463.21, page 11, establishes the six requirement identities and generic control-pattern wording. It is requirement-identity evidence, not complete procurement policy.
+- `EM-BRD-001_Volume-XIII_Chapter-463_Enterprise-Procurement-and-Source-to-Pay-Strategic-Sourcing-RFQ-RFP-RFI-Supplier-Selection-Purchase-Requisitions-Purchase-Orders-Contracts-Catalogs-Approvals-and-Procurement-Compliance-Traceability-Matrix_v1.0.docx` supplies relevant procurement domain sections. Its In Development status means it cannot by itself serve as final approval of policy parameters or every requirement-to-domain join.
+- `HLD_463_470_Controlled_Traceability_Recovery_Matrix_46301_46306_CH463_OptionA_Correction_Candidate.docx` records the source-precedence decision but explicitly leaves exact requirement-level HLD/LLD bindings open.
+- `EM-LLD-001_Consolidated_LLD_Chapters_463-500_v1.0` supplies detailed-design pattern targets. Named components remain supporting locators until an approved source explicitly binds each one to its requirement.
+- `eper/CH463_IMPLEMENTATION_TO_DESIGN_CROSSWALK.csv` and `eper/contracts/index.ts` show implementation and registry descriptors only. They are not complete DATA schemas, OpenAPI operations, event payload schemas, or approval records.
 
-This recovery changes the next action from “request another document” to **reconcile existing submitted sources and their authority**. No owner upload is currently required. SRC-003/G3 remains OPEN / NO-GO until this discrepancy and the requirement-level bindings are resolved.
+### Controlled requirement-to-source reconciliation queue
+
+| Requirement | Candidate procurement sections to inspect | Required domain decision/evidence before promotion |
+|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | §§463.7–463.8, 463.16, 463.18, 463.21–463.23, 463.39, 463.42 | Approved mapping of record types, lifecycle/history, fields, identity/idempotency and allowed transitions |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | §§463.3, 463.8, 463.14–463.16, 463.24–463.25, 463.35 | Approved actor/role/action/resource/tenant authority matrix, delegation and segregation-of-duties rules |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | §§463.7–463.8, 463.15–463.16, 463.19–463.25, 463.27, 463.46–463.47 | Approved mandatory/conditional field catalogue, policy precedence, thresholds, rule versions and validation errors |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | §§463.3, 463.14–463.16, 463.18, 463.22, 463.24 | Approved material-event catalogue, audit payload/attribution, integrity, access and retention controls |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | §§463.3, 463.8, 463.14–463.16, 463.22–463.25, 463.27 | Approved exception taxonomy, retry/recovery, compensation, escalation and terminal-state policy |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | §§463.12, 463.15–463.16, 463.24–463.25, 463.28–463.29, 463.32, 463.37, 463.46–463.47 | Approved report catalogue, formulas, source lineage, freshness, reconciliation tolerances and access scope |
+
+The section references above are **candidate source locators for review**, not approved requirement-level joins. For each row, record the exact controlled document version, section/page/row, approval/change reference, effective date, accountable owner, and decision. If the source does not define a requirement's intended procurement behavior, record `CLARIFICATION_REQUIRED`; do not infer the join from plausibility.
+
+### Contract and event-name guardrails
+
+- All 18 DATA/API/EVENT entries remain `CANDIDATE_NOT_APPROVED` until each has a versioned contract, exact source locator, explicit requirement binding, and authorized approval—or an explicitly approved N/A with rationale.
+- Do not treat registry IDs as schemas or contracts.
+- Reconcile `RequisitionSubmitted` versus `PurchaseRequisitionSubmitted` and `RequisitionDecisionRecorded` versus `PurchaseRequisitionApproved` against the controlled event catalogue and approved lifecycle. This draft does not select canonical names.
+- Use the existing SRC-003/G9 reconciliation registers; do not create a parallel closure register.
+
+### Current gate disposition
+
+- Domain identity: **RESOLVED** by `B01-CH463-SOURCE-CORRECTION-DECISION-001`.
+- Exact approved HLD→LLD pairs: **0/6**.
+- Verified DATA/API/EVENT bindings: **0/18**.
+- Approved executable acceptance oracles: **0/6**.
+- SRC-003/G3: **OPEN / NO-GO**.
+- Business UAT: **HOLD / NOT AUTHORIZED / NOT EXECUTED**.
+- G9: **NOT FROZEN**. G10: **NOT ISSUED**.
+
+No owner upload is requested where source material already exists. This contract specification remains draft work only; it does not approve contracts, authorize UAT, or authorize deployment/AWS provisioning.
