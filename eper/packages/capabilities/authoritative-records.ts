@@ -65,6 +65,18 @@ export class InMemoryAuthoritativeRecordStore implements AuthoritativeRecordStor
     expectedVersion: number,
     patch: Partial<Pick<AuthoritativeRecord, "state" | "data">>,
   ): AuthoritativeRecord {
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error("RECORD_VERSION_INVALID");
+    }
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+      throw new Error("RECORD_PATCH_INVALID");
+    }
+    if (patch.state !== undefined && (typeof patch.state !== "string" || !patch.state.trim())) {
+      throw new Error("RECORD_STATE_INVALID");
+    }
+    if (patch.data !== undefined && (!patch.data || typeof patch.data !== "object" || Array.isArray(patch.data))) {
+      throw new Error("RECORD_DATA_INVALID");
+    }
     const key = this.key(tenantId, id);
     const current = this.records.get(key);
     if (!current) throw new Error("RECORD_NOT_FOUND");
