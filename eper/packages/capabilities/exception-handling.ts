@@ -123,6 +123,19 @@ export class InMemoryExceptionStore implements ExceptionStore {
     patch: ExceptionPatch,
     beforeCommit?: (next: WorkflowException, current: WorkflowException) => void,
   ): WorkflowException {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+      throw new Error("EXCEPTION_PATCH_INVALID");
+    }
+    const validStates: readonly string[] = ["OPEN", "RETRYING", "RESOLVED", "ESCALATED"];
+    if (patch.state !== undefined && (typeof patch.state !== "string" || !validStates.includes(patch.state))) {
+      throw new Error("EXCEPTION_STATE_INVALID");
+    }
+    if (patch.owner !== undefined && (typeof patch.owner !== "string" || !patch.owner.trim())) {
+      throw new Error("EXCEPTION_OWNER_INVALID");
+    }
+    if (patch.message !== undefined && (typeof patch.message !== "string" || !patch.message.trim())) {
+      throw new Error("EXCEPTION_MESSAGE_INVALID");
+    }
     const current = this.get(tenantId, id);
     if (!current) throw new Error("EXCEPTION_NOT_FOUND");
 
