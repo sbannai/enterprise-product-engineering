@@ -105,3 +105,20 @@ test("authoritative record updates reject malformed runtime versions, patches, a
   assert.equal(unchanged.state, "ACTIVE");
   assert.deepEqual(unchanged.data, { safe: true });
 });
+
+test("authoritative record delete rejects invalid runtime versions without deleting the record", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "delete-guard", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { safe: true } });
+
+  assert.throws(
+    () => store.delete("tenant-a", "delete-guard", 0),
+    /RECORD_VERSION_INVALID/,
+  );
+  assert.deepEqual(store.get("tenant-a", "delete-guard"), {
+    id: "delete-guard",
+    tenantId: "tenant-a",
+    version: 1,
+    state: "ACTIVE",
+    data: { safe: true },
+  });
+});
