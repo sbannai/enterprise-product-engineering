@@ -75,6 +75,22 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
   const requirement = req("REQ-46302");
   assert.equal(requirement.pattern, "XX02");
   const service = new AuthorizationService();
+  // Policies belong to the authorization policy store, not the request payload.
+  // Register both effects so this test proves DENY precedence rather than only default-deny.
+  service.addPolicy({
+    tenantId: "wave-01-ch463",
+    principalId: "actor-46302",
+    actions: ["material.update"],
+    resources: ["authoritative-record"],
+    effect: "ALLOW",
+  });
+  service.addPolicy({
+    tenantId: "wave-01-ch463",
+    principalId: "actor-46302",
+    actions: ["material.update"],
+    resources: ["authoritative-record"],
+    effect: "DENY",
+  });
 
   const decision = await service.execute(requirement, {
     context: context("req-46302-deny-precedence"),
@@ -86,13 +102,10 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
         action: "material.update",
         resource: "authoritative-record",
       },
-      policies: [
-        { tenantId: "wave-01-ch463", principalId: "actor-46302", actions: ["material.update"], resources: ["authoritative-record"], effect: "ALLOW" },
-        { tenantId: "wave-01-ch463", principalId: "actor-46302", actions: ["material.update"], resources: ["authoritative-record"], effect: "DENY" },
-      ],
     },
   });
   assert.equal(decision.data.payload.decision.effect, "DENY");
+  assert.equal(decision.data.payload.decision.reason, "EXPLICIT_DENY_POLICY");
 
   const defaultDeny = await service.execute(requirement, {
     context: context("req-46302-default-deny"),
