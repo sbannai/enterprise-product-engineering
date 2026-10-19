@@ -78,3 +78,23 @@ Complete one packet per existing case ID, without creating duplicate case IDs:
 - No production transactions or paid AWS resources are authorized by this plan.
 
 **Disposition:** Start readiness preparation now. Use exploratory walkthroughs only in an approved safe environment. Keep formal Business UAT execution gated until its explicit authorization and acceptance controls are satisfied.
+
+
+## 7. Target facts reconciled from the existing evidence trail — 2026-10-19
+
+Do not describe the UAT target as simply "missing". The controlled history records the following:
+
+- Candidate target: `https://eper-b01-uat-lj3n.onrender.com`, Render service `eper-b01-uat`, configured on the **free** plan in `render.yaml`, health path `/health`.
+- On 2026-10-16, the requester supplied this health response: `{"status":"ok","service":"eper-api","buildId":"8825c0f8b9cf8a523e2943dbf2ce0a5a2d74b959"}`. This is historical requester-provided evidence for health/build identity at that time, not a fresh independent probe.
+- Subsequent independent probes from the available tool environment could not retrieve the host. That is inconclusive about whether Render is currently up; it is not a confirmed outage.
+- Current `render.yaml` on `main` sets `EPER_UAT_API_ENABLED=false` and `EPER_LOCAL_CAPABILITY_API=false`. Therefore the health endpoint does not establish that capability execution is enabled. Do not turn on a public bearer-token route or change the security posture without the authorized environment/security owner’s approval and secure secret configuration.
+- The latest readiness-plan commit’s container-smoke workflow passed but published no runtime image artifact. This is a workflow/artifact gap, not a runtime test failure.
+
+### Next operational sequence
+
+1. Re-run the protected **EPER Authorized UAT Target Preflight** only if the approved host allowlist, protected environment/reviewers, expected deployed build ID and service-owner authorization are verified. Preserve the workflow artifact; do not treat the historic health response as a current preflight.
+2. Have the environment/security owner confirm whether the six-family test API may be enabled for the UAT session. Keep it disabled until approved. Prefer a private/allowlisted or identity-gated execution route; never put bearer tokens in source, issue comments or evidence.
+3. If public execution is not approved, use the controlled local container runbook with a checksum-verified runtime artifact. The current runtime-smoke workflow has not produced a downloadable artifact for the latest plan commit, so repair that artifact path before claiming local container execution.
+4. Only after a safe executable target and session authorization exist, proceed to the six canonical Chapter 463 business journeys; keep each case `NOT_RUN` until actual authorized steps/results/evidence are captured.
+
+This section corrects target status without authorizing execution or changing canonical UAT records.
