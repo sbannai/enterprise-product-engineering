@@ -47,3 +47,17 @@ Never store credentials, bearer tokens, or unnecessary personal data in the evid
 - `eper/uat/B01_BUSINESS_UAT_READINESS_FIRST_PLAN.md`
 
 The source test patterns are implementation observations. They must not be presented as approved domain policy or formal acceptance criteria.
+
+
+## 1.1 Existing Library decision sources reconciled — 2026-10-19
+
+The worksheet was cross-checked against the existing Library artifacts surfaced for Chapter 463; this is not a request for the business owner to recreate the work from scratch:
+
+- `CH463_Acceptance_Oracle_and_Approval_Matrix_v0.1.docx` — controlled change candidate, explicitly **NOT APPROVED / NOT A REISSUED BASELINE**. It already frames all six oracles and their missing decisions.
+- `B01_CH463_Business_Rule_and_Acceptance_Register_v0.5.xlsx` — latest surfaced register version; the D1–D10 decision/control register records D4 audit, D5 exception handling, D6 reporting/KPIs, D7 HLD/LLD binding, D8 DATA/schema, D9 API/Event, and D10 controlled release as open where approvals/evidence are missing.
+- `B01_CH463_UAT_Evidence_Readiness_v0.7.xlsx` — existing case-level readiness tracker. The surfaced case rows explicitly retain `DRAFT_TEMPLATE_NOT_APPROVED; REVIEW_REQUIRED; NOT_RUN`, execution authorization `NO`, and list missing oracle, design binding, actor/test data, expected result, reviewer, and approval reference.
+- `B01_CH463_Controlled_Change_Approval_and_Evidence_Request_v0.1.docx` — controlled working candidate, not approval; confirms D1–D9 source/decision closure precedes D10.
+
+**Reconciliation outcome:** the current candidate worksheet is a repo-side convenience view of existing Library work, not a replacement baseline. Use the existing v0.5 register and v0.7 evidence-readiness workbook as the primary working trackers; retain their open statuses and do not downgrade/overwrite them with this draft. No approved acceptance oracle, owner approval, or D10 disposition was found in the surfaced excerpts. Therefore the six formal cases remain `NOT_RUN`.
+
+**Efficient next action:** continue from the existing decision register and evidence-readiness tracker, mapping each open decision to its owner/source artifact and collecting actual approved source evidence where available. Only issue an approval when the corresponding signed/controlled source is present.
