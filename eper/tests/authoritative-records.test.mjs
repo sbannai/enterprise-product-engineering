@@ -122,3 +122,16 @@ test("authoritative record delete rejects invalid runtime versions without delet
     data: { safe: true },
   });
 });
+
+test("authoritative record delete rejects stale versions and preserves the current record", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "delete-conflict", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { safe: true } });
+  store.update("tenant-a", "delete-conflict", 1, { state: "REVISED" });
+
+  assert.throws(
+    () => store.delete("tenant-a", "delete-conflict", 1),
+    /RECORD_VERSION_CONFLICT/,
+  );
+  assert.equal(store.get("tenant-a", "delete-conflict").version, 2);
+  assert.equal(store.get("tenant-a", "delete-conflict").state, "REVISED");
+});
