@@ -82,3 +82,26 @@ test("authoritative records reject malformed runtime context, versions, and data
   assert.equal(store.get("tenant-a", "bad-version"), undefined);
   assert.equal(store.get("tenant-a", "bad-data"), undefined);
 });
+
+test("authoritative record updates reject malformed runtime versions, patches, and data", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "update-guard", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { safe: true } });
+
+  assert.throws(
+    () => store.update("tenant-a", "update-guard", 0, { state: "REVISED" }),
+    /RECORD_VERSION_INVALID/,
+  );
+  assert.throws(
+    () => store.update("tenant-a", "update-guard", 1, { data: [] }),
+    /RECORD_DATA_INVALID/,
+  );
+  assert.throws(
+    () => store.update("tenant-a", "update-guard", 1, { state: " " }),
+    /RECORD_STATE_INVALID/,
+  );
+
+  const unchanged = store.get("tenant-a", "update-guard");
+  assert.equal(unchanged.version, 1);
+  assert.equal(unchanged.state, "ACTIVE");
+  assert.deepEqual(unchanged.data, { safe: true });
+});
