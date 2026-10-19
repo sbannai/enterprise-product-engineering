@@ -98,3 +98,16 @@ Do not describe the UAT target as simply "missing". The controlled history recor
 4. Only after a safe executable target and session authorization exist, proceed to the six canonical Chapter 463 business journeys; keep each case `NOT_RUN` until actual authorized steps/results/evidence are captured.
 
 This section corrects target status without authorizing execution or changing canonical UAT records.
+
+
+## 8. RC4 artifact inspected locally — 2026-10-19
+
+Artifact ID `11306122539` was downloaded from the recorded GitHub Actions release artifact and inspected locally.
+
+- Outer ZIP SHA-256: `7206c96e72ce6a3279cd62063a694c3c4ecc558d92ae66622297a988f87e075a` — matches the digest recorded in the existing preflight evidence.
+- Inner npm tarball SHA-256: `93cdc02a685faa9c4385d2d0cb142dd8704a6743a36c805b36e5de4d02605bca` — matches the artifact's included checksum file.
+- Embedded metadata: RC4, commit `13dc7fa94a4c0998d94e22a361d6e5790eee1183`, build date 2026-10-04, explicitly classified `RELEASE CANDIDATE BUILD — NOT RELEASED / NOT PRODUCTION`.
+- Package contains the compiled requirement modules and capability-router/contracts output, but does **not** contain the API server, the local container runtime, or the test suite required by the local six-family HTTP runner. It is an integrity-verified package, not an executable UAT target.
+- The artifact commit is not the readiness-plan commit `3cb76ed403241504dc94d825b9f7b926b384788c` or the subsequent plan-update commit. Do not use it as evidence that the latest candidate is runnable.
+
+**Disposition:** RC4 artifact integrity is VERIFIED; artifact suitability for local HTTP UAT is NOT SUITABLE. The correct next engineering fix is to update the controlled runtime-smoke/release workflow to emit a versioned executable runtime artifact (or a deliberately supported local bundle including server + runner dependencies) for the exact intended commit, then verify checksum/build identity and execute the loopback smoke. Do not promote RC4 to business UAT, and do not change any canonical case outcome.
