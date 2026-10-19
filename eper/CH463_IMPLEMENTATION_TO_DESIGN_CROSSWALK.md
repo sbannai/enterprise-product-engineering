@@ -294,3 +294,32 @@ This section reconciles recorded owner decisions against the existing Chapter 46
 5. Recalculate readiness. Keep D3/D4 and business UAT blocked until the review and execution-authorization evidence exists.
 
 This is a controlled reconciliation update, not a claim that the above open actions are complete or that a gate has passed.
+
+
+## Library candidate-matrix reconciliation — 2026-10-19
+
+This section reuses the existing controlled Library candidate matrices rather than creating another tracker:
+- `B01_CH463_LLD_DATA_API_EVENT_RECONCILIATION_CANDIDATE_v0.1.csv`
+- `B01_CH463_Requirement_Oracle_Candidates_v0.1.csv`
+- `HLD_463_470_Controlled_Traceability_Recovery_Matrix_46301_46306_CH463_OptionA_Correction_Candidate.docx` (v1.6)
+
+These rows provide candidate design targets and Chapter 463 section leads. The source artifacts explicitly mark the rows as supporting/candidate-only, with EM-LLD-001 v1.0 still a controlled detailed-design draft pending formal approval and the Volume XIII Chapter 463 BRD v1.0 still In Development. Chapter section references below are **domain-source search anchors, not approved HLD/LLD locators**.
+
+| Existing requirement | Candidate LLD target from source matrix | Candidate Chapter 463 section leads | Existing DATA/API/EVENT design intent | Required unresolved disposition |
+|---|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | LLD-02 Domain & Component; LLD-03 Data Model | §463.39 Core Procurement Object Model; §§463.7–463.8, 463.16, 463.21–463.27, 463.42 | Authoritative aggregate/entity with keys, tenant scope, lifecycle/version metadata; API/lifecycle event only after authoritative commit | Exact approved HLD locator, exact approved LLD locator and HLD→LLD pair; DATA owner/schema; API/EVENT contract or approved N/A |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | LLD-05 Security & Authorization | §§463.3, 463.8, 463.16, 463.24–463.25, 463.35, 463.40 | Identity/tenant/role policy and privileged-action audit; authorization outcome event only if required | Exact approved HLD/LLD pair; approved authority/delegation/SoD matrix; API/EVENT contract or approved N/A |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | LLD-02 Domain & Component; LLD-06 Workflow & Rules | §§463.7–463.8, 463.15–463.16, 463.21–463.25, 463.27, 463.46–463.47 | Validation rules/invariants, command inputs/results, validation error envelope and idempotency semantics | Exact approved HLD/LLD pair; approved rule/threshold configuration; versioned API contract |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | LLD-03 Audit Metadata; LLD-09 Observability | §§463.3, 463.14–463.16, 463.24, 463.35–463.36, 463.42, 463.47 | Actor/tenant/action/time/correlation/outcome audit record; correlation/causation and protected payload rules | Exact approved HLD/LLD pair; audit schema/owner/retention; event contract/version |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | LLD-06 Workflow & Rules; LLD-07 Integration | §§463.3, 463.8, 463.14–463.16, 463.24–463.27, 463.30, 463.36, 463.47 | Workflow/exception state, retry/recovery/DLQ metadata, idempotent consumers | Exact approved HLD/LLD pair; exception taxonomy/recovery policy; retry/recovery contract/version |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | LLD-09 Observability/Analytics | §§463.28–463.29, 463.32, 463.37, 463.41–463.42, 463.46–463.47 | Governed read model/aggregation and tenant-scoped metrics/reporting dimensions | Exact approved HLD/LLD pair; KPI formulas/read-model owner; reporting contract/version |
+
+### Promotion rules for this reconciliation
+
+- Keep all six rows classified as `SUPPORTING DESIGN ONLY — NOT EXACT TRACEABILITY`.
+- Do not promote the Chapter 463 section leads to exact HLD locators, or the LLD-02/03/etc. labels to exact requirement-level LLD locators, without an approved versioned source explicitly binding the requirement/SRS/TRC to that location.
+- Do not convert candidate object names, API intent, or event intent into approved schema/operation/payload definitions.
+- Reuse the existing six canonical B01 cases and the existing candidate-oracle CSV. Do not create duplicate UAT IDs or treat candidate oracles as approved.
+- Preserve Option A and all existing requirement/SRS/TRC IDs. The source-precedence decision `B01-CH463-SOURCE-CORRECTION-DECISION-001` is already resolved; the remaining blockers are approval, exact locators, contracts, measurable oracle approval, and separate D10 execution authorization.
+
+**Disposition:** useful row-level source candidates reconciled into the existing implementation-to-design crosswalk; exact approved HLD→LLD remains 0/6, fully verified DATA/API/EVENT slots or approved N/A remain 0/18, approved acceptance oracles remain 0/6. Business UAT remains HOLD / NOT AUTHORIZED / NOT EXECUTED.
