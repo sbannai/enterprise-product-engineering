@@ -147,6 +147,10 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (!tenantId || !tenantMatches(req, tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     const amountPaise = input?.amountPaise;
     const currency = typeof input?.currency === "string" ? input.currency.toUpperCase() : "INR";
+    // Payment amount must come from a trusted server-side invoice/fee source, not an arbitrary client value.
+    if (process.env.EPER_PAYMENT_ALLOW_CLIENT_AMOUNT !== "true") {
+      json(res, 503, { error: "server_side_amount_authority_required" }); return true;
+    }
     if (!tenantId || !reference || !Number.isSafeInteger(amountPaise) || amountPaise <= 0 || currency !== "INR") {
       json(res, 400, { error: "tenant_reference_positive_amount_paise_and_inr_required" }); return true;
     }
