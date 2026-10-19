@@ -323,3 +323,26 @@ These rows provide candidate design targets and Chapter 463 section leads. The s
 - Preserve Option A and all existing requirement/SRS/TRC IDs. The source-precedence decision `B01-CH463-SOURCE-CORRECTION-DECISION-001` is already resolved; the remaining blockers are approval, exact locators, contracts, measurable oracle approval, and separate D10 execution authorization.
 
 **Disposition:** useful row-level source candidates reconciled into the existing implementation-to-design crosswalk; exact approved HLD→LLD remains 0/6, fully verified DATA/API/EVENT slots or approved N/A remain 0/18, approved acceptance oracles remain 0/6. Business UAT remains HOLD / NOT AUTHORIZED / NOT EXECUTED.
+
+
+## Procurement catalogue candidate IDs recovered from the existing UAT readiness workbook — 2026-10-19
+
+Source consulted: `B01_CH463_UAT_Evidence_Readiness_v1.2_owner_decision_capture.xlsx` in the project Library. These identifiers are **candidate search leads**; the workbook explicitly marks the inspected rows Draft / Not Approved or says exact Chapter 463 applicability must be verified. This section records the candidates to accelerate the controlled join; it does not promote them to approved contracts.
+
+| Requirement area | Existing candidate catalogue rows identified | Verified limitation / required next check |
+|---|---|---|
+| REQ-46301 — authoritative record/lifecycle | `ENT-PROC-001–018` in `EPER_Master_Repository_v57.5.xlsx`, sheet `11_Data_Entities`; `PROC-OBJ-001–010`, sheet `89_PROC_Object_Catalog`; lifecycle candidates in `97_PROC_Lifecycle_States` including `LC-PROC-007–013` | Catalogue rows are Draft. Need exact procurement object/entity rows, field/key/relationship/lifecycle definitions, owner, approved version and requirement-level binding. |
+| REQ-46302 — authorization | `AUTH-PROC-007` (Purchase Requisition), `AUTH-PROC-008` (Purchase Order), `SOD-PROC-006` (requisition create/final approval conflict) | Rows are Draft. Need approved role×action×resource×tenant/delegation matrix, thresholds, expiry/substitution and SoD policy; do not infer expected denial/approval solely from the candidate labels. |
+| REQ-46303 — validation | `LC-PROC-007–013` and procurement rule/threshold candidates referenced by the readiness workbook | Lifecycle rows are Draft. Exact required fields, guards, threshold values, error codes and permitted transitions need approved policy/configuration. |
+| REQ-46304 — audit/events | `EVT-PROC-007` PurchaseRequisitionSubmitted; `EVT-PROC-008` PurchaseRequisitionApproved; `EVT-PROC-009` PurchaseOrderApproved; `EVT-PROC-010` PurchaseOrderDispatched; `EVT-PROC-011` PurchaseOrderChanged; `EVT-PROC-012` ProcurementFulfilmentChanged | Event rows are Draft. Lifecycle rows use differing names such as `RequisitionSubmitted`, `RequisitionDecisionRecorded`, `PurchaseOrderDecisionRecorded`, and `PurchaseOrderFulfilmentChanged`. Do not treat names as aliases without an approved mapping; producer, payload schema/version, delivery and retention remain open. |
+| REQ-46305 — exception/recovery | Procurement lifecycle and integration/recovery candidates in `97_PROC_Lifecycle_States` and `104_PROC_API_Contracts` (`CON-PROC-012–017`) | Candidate contracts are Draft. Need approved exception taxonomy, retry/backoff, idempotency, DLQ/replay, compensation, escalation and terminal-state policy. |
+| REQ-46306 — governed reporting | `API-PROC-024` Query KPIs in `103_PROC_API_Catalog` | Marked Draft; a catalogue label is not an approved OpenAPI operation. Need exact operation/request/response/error schemas, KPI formula book, read-model owner, lineage, freshness, reconciliation tolerance and report-access policy. |
+
+### Shared catalogue baselines — existence does not equal requirement approval
+
+- `EM-DATA-001_Database_Dictionary_ER_Model_v1.docx`: initial data design baseline; exact approved Chapter 463 entity/schema locator and procurement-specific approval not verified.
+- `EM-API-001_OpenAPI_Specification_v1.docx`: initial build-ready API baseline; global `/api/v1`, auth, tenant, correlation and idempotency conventions are context, not proof of a specific approved procurement operation.
+- `EM-EVT-001_Event_Schema_Catalogue_v1.docx`: initial event baseline; common envelope/delivery/retry/replay conventions are context, not proof of an approved Chapter 463 producer or payload schema.
+- `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx`: explicitly states requirement-level exact joins are not fully promoted and execution/contract-test evidence is not established.
+
+**Disposition:** this pass narrows the remaining work to validating the named candidate catalogue rows and their approvals. It does not change the controlled gate counts: exact approved HLD→LLD pairs 0/6; verified full DATA/API/EVENT bindings or approved N/A 0/18; approved oracles 0/6. Keep the six canonical cases `B01-463-01`–`B01-463-06` unchanged and `NOT_RUN`. No UAT authorization is implied.
