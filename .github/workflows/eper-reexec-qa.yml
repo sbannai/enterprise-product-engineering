@@ -27,7 +27,12 @@ jobs:
       - name: Build candidate
         run: npm run build
       - name: Execute 228 requirement test suite
-        run: npm test
+        run: |
+          set +e
+          npm test 2>&1 | tee reexec-evidence/npm-test.log
+          test_status=${PIPESTATUS[0]}
+          printf "npm_test_exit_code=%s\\n" "$test_status" >> reexec-evidence/npm-test.log
+          exit "$test_status"
       - name: Record execution metadata
         if: always()
         run: |
@@ -45,11 +50,13 @@ jobs:
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
             echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "business_acceptance=NOT_EXECUTED"
+            echo "formal_uat_signoff=NOT_EXECUTED"
           } > reexec-evidence/execution-metadata.txt
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: EPER-REEXEC-001-${{github.run_id}}
-          path: eper/reexec-evidence/execution-metadata.txt
+          path: eper/reexec-evidence/
           if-no-files-found: error
