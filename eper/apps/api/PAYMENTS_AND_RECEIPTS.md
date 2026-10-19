@@ -29,3 +29,6 @@ If any required secret is absent, the payment routes fail closed with HTTP 503. 
 ## Additional security gates added during review
 - HMAC values must be exactly 64 hexadecimal characters before constant-time comparison; malformed hex suffixes are rejected.
 - Order creation fails closed with `503 server_side_amount_authority_required` unless `EPER_PAYMENT_ALLOW_CLIENT_AMOUNT=true`. This flag is a temporary explicit development escape hatch only; production must replace it with server-side invoice/fee lookup and must not enable client-supplied amounts.
+
+- The development escape hatch is blocked whenever `NODE_ENV=production`, regardless of `EPER_PAYMENT_ALLOW_CLIENT_AMOUNT`; production must use server-side invoice/fee lookup.
+- Reusing a tenant/reference with a different amount or currency returns HTTP 409 (`payment_reference_amount_currency_conflict`). This protects against inconsistent retries but does not replace a durable idempotency key and database uniqueness constraints.
