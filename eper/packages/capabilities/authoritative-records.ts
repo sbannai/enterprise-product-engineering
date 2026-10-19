@@ -92,6 +92,9 @@ export class InMemoryAuthoritativeRecordStore implements AuthoritativeRecordStor
   }
 
   delete(tenantId: string, id: string, expectedVersion: number): void {
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error("RECORD_VERSION_INVALID");
+    }
     const key = this.key(tenantId, id);
     const current = this.records.get(key);
     if (!current) throw new Error("RECORD_NOT_FOUND");
