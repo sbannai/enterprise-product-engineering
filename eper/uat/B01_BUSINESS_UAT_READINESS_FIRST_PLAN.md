@@ -140,3 +140,20 @@ A fresh download of GitHub Actions artifact `12195063132` was extracted and chec
 - Docker/Podman is not installed in the available workspace, so the image cannot be loaded or run here. This is integrity/package validation only; it is not local container runtime execution or six-family HTTP smoke.
 
 **Next handoff:** on an operator workstation with Docker Desktop, follow `LOCAL_CONTAINER_UAT_RUNBOOK.md`, verify the build ID/checksum, load the image and run the loopback-only six-family runner. Capture the JSON evidence. Keep the local API bound to `127.0.0.1`, use temporary test-only identity/token values, and do not expose the route externally. Formal Business UAT remains separate and requires approved business oracles and session authorization.
+
+
+## 11. Six-family HTTP smoke artifact inspected — 2026-10-19
+
+Artifact ID `12194364674` from workflow run `39271893252` was downloaded and the contained `EPER-SIX-FAMILY-HTTP-SMOKE.json` was inspected.
+
+- Artifact archive SHA-256: `09baea95d73f61a93854b77a3f487bd0f39895c7ee54fe8e9f044b2d55c327c9`.
+- Evidence JSON SHA-256: `9f887fb5cf9ddbc7d6cf6554c9245a42af36fa74dc1759850d518e7d1752dca9`.
+- Capture time: `2026-10-19T14:46:09.8086465Z`.
+- Build ID in evidence: `bd428112d5d29800a3ed463273fb6a1dd81ca46e` (the PR merge build used by this workflow).
+- Target: loopback-only `http://127.0.0.1:18080`.
+- Reported totals: 6 passed, 0 failed. `REQ-46301` create, `REQ-46302` decide, `REQ-46303` validate, `REQ-46304` append, `REQ-46305` create, `REQ-46306` publish; all returned HTTP 200.
+- Payload patterns in the evidence are synthetic `XX01`–`XX06`. The artifact labels itself `LOCAL_TECHNICAL_SMOKE_NOT_BUSINESS_UAT`.
+
+**Disposition:** This is now an inspected, hash-recorded technical evidence artifact for the six capability HTTP paths. It does not establish that business rules, policy decisions, lifecycle transitions, access control, audit semantics, or user acceptance are correct. It does not change the six canonical Business UAT case statuses from `NOT_RUN`. Use the six technical outcomes as entry evidence for a controlled business walkthrough only after the approved oracle and safe execution/session conditions are met.
+
+**Supersession note:** Section 7's earlier statement that the runtime workflow had not produced an artifact describes the state before sections 9–11 and is superseded by the later verified runtime and six-family smoke evidence. The target Render service remains separately unverified for current health and protected execution remains disabled pending approval.
