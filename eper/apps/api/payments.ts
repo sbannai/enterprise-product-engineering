@@ -156,7 +156,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     }
     const ledger = await readLedger(cfg.ledgerFile);
     const existing = ledger.records.find(item => item.tenantId === tenantId && item.reference === reference);
-    if (existing) { json(res, 200, { payment: existing, keyId: cfg.keyId }); return true; }
+    if (existing) {
+      if (existing.amountPaise !== amountPaise || existing.currency !== currency) {
+        json(res, 409, { error: "payment_reference_amount_currency_conflict" }); return true;
+      }
+      json(res, 200, { payment: existing, keyId: cfg.keyId }); return true;
+    }
     const orderResponse = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: { authorization: "Basic " + Buffer.from(cfg.keyId + ":" + cfg.keySecret).toString("base64"), "content-type": "application/json" },
