@@ -71,8 +71,21 @@ export class InMemoryExceptionStore implements ExceptionStore {
   }
 
   create(input: ExceptionCreateInput, beforeCommit?: (created: WorkflowException) => void): WorkflowException {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey || !input.createdAt) {
+    if (!input || typeof input !== "object" ||
+      typeof input.id !== "string" || !input.id.trim() ||
+      typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+      typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+      typeof input.code !== "string" || !input.code.trim() ||
+      typeof input.message !== "string" || !input.message.trim() ||
+      typeof input.idempotencyKey !== "string" || !input.idempotencyKey.trim() ||
+      typeof input.createdAt !== "string" || !input.createdAt.trim()) {
       throw new Error("EXCEPTION_CONTEXT_REQUIRED");
+    }
+    if (Number.isNaN(Date.parse(input.createdAt))) {
+      throw new Error("EXCEPTION_TIMESTAMP_INVALID");
+    }
+    if (input.owner !== undefined && (typeof input.owner !== "string" || !input.owner.trim())) {
+      throw new Error("EXCEPTION_OWNER_INVALID");
     }
     const scopedIdempotencyKey = this.idempotencyKey(input.tenantId, input.idempotencyKey);
     const fingerprint = this.fingerprint(input);
