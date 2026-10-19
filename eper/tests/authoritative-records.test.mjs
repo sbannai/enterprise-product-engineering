@@ -64,3 +64,21 @@ test("authoritative records reject circular data instead of storing partial evid
   circular.self = circular;
   assert.throws(() => store.create({ id: "bad", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: circular }), /RECORD_DATA_NOT_SERIALIZABLE/);
 });
+
+test("authoritative records reject malformed runtime context, versions, and data", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  assert.throws(
+    () => store.create({ id: "", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} }),
+    /RECORD_CONTEXT_REQUIRED/,
+  );
+  assert.throws(
+    () => store.create({ id: "bad-version", tenantId: "tenant-a", version: 0, state: "ACTIVE", data: {} }),
+    /RECORD_VERSION_INVALID/,
+  );
+  assert.throws(
+    () => store.create({ id: "bad-data", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: [] }),
+    /RECORD_DATA_INVALID/,
+  );
+  assert.equal(store.get("tenant-a", "bad-version"), undefined);
+  assert.equal(store.get("tenant-a", "bad-data"), undefined);
+});
