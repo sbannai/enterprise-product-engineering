@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { applicationToastMarkup } from "./app-toast.js";
 
 /** Minimal same-origin admin console. Secrets are never persisted in browser storage. */
 export const adminPricingUiHtml = String.raw`<!doctype html>
@@ -91,7 +92,7 @@ var entries=[],activeQuote=null;
 var $=function(id){return document.getElementById(id)};
 var base=function(){return ($("apiBase").value||"").trim().replace(/\/$/,"")};
 var token=function(){return $("adminToken").value.trim()};var tokenFor=function(path){return path.indexOf("/pricing/")===0?($("pricingToken").value.trim()||token()):token()};
-function status(id,msg,kind){var el=$(id);el.textContent=msg||"";el.className="statusline"+(kind?" "+kind:"")}
+function status(id,msg,kind){var el=$(id);el.textContent=msg||"";el.className="statusline"+(kind?" "+kind:"");if(kind==="success"&&msg&&window.EPERToast)window.EPERToast.success(msg);if(kind==="error"&&msg&&window.EPERToast)window.EPERToast.error(msg)}
 function money(minor,currency){try{return new Intl.NumberFormat(undefined,{style:"currency",currency:currency}).format(minor/100)}catch(e){return (minor/100).toFixed(2)+" "+currency}}
 async function api(path,options){options=options||{};options.headers=Object.assign({},options.headers||{},{authorization:"Bearer "+tokenFor(path)});if(options.body)options.headers["content-type"]="application/json";var response=await fetch(base()+path,options);var type=response.headers.get("content-type")||"";var data=type.indexOf("application/json")>=0?await response.json():await response.text();if(!response.ok)throw new Error(data&&data.error?data.error:"HTTP "+response.status);return data}
 function esc(value){return String(value==null?"":value).replace(/[&<>"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]})}
@@ -113,6 +114,7 @@ $("compareMarkets").addEventListener("click",async function(){var product=$("res
 $("vendorForm").addEventListener("submit",async function(ev){ev.preventDefault();try{var data=await api("/admin/config/payment-vendor",{method:"PUT",body:JSON.stringify({provider:$("vendorProvider").value,mode:$("vendorMode").value,sandboxEnabled:$("vendorEnabled").checked})});status("vendorStatus",data.message||"Vendor settings updated","success");await loadVendor()}catch(e){status("vendorStatus",e.message,"error")}});
 })();
 </script>
+${applicationToastMarkup}
 </body></html>`;
 
 export function isAdminPricingUiRequest(request: IncomingMessage): boolean {
