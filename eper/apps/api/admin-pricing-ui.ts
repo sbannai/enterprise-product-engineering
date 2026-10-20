@@ -56,8 +56,8 @@ footer{font-size:12px;color:var(--muted);margin-top:20px}
 <div class="field"><label for="priceBookId">Price book ID</label><input id="priceBookId" required placeholder="e.g. INDIA-2026"></div>
 <div class="field"><label for="priceBookVersion">Version</label><input id="priceBookVersion" required placeholder="e.g. v1.0"></div>
 <div class="field"><label for="priceStatus">Status</label><select id="priceStatus"><option value="DRAFT">Draft</option><option value="APPROVED">Approved</option><option value="RETIRED">Retired</option></select></div>
-<div class="field"><label for="effectiveFrom">Effective from (UTC)</label><input id="effectiveFrom" type="datetime-local" required></div>
-<div class="field"><label for="effectiveTo">Effective to (optional UTC)</label><input id="effectiveTo" type="datetime-local"></div>
+<div class="field"><label for="effectiveFrom">Effective from (your local time)</label><input id="effectiveFrom" type="datetime-local" required></div>
+<div class="field"><label for="effectiveTo">Effective to (optional, your local time)</label><input id="effectiveTo" type="datetime-local"></div>
 </div><div class="actions"><button type="submit">Save price entry</button><button type="button" class="secondary" id="clearPriceForm">Clear form</button></div><p class="help">Amounts are stored as integer minor units. Draft is the default; only approved, effective entries can resolve to a quote.</p><div id="priceStatusMsg" class="statusline" role="status" aria-live="polite"></div></form></div>
 <div class="card span-7"><h2>Configured price book</h2><p class="sub">Loaded from the authenticated price-book API.</p><div class="tablewrap"><table><thead><tr><th>Product</th><th>Market</th><th>Price</th><th>Price book</th><th>State</th><th>Effective from</th><th>Action</th></tr></thead><tbody id="priceRows"><tr><td colspan="7">Connect to load entries.</td></tr></tbody></table></div><div class="actions"><button class="secondary" id="reloadPrices">Reload entries</button></div><div id="priceTableMsg" class="statusline" role="status" aria-live="polite"></div></div>
 </div>
