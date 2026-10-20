@@ -90,7 +90,15 @@ export function createAppServer(): Server {
   const allowedWorkflowPermissions = ["workflow:view", "workflow:act", "workflow:approve", "workflow:admin", "role:assign", "access:manage"];
   const allowedFieldTypes = ["text", "textarea", "number", "date", "select", "checkbox"];
 
-  return createServer(async (request: IncomingMessage, response: ServerResponse) => {
+  const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+    // Apply baseline browser protections before every route, including error responses.
+    response.setHeader("x-content-type-options", "nosniff");
+    response.setHeader("x-frame-options", "DENY");
+    response.setHeader("referrer-policy", "no-referrer");
+    response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()");
+    response.setHeader("cross-origin-opener-policy", "same-origin");
+    response.setHeader("cache-control", "no-store");
+
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
 
     if (isAdminWorkflowUiRequest(request)) {
@@ -696,4 +704,11 @@ export function createAppServer(): Server {
 
     sendJson(response, 404, { error: "not_found" });
   });
+
+  // Bound slow-client resource retention. Keep TLS termination at the trusted edge.
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxRequestsPerSocket = 1_000;
+  return server;
 }
