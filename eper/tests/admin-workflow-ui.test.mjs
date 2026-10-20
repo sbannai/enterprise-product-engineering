@@ -28,7 +28,7 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(html, /Generated activities/);
     assert.match(html, /eper-toast-region/);
     assert.match(html, /window\.EPERToast/);
-    const scripts = Array.from(html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g), (match) => match[1]);
+    const scripts = html.split("<script>").slice(1).map((chunk) => chunk.split("</script>")[0]);
     assert.ok(scripts.length >= 2, "shared toast and workflow scripts should be present");
     for (const script of scripts) assert.doesNotThrow(() => new vm.Script(script), "embedded UI JavaScript must parse");
 
