@@ -324,6 +324,39 @@ export function createAppServer(): Server {
       }
 
       try {
+        if (request.method === "POST" && paymentPath === "/sandbox/payments/from-quote") {
+          const body = await readJson(request);
+          const productId = body.productId;
+          const marketId = body.marketId;
+          const description = body.description;
+          const idempotencyKey = request.headers["idempotency-key"] ?? body.idempotencyKey;
+          if (typeof productId !== "string" || typeof marketId !== "string" ||
+              typeof description !== "string" || typeof idempotencyKey !== "string" ||
+              (body.currency !== undefined && typeof body.currency !== "string")) {
+            sendJson(response, 400, { error: "productId, marketId, description and idempotency key are required" });
+            return;
+          }
+          const quote = marketPriceBook.quote({
+            productId,
+            marketId,
+            ...(typeof body.currency === "string" ? { currency: body.currency } : {}),
+          });
+          const result = paymentService.initiate({
+            tenantId: paymentTenant,
+            principalId: paymentPrincipal,
+            amountMinor: quote.amountMinor,
+            currency: quote.currency,
+            marketId: quote.marketId,
+            productId: quote.productId,
+            priceBookId: quote.priceBookId,
+            priceBookVersion: quote.priceBookVersion,
+            description,
+            idempotencyKey,
+          });
+          sendJson(response, result.replayed ? 200 : 201, { ...result, quote });
+          return;
+        }
+
         if (request.method === "POST" && paymentPath === "/sandbox/payments") {
           const body = await readJson(request);
           const amountPaise = body.amountPaise;
@@ -383,11 +416,13 @@ export function createAppServer(): Server {
         sendJson(response, 404, { error: "not_found" });
       } catch (error) {
         const message = error instanceof Error ? error.message : "PAYMENT_OPERATION_FAILED";
-        const status = message === "PAYMENT_NOT_FOUND" ? 404
+        const status = message === "PAYMENT_NOT_FOUND" || message === "APPROVED_MARKET_PRICE_NOT_FOUND" ? 404
           : message === "RECEIPT_NOT_AVAILABLE" || message.includes("IDEMPOTENCY_KEY_REUSED") ||
-            message === "PAYMENT_CALLBACK_CONFLICT" || message === "PAYMENT_TERMINAL_STATE_CONFLICT" ? 409
+            message === "PAYMENT_CALLBACK_CONFLICT" || message === "PAYMENT_TERMINAL_STATE_CONFLICT" ||
+            message === "MARKET_PRICE_CONFIGURATION_AMBIGUOUS" ? 409
           : message === "REQUEST_BODY_TOO_LARGE" ? 413
           : message === "JSON_OBJECT_REQUIRED" || error instanceof SyntaxError ||
+            message === "MARKET_CURRENCY_MISMATCH" || message.startsWith("PRICE_") || message.startsWith("MARKET_PRICE_") ||
             message.startsWith("PAYMENT_AMOUNT") || message.startsWith("PAYMENT_CURRENCY") ||
             message.startsWith("PAYMENT_DESCRIPTION") || message.startsWith("PAYMENT_IDEMPOTENCY") ||
             message.startsWith("PAYMENT_ACTOR") || message.startsWith("PAYMENT_PROVIDER") ? 400
