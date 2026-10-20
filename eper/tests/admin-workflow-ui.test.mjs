@@ -22,6 +22,11 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
 
     const uiResponse = await fetch(`${base}/admin/workflow-ui`);
     assert.equal(uiResponse.status, 200);
+    assert.equal(uiResponse.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(uiResponse.headers.get("x-frame-options"), "DENY");
+    assert.equal(uiResponse.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(uiResponse.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
+    assert.equal(uiResponse.headers.get("cache-control"), "no-store");
     const html = await uiResponse.text();
     assert.match(html, /Workflow designer/);
     assert.match(html, /Roles &amp; access|Roles & access/);
