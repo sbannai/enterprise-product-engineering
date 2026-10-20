@@ -7,6 +7,7 @@ import { LocalizationService, type SupportedLocale, type SupportedCurrency } fro
 import { PaymentReceiptService } from "../../packages/payments/payment-receipt.js";
 import { MarketPriceBookService, type MarketPriceEntry } from "../../packages/pricing/market-price-book.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
+import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -80,8 +81,34 @@ export function createAppServer(): Server {
     sandboxEnabled: process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
   };
 
+  type WorkflowField = { id: string; label?: string; type: string; required?: boolean; options?: string[] };
+  type WorkflowActivity = { id: string; title: string; type: string; roleId: string; permission: string; nextActivityIds: string[]; fields: WorkflowField[] };
+  type WorkflowDefinition = { id: string; name: string; description?: string; status: "DRAFT" | "ACTIVE"; activities: WorkflowActivity[] };
+  type WorkflowRole = { id: string; name: string; description?: string; members: string[]; permissions: string[] };
+  let workflowDefinitions: WorkflowDefinition[] = [];
+  let workflowRoles: WorkflowRole[] = [];
+  const allowedWorkflowPermissions = ["workflow:view", "workflow:act", "workflow:approve", "workflow:admin", "role:assign", "access:manage"];
+  const allowedFieldTypes = ["text", "textarea", "number", "date", "select", "checkbox"];
+
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    if (isAdminWorkflowUiRequest(request)) {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+      });
+      response.end(adminWorkflowUiHtml);
+      return;
+    }
 
     if (isAdminPricingUiRequest(request)) {
       if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
@@ -101,7 +128,7 @@ export function createAppServer(): Server {
     }
 
     const adminConfigPath = requestUrl.pathname;
-    if (adminConfigPath === "/admin/config/price-book" || adminConfigPath === "/admin/config/payment-vendor") {
+    if (["/admin/config/price-book", "/admin/config/payment-vendor", "/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
       if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
         sendJson(response, 404, { error: "not_found" });
         return;
@@ -116,6 +143,114 @@ export function createAppServer(): Server {
         return;
       }
       try {
+        if (adminConfigPath === "/admin/config/workflows" && request.method === "GET") {
+          sendJson(response, 200, { workflows: workflowDefinitions, persistence: "process-memory", restartPersistence: false });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/workflows" && request.method === "PUT") {
+          const body = await readJson(request);
+          if (!Array.isArray(body.workflows)) {
+            sendJson(response, 400, { error: "workflows_array_required" });
+            return;
+          }
+          const candidate = body.workflows as WorkflowDefinition[];
+          const workflowIds = candidate.map((w) => w && w.id);
+          if (candidate.some((w) => !w || typeof w.id !== "string" || !/^[a-zA-Z0-9._-]+$/.test(w.id) ||
+              typeof w.name !== "string" || !w.name.trim() || !["DRAFT", "ACTIVE"].includes(w.status) || !Array.isArray(w.activities)) ||
+              new Set(workflowIds).size !== workflowIds.length) {
+            sendJson(response, 400, { error: "invalid_or_duplicate_workflow_definition" });
+            return;
+          }
+          for (const workflow of candidate) {
+            const activityIds = workflow.activities.map((a) => a && a.id);
+            if (new Set(activityIds).size !== activityIds.length ||
+                workflow.activities.some((a) => !a || typeof a.id !== "string" || !/^[a-zA-Z0-9._-]+$/.test(a.id) ||
+                  typeof a.title !== "string" || !a.title.trim() ||
+                  !["TASK", "FORM", "APPROVAL"].includes(a.type) ||
+                  typeof a.roleId !== "string" || !a.roleId ||
+                  !["workflow:act", "workflow:approve"].includes(a.permission) ||
+                  !Array.isArray(a.nextActivityIds) || !Array.isArray(a.fields))) {
+              sendJson(response, 400, { error: "invalid_or_duplicate_workflow_activity" });
+              return;
+            }
+            for (const activity of workflow.activities) {
+              if (!workflowRoles.some((role) => role.id === activity.roleId)) {
+                sendJson(response, 422, { error: "workflow_activity_role_not_found:" + activity.roleId });
+                return;
+              }
+              if (activity.nextActivityIds.some((id) => !activityIds.includes(id))) {
+                sendJson(response, 422, { error: "workflow_transition_target_not_found:" + activity.id });
+                return;
+              }
+              if (activity.fields.some((field) => !field || typeof field.id !== "string" || !field.id ||
+                  !allowedFieldTypes.includes(field.type) ||
+                  (field.type === "select" && (!Array.isArray(field.options) || field.options.some((option) => typeof option !== "string"))))) {
+                sendJson(response, 400, { error: "invalid_workflow_form_field:" + activity.id });
+                return;
+              }
+            }
+          }
+          workflowDefinitions = candidate;
+          sendJson(response, 200, { workflows: workflowDefinitions, persistence: "process-memory", restartPersistence: false });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/roles-access" && request.method === "GET") {
+          sendJson(response, 200, { roles: workflowRoles, availablePermissions: allowedWorkflowPermissions, persistence: "process-memory", restartPersistence: false });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/roles-access" && request.method === "PUT") {
+          const body = await readJson(request);
+          if (!Array.isArray(body.roles)) {
+            sendJson(response, 400, { error: "roles_array_required" });
+            return;
+          }
+          const candidate = body.roles as WorkflowRole[];
+          const roleIds = candidate.map((role) => role && role.id);
+          if (candidate.some((role) => !role || typeof role.id !== "string" || !/^[a-zA-Z0-9._-]+$/.test(role.id) ||
+              typeof role.name !== "string" || !role.name.trim() || !Array.isArray(role.members) ||
+              !Array.isArray(role.permissions) || role.members.some((member) => typeof member !== "string" || !member.trim()) ||
+              role.permissions.some((permission) => !allowedWorkflowPermissions.includes(permission)) ||
+              new Set(role.members).size !== role.members.length) ||
+              new Set(roleIds).size !== roleIds.length) {
+            sendJson(response, 400, { error: "invalid_or_duplicate_role_or_permission" });
+            return;
+          }
+          workflowRoles = candidate;
+          sendJson(response, 200, { roles: workflowRoles, availablePermissions: allowedWorkflowPermissions, persistence: "process-memory", restartPersistence: false });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/access-check" && request.method === "POST") {
+          const body = await readJson(request);
+          if (typeof body.principalId !== "string" || !body.principalId.trim() ||
+              typeof body.permission !== "string" || !allowedWorkflowPermissions.includes(body.permission) ||
+              (body.workflowId !== undefined && typeof body.workflowId !== "string")) {
+            sendJson(response, 400, { error: "principalId_and_supported_permission_required" });
+            return;
+          }
+          const matchingRoles = workflowRoles.filter((role) => role.members.includes(body.principalId as string));
+          const allowed = matchingRoles.some((role) => role.permissions.includes(body.permission as string) ||
+            (body.permission === "workflow:view" && role.permissions.includes("workflow:admin")) ||
+            (body.permission === "workflow:act" && role.permissions.includes("workflow:admin")));
+          const workflow = typeof body.workflowId === "string" ? workflowDefinitions.find((item) => item.id === body.workflowId) : undefined;
+          const workflowMissing = typeof body.workflowId === "string" && !workflow;
+          const inactiveWorkflow = Boolean(workflow && workflow.status !== "ACTIVE");
+          const finalAllowed = allowed && !workflowMissing && !inactiveWorkflow;
+          sendJson(response, 200, {
+            allowed: finalAllowed,
+            principalId: body.principalId,
+            permission: body.permission,
+            roles: matchingRoles.map((role) => role.id),
+            reason: workflowMissing ? "Workflow not found; access denied." :
+              inactiveWorkflow ? "Workflow is not active; access denied." :
+              finalAllowed ? "A configured role grants this permission." : "No assigned role grants this permission; access denied.",
+          });
+          return;
+        }
+        if (["/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
+          response.writeHead(405, { allow: adminConfigPath === "/admin/config/access-check" ? "POST" : "GET, PUT", "cache-control": "no-store" });
+          response.end();
+          return;
+        }
         if (adminConfigPath === "/admin/config/price-book" && request.method === "GET") {
           sendJson(response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
           return;
