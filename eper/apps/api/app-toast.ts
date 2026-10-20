@@ -9,7 +9,9 @@ export const applicationToastMarkup = String.raw`
 <script>
 (function(){
   var region=document.getElementById('eper-toast-region');if(!region)return;
-  var timers=new WeakMap();\n  function dismiss(item){var timer=timers.get(item);if(timer!==undefined){clearTimeout(timer);timers.delete(item)}item.remove()}\n  var icons={success:'✓',error:'!',warning:'⚠',info:'i'};
+  var timers=new WeakMap();
+  function dismiss(item){var timer=timers.get(item);if(timer!==undefined){clearTimeout(timer);timers.delete(item)}item.remove()}
+  var icons={success:'✓',error:'!',warning:'⚠',info:'i'};
   function show(kind,message,title,options){
     options=options||{};kind=icons[kind]?kind:'info';
     var item=document.createElement('section');item.className='eper-toast';item.dataset.kind=kind;item.setAttribute('role',kind==='error'?'alert':'status');
