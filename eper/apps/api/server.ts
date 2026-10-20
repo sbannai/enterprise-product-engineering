@@ -187,7 +187,7 @@ export function createAppServer(): Server {
             body.permission as import("../../packages/workflows/workflow-configuration.js").WorkflowPermission,
             body.workflowId as string | undefined,
           );
-          sendJson(response, 200, decision);
+          sendJson(response, 200, { ...decision });
           return;
         }
         if (["/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
