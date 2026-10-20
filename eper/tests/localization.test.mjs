@@ -39,7 +39,7 @@ test("money and dates format according to selected locale, currency and timezone
   assert.match(service.formatMoney(125.5, "USD", "en-IN"), /125/);
   assert.notEqual(
     service.formatDate("2026-10-20T12:00:00Z", "en-IN", "Asia/Kolkata"),
-    service.formatDate("2026-10-20T12:00:00Z", "en-US" as never, "America/New_York"),
+    service.formatDate("2026-10-20T12:00:00Z", "en-IN", "America/New_York"),
   );
 });
 
