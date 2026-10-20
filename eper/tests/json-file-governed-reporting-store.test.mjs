@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileGovernedReportingStore } from "../dist/packages/capabilities/json-file-governed-reporting-store.js";
@@ -56,4 +56,17 @@ test("JSON reporting store isolates tenants and deep-clones published and return
     });
     assert.equal(store.query({ tenantId: "tenant-b", reportId: "rpt-1" }).length, 1);
   });
+});
+
+test("persisted reporting store rejects malformed report rows on reload", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-report-corrupt-"));
+  const path = join(directory, "reports.json");
+  try {
+    const store = new JsonFileGovernedReportingStore(path);
+    store.publish({ tenantId: "tenant-a", reportId: "report-1", generatedAt: "2026-10-20T00:00:00Z", values: { total: 3 }, sourceRequirementIds: ["REQ-46301"] });
+    const state = JSON.parse(readFileSync(path, "utf8"));
+    state[0].sourceRequirementIds = [42];
+    writeFileSync(path, JSON.stringify(state));
+    assert.throws(() => store.query({ tenantId: "tenant-a", reportId: "report-1" }), /PERSISTENCE_DATA_INVALID/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
