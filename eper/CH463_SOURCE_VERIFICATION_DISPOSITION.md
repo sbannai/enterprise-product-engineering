@@ -158,3 +158,19 @@ The approval-status discrepancy and crosswalk annotation were committed in `5dbb
 At the time this checkpoint was recorded, [Six-Family Capability HTTP Smoke — 39427607148](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607148) was still in progress; it is not counted as passed here.
 
 These green workflows validate repository/technical checks and the pilot harness only. They do not resolve the source-artifact approval metadata discrepancy, establish exact HLD→LLD requirement bindings, approve contract slots/oracles, or execute Business UAT. Keep all six Chapter 463 business cases `NOT_RUN`, Business UAT `NOT AUTHORIZED / NOT EXECUTED`, G9 `NOT FROZEN`, and G10 `NOT ISSUED`. PR #165 remains draft/open/unmerged.
+
+## 10. Exact-binding register CI checkpoint (2026-10-20)
+
+The six-row [Exact Binding Closure Register](https://github.com/sbannai/enterprise-product-engineering/blob/work/ch463-candidate-contract-pack-2026-10-19/eper/CH463_EXACT_BINDING_CLOSURE_REGISTER.csv) was committed at `a167342305634fd1c58c173df4838a09a021f12b`. It preserves REQ-46301–REQ-46306 and records requirement-specific closure actions without promoting supporting component anchors to approved exact design locators.
+
+All following workflows completed successfully on that commit:
+- [EPER CI — 39427879940](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427879940)
+- [G9 Reconciliation CI — 39427879826](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427879826)
+- [228 Requirement Pilot Test Matrix — 39427879841](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427879841)
+- [Six-Family Capability HTTP Smoke — 39427879821](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427879821)
+- [Release Candidate Build — 39427879830](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427879830)
+- [Container Runtime Smoke — 39427879853](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427879853)
+- [Controlled QA Re-execution — 39427872477](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427872477)
+- [Controlled UAT Technical Simulation — 39427872286](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427872286)
+
+The successful runs are technical validation only. They do not close requirement-specific acceptance, exact HLD→LLD binding, formal approval metadata, or DATA/API/EVENT decisions. Business UAT remains `NOT AUTHORIZED / NOT EXECUTED`; six business cases remain `NOT_RUN`; G9 remains `NOT FROZEN`; G10 remains `NOT ISSUED`. PR #165 remains draft/open/unmerged.
