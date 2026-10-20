@@ -45,8 +45,8 @@ test("money and dates format according to selected locale, currency and timezone
 
 test("unsupported locale/currency and invalid date/amount are rejected", () => {
   const service = new LocalizationService();
-  assert.throws(() => service.setPreference("tenant-a", "user-1", { locale: "xx-XX" as never }), /LOCALE_UNSUPPORTED/);
-  assert.throws(() => service.setPreference("tenant-a", "user-1", { currency: "XYZ" as never }), /CURRENCY_UNSUPPORTED/);
+  assert.throws(() => service.setPreference("tenant-a", "user-1", { locale: "xx-XX" }), /LOCALE_UNSUPPORTED/);
+  assert.throws(() => service.setPreference("tenant-a", "user-1", { currency: "XYZ" }), /CURRENCY_UNSUPPORTED/);
   assert.throws(() => service.formatMoney(Number.NaN, "INR", "en-IN"), /MONEY_AMOUNT_INVALID/);
   assert.throws(() => service.formatDate("not-a-date", "en-IN", "Asia/Kolkata"), /DATE_INVALID/);
 });
