@@ -53,7 +53,7 @@ The automated wave shall verify:
 | Approved DATA/API/EVENT contract or approved N/A | 0/18 slots verified |
 | Approved measurable business acceptance oracle | 0/6 |
 | Generic shared-capability automated pilot | TECHNICAL COVERAGE ONLY |
-| CI execution for candidate code | PASS on commit eb56e36; not Business UAT |
+| CI execution for candidate code | PASS on commit 0b44cc11f5ea07116ab53e7487e1015f76787e6c; not Business UAT |
 | Requirement-specific procurement test | NOT YET ESTABLISHED |
 | Business UAT execution | NOT AUTHORIZED / NOT EXECUTED |
 | Release / production evidence | NOT ESTABLISHED |
