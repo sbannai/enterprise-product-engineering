@@ -686,7 +686,8 @@ export function createAppServer(): Server {
         sendJson(response, 404, { error: "not_found" });
       } catch (error) {
         const message = error instanceof Error ? error.message : "PAYMENT_OPERATION_FAILED";
-        const status = message === "PAYMENT_NOT_FOUND" || message === "APPROVED_MARKET_PRICE_NOT_FOUND" ? 404
+        const status = message === "PAYMENT_STORE_CAPACITY_REACHED" ? 503
+          : message === "PAYMENT_NOT_FOUND" || message === "APPROVED_MARKET_PRICE_NOT_FOUND" ? 404
           : message === "RECEIPT_NOT_AVAILABLE" || message.includes("IDEMPOTENCY_KEY_REUSED") ||
             message === "PAYMENT_CALLBACK_CONFLICT" || message === "PAYMENT_TERMINAL_STATE_CONFLICT" ||
             message === "MARKET_PRICE_CONFIGURATION_AMBIGUOUS" ? 409
@@ -695,7 +696,7 @@ export function createAppServer(): Server {
             message === "MARKET_CURRENCY_MISMATCH" || message.startsWith("PRICE_") || message.startsWith("MARKET_PRICE_") ||
             message.startsWith("PAYMENT_AMOUNT") || message.startsWith("PAYMENT_CURRENCY") ||
             message.startsWith("PAYMENT_DESCRIPTION") || message.startsWith("PAYMENT_IDEMPOTENCY") ||
-            message.startsWith("PAYMENT_ACTOR") || message.startsWith("PAYMENT_PROVIDER") ? 400
+            message.startsWith("PAYMENT_ACTOR") || message.startsWith("PAYMENT_PROVIDER") || message.startsWith("PAYMENT_METADATA") ? 400
           : 422;
         sendJson(response, status, { error: message });
       }
