@@ -64,13 +64,22 @@ export class PaymentReceiptService {
     idempotencyKey: string;
   }): { payment: Payment; provider: string; checkoutReference: string; replayed: boolean } {
     if (!input.tenantId?.trim() || !input.principalId?.trim()) throw new Error("PAYMENT_ACTOR_REQUIRED");
+    if (input.tenantId.length > 128 || input.principalId.length > 128) throw new Error("PAYMENT_ACTOR_INVALID");
     const currency = input.currency ?? "INR";
     const amountMinor = input.amountMinor ?? input.amountPaise;
     if (typeof amountMinor !== "number" || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) throw new Error("PAYMENT_AMOUNT_INVALID");
     if (!["INR", "USD", "EUR", "GBP", "AED"].includes(currency)) throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
     if (input.amountPaise !== undefined && currency !== "INR") throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
     if (!input.description?.trim()) throw new Error("PAYMENT_DESCRIPTION_REQUIRED");
+    if (input.description.length > 500) throw new Error("PAYMENT_DESCRIPTION_INVALID");
     if (!input.idempotencyKey?.trim() || input.idempotencyKey.length > 128) throw new Error("PAYMENT_IDEMPOTENCY_KEY_REQUIRED");
+    for (const [field, value] of Object.entries({
+      marketId: input.marketId, productId: input.productId, priceBookId: input.priceBookId, priceBookVersion: input.priceBookVersion,
+    })) {
+      if (value !== undefined && (typeof value !== "string" || value.length > 128)) {
+        throw new Error("PAYMENT_METADATA_INVALID:" + field);
+      }
+    }
 
     const idemKey = `${input.tenantId}:${input.idempotencyKey}`;
     const priorId = this.idempotency.get(idemKey);
@@ -125,6 +134,7 @@ export class PaymentReceiptService {
     providerReference: string;
   }): Payment {
     if (!input.providerReference?.trim()) throw new Error("PAYMENT_PROVIDER_REFERENCE_REQUIRED");
+    if (input.providerReference.length > 256) throw new Error("PAYMENT_PROVIDER_REFERENCE_INVALID");
     const payment = this.payments.get(input.paymentId);
     if (!payment || payment.tenantId !== input.tenantId) throw new Error("PAYMENT_NOT_FOUND");
     if (payment.status === input.outcome) {
