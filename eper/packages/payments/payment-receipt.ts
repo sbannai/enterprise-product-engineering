@@ -6,8 +6,14 @@ export interface Payment {
   id: string;
   tenantId: string;
   principalId: string;
-  amountPaise: number;
-  currency: "INR";
+  amountMinor: number;
+  /** Legacy INR alias retained for existing callers. */
+  amountPaise?: number;
+  currency: string;
+  marketId?: string;
+  productId?: string;
+  priceBookId?: string;
+  priceBookVersion?: string;
   description: string;
   status: PaymentStatus;
   idempotencyKey: string;
@@ -17,15 +23,16 @@ export interface Payment {
 }
 
 export interface PaymentGateway {
-  createPayment(input: { paymentId: string; amountPaise: number; currency: "INR"; idempotencyKey: string }): {
+  createPayment(input: { paymentId: string; amountMinor: number; currency: string; idempotencyKey: string }): {
     provider: string;
     checkoutReference: string;
   };
 }
 
 export class SandboxPaymentGateway implements PaymentGateway {
-  createPayment(input: { paymentId: string; amountPaise: number; currency: "INR"; idempotencyKey: string }) {
-    if (!input.paymentId || input.amountPaise <= 0 || input.currency !== "INR") {
+  createPayment(input: { paymentId: string; amountMinor: number; currency: string; idempotencyKey: string }) {
+    if (!input.paymentId || !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 ||
+        !["INR", "USD", "EUR", "GBP", "AED"].includes(input.currency)) {
       throw new Error("PAYMENT_GATEWAY_REQUEST_INVALID");
     }
     return {
@@ -44,14 +51,22 @@ export class PaymentReceiptService {
   initiate(input: {
     tenantId: string;
     principalId: string;
-    amountPaise: number;
+    amountPaise?: number;
+    amountMinor?: number;
     currency?: string;
+    marketId?: string;
+    productId?: string;
+    priceBookId?: string;
+    priceBookVersion?: string;
     description: string;
     idempotencyKey: string;
   }): { payment: Payment; provider: string; checkoutReference: string; replayed: boolean } {
     if (!input.tenantId?.trim() || !input.principalId?.trim()) throw new Error("PAYMENT_ACTOR_REQUIRED");
-    if (!Number.isSafeInteger(input.amountPaise) || input.amountPaise <= 0) throw new Error("PAYMENT_AMOUNT_INVALID");
-    if ((input.currency ?? "INR") !== "INR") throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
+    const currency = input.currency ?? "INR";
+    const amountMinor = input.amountMinor ?? input.amountPaise;
+    if (!Number.isSafeInteger(amountMinor) || (amountMinor ?? 0) <= 0) throw new Error("PAYMENT_AMOUNT_INVALID");
+    if (!["INR", "USD", "EUR", "GBP", "AED"].includes(currency)) throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
+    if (input.amountPaise !== undefined && currency !== "INR") throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
     if (!input.description?.trim()) throw new Error("PAYMENT_DESCRIPTION_REQUIRED");
     if (!input.idempotencyKey?.trim() || input.idempotencyKey.length > 128) throw new Error("PAYMENT_IDEMPOTENCY_KEY_REQUIRED");
 
@@ -59,7 +74,9 @@ export class PaymentReceiptService {
     const priorId = this.idempotency.get(idemKey);
     if (priorId) {
       const prior = this.payments.get(priorId)!;
-      if (prior.amountPaise !== input.amountPaise || prior.description !== input.description || prior.principalId !== input.principalId) {
+      if (prior.amountMinor !== amountMinor || prior.currency !== currency || prior.description !== input.description ||
+          prior.principalId !== input.principalId || prior.marketId !== input.marketId || prior.productId !== input.productId ||
+          prior.priceBookId !== input.priceBookId || prior.priceBookVersion !== input.priceBookVersion) {
         throw new Error("PAYMENT_IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST");
       }
       return {
@@ -74,12 +91,16 @@ export class PaymentReceiptService {
     const now = new Date().toISOString();
     const payment: Payment = {
       id, tenantId: input.tenantId, principalId: input.principalId,
-      amountPaise: input.amountPaise, currency: "INR", description: input.description,
-      status: "PENDING", idempotencyKey: input.idempotencyKey,
+      amountMinor: amountMinor!, ...(currency === "INR" ? { amountPaise: amountMinor! } : {}), currency,
+      ...(input.marketId ? { marketId: input.marketId } : {}),
+      ...(input.productId ? { productId: input.productId } : {}),
+      ...(input.priceBookId ? { priceBookId: input.priceBookId } : {}),
+      ...(input.priceBookVersion ? { priceBookVersion: input.priceBookVersion } : {}),
+      description: input.description, status: "PENDING", idempotencyKey: input.idempotencyKey,
       providerReference: null, createdAt: now, updatedAt: now,
     };
     const gateway = this.gateway.createPayment({
-      paymentId: id, amountPaise: input.amountPaise, currency: "INR", idempotencyKey: input.idempotencyKey,
+      paymentId: id, amountMinor: amountMinor!, currency, idempotencyKey: input.idempotencyKey,
     });
     this.payments.set(id, payment);
     this.idempotency.set(idemKey, id);
@@ -136,7 +157,9 @@ export function createReceiptPdf(payment: Payment): Buffer {
     `Tenant: ${payment.tenantId}`,
     `Payer: ${payment.principalId}`,
     `Description: ${payment.description}`,
-    `Amount: ${(payment.amountPaise / 100).toFixed(2)} ${payment.currency}`,
+    `Amount: ${(payment.amountMinor / 100).toFixed(2)} ${payment.currency}`,
+    ...(payment.marketId ? [`Market: ${payment.marketId}`] : []),
+    ...(payment.priceBookId ? [`Price book: ${payment.priceBookId} / ${payment.priceBookVersion ?? ""}`] : []),
     `Status: ${payment.status}`,
     `Provider reference: ${payment.providerReference ?? ""}`,
     `Paid / updated at: ${payment.updatedAt}`,
