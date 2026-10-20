@@ -9,10 +9,10 @@
 
 | Layer | Library source | Evidence found | Controlled disposition |
 |---|---|---|---|
-| BRD | `EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx` | Chapter 463 pattern identities and requirement IDs | Requirement identity/source candidate; approval/sign-off still required |
-| SRS | `EM-SRS-001_SRS_Batch_010_Chapters_451_500.docx` | Chapter 463 IDs SRS-FR-2323–2328 | Identity mapping present; SRS approval pending |
+| BRD | `EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx` | Chapter 463 pattern identities and requirement IDs; controlled B01 baseline approval is recorded for Chapters 463–470 | Baseline approval recorded; exact source-file/version reconciliation and requirement-level acceptance oracle remain separate checks |
+| SRS | `EM-SRS-001_SRS_Batch_010_Chapters_451_500.docx` | Chapter 463 IDs SRS-FR-2323–2328; controlled B01 baseline approval is recorded for Chapters 463–470 | Baseline approval recorded; reconcile the named source file/version to the approved baseline before promoting exact locators or oracles |
 | HLD | `EM-HLD-001_Architecture_Consistency_Decision_Register_FINAL.docx` and `EM-HLD-001_Consolidated_HLD_Chapters_463-500_v1.0.docx` | Architecture family exists; consolidated artifact itself says requirement-level locators/approval are pending | Supporting architecture only; exact approved HLD locator not promoted |
-| LLD | `EM-LLD-CONSOLIDATED_v1.docx` and `EM-LLD-001_Consolidated_LLD_Chapters_463-500_v1.0` | Reusable component baseline and pattern mappings | Supporting component anchors only; exact approved requirement-level LLD pair not promoted |
+| LLD | `EM-LLD-CONSOLIDATED_v1.docx` and `EM-LLD-001_Consolidated_LLD_Chapters_463-500_v1.0` | Reusable component baseline and pattern mappings; recorded `EM-LLD-001-DESIGN-AUTH-APPROVAL-001` approves the consolidated LLD baseline | Baseline approval recorded; supporting component anchors only, with exact approved requirement-level HLD→LLD pair still not promoted |
 | Traceability/test design | `EM-LLD-010_Detailed_Traceability_Test_Design_Mapping_FINAL.docx` | Identified as intended requirement-to-component/interface/data/test mapping source; targeted retrieval did not confirm direct Chapter 463 rows | Exact direct row still unverified |
 | Governance | `EM-OPS-049_050_FINAL_Consolidated_BRD_SRS_HLD_LLD_Source_Package_v0.2.docx`; `EM-OPS-ALL-CHAPTERS_463-500_Consolidated_Evidence_Closure_Document_v2.docx` | Both explicitly preserve open/hold states where authoritative exact evidence is absent | Use as control evidence, not as substitute for design authority |
 
@@ -60,3 +60,17 @@ The consolidated HLD document itself states that formal architecture approval, s
 - G9 not frozen; G10 not issued.
 
 This is a source-evidence reconciliation, not a source approval, contract approval, UAT authorization or closure certificate.
+
+## 6. Recorded baseline approvals reconciled (2026-10-20)
+
+The source table above is corrected to distinguish **baseline approval** from **requirement-level traceability closure**. The controlled decision records available in the repository record:
+- `B01-BASELINE-APPROVAL-001`: controlled B01 BRD/SRS baseline approved for Chapters 463–470 (48 requirements).
+- `EM-LLD-001-DESIGN-AUTH-APPROVAL-001`: consolidated LLD v1.0 baseline approved for Chapters 463–500 (228 requirements).
+
+These records do not, by themselves, establish:
+1. that every locally named source filename is byte-for-byte/version-identical to the approved controlled artifact;
+2. an exact approved HLD and LLD section/locator pair for each of the six Chapter 463 requirements;
+3. complete approved DATA/API/EVENT contracts or explicit approved N/A decisions; or
+4. measurable, requirement-specific acceptance oracles and controlled fixtures.
+
+Accordingly, this reconciliation no longer describes the overall BRD/SRS or LLD baseline as simply “approval pending.” The remaining blocker is exact source/version and requirement-level binding, not a claim that the recorded baseline approvals do not exist. The HLD requirement-level bindings remain unverified. No approval is inferred for draft catalogue candidates, and no business UAT execution is authorized by this update.
