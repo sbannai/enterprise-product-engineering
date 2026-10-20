@@ -109,7 +109,6 @@ export function createAppServer(): Server {
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
-        "referrer-policy": "same-origin",
       });
       response.end(adminWorkflowUiHtml);
       return;
