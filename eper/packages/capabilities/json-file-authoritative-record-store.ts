@@ -24,6 +24,16 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
     return JSON.stringify([tenantId, id]);
   }
 
+  private validRecord(record: unknown): record is AuthoritativeRecord {
+    if (!record || typeof record !== "object" || Array.isArray(record)) return false;
+    const candidate = record as AuthoritativeRecord;
+    return typeof candidate.id === "string" && !!candidate.id.trim() &&
+      typeof candidate.tenantId === "string" && !!candidate.tenantId.trim() &&
+      Number.isInteger(candidate.version) && candidate.version >= 1 &&
+      typeof candidate.state === "string" && !!candidate.state.trim() &&
+      !!candidate.data && typeof candidate.data === "object" && !Array.isArray(candidate.data);
+  }
+
   private read(): AuthoritativeRecord[] {
     let parsed: unknown;
     try {
@@ -31,7 +41,9 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
     } catch {
       throw new Error("PERSISTENCE_DATA_INVALID");
     }
-    if (!Array.isArray(parsed)) throw new Error("PERSISTENCE_DATA_INVALID");
+    if (!Array.isArray(parsed) || !parsed.every(record => this.validRecord(record))) {
+      throw new Error("PERSISTENCE_DATA_INVALID");
+    }
     return parsed as AuthoritativeRecord[];
   }
 
@@ -43,7 +55,10 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
 
   private clone(record: AuthoritativeRecord): AuthoritativeRecord {
     try {
-      const data = JSON.parse(JSON.stringify(record.data));
+      const serialized = JSON.stringify(record.data);
+      if (serialized === undefined) throw new Error();
+      const data = JSON.parse(serialized);
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
       return { ...record, data };
     } catch {
       throw new Error("RECORD_DATA_NOT_SERIALIZABLE");
@@ -51,6 +66,18 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
   }
 
   create(record: AuthoritativeRecord): AuthoritativeRecord {
+    if (!record || typeof record !== "object" || Array.isArray(record) ||
+      typeof record.id !== "string" || !record.id.trim() ||
+      typeof record.tenantId !== "string" || !record.tenantId.trim() ||
+      typeof record.state !== "string" || !record.state.trim()) {
+      throw new Error("RECORD_CONTEXT_REQUIRED");
+    }
+    if (!Number.isInteger(record.version) || record.version < 1) {
+      throw new Error("RECORD_VERSION_INVALID");
+    }
+    if (!record.data || typeof record.data !== "object" || Array.isArray(record.data)) {
+      throw new Error("RECORD_DATA_INVALID");
+    }
     const records = this.read();
     if (records.some(item => this.key(item.tenantId, item.id) === this.key(record.tenantId, record.id))) {
       throw new Error("RECORD_ALREADY_EXISTS");
@@ -72,6 +99,18 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
     expectedVersion: number,
     patch: Partial<Pick<AuthoritativeRecord, "state" | "data">>,
   ): AuthoritativeRecord {
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error("RECORD_VERSION_INVALID");
+    }
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+      throw new Error("RECORD_PATCH_INVALID");
+    }
+    if (patch.state !== undefined && (typeof patch.state !== "string" || !patch.state.trim())) {
+      throw new Error("RECORD_STATE_INVALID");
+    }
+    if (patch.data !== undefined && (!patch.data || typeof patch.data !== "object" || Array.isArray(patch.data))) {
+      throw new Error("RECORD_DATA_INVALID");
+    }
     const records = this.read();
     const index = records.findIndex(item => this.key(item.tenantId, item.id) === this.key(tenantId, id));
     if (index < 0) throw new Error("RECORD_NOT_FOUND");
@@ -89,6 +128,9 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
   }
 
   delete(tenantId: string, id: string, expectedVersion: number): void {
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error("RECORD_VERSION_INVALID");
+    }
     const records = this.read();
     const index = records.findIndex(item => this.key(item.tenantId, item.id) === this.key(tenantId, id));
     if (index < 0) throw new Error("RECORD_NOT_FOUND");
