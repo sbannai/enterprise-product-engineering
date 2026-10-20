@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 const TOKEN = "eper-workflow-config-test-token-more-than-32-characters";
@@ -27,6 +28,9 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(html, /Generated activities/);
     assert.match(html, /eper-toast-region/);
     assert.match(html, /window\.EPERToast/);
+    const scripts = Array.from(html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g), (match) => match[1]);
+    assert.ok(scripts.length >= 2, "shared toast and workflow scripts should be present");
+    for (const script of scripts) assert.doesNotThrow(() => new vm.Script(script), "embedded UI JavaScript must parse");
 
     const noAuth = await fetch(`${base}/admin/config/workflows`);
     assert.equal(noAuth.status, 401);
