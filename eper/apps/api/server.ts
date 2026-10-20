@@ -432,8 +432,9 @@ export function createAppServer(): Server {
     // Explicitly opt-in sandbox payment flow. This is a test adapter, not a live gateway.
     const paymentPath = requestUrl.pathname;
     if (paymentPath === "/sandbox/payments" || paymentPath.startsWith("/sandbox/payments/")) {
-      if (process.env.EPER_PAYMENT_SANDBOX_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+      if (process.env.EPER_PAYMENT_SANDBOX_ENABLED !== "true" ||
+          !paymentVendorConfig.sandboxEnabled || paymentVendorConfig.provider !== "sandbox") {
+        sendJson(response, 404, { error: "sandbox_payment_flow_disabled" });
         return;
       }
       const paymentToken = process.env.EPER_PAYMENT_SANDBOX_TOKEN ?? "";
