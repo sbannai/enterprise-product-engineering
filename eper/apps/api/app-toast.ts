@@ -9,16 +9,16 @@ export const applicationToastMarkup = String.raw`
 <script>
 (function(){
   var region=document.getElementById('eper-toast-region');if(!region)return;
-  var icons={success:'✓',error:'!',warning:'⚠',info:'i'};
+  var timers=new WeakMap();\n  function dismiss(item){var timer=timers.get(item);if(timer!==undefined){clearTimeout(timer);timers.delete(item)}item.remove()}\n  var icons={success:'✓',error:'!',warning:'⚠',info:'i'};
   function show(kind,message,title,options){
     options=options||{};kind=icons[kind]?kind:'info';
     var item=document.createElement('section');item.className='eper-toast';item.dataset.kind=kind;item.setAttribute('role',kind==='error'?'alert':'status');
     var icon=document.createElement('div');icon.className='eper-toast-icon';icon.setAttribute('aria-hidden','true');icon.textContent=icons[kind];
     var body=document.createElement('div');var heading=document.createElement('div');heading.className='eper-toast-title';heading.textContent=title||({success:'Saved',error:'Something went wrong',warning:'Attention needed',info:'Notice'}[kind]);
     var copy=document.createElement('div');copy.className='eper-toast-message';copy.textContent=String(message||'');body.append(heading,copy);
-    var close=document.createElement('button');close.type='button';close.className='eper-toast-close';close.setAttribute('aria-label','Dismiss notification');close.textContent='×';close.addEventListener('click',function(){item.remove()});item.append(icon,body,close);region.appendChild(item);
-    while(region.children.length>5)region.firstElementChild.remove();
-    var duration=Number.isFinite(options.duration)?options.duration:(kind==='error'?8000:4500);if(duration>0)setTimeout(function(){if(item.isConnected)item.remove()},duration);return item;
+    var close=document.createElement('button');close.type='button';close.className='eper-toast-close';close.setAttribute('aria-label','Dismiss notification');close.textContent='×';close.addEventListener('click',function(){dismiss(item)});item.append(icon,body,close);region.appendChild(item);
+    while(region.children.length>5)dismiss(region.firstElementChild);
+    var duration=Number.isFinite(options.duration)?options.duration:(kind==='error'?8000:4500);if(duration>0)timers.set(item,setTimeout(function(){dismiss(item)},duration));return item;
   }
   window.EPERToast={success:function(m,t,o){return show('success',m,t,o)},error:function(m,t,o){return show('error',m,t,o)},warning:function(m,t,o){return show('warning',m,t,o)},info:function(m,t,o){return show('info',m,t,o)},show:show};
 })();
