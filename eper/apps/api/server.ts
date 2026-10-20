@@ -6,6 +6,7 @@ import { requirementBindings } from "../../packages/requirements/registry.js";
 import { LocalizationService, type SupportedLocale, type SupportedCurrency } from "../../packages/localization/localization.js";
 import { PaymentReceiptService } from "../../packages/payments/payment-receipt.js";
 import { MarketPriceBookService, type MarketPriceEntry } from "../../packages/pricing/market-price-book.js";
+import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -72,10 +73,134 @@ export function createAppServer(): Server {
     if (!Array.isArray(parsed)) throw new Error("MARKET_PRICE_BOOK_JSON_ARRAY_REQUIRED");
     marketPriceEntries = parsed as MarketPriceEntry[];
   }
-  const marketPriceBook = new MarketPriceBookService(marketPriceEntries);
+  let marketPriceBook = new MarketPriceBookService(marketPriceEntries);
+  let paymentVendorConfig = {
+    provider: process.env.EPER_PAYMENT_PROVIDER ?? "sandbox",
+    mode: "sandbox",
+    sandboxEnabled: process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
+  };
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    if (isAdminPricingUiRequest(request)) {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+      });
+      response.end(adminPricingUiHtml);
+      return;
+    }
+
+    const adminConfigPath = requestUrl.pathname;
+    if (adminConfigPath === "/admin/config/price-book" || adminConfigPath === "/admin/config/payment-vendor") {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      const adminToken = process.env.EPER_ADMIN_CONFIG_API_TOKEN ?? "";
+      if (adminToken.length < 32) {
+        sendJson(response, 503, { error: "admin_config_api_unconfigured" });
+        return;
+      }
+      if (!bearerMatches(request, adminToken)) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      try {
+        if (adminConfigPath === "/admin/config/price-book" && request.method === "GET") {
+          sendJson(response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/price-book" && request.method === "PUT") {
+          const body = await readJson(request);
+          const candidate = body.entry;
+          if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+            sendJson(response, 400, { error: "entry_object_required" });
+            return;
+          }
+          const entry = candidate as MarketPriceEntry;
+          const nextEntries = marketPriceEntries.filter((current) =>
+            !(current.productId === entry.productId && current.marketId === entry.marketId &&
+              current.priceBookId === entry.priceBookId && current.priceBookVersion === entry.priceBookVersion));
+          nextEntries.push(entry);
+          const nextService = new MarketPriceBookService(nextEntries);
+          marketPriceEntries = nextEntries;
+          marketPriceBook = nextService;
+          sendJson(response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/payment-vendor" && request.method === "GET") {
+          const provider = paymentVendorConfig.provider;
+          const providerKeyConfigured = provider === "razorpay"
+            ? Boolean(process.env.EPER_RAZORPAY_KEY_ID && process.env.EPER_RAZORPAY_KEY_SECRET)
+            : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_SECRET_KEY)
+            : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_API_KEY && process.env.EPER_ADYEN_MERCHANT_ACCOUNT)
+            : true;
+          const webhookSecretConfigured = provider === "razorpay"
+            ? Boolean(process.env.EPER_RAZORPAY_WEBHOOK_SECRET)
+            : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_WEBHOOK_SECRET)
+            : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_HMAC_KEY)
+            : false;
+          const adapterAvailable = provider === "sandbox";
+          sendJson(response, 200, {
+            provider, mode: paymentVendorConfig.mode, sandboxEnabled: paymentVendorConfig.sandboxEnabled,
+            productionEnabled: false, adapterAvailable,
+            credentials: { providerKeyConfigured, webhookSecretConfigured },
+            persistence: "process-memory",
+            message: adapterAvailable ? "Sandbox adapter selected; no live charges can be made." : "Provider selection saved as configuration only; adapter is not implemented and cannot process payments.",
+          });
+          return;
+        }
+        if (adminConfigPath === "/admin/config/payment-vendor" && request.method === "PUT") {
+          const body = await readJson(request);
+          const allowedProviders = ["sandbox", "razorpay", "stripe", "adyen"];
+          if (typeof body.provider !== "string" || !allowedProviders.includes(body.provider) ||
+              body.mode !== "sandbox" || typeof body.sandboxEnabled !== "boolean") {
+            sendJson(response, 400, { error: "provider must be supported; mode must remain sandbox; sandboxEnabled must be boolean" });
+            return;
+          }
+          paymentVendorConfig = {
+            provider: body.provider,
+            mode: "sandbox",
+            sandboxEnabled: body.sandboxEnabled && body.provider === "sandbox" &&
+              process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
+          };
+          sendJson(response, 200, {
+            provider: paymentVendorConfig.provider,
+            mode: paymentVendorConfig.mode,
+            sandboxEnabled: paymentVendorConfig.sandboxEnabled,
+            productionEnabled: false,
+            adapterAvailable: paymentVendorConfig.provider === "sandbox",
+            persistence: "process-memory",
+            message: paymentVendorConfig.provider === "sandbox"
+              ? "Sandbox configuration updated. Server-side sandbox opt-in and tenant settings are still required."
+              : "Provider selection recorded for planning only. Its adapter is not implemented; sandbox payment flow is disabled for this selection.",
+          });
+          return;
+        }
+        response.writeHead(405, { allow: "GET, PUT", "cache-control": "no-store" });
+        response.end();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "ADMIN_CONFIG_OPERATION_FAILED";
+        const status = message === "MARKET_PRICE_CONFIGURATION_AMBIGUOUS" ? 409
+          : message.startsWith("MARKET_PRICE_") || message.startsWith("PRICE_") ||
+            message === "MARKET_PRICE_REQUIRED_FIELDS_MISSING" ? 400
+          : message === "REQUEST_BODY_TOO_LARGE" ? 413
+          : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
+          : 422;
+        sendJson(response, status, { error: message });
+      }
+      return;
+    }
 
     if (request.method === "GET" && requestUrl.pathname === "/health") {
       const buildId = process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID || "";
