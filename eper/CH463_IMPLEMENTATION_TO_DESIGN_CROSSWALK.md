@@ -346,3 +346,29 @@ Source consulted: `B01_CH463_UAT_Evidence_Readiness_v1.2_owner_decision_capture.
 - `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx`: explicitly states requirement-level exact joins are not fully promoted and execution/contract-test evidence is not established.
 
 **Disposition:** this pass narrows the remaining work to validating the named candidate catalogue rows and their approvals. It does not change the controlled gate counts: exact approved HLD→LLD pairs 0/6; verified full DATA/API/EVENT bindings or approved N/A 0/18; approved oracles 0/6. Keep the six canonical cases `B01-463-01`–`B01-463-06` unchanged and `NOT_RUN`. No UAT authorization is implied.
+
+## 6. Closure reconciliation against recorded baseline approvals (2026-10-20)
+
+The controlled BRD/SRS and consolidated LLD baseline approvals are recorded in the repository. The crosswalk therefore treats those baseline approvals as existing evidence, while keeping the **exact requirement-level binding** open. A component heading or registry descriptor is not an exact approved locator.
+
+| Requirement | Supporting LLD anchor | Exact HLD→LLD binding still needed | Requirement-specific business decision / oracle still needed |
+|---|---|---|---|
+| REQ-46301 | `LLD-CMP-008` Domain; `LLD-CMP-007` Application Services; consolidated LLD sections LLD-02/LLD-03 | Exact approved HLD section + LLD section/page/table row, version and approval/change reference | Authoritative procurement object(s), relationships, mandatory fields, lifecycle and duplicate/version-conflict expected state |
+| REQ-46302 | `LLD-CMP-003` Identity; `LLD-CMP-004` Authorization; `LLD-CMP-005` Tenant Management; LLD-05 | Exact approved HLD security/tenant policy locator paired with exact LLD locator | Approved actor/role/action/resource/tenant matrix, delegation/SoD, denied response, zero-side-effect assertion and audit requirement |
+| REQ-46303 | `LLD-CMP-007` Application Services; `LLD-CMP-010` Rules; `LLD-CMP-008` Domain; LLD-02/LLD-06 | Exact approved HLD domain/rules locator paired with exact LLD locator | Procurement-specific mandatory-field catalogue, rule version, validation order, boundary fixture and deterministic rejection outcomes |
+| REQ-46304 | `LLD-CMP-017` Audit; `LLD-CMP-018` Observability; LLD-03/LLD-09 | Exact approved HLD audit/security locator paired with exact LLD locator | Material event taxonomy, required audit schema, actor/correlation fields, integrity, retention, access/retrieval and failure behavior |
+| REQ-46305 | `LLD-CMP-009` Workflow; `LLD-CMP-010` Rules; `LLD-CMP-011` Integration | Exact approved HLD workflow/integration locator paired with exact LLD locator | Resolve procurement-match exception vs general procurement exception scope; approve retry/idempotency/recovery/escalation/terminal-state rules |
+| REQ-46306 | `LLD-CMP-016` Reporting/Analytics; `LLD-CMP-014` Search | Exact approved HLD reporting/data-lineage locator paired with exact LLD locator | Approved report/KPI catalogue, formula, fixture totals, filters/tenant scope, freshness, time zone, lineage and tolerance |
+
+### Contract-slot disposition (all six requirements)
+
+The `DATA:*`, `API:*`, and `EVENT:*` values in `eper/contracts/index.ts` are registered descriptor IDs at version `v1`. They are **not** complete approved contracts. For each of the 18 slots, closure requires either (a) the exact controlled schema/operation/event identifier, version and stable locator plus approval reference, or (b) an explicit approved N/A decision with rationale. Empty, draft, or implementation-derived entries do not count as N/A.
+
+### Controlled action order
+
+1. Preserve the recorded baseline approval references and confirm the named BRD/SRS files resolve to those controlled versions.
+2. Retrieve direct requirement rows from the authoritative HLD/LLD and traceability source. If absent, raise a controlled traceability change request rather than inventing page/section locators.
+3. Resolve the six requirement-specific decisions above and bind approved DATA/API/EVENT slots or approved N/A decisions.
+4. Approve the candidate oracle matrix and controlled fixtures; keep all six canonical cases `NOT_RUN` until D10 authorization and environment preflight are recorded.
+
+**Current gate remains unchanged:** exact HLD→LLD pairs 0/6; complete approved contract slots or approved N/A 0/18; approved measurable oracles 0/6; business execution 0/6. This table is a closure worklist, not approval evidence.
