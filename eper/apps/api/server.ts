@@ -227,7 +227,7 @@ export function createAppServer(): Server {
           return;
         }
 
-        const receiptMatch = /^\\/sandbox\\/payments\\/([^/]+)\\/receipt$/.exec(paymentPath);
+        const receiptMatch = /^\/sandbox\/payments\/([^/]+)\/receipt$/.exec(paymentPath);
         if (request.method === "GET" && receiptMatch) {
           const receipt = paymentService.getReceipt(paymentTenant, decodeURIComponent(receiptMatch[1]));
           response.writeHead(200, {
@@ -240,7 +240,7 @@ export function createAppServer(): Server {
           return;
         }
 
-        const resultMatch = /^\\/sandbox\\/payments\\/([^/]+)\\/result$/.exec(paymentPath);
+        const resultMatch = /^\/sandbox\/payments\/([^/]+)\/result$/.exec(paymentPath);
         if (request.method === "POST" && resultMatch) {
           const body = await readJson(request);
           if ((body.outcome !== "SUCCEEDED" && body.outcome !== "FAILED") || typeof body.providerReference !== "string") {
@@ -255,7 +255,7 @@ export function createAppServer(): Server {
           return;
         }
 
-        const paymentMatch = /^\\/sandbox\\/payments\\/([^/]+)$/.exec(paymentPath);
+        const paymentMatch = /^\/sandbox\/payments\/([^/]+)$/.exec(paymentPath);
         if (request.method === "GET" && paymentMatch) {
           const payment = paymentService.get(paymentTenant, decodeURIComponent(paymentMatch[1]));
           if (!payment) {
