@@ -187,3 +187,12 @@ test("exception create and transitions emit tenant-scoped lifecycle audit eviden
   assert.equal(events.every(e => service.verifyLifecycleEvidence(e)), true);
   assert.equal(service.verifyLifecycleEvidence({ ...events[0], action: "TAMPERED" }), false);
 });
+
+
+test("services reject malformed typed context and blank requested tenant IDs", () => {
+  const requirement = requirementBindings.find(r => r.pattern === "XX01");
+  const service = new AuthoritativeRecordService();
+  assert.throws(() => service.execute(requirement, { context: { tenantId: 7, principalId: "user", correlationId: "c" }, payload: { operation: "get", id: "r1" } }), /CAPABILITY_CONTEXT_REQUIRED/);
+  assert.throws(() => service.execute(requirement, { context: { tenantId: "tenant-a", principalId: "user", correlationId: "c" }, payload: { operation: "get", tenantId: "", id: "r1" } }), /TENANT_CONTEXT_MISMATCH/);
+  assert.throws(() => service.execute(requirement, null), /CAPABILITY_OPERATION_REQUIRED/);
+});
