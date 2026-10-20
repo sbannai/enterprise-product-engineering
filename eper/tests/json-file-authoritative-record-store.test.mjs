@@ -61,3 +61,11 @@ test("JSON record store isolates tenants and deep-clones record data", () => {
     assert.equal(store.get("tenant-b", "record-1").tenantId, "tenant-b");
   });
 });
+
+
+test("JSON record store rejects duplicate persisted tenant-scoped record IDs", () => {
+  withStore((store, filePath) => {
+    writeFileSync(filePath, JSON.stringify([record, record]));
+    assert.throws(() => store.get("tenant-a", "record-1"), /PERSISTENCE_DATA_INVALID/);
+  });
+});
