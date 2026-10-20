@@ -72,6 +72,7 @@ export function createAppServer(): Server {
   if (rawPriceBook !== undefined) {
     const parsed: unknown = JSON.parse(rawPriceBook);
     if (!Array.isArray(parsed)) throw new Error("MARKET_PRICE_BOOK_JSON_ARRAY_REQUIRED");
+    if (parsed.length > 10_000) throw new Error("MARKET_PRICE_BOOK_CAPACITY_EXCEEDED");
     marketPriceEntries = parsed as MarketPriceEntry[];
   }
   let marketPriceBook = new MarketPriceBookService(marketPriceEntries);
@@ -162,6 +163,10 @@ export function createAppServer(): Server {
             return;
           }
           const candidate = body.workflows as WorkflowDefinition[];
+          if (candidate.length > 500) {
+            sendJson(response, 413, { error: "workflow_configuration_capacity_exceeded" });
+            return;
+          }
           const workflowIds = candidate.map((w) => w && w.id);
           if (candidate.some((w) => !w || typeof w.id !== "string" || !/^[a-zA-Z0-9._-]+$/.test(w.id) ||
               typeof w.name !== "string" || !w.name.trim() || !["DRAFT", "ACTIVE"].includes(w.status) || !Array.isArray(w.activities)) ||
@@ -170,6 +175,10 @@ export function createAppServer(): Server {
             return;
           }
           for (const workflow of candidate) {
+            if (workflow.activities.length > 200) {
+              sendJson(response, 413, { error: "workflow_activity_capacity_exceeded:" + workflow.id });
+              return;
+            }
             const activityIds = workflow.activities.map((a) => a && a.id);
             if (new Set(activityIds).size !== activityIds.length ||
                 workflow.activities.some((a) => !a || typeof a.id !== "string" || !/^[a-zA-Z0-9._-]+$/.test(a.id) ||
@@ -190,7 +199,7 @@ export function createAppServer(): Server {
                 sendJson(response, 422, { error: "workflow_transition_target_not_found:" + activity.id });
                 return;
               }
-              if (activity.fields.some((field) => !field || typeof field.id !== "string" || !field.id ||
+              if (activity.fields.length > 100 || activity.fields.some((field) => !field || typeof field.id !== "string" || !field.id || field.id.length > 128 || (field.label !== undefined && (typeof field.label !== "string" || field.label.length > 200)) || (field.options !== undefined && field.options.length > 100) ||
                   !allowedFieldTypes.includes(field.type) ||
                   (field.type === "select" && (!Array.isArray(field.options) || field.options.some((option) => typeof option !== "string"))))) {
                 sendJson(response, 400, { error: "invalid_workflow_form_field:" + activity.id });
@@ -213,10 +222,14 @@ export function createAppServer(): Server {
             return;
           }
           const candidate = body.roles as WorkflowRole[];
+          if (candidate.length > 500) {
+            sendJson(response, 413, { error: "role_configuration_capacity_exceeded" });
+            return;
+          }
           const roleIds = candidate.map((role) => role && role.id);
           if (candidate.some((role) => !role || typeof role.id !== "string" || !/^[a-zA-Z0-9._-]+$/.test(role.id) ||
               typeof role.name !== "string" || !role.name.trim() || !Array.isArray(role.members) ||
-              !Array.isArray(role.permissions) || role.members.some((member) => typeof member !== "string" || !member.trim()) ||
+              !Array.isArray(role.permissions) || role.members.length > 10_000 || role.permissions.length > allowedWorkflowPermissions.length || role.members.some((member) => typeof member !== "string" || !member.trim() || member.length > 128) ||
               role.permissions.some((permission) => !allowedWorkflowPermissions.includes(permission)) ||
               new Set(role.members).size !== role.members.length) ||
               new Set(roleIds).size !== roleIds.length) {
@@ -274,6 +287,10 @@ export function createAppServer(): Server {
           const nextEntries = marketPriceEntries.filter((current) =>
             !(current.productId === entry.productId && current.marketId === entry.marketId &&
               current.priceBookId === entry.priceBookId && current.priceBookVersion === entry.priceBookVersion));
+          if (nextEntries.length >= 10_000) {
+            sendJson(response, 503, { error: "MARKET_PRICE_BOOK_CAPACITY_EXCEEDED" });
+            return;
+          }
           nextEntries.push(entry);
           const nextService = new MarketPriceBookService(nextEntries);
           marketPriceEntries = nextEntries;
