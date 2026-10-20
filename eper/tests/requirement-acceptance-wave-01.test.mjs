@@ -44,6 +44,43 @@ test("REQ-46301 / SRS-FR-2323: authoritative record valid lifecycle and invalid 
   assert.equal(created.requirementId, "REQ-46301");
   assert.equal(created.data.payload.record.state, "OPEN");
 
+  assert.throws(
+    () => service.execute(requirement, {
+      context: context("req-46301-duplicate"),
+      payload: {
+        operation: "create",
+        record: {
+          id: "req-46301-record",
+          tenantId: "wave-01-ch463",
+          version: 1,
+          state: "OPEN",
+          data: { source: "duplicate" },
+        },
+      },
+    }),
+    /RECORD_ALREADY_EXISTS/,
+  );
+
+  const crossTenantRead = await service.execute(requirement, {
+    context: { ...context("req-46301-cross-tenant"), tenantId: "other-tenant" },
+    payload: { operation: "get", tenantId: "other-tenant", id: "req-46301-record" },
+  });
+  assert.equal(crossTenantRead.data.payload.record, undefined);
+
+  assert.throws(
+    () => service.execute(requirement, {
+      context: context("req-46301-missing"),
+      payload: {
+        operation: "update",
+        tenantId: "wave-01-ch463",
+        id: "missing-record",
+        expectedVersion: 1,
+        patch: { state: "CLOSED" },
+      },
+    }),
+    /RECORD_NOT_FOUND/,
+  );
+
   const updated = await service.execute(requirement, {
     context: context("req-46301-update"),
     payload: {
@@ -150,17 +187,26 @@ test("REQ-46303 / SRS-FR-2325: mandatory business condition passes when valid an
   assert.equal(requirement.pattern, "XX03");
   const service = new BusinessValidationService();
 
-  service.addRule({
+  const positiveAmountRule = {
     id: "req-46303-positive-amount",
     evaluate: (input) =>
       input?.amount > 0
         ? null
         : { code: "MANDATORY_CONDITION_FAILED", message: "Amount must be positive", severity: "ERROR" },
+  };
+  service.addRule(positiveAmountRule);
+  assert.throws(() => service.addRule(positiveAmountRule), /VALIDATION_RULE_DUPLICATE/);
+  service.addRule({
+    id: "req-46303-reference-required",
+    evaluate: (input) =>
+      typeof input?.reference === "string" && input.reference.length > 0
+        ? null
+        : { code: "REFERENCE_REQUIRED", message: "Reference is required", severity: "ERROR" },
   });
 
   const valid = await service.execute(requirement, {
     context: context("req-46303-valid"),
-    payload: { operation: "validate", input: { amount: 100 } },
+    payload: { operation: "validate", input: { amount: 100, reference: "REF-46303" } },
   });
   assert.equal(valid.data.payload.validation.valid, true);
 
@@ -169,7 +215,10 @@ test("REQ-46303 / SRS-FR-2325: mandatory business condition passes when valid an
     payload: { operation: "validate", input: { amount: 0 } },
   });
   assert.equal(invalid.data.payload.validation.valid, false);
-  assert.equal(invalid.data.payload.validation.issues[0].code, "MANDATORY_CONDITION_FAILED");
+  assert.deepEqual(
+    invalid.data.payload.validation.issues.map((issue) => issue.code).sort(),
+    ["MANDATORY_CONDITION_FAILED", "REFERENCE_REQUIRED"],
+  );
 });
 
 test("REQ-46304 / SRS-FR-2326: audit evidence preserves integrity and tenant boundary", async () => {
@@ -226,24 +275,41 @@ test("REQ-46304 / SRS-FR-2326: audit evidence preserves integrity and tenant bou
 test("REQ-46305 / SRS-FR-2327: controlled exception lifecycle permits retry/resolution and rejects invalid terminal transition", async () => {
   const requirement = req("REQ-46305");
   assert.equal(requirement.pattern, "XX05");
-  const service = new ExceptionHandlingService();
+  const lifecycleEvidence = new InMemoryAuditEvidenceStore();
+  const service = new ExceptionHandlingService(undefined, lifecycleEvidence);
 
-  const created = await service.execute(requirement, {
-    context: context("req-46305-create"),
-    payload: {
-      operation: "create",
-      exception: {
-        id: "req-46305-exception",
-        tenantId: "wave-01-ch463",
-        requirementId: "REQ-46305",
-        code: "CONTROLLED_FAILURE",
-        message: "Acceptance test failure scenario",
-        idempotencyKey: "req-46305-idempotency",
-        createdAt: "2026-09-24T03:00:00.000Z",
-      },
+  context: context("req-46305-create"),
+  payload: {
+    operation: "create",
+    exception: {
+      id: "req-46305-exception",
+      tenantId: "wave-01-ch463",
+      requirementId: "REQ-46305",
+      code: "CONTROLLED_FAILURE",
+      message: "Acceptance test failure scenario",
+      idempotencyKey: "req-46305-idempotency",
+      createdAt: "2026-09-24T03:00:00.000Z",
     },
-  });
+  },
+};
+  const created = await service.execute(requirement, createInput);
   assert.equal(created.data.payload.exception.state, "OPEN");
+  const replayed = await service.execute(requirement, {
+    ...createInput,
+    context: context("req-46305-create-replay"),
+  });
+  assert.equal(replayed.data.payload.exception.id, "req-46305-exception");
+  assert.equal(lifecycleEvidence.listByRequirement("wave-01-ch463", "REQ-46305").length, 1);
+  assert.throws(
+    () => service.execute(requirement, {
+      context: context("req-46305-idempotency-conflict"),
+      payload: {
+        ...createInput.payload,
+        exception: { ...createInput.payload.exception, message: "Different request, same key" },
+      },
+    }),
+    /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST/,
+  );
 
   const retrying = await service.execute(requirement, {
     context: context("req-46305-retry"),
@@ -266,6 +332,13 @@ test("REQ-46305 / SRS-FR-2327: controlled exception lifecycle permits retry/reso
     },
   });
   assert.equal(resolved.data.payload.exception.state, "RESOLVED");
+
+  const lifecycleEvents = lifecycleEvidence.listByRequirement("wave-01-ch463", "REQ-46305");
+  assert.equal(lifecycleEvents.length, 3);
+  assert.deepEqual(lifecycleEvents.map((event) => event.action), [
+    "EXCEPTION_CREATED", "EXCEPTION_TRANSITIONED", "EXCEPTION_TRANSITIONED",
+  ]);
+  assert.ok(lifecycleEvents.every((event) => lifecycleEvidence.verify(event)));
 
   assert.throws(
     () => service.execute(requirement, {
