@@ -278,20 +278,21 @@ test("REQ-46305 / SRS-FR-2327: controlled exception lifecycle permits retry/reso
   const lifecycleEvidence = new InMemoryAuditEvidenceStore();
   const service = new ExceptionHandlingService(undefined, lifecycleEvidence);
 
-  context: context("req-46305-create"),
-  payload: {
-    operation: "create",
-    exception: {
-      id: "req-46305-exception",
-      tenantId: "wave-01-ch463",
-      requirementId: "REQ-46305",
-      code: "CONTROLLED_FAILURE",
-      message: "Acceptance test failure scenario",
-      idempotencyKey: "req-46305-idempotency",
-      createdAt: "2026-09-24T03:00:00.000Z",
+  const createInput = {
+    context: context("req-46305-create"),
+    payload: {
+      operation: "create",
+      exception: {
+        id: "req-46305-exception",
+        tenantId: "wave-01-ch463",
+        requirementId: "REQ-46305",
+        code: "CONTROLLED_FAILURE",
+        message: "Acceptance test failure scenario",
+        idempotencyKey: "req-46305-idempotency",
+        createdAt: "2026-09-24T03:00:00.000Z",
+      },
     },
-  },
-};
+  };
   const created = await service.execute(requirement, createInput);
   assert.equal(created.data.payload.exception.state, "OPEN");
   const replayed = await service.execute(requirement, {
