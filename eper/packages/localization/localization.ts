@@ -63,6 +63,7 @@ const MESSAGES = {
 } as const;
 
 export class LocalizationService {
+  static readonly MAX_IN_MEMORY_PREFERENCES = 10_000;
   private readonly preferences = new Map<string, LocalizationPreference>();
 
   options(): LocalizationOptions {
@@ -97,7 +98,11 @@ export class LocalizationService {
     }
 
     const next = { locale, currency, timeZone };
-    this.preferences.set(this.key(tenantId, principalId), next);
+    const preferenceKey = this.key(tenantId, principalId);
+    if (!this.preferences.has(preferenceKey) && this.preferences.size >= LocalizationService.MAX_IN_MEMORY_PREFERENCES) {
+      throw new Error("LOCALIZATION_STORE_CAPACITY_REACHED");
+    }
+    this.preferences.set(preferenceKey, next);
     return { ...next };
   }
 
