@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer as createHttpServer } from "node:net";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 const TOKEN = "local-sandbox-token-with-at-least-32-characters";
