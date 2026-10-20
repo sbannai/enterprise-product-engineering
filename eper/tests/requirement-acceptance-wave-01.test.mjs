@@ -74,9 +74,28 @@ test("REQ-46301 / SRS-FR-2323: authoritative record valid lifecycle and invalid 
 test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedence and default deny", async () => {
   const requirement = req("REQ-46302");
   assert.equal(requirement.pattern, "XX02");
-  const service = new AuthorizationService();
 
-  const decision = await service.execute(requirement, {
+  const allowPolicy = {
+    tenantId: "wave-01-ch463",
+    principalId: "actor-46302",
+    actions: ["material.update"],
+    resources: ["authoritative-record"],
+    effect: "ALLOW",
+  };
+  const denyPolicy = {
+    tenantId: "wave-01-ch463",
+    principalId: "actor-46302",
+    actions: ["material.update"],
+    resources: ["authoritative-record"],
+    effect: "DENY",
+  };
+
+  // Policies must be registered through the service API. A payload.policies field
+  // is not consumed by AuthorizationService.execute and would make this test vacuous.
+  const denyPrecedenceService = new AuthorizationService();
+  denyPrecedenceService.addPolicy(allowPolicy);
+  denyPrecedenceService.addPolicy(denyPolicy);
+  const decision = await denyPrecedenceService.execute(requirement, {
     context: context("req-46302-deny-precedence"),
     payload: {
       operation: "decide",
@@ -86,15 +105,30 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
         action: "material.update",
         resource: "authoritative-record",
       },
-      policies: [
-        { tenantId: "wave-01-ch463", principalId: "actor-46302", actions: ["material.update"], resources: ["authoritative-record"], effect: "ALLOW" },
-        { tenantId: "wave-01-ch463", principalId: "actor-46302", actions: ["material.update"], resources: ["authoritative-record"], effect: "DENY" },
-      ],
     },
   });
   assert.equal(decision.data.payload.decision.effect, "DENY");
+  assert.equal(decision.data.payload.decision.reason, "EXPLICIT_DENY_POLICY");
 
-  const defaultDeny = await service.execute(requirement, {
+  const allowOnlyService = new AuthorizationService();
+  allowOnlyService.addPolicy(allowPolicy);
+  const allowed = await allowOnlyService.execute(requirement, {
+    context: context("req-46302-allow"),
+    payload: {
+      operation: "decide",
+      request: {
+        tenantId: "wave-01-ch463",
+        principalId: "actor-46302",
+        action: "material.update",
+        resource: "authoritative-record",
+      },
+    },
+  });
+  assert.equal(allowed.data.payload.decision.effect, "ALLOW");
+  assert.equal(allowed.data.payload.decision.reason, "ALLOW_POLICY_MATCH");
+
+  const defaultDenyService = new AuthorizationService();
+  const defaultDeny = await defaultDenyService.execute(requirement, {
     context: context("req-46302-default-deny"),
     payload: {
       operation: "decide",
@@ -107,6 +141,7 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
     },
   });
   assert.equal(defaultDeny.data.payload.decision.effect, "DENY");
+  assert.equal(defaultDeny.data.payload.decision.reason, "NO_ALLOW_POLICY");
 });
 
 test("REQ-46303 / SRS-FR-2325: mandatory business condition passes when valid and rejects invalid input", async () => {
