@@ -199,9 +199,10 @@ export function createAppServer(): Server {
                 sendJson(response, 422, { error: "workflow_transition_target_not_found:" + activity.id });
                 return;
               }
-              if (activity.fields.length > 100 || activity.fields.some((field) => !field || typeof field.id !== "string" || !field.id || field.id.length > 128 || (field.label !== undefined && (typeof field.label !== "string" || field.label.length > 200)) || (field.options !== undefined && field.options.length > 100) ||
+              if (activity.fields.length > 100 || activity.fields.some((field) => !field || typeof field.id !== "string" || !field.id || field.id.length > 128 || (field.label !== undefined && (typeof field.label !== "string" || field.label.length > 200)) || (field.required !== undefined && typeof field.required !== "boolean") ||
+                  (field.options !== undefined && (!Array.isArray(field.options) || field.options.length > 100 || field.options.some((option) => typeof option !== "string" || option.length > 200))) ||
                   !allowedFieldTypes.includes(field.type) ||
-                  (field.type === "select" && (!Array.isArray(field.options) || field.options.some((option) => typeof option !== "string"))))) {
+                  (field.type === "select" && !Array.isArray(field.options)))) {
                 sendJson(response, 400, { error: "invalid_workflow_form_field:" + activity.id });
                 return;
               }
