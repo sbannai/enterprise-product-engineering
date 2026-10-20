@@ -19,10 +19,30 @@ export class JsonFileAuditEvidenceStore implements AuditEvidenceStore {
     return JSON.stringify([tenantId, id]);
   }
 
+  private validEvidence(value: unknown): value is AuditEvidence {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const entry = value as AuditEvidence;
+    if (typeof entry.id !== "string" || !entry.id.trim() ||
+      typeof entry.tenantId !== "string" || !entry.tenantId.trim() ||
+      typeof entry.requirementId !== "string" || !entry.requirementId.trim() ||
+      typeof entry.action !== "string" || !entry.action.trim() ||
+      typeof entry.principalId !== "string" || !entry.principalId.trim() ||
+      typeof entry.correlationId !== "string" || !entry.correlationId.trim() ||
+      typeof entry.occurredAt !== "string" || Number.isNaN(Date.parse(entry.occurredAt)) ||
+      typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) return false;
+    return this.verify(entry);
+  }
+
   private read(): AuditEvidence[] {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
-      if (!Array.isArray(parsed)) throw new Error();
+      if (!Array.isArray(parsed) || !parsed.every(entry => this.validEvidence(entry))) throw new Error();
+      const keys = new Set<string>();
+      for (const entry of parsed as AuditEvidence[]) {
+        const key = this.key(entry.tenantId, entry.id);
+        if (keys.has(key)) throw new Error();
+        keys.add(key);
+      }
       return parsed as AuditEvidence[];
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
