@@ -26,6 +26,8 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.equal(uiResponse.headers.get("x-frame-options"), "DENY");
     assert.equal(uiResponse.headers.get("referrer-policy"), "no-referrer");
     assert.equal(uiResponse.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
+    assert.equal(uiResponse.headers.get("cross-origin-resource-policy"), "same-origin");
+    assert.match(uiResponse.headers.get("content-security-policy") ?? "", /default-src 'none'/);
     assert.equal(uiResponse.headers.get("cache-control"), "no-store");
     const html = await uiResponse.text();
     assert.match(html, /Workflow designer/);
