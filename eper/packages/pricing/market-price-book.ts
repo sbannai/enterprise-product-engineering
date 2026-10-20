@@ -77,9 +77,13 @@ export class MarketPriceBookService {
   }
 
   private validateEntry(entry: MarketPriceEntry): void {
-    if (!entry.productId?.trim() || !entry.marketId?.trim() || !entry.currency?.trim() ||
-        !entry.priceBookId?.trim() || !entry.priceBookVersion?.trim()) {
+    const identifiers = [entry.productId, entry.marketId, entry.priceBookId, entry.priceBookVersion];
+    if (identifiers.some((value) => typeof value !== "string" || !value.trim() || value.length > 128) ||
+        typeof entry.currency !== "string" || !entry.currency.trim()) {
       throw new Error("MARKET_PRICE_REQUIRED_FIELDS_MISSING");
+    }
+    if (!(["INR", "USD", "EUR", "GBP", "AED"] as const).includes(entry.currency as "INR" | "USD" | "EUR" | "GBP" | "AED")) {
+      throw new Error("MARKET_PRICE_CURRENCY_UNSUPPORTED");
     }
     if (!Number.isSafeInteger(entry.amountMinor) || entry.amountMinor <= 0) {
       throw new Error("MARKET_PRICE_AMOUNT_INVALID");
