@@ -119,3 +119,25 @@ The current run results remain valid in their proper scope:
 **Required closure action:** preserve these automated statuses as technical pilot results; do not copy them into the business UAT acceptance column. Once approved procurement oracles and source bindings exist, add/execute requirement-specific tests against the six procurement capability paths and retain their actual results independently.
 
 **Disposition:** this audit does not change the gate status: six Chapter 463 business cases remain NOT_RUN; approved oracles 0/6; exact approved HLD→LLD pairs 0/6; approved full DATA/API/EVENT bindings or N/A 0/18; Business UAT NOT AUTHORIZED / NOT EXECUTED.
+
+## 8. Fresh B01 six-wave bridge and entry-readiness review (2026-10-20)
+
+The latest B01 evidence bridge completed successfully on commit `26cefa1040277f67266df270bc6c1006c0c75c53`:
+- Evidence bridge run: [39426596027](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39426596027), artifact `EPER-B01-SIX-WAVE-EVIDENCE-39426596027`.
+- The bridge reports 8/8 chapter suites passed, 63/63 tests passed, 0 failures, and 48/48 B01 rows classified `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`.
+- The six wave evidence records were generated. Their Business UAT field remains `NOT EXECUTED`; acceptance remains `PENDING`; G9 remains `NOT FROZEN`; G10 remains `NOT ISSUED`.
+- Release candidate build, G9 reconciliation CI, six-family capability HTTP smoke, container runtime smoke, EPER CI, and 228-requirement pilot matrix also completed successfully on the same commit. These are technical checks, not authorization or business acceptance.
+
+### Entry-readiness blockers confirmed by the bridge artifact
+
+| Entry criterion | Recorded status | Closure evidence required |
+|---|---|---|
+| Formal business-owner authorization | `PLANNING_INPUT_PRESENT_NOT_FORMAL_APPROVAL` | Controlled authorization / UAT-session record |
+| Actual UAT endpoint, tenant, deployed build | `PLANNING_INPUT_PRESENT` only for Linux runner; target not recorded | Verified base URL, tenant ID, build ID and environment evidence |
+| Approved test data | `BLOCKED` | Controlled approved dataset reference and data-handling approval |
+| OAuth access | `BLOCKED` | Issuer/client configuration, authorized test identity and live login/session evidence |
+| Tester and role mapping | `BLOCKED` | Named tester and controlled role-account mapping |
+| Audit/reporting access | `BLOCKED` | Verified target-environment audit and business-report access |
+| Production-like deployed build | `BLOCKED` | Deployed target evidence; current pilots use implementation candidates, in-memory storage and simulated security context |
+
+**Disposition:** the bridge is a successful technical evidence-generation run, not a business UAT run. Do not mark any of the 48 acceptance rows as accepted from this artifact. Chapter 463 remains blocked by 0/6 approved measurable oracles, 0/6 exact approved HLD→LLD pairs, 0/18 full approved DATA/API/EVENT contracts or approved N/A, and missing D10 controlled authorization.
