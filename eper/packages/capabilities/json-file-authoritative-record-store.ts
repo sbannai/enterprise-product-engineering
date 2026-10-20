@@ -44,6 +44,12 @@ export class JsonFileAuthoritativeRecordStore implements AuthoritativeRecordStor
     if (!Array.isArray(parsed) || !parsed.every(record => this.validRecord(record))) {
       throw new Error("PERSISTENCE_DATA_INVALID");
     }
+    const keys = new Set<string>();
+    for (const record of parsed as AuthoritativeRecord[]) {
+      const key = this.key(record.tenantId, record.id);
+      if (keys.has(key)) throw new Error("PERSISTENCE_DATA_INVALID");
+      keys.add(key);
+    }
     return parsed as AuthoritativeRecord[];
   }
 
