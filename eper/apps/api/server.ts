@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
+import { LocalizationService, type SupportedLocale, type SupportedCurrency } from "../../packages/localization/localization.js";
 import { PaymentReceiptService } from "../../packages/payments/payment-receipt.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -62,6 +63,7 @@ function createConfiguredCapabilityServices() {
 export function createAppServer(): Server {
   const services = createConfiguredCapabilityServices();
   const paymentService = new PaymentReceiptService();
+  const localizationService = new LocalizationService();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
@@ -188,6 +190,57 @@ export function createAppServer(): Server {
       return;
     }
 
+
+
+    if (request.method === "GET" && requestUrl.pathname === "/localization/options") {
+      sendJson(response, 200, localizationService.options());
+      return;
+    }
+
+    if (requestUrl.pathname === "/localization/preferences") {
+      if (process.env.EPER_LOCALIZATION_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      const localizationToken = process.env.EPER_LOCALIZATION_API_TOKEN ?? "";
+      const localizationTenant = process.env.EPER_LOCALIZATION_TENANT_ID ?? "";
+      const localizationPrincipal = process.env.EPER_LOCALIZATION_PRINCIPAL_ID ?? "";
+      if (localizationToken.length < 32 || !localizationTenant || !localizationPrincipal) {
+        sendJson(response, 503, { error: "localization_api_unconfigured" });
+        return;
+      }
+      if (!bearerMatches(request, localizationToken)) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      try {
+        if (request.method === "GET") {
+          sendJson(response, 200, { preference: localizationService.getPreference(localizationTenant, localizationPrincipal) });
+          return;
+        }
+        if (request.method === "PUT") {
+          const body = await readJson(request);
+          const preference = localizationService.setPreference(localizationTenant, localizationPrincipal, {
+            ...(typeof body.locale === "string" ? { locale: body.locale as SupportedLocale } : {}),
+            ...(typeof body.currency === "string" ? { currency: body.currency as SupportedCurrency } : {}),
+            ...(typeof body.timeZone === "string" ? { timeZone: body.timeZone } : {}),
+          });
+          sendJson(response, 200, { preference });
+          return;
+        }
+        response.writeHead(405, { allow: "GET, PUT", "cache-control": "no-store" });
+        response.end();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "LOCALIZATION_OPERATION_FAILED";
+        const status = message === "LOCALIZATION_ACTOR_REQUIRED" ? 400
+          : message === "LOCALE_UNSUPPORTED" || message === "CURRENCY_UNSUPPORTED" || message === "TIME_ZONE_INVALID" ? 400
+          : message === "REQUEST_BODY_TOO_LARGE" ? 413
+          : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
+          : 422;
+        sendJson(response, status, { error: message });
+      }
+      return;
+    }
 
     // Explicitly opt-in sandbox payment flow. This is a test adapter, not a live gateway.
     const paymentPath = requestUrl.pathname;
