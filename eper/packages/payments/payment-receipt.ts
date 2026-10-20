@@ -43,6 +43,8 @@ export class SandboxPaymentGateway implements PaymentGateway {
 }
 
 export class PaymentReceiptService {
+  // This sandbox adapter is deliberately bounded; production must use durable storage.
+  static readonly MAX_IN_MEMORY_PAYMENTS = 10_000;
   private readonly payments = new Map<string, Payment>();
   private readonly idempotency = new Map<string, string>();
 
@@ -85,6 +87,10 @@ export class PaymentReceiptService {
         checkoutReference: `sandbox_${prior.id}`,
         replayed: true,
       };
+    }
+
+    if (this.payments.size >= PaymentReceiptService.MAX_IN_MEMORY_PAYMENTS) {
+      throw new Error("PAYMENT_STORE_CAPACITY_REACHED");
     }
 
     const id = randomUUID();
