@@ -193,7 +193,7 @@ export function createAppServer(): Server {
 
 
     if (request.method === "GET" && requestUrl.pathname === "/localization/options") {
-      sendJson(response, 200, localizationService.options());
+      sendJson(response, 200, { ...localizationService.options() });
       return;
     }
 
