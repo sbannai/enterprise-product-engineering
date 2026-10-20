@@ -15,10 +15,21 @@ export class JsonFileGovernedReportingStore {
     }
   }
 
+  private validRow(value: unknown): value is ReportRow {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const row = value as ReportRow;
+    return typeof row.tenantId === "string" && !!row.tenantId.trim() &&
+      typeof row.reportId === "string" && !!row.reportId.trim() &&
+      typeof row.generatedAt === "string" && !Number.isNaN(Date.parse(row.generatedAt)) &&
+      !!row.values && typeof row.values === "object" && !Array.isArray(row.values) &&
+      Array.isArray(row.sourceRequirementIds) && row.sourceRequirementIds.length > 0 &&
+      row.sourceRequirementIds.every(id => typeof id === "string" && !!id.trim());
+  }
+
   private read(): ReportRow[] {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
-      if (!Array.isArray(parsed)) throw new Error();
+      if (!Array.isArray(parsed) || !parsed.every(row => this.validRow(row))) throw new Error();
       return parsed as ReportRow[];
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
