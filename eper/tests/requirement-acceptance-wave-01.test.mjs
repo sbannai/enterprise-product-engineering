@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { requirementBindings } from "../dist/packages/requirements/registry.js";
+import { InMemoryAuditEvidenceStore } from "../dist/packages/capabilities/audit-evidence.js";
 import {
   AuthoritativeRecordService,
   AuthorizationService,
@@ -174,7 +175,8 @@ test("REQ-46303 / SRS-FR-2325: mandatory business condition passes when valid an
 test("REQ-46304 / SRS-FR-2326: audit evidence preserves integrity and tenant boundary", async () => {
   const requirement = req("REQ-46304");
   assert.equal(requirement.pattern, "XX04");
-  const service = new AuditEvidenceService();
+  const evidenceStore = new InMemoryAuditEvidenceStore();
+  const service = new AuditEvidenceService(evidenceStore);
 
   const appended = await service.execute(requirement, {
     context: context("req-46304-append"),
@@ -194,6 +196,11 @@ test("REQ-46304 / SRS-FR-2326: audit evidence preserves integrity and tenant bou
   });
   assert.equal(appended.requirementId, "REQ-46304");
   assert.match(appended.data.payload.evidence.integrityHash, /^[a-f0-9]{64}$/);
+  assert.equal(evidenceStore.verify(appended.data.payload.evidence), true);
+  assert.equal(evidenceStore.verify({
+    ...appended.data.payload.evidence,
+    payload: { result: "TAMPERED" },
+  }), false);
 
   const own = await service.execute(requirement, {
     context: context("req-46304-list"),
@@ -293,6 +300,20 @@ test("REQ-46306 / SRS-FR-2328: governed reporting publishes, queries and isolate
     },
   });
 
+  await service.execute(requirement, {
+    context: { ...context("req-46306-publish-other"), tenantId: "other-tenant" },
+    payload: {
+      operation: "publish",
+      row: {
+        tenantId: "other-tenant",
+        reportId: "status-performance",
+        values: { state: "OPEN", performance: 11 },
+        sourceRequirementIds: ["REQ-46306"],
+        generatedAt: "2026-09-24T03:01:00.000Z",
+      },
+    },
+  });
+
   const own = await service.execute(requirement, {
     context: context("req-46306-query"),
     payload: {
@@ -306,6 +327,7 @@ test("REQ-46306 / SRS-FR-2328: governed reporting publishes, queries and isolate
     },
   });
   assert.equal(own.data.payload.rows.length, 1);
+  assert.equal(own.data.payload.rows[0].values.performance, 99);
 
   const other = await service.execute(requirement, {
     context: { ...context("req-46306-other"), tenantId: "other-tenant" },
@@ -314,5 +336,6 @@ test("REQ-46306 / SRS-FR-2328: governed reporting publishes, queries and isolate
       request: { tenantId: "other-tenant", reportId: "status-performance", limit: 10 },
     },
   });
-  assert.equal(other.data.payload.rows.length, 0);
+  assert.equal(other.data.payload.rows.length, 1);
+  assert.equal(other.data.payload.rows[0].values.performance, 11);
 });
