@@ -144,7 +144,8 @@ export function createAppServer(): Server {
             ? Boolean(process.env.EPER_RAZORPAY_KEY_ID && process.env.EPER_RAZORPAY_KEY_SECRET)
             : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_SECRET_KEY)
             : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_API_KEY && process.env.EPER_ADYEN_MERCHANT_ACCOUNT)
-            : true;
+            : Boolean(process.env.EPER_PAYMENT_SANDBOX_TOKEN && process.env.EPER_PAYMENT_SANDBOX_TENANT_ID &&
+              process.env.EPER_PAYMENT_SANDBOX_PRINCIPAL_ID);
           const webhookSecretConfigured = provider === "razorpay"
             ? Boolean(process.env.EPER_RAZORPAY_WEBHOOK_SECRET)
             : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_WEBHOOK_SECRET)
