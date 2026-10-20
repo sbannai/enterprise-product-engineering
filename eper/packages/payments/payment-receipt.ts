@@ -64,7 +64,7 @@ export class PaymentReceiptService {
     if (!input.tenantId?.trim() || !input.principalId?.trim()) throw new Error("PAYMENT_ACTOR_REQUIRED");
     const currency = input.currency ?? "INR";
     const amountMinor = input.amountMinor ?? input.amountPaise;
-    if (!Number.isSafeInteger(amountMinor) || (amountMinor ?? 0) <= 0) throw new Error("PAYMENT_AMOUNT_INVALID");
+    if (typeof amountMinor !== "number" || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) throw new Error("PAYMENT_AMOUNT_INVALID");
     if (!["INR", "USD", "EUR", "GBP", "AED"].includes(currency)) throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
     if (input.amountPaise !== undefined && currency !== "INR") throw new Error("PAYMENT_CURRENCY_UNSUPPORTED");
     if (!input.description?.trim()) throw new Error("PAYMENT_DESCRIPTION_REQUIRED");
