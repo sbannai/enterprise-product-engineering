@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
+import { PaymentReceiptService } from "../../packages/payments/payment-receipt.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -60,6 +61,7 @@ function createConfiguredCapabilityServices() {
 
 export function createAppServer(): Server {
   const services = createConfiguredCapabilityServices();
+  const paymentService = new PaymentReceiptService();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
@@ -182,6 +184,100 @@ export function createAppServer(): Server {
           : error instanceof SyntaxError || message === "CAPABILITY_OPERATION_REQUIRED" || message.endsWith("_UNSUPPORTED") || message === "JSON_OBJECT_REQUIRED" ? 400
           : 422;
         sendJson(response, status, { error: status === 422 ? "capability_execution_failed" : message });
+      }
+      return;
+    }
+
+
+    // Explicitly opt-in sandbox payment flow. This is a test adapter, not a live gateway.
+    const paymentPath = requestUrl.pathname;
+    if (paymentPath === "/sandbox/payments" || paymentPath.startsWith("/sandbox/payments/")) {
+      if (process.env.EPER_PAYMENT_SANDBOX_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      const paymentToken = process.env.EPER_PAYMENT_SANDBOX_TOKEN ?? "";
+      const paymentTenant = process.env.EPER_PAYMENT_SANDBOX_TENANT_ID ?? "";
+      const paymentPrincipal = process.env.EPER_PAYMENT_SANDBOX_PRINCIPAL_ID ?? "";
+      if (paymentToken.length < 32 || !paymentTenant || !paymentPrincipal) {
+        sendJson(response, 503, { error: "payment_sandbox_unconfigured" });
+        return;
+      }
+      if (!bearerMatches(request, paymentToken)) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+
+      try {
+        if (request.method === "POST" && paymentPath === "/sandbox/payments") {
+          const body = await readJson(request);
+          const amountPaise = body.amountPaise;
+          const description = body.description;
+          const idempotencyKey = request.headers["idempotency-key"] ?? body.idempotencyKey;
+          if (typeof amountPaise !== "number" || typeof description !== "string" || typeof idempotencyKey !== "string") {
+            sendJson(response, 400, { error: "amountPaise, description and idempotency key are required" });
+            return;
+          }
+          const result = paymentService.initiate({
+            tenantId: paymentTenant, principalId: paymentPrincipal, amountPaise,
+            currency: typeof body.currency === "string" ? body.currency : "INR",
+            description, idempotencyKey,
+          });
+          sendJson(response, result.replayed ? 200 : 201, result);
+          return;
+        }
+
+        const receiptMatch = /^\\/sandbox\\/payments\\/([^/]+)\\/receipt$/.exec(paymentPath);
+        if (request.method === "GET" && receiptMatch) {
+          const receipt = paymentService.getReceipt(paymentTenant, decodeURIComponent(receiptMatch[1]));
+          response.writeHead(200, {
+            "content-type": receipt.contentType,
+            "content-disposition": `attachment; filename="${receipt.filename}"`,
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+          });
+          response.end(receipt.bytes);
+          return;
+        }
+
+        const resultMatch = /^\\/sandbox\\/payments\\/([^/]+)\\/result$/.exec(paymentPath);
+        if (request.method === "POST" && resultMatch) {
+          const body = await readJson(request);
+          if ((body.outcome !== "SUCCEEDED" && body.outcome !== "FAILED") || typeof body.providerReference !== "string") {
+            sendJson(response, 400, { error: "outcome and providerReference are required" });
+            return;
+          }
+          const payment = paymentService.applyGatewayResult({
+            tenantId: paymentTenant, paymentId: decodeURIComponent(resultMatch[1]),
+            outcome: body.outcome, providerReference: body.providerReference,
+          });
+          sendJson(response, 200, { payment });
+          return;
+        }
+
+        const paymentMatch = /^\\/sandbox\\/payments\\/([^/]+)$/.exec(paymentPath);
+        if (request.method === "GET" && paymentMatch) {
+          const payment = paymentService.get(paymentTenant, decodeURIComponent(paymentMatch[1]));
+          if (!payment) {
+            sendJson(response, 404, { error: "payment_not_found" });
+            return;
+          }
+          sendJson(response, 200, { payment });
+          return;
+        }
+        sendJson(response, 404, { error: "not_found" });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "PAYMENT_OPERATION_FAILED";
+        const status = message === "PAYMENT_NOT_FOUND" ? 404
+          : message === "RECEIPT_NOT_AVAILABLE" || message.includes("IDEMPOTENCY_KEY_REUSED") ||
+            message === "PAYMENT_CALLBACK_CONFLICT" || message === "PAYMENT_TERMINAL_STATE_CONFLICT" ? 409
+          : message === "REQUEST_BODY_TOO_LARGE" ? 413
+          : message === "JSON_OBJECT_REQUIRED" || error instanceof SyntaxError ||
+            message.startsWith("PAYMENT_AMOUNT") || message.startsWith("PAYMENT_CURRENCY") ||
+            message.startsWith("PAYMENT_DESCRIPTION") || message.startsWith("PAYMENT_IDEMPOTENCY") ||
+            message.startsWith("PAYMENT_ACTOR") || message.startsWith("PAYMENT_PROVIDER") ? 400
+          : 422;
+        sendJson(response, status, { error: message });
       }
       return;
     }
