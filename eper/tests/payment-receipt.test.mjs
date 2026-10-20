@@ -70,3 +70,34 @@ test("invalid amount and unsupported currency are rejected", () => {
   assert.throws(() => service.initiate({ tenantId: "tenant-a", principalId: "payer-1", amountPaise: 0, description: "invalid", idempotencyKey: "bad-amount" }), /PAYMENT_AMOUNT_INVALID/);
   assert.throws(() => service.initiate({ tenantId: "tenant-a", principalId: "payer-1", amountPaise: 100, currency: "USD", description: "invalid", idempotencyKey: "bad-currency" }), /PAYMENT_CURRENCY_UNSUPPORTED/);
 });
+
+
+test("sandbox payment store is bounded and refuses new records at capacity", () => {
+  const service = new PaymentReceiptService();
+  assert.equal(PaymentReceiptService.MAX_IN_MEMORY_PAYMENTS, 10_000);
+  // Fill the in-memory sandbox store with minimal valid unique records.
+  for (let i = 0; i < PaymentReceiptService.MAX_IN_MEMORY_PAYMENTS; i += 1) {
+    service.initiate({
+      tenantId: "capacity-tenant",
+      principalId: "capacity-user",
+      amountPaise: 1,
+      description: "bounded store test",
+      idempotencyKey: `capacity-${i}`,
+    });
+  }
+  // Existing idempotency keys remain replayable even at capacity.
+  assert.equal(service.initiate({
+    tenantId: "capacity-tenant",
+    principalId: "capacity-user",
+    amountPaise: 1,
+    description: "bounded store test",
+    idempotencyKey: "capacity-0",
+  }).replayed, true);
+  assert.throws(() => service.initiate({
+    tenantId: "capacity-tenant",
+    principalId: "capacity-user",
+    amountPaise: 1,
+    description: "bounded store test",
+    idempotencyKey: "capacity-overflow",
+  }), /PAYMENT_STORE_CAPACITY_REACHED/);
+});
