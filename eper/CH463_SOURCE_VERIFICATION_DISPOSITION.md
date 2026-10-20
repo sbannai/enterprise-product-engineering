@@ -174,3 +174,20 @@ All following workflows completed successfully on that commit:
 - [Controlled UAT Technical Simulation — 39427872286](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427872286)
 
 The successful runs are technical validation only. They do not close requirement-specific acceptance, exact HLD→LLD binding, formal approval metadata, or DATA/API/EVENT decisions. Business UAT remains `NOT AUTHORIZED / NOT EXECUTED`; six business cases remain `NOT_RUN`; G9 remains `NOT FROZEN`; G10 remains `NOT ISSUED`. PR #165 remains draft/open/unmerged.
+
+
+## 12. Acceptance-oracle register and technical rerun checkpoint (2026-10-20)
+
+The [Chapter 463 Acceptance Oracle Capture Register](https://github.com/sbannai/enterprise-product-engineering/blob/work/ch463-candidate-contract-pack-2026-10-19/eper/CH463_ACCEPTANCE_ORACLE_CAPTURE_REGISTER.csv) contains one controlled capture row for each of REQ-46301–REQ-46306. All six oracle statuses remain `NOT_APPROVED`; all six execution statuses remain `NOT_RUN`.
+
+The following workflows completed successfully on commit `4fe4971bb186df2695b587bbf330c1433b4bb63b`:
+- [EPER CI — 39428157502](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428157502)
+- [G9 Reconciliation CI — 39428157493](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428157493)
+- [228 Requirement Pilot Test Matrix — 39428157635](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428157635)
+- [Six-Family Capability HTTP Smoke — 39428157531](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428157531)
+- [Release Candidate Build — 39428157462](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428157462)
+- [Container Runtime Smoke — 39428157458](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428157458)
+- [Controlled QA Re-execution — 39428148327](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428148327)
+- [Controlled UAT Technical Simulation — 39428148374](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39428148374)
+
+These runs establish technical validation only. They do not approve the six business oracles, establish exact HLD→LLD locators, resolve the formal LLD approval metadata discrepancy, approve DATA/API/EVENT contracts, or execute Business UAT. Keep all six cases `NOT_RUN`, Business UAT `NOT AUTHORIZED / NOT EXECUTED`, G9 `NOT FROZEN`, G10 `NOT ISSUED`, and PR #165 draft/open/unmerged. No deployment or chargeable AWS resources were created.
