@@ -141,3 +141,20 @@ The latest B01 evidence bridge completed successfully on commit `26cefa1040277f6
 | Production-like deployed build | `BLOCKED` | Deployed target evidence; current pilots use implementation candidates, in-memory storage and simulated security context |
 
 **Disposition:** the bridge is a successful technical evidence-generation run, not a business UAT run. Do not mark any of the 48 acceptance rows as accepted from this artifact. Chapter 463 remains blocked by 0/6 approved measurable oracles, 0/6 exact approved HLD→LLD pairs, 0/18 full approved DATA/API/EVENT contracts or approved N/A, and missing D10 controlled authorization.
+
+## 9. Post-reconciliation CI checkpoint (2026-10-20 13:07 UTC)
+
+The approval-status discrepancy and crosswalk annotation were committed in `5dbb5b7d6d856cd3fc83bb72a8f4f036fd7c9430`. The following workflows have now completed successfully on that exact commit:
+
+- [EPER CI — 39427607202](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607202)
+- [Release Candidate Build — 39427607177](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607177)
+- [G9 Reconciliation CI — 39427607205](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607205)
+- [228 Requirement Pilot Test Matrix — 39427607229](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607229)
+- [Container Runtime Smoke — 39427607312](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607312)
+- [Controlled UAT Technical Simulation — 39427598393](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427598393)
+- [Controlled QA Re-execution — 39427598512](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427598512)
+- [228 Requirement Pilot Matrix (re-run) — 39427598397](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427598397)
+
+At the time this checkpoint was recorded, [Six-Family Capability HTTP Smoke — 39427607148](https://github.com/sbannai/enterprise-product-engineering/actions/runs/39427607148) was still in progress; it is not counted as passed here.
+
+These green workflows validate repository/technical checks and the pilot harness only. They do not resolve the source-artifact approval metadata discrepancy, establish exact HLD→LLD requirement bindings, approve contract slots/oracles, or execute Business UAT. Keep all six Chapter 463 business cases `NOT_RUN`, Business UAT `NOT AUTHORIZED / NOT EXECUTED`, G9 `NOT FROZEN`, and G10 `NOT ISSUED`. PR #165 remains draft/open/unmerged.
