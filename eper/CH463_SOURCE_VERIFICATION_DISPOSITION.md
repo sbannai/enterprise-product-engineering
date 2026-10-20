@@ -48,17 +48,17 @@ Do not treat similarly named events as aliases without a controlled mapping deci
 
 ## 4. HLD→LLD and approval rule
 
-The Library's `B01_CH463_AUTHORITATIVE_HLD_LLD_SOURCE_INTAKE_v0.1.docx` explicitly says it is an intake template and no source receipt is claimed. It records all six HLD and LLD exact locators as NOT CAPTURED. The controlled recovery matrix records HLD and LLD component references as SUPPORTING only and states that exact requirement-level relationships and approval/baseline evidence remain open.
+The Library's `B01_CH463_AUTHORITATIVE_HLD_LLD_SOURCE_INTAKE_v0.1.docx` explicitly says it is an intake template and no source receipt is claimed. It records all six HLD and LLD exact locators as NOT CAPTURED. The controlled recovery matrix records HLD and LLD component references as SUPPORTING only. The repo also records `B01-BASELINE-APPROVAL-001` (controlled B01 BRD/SRS baseline approved) and `EM-LLD-001-DESIGN-AUTH-APPROVAL-001` (consolidated LLD v1.0 approved). These baseline approvals do not establish exact requirement-level HLD→LLD bindings or approve requirement-specific acceptance oracles.
 
 Therefore:
-- Exact approved HLD→LLD pairs remain **0/6**.
+- BRD/SRS baseline approval and LLD v1.0 design-baseline approval are recorded; exact approved HLD→LLD pairs remain **0/6**.
 - Full approved DATA/API/EVENT contracts or explicitly approved N/A decisions remain **0/18** verified.
 - Approved measurable acceptance oracles remain **0/6**.
 - The source catalogue discovery is useful progress, but it does not itself close a governance gate.
 
 ## 5. Next actions — no business owner re-choosing Option A
 
-1. Identify the actual approved/superseding procurement source baseline and its design-authority approval reference, effective date and controlled version.
+1. Retain the recorded B01 controlled baseline decision `B01-BASELINE-APPROVAL-001` and LLD design approval `EM-LLD-001-DESIGN-AUTH-APPROVAL-001`. Reconcile the approved SRS filename/version against legacy Batch 010 extraction artifacts before reusing their acceptance-criteria status; do not infer that differently named source files are identical.
 2. Capture the exact requirement-to-HLD and HLD-to-LLD locators for each of the six existing IDs; keep the architecture anchors as SUPPORTING until an approved crosswalk proves the pair.
 3. For every DATA/API/EVENT slot, cite the exact approved schema/operation/event definition or record a separately approved N/A with rationale.
 4. Reconcile event names and producers before writing payload schemas.
