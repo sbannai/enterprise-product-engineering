@@ -74,3 +74,15 @@ These records do not, by themselves, establish:
 4. measurable, requirement-specific acceptance oracles and controlled fixtures.
 
 Accordingly, this reconciliation no longer describes the overall BRD/SRS or LLD baseline as simply “approval pending.” The remaining blocker is exact source/version and requirement-level binding, not a claim that the recorded baseline approvals do not exist. The HLD requirement-level bindings remain unverified. No approval is inferred for draft catalogue candidates, and no business UAT execution is authorized by this update.
+
+## 7. Formal LLD approval metadata conflict flagged (2026-10-20)
+
+The owner-decision capture in the Library records an owner choice of **APPROVE** for EM-LLD-001 v1.0, while also requiring reconciliation of formal approval/change metadata and exact requirement-level HLD→LLD locators. Separately, the visible EM-LLD-001 v1.0 cover/status text says **CONTROLLED DETAILED-DESIGN DRAFT — PENDING FORMAL APPROVAL**. These are not equivalent evidence states.
+
+Controlled disposition:
+- Preserve the recorded owner decision; do not erase it.
+- Do not claim formal baseline approval is fully evidenced until the approval authority, date/effective version, controlled artifact identity/hash or version, and change/approval reference are reconciled against the artifact's own status.
+- The CSV crosswalk now records this discrepancy explicitly for all six requirements in `lld_approval_artifact_status_reconciliation`.
+- Even after the baseline metadata conflict is resolved, the six exact requirement-level HLD→LLD pairs, the 18 contract slots, and six measurable acceptance oracles remain separate closure gates.
+
+This is a source-governance reconciliation finding, not a new owner decision and not authorization to execute Business UAT.
