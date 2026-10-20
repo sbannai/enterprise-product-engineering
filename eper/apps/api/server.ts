@@ -563,7 +563,8 @@ export function createAppServer(): Server {
         response.end();
       } catch (error) {
         const message = error instanceof Error ? error.message : "LOCALIZATION_OPERATION_FAILED";
-        const status = message === "LOCALIZATION_ACTOR_REQUIRED" ? 400
+        const status = message === "LOCALIZATION_STORE_CAPACITY_REACHED" ? 503
+          : message === "LOCALIZATION_ACTOR_REQUIRED" ? 400
           : message === "LOCALE_UNSUPPORTED" || message === "CURRENCY_UNSUPPORTED" || message === "TIME_ZONE_INVALID" ? 400
           : message === "REQUEST_BODY_TOO_LARGE" ? 413
           : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
