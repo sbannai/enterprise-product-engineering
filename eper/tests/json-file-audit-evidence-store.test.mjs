@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileAuditEvidenceStore } from "../dist/packages/capabilities/json-file-audit-evidence-store.js";
@@ -49,4 +49,19 @@ test("JSON audit store deep-clones input and returned evidence", () => {
     assert.deepEqual(saved.payload, { nested: { labels: ["original"] } });
     assert.equal(store.verify(saved), true);
   });
+});
+
+test("persisted audit store rejects tampered rows and duplicate tenant-scoped IDs", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-corrupt-"));
+  const path = join(directory, "audit.json");
+  try {
+    const store = new JsonFileAuditEvidenceStore(path);
+    const entry = store.append(evidence);
+    const state = JSON.parse(readFileSync(path, "utf8"));
+    state[0].action = "TAMPERED";
+    writeFileSync(path, JSON.stringify(state));
+    assert.throws(() => store.listByRequirement("tenant-a", "REQ-46305"), /PERSISTENCE_DATA_INVALID/);
+    writeFileSync(path, JSON.stringify([entry, entry]));
+    assert.throws(() => store.get("tenant-a", "audit-1"), /PERSISTENCE_DATA_INVALID/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
