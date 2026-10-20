@@ -92,6 +92,8 @@ export function createAppServer(): Server {
     response.setHeader("referrer-policy", "no-referrer");
     response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()");
     response.setHeader("cross-origin-opener-policy", "same-origin");
+    response.setHeader("cross-origin-resource-policy", "same-origin");
+    response.setHeader("content-security-policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
     response.setHeader("cache-control", "no-store");
 
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
