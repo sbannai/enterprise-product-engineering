@@ -38,8 +38,15 @@ function prepare(
 
   const contracts = validateRequirementContracts(requirement);
   const value = (input ?? {}) as CapabilityInput;
-  if (value.context) {
-    if (!value.context.tenantId || !value.context.principalId || !value.context.correlationId) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("CAPABILITY_INPUT_INVALID");
+  }
+  if (value.context !== undefined) {
+    const context = value.context;
+    if (!context || typeof context !== "object" || Array.isArray(context) ||
+      typeof context.tenantId !== "string" || !context.tenantId.trim() ||
+      typeof context.principalId !== "string" || !context.principalId.trim() ||
+      typeof context.correlationId !== "string" || !context.correlationId.trim()) {
       throw new Error("CAPABILITY_CONTEXT_REQUIRED");
     }
   }
@@ -48,8 +55,8 @@ function prepare(
 
 function requireTenantContext(value: CapabilityInput, requestedTenantId?: string): string {
   const tenantId = value.context?.tenantId;
-  if (!tenantId) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
-  if (requestedTenantId && requestedTenantId !== tenantId) {
+  if (typeof tenantId !== "string" || !tenantId.trim()) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
+  if (requestedTenantId !== undefined && requestedTenantId !== tenantId) {
     throw new Error("TENANT_CONTEXT_MISMATCH");
   }
   return tenantId;
