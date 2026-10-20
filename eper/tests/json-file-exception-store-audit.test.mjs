@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonFileExceptionStore } from "../dist/packages/capabilities/json-file-exception-store.js";
@@ -36,4 +36,28 @@ test("combined exception store preserves audit integrity and rejects duplicate I
     assert.throws(() => store.append(evidence), /AUDIT_EVIDENCE_ALREADY_EXISTS/);
     assert.equal(store.listByRequirement("tenant-a", "REQ-46305").length, 1);
   });
+});
+
+
+test("combined exception store rejects malformed persisted exception rows", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-exception-corrupt-"));
+  const path = join(directory, "state.json");
+  try {
+    new JsonFileExceptionStore(path);
+    writeFileSync(path, JSON.stringify({ schemaVersion: 1, exceptions: [{ id: "broken", tenantId: 42 }], lifecycleEvidence: [] }));
+    assert.throws(() => new JsonFileExceptionStore(path).snapshot(), /PERSISTENCE_DATA_INVALID/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("combined exception store rejects tampered persisted lifecycle evidence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-audit-corrupt-"));
+  const path = join(directory, "state.json");
+  try {
+    const store = new JsonFileExceptionStore(path);
+    store.append(evidence);
+    const state = JSON.parse(readFileSync(path, "utf8"));
+    state.lifecycleEvidence[0].action = "TAMPERED_ACTION";
+    writeFileSync(path, JSON.stringify(state));
+    assert.throws(() => store.listByRequirement("tenant-a", "REQ-46305"), /PERSISTENCE_DATA_INVALID/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
