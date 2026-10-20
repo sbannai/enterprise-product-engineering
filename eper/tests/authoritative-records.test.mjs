@@ -64,3 +64,74 @@ test("authoritative records reject circular data instead of storing partial evid
   circular.self = circular;
   assert.throws(() => store.create({ id: "bad", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: circular }), /RECORD_DATA_NOT_SERIALIZABLE/);
 });
+
+test("authoritative records reject malformed runtime context, versions, and data", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  assert.throws(
+    () => store.create({ id: "", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} }),
+    /RECORD_CONTEXT_REQUIRED/,
+  );
+  assert.throws(
+    () => store.create({ id: "bad-version", tenantId: "tenant-a", version: 0, state: "ACTIVE", data: {} }),
+    /RECORD_VERSION_INVALID/,
+  );
+  assert.throws(
+    () => store.create({ id: "bad-data", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: [] }),
+    /RECORD_DATA_INVALID/,
+  );
+  assert.equal(store.get("tenant-a", "bad-version"), undefined);
+  assert.equal(store.get("tenant-a", "bad-data"), undefined);
+});
+
+test("authoritative record updates reject malformed runtime versions, patches, and data", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "update-guard", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { safe: true } });
+
+  assert.throws(
+    () => store.update("tenant-a", "update-guard", 0, { state: "REVISED" }),
+    /RECORD_VERSION_INVALID/,
+  );
+  assert.throws(
+    () => store.update("tenant-a", "update-guard", 1, { data: [] }),
+    /RECORD_DATA_INVALID/,
+  );
+  assert.throws(
+    () => store.update("tenant-a", "update-guard", 1, { state: " " }),
+    /RECORD_STATE_INVALID/,
+  );
+
+  const unchanged = store.get("tenant-a", "update-guard");
+  assert.equal(unchanged.version, 1);
+  assert.equal(unchanged.state, "ACTIVE");
+  assert.deepEqual(unchanged.data, { safe: true });
+});
+
+test("authoritative record delete rejects invalid runtime versions without deleting the record", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "delete-guard", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { safe: true } });
+
+  assert.throws(
+    () => store.delete("tenant-a", "delete-guard", 0),
+    /RECORD_VERSION_INVALID/,
+  );
+  assert.deepEqual(store.get("tenant-a", "delete-guard"), {
+    id: "delete-guard",
+    tenantId: "tenant-a",
+    version: 1,
+    state: "ACTIVE",
+    data: { safe: true },
+  });
+});
+
+test("authoritative record delete rejects stale versions and preserves the current record", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "delete-conflict", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { safe: true } });
+  store.update("tenant-a", "delete-conflict", 1, { state: "REVISED" });
+
+  assert.throws(
+    () => store.delete("tenant-a", "delete-conflict", 1),
+    /RECORD_VERSION_CONFLICT/,
+  );
+  assert.equal(store.get("tenant-a", "delete-conflict").version, 2);
+  assert.equal(store.get("tenant-a", "delete-conflict").state, "REVISED");
+});

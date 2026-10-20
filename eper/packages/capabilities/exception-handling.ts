@@ -71,8 +71,21 @@ export class InMemoryExceptionStore implements ExceptionStore {
   }
 
   create(input: ExceptionCreateInput, beforeCommit?: (created: WorkflowException) => void): WorkflowException {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.code || !input.idempotencyKey || !input.createdAt) {
+    if (!input || typeof input !== "object" ||
+      typeof input.id !== "string" || !input.id.trim() ||
+      typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+      typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+      typeof input.code !== "string" || !input.code.trim() ||
+      typeof input.message !== "string" || !input.message.trim() ||
+      typeof input.idempotencyKey !== "string" || !input.idempotencyKey.trim() ||
+      typeof input.createdAt !== "string" || !input.createdAt.trim()) {
       throw new Error("EXCEPTION_CONTEXT_REQUIRED");
+    }
+    if (Number.isNaN(Date.parse(input.createdAt))) {
+      throw new Error("EXCEPTION_TIMESTAMP_INVALID");
+    }
+    if (input.owner !== undefined && (typeof input.owner !== "string" || !input.owner.trim())) {
+      throw new Error("EXCEPTION_OWNER_INVALID");
     }
     const scopedIdempotencyKey = this.idempotencyKey(input.tenantId, input.idempotencyKey);
     const fingerprint = this.fingerprint(input);
@@ -110,6 +123,19 @@ export class InMemoryExceptionStore implements ExceptionStore {
     patch: ExceptionPatch,
     beforeCommit?: (next: WorkflowException, current: WorkflowException) => void,
   ): WorkflowException {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+      throw new Error("EXCEPTION_PATCH_INVALID");
+    }
+    const validStates: readonly string[] = ["OPEN", "RETRYING", "RESOLVED", "ESCALATED"];
+    if (patch.state !== undefined && (typeof patch.state !== "string" || !validStates.includes(patch.state))) {
+      throw new Error("EXCEPTION_STATE_INVALID");
+    }
+    if (patch.owner !== undefined && (typeof patch.owner !== "string" || !patch.owner.trim())) {
+      throw new Error("EXCEPTION_OWNER_INVALID");
+    }
+    if (patch.message !== undefined && (typeof patch.message !== "string" || !patch.message.trim())) {
+      throw new Error("EXCEPTION_MESSAGE_INVALID");
+    }
     const current = this.get(tenantId, id);
     if (!current) throw new Error("EXCEPTION_NOT_FOUND");
 

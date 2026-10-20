@@ -294,3 +294,81 @@ This section reconciles recorded owner decisions against the existing Chapter 46
 5. Recalculate readiness. Keep D3/D4 and business UAT blocked until the review and execution-authorization evidence exists.
 
 This is a controlled reconciliation update, not a claim that the above open actions are complete or that a gate has passed.
+
+
+## Library candidate-matrix reconciliation — 2026-10-19
+
+This section reuses the existing controlled Library candidate matrices rather than creating another tracker:
+- `B01_CH463_LLD_DATA_API_EVENT_RECONCILIATION_CANDIDATE_v0.1.csv`
+- `B01_CH463_Requirement_Oracle_Candidates_v0.1.csv`
+- `HLD_463_470_Controlled_Traceability_Recovery_Matrix_46301_46306_CH463_OptionA_Correction_Candidate.docx` (v1.6)
+
+These rows provide candidate design targets and Chapter 463 section leads. The source artifacts explicitly mark the rows as supporting/candidate-only, with EM-LLD-001 v1.0 still a controlled detailed-design draft pending formal approval and the Volume XIII Chapter 463 BRD v1.0 still In Development. Chapter section references below are **domain-source search anchors, not approved HLD/LLD locators**.
+
+| Existing requirement | Candidate LLD target from source matrix | Candidate Chapter 463 section leads | Existing DATA/API/EVENT design intent | Required unresolved disposition |
+|---|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | LLD-02 Domain & Component; LLD-03 Data Model | §463.39 Core Procurement Object Model; §§463.7–463.8, 463.16, 463.21–463.27, 463.42 | Authoritative aggregate/entity with keys, tenant scope, lifecycle/version metadata; API/lifecycle event only after authoritative commit | Exact approved HLD locator, exact approved LLD locator and HLD→LLD pair; DATA owner/schema; API/EVENT contract or approved N/A |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | LLD-05 Security & Authorization | §§463.3, 463.8, 463.16, 463.24–463.25, 463.35, 463.40 | Identity/tenant/role policy and privileged-action audit; authorization outcome event only if required | Exact approved HLD/LLD pair; approved authority/delegation/SoD matrix; API/EVENT contract or approved N/A |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | LLD-02 Domain & Component; LLD-06 Workflow & Rules | §§463.7–463.8, 463.15–463.16, 463.21–463.25, 463.27, 463.46–463.47 | Validation rules/invariants, command inputs/results, validation error envelope and idempotency semantics | Exact approved HLD/LLD pair; approved rule/threshold configuration; versioned API contract |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | LLD-03 Audit Metadata; LLD-09 Observability | §§463.3, 463.14–463.16, 463.24, 463.35–463.36, 463.42, 463.47 | Actor/tenant/action/time/correlation/outcome audit record; correlation/causation and protected payload rules | Exact approved HLD/LLD pair; audit schema/owner/retention; event contract/version |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | LLD-06 Workflow & Rules; LLD-07 Integration | §§463.3, 463.8, 463.14–463.16, 463.24–463.27, 463.30, 463.36, 463.47 | Workflow/exception state, retry/recovery/DLQ metadata, idempotent consumers | Exact approved HLD/LLD pair; exception taxonomy/recovery policy; retry/recovery contract/version |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | LLD-09 Observability/Analytics | §§463.28–463.29, 463.32, 463.37, 463.41–463.42, 463.46–463.47 | Governed read model/aggregation and tenant-scoped metrics/reporting dimensions | Exact approved HLD/LLD pair; KPI formulas/read-model owner; reporting contract/version |
+
+### Promotion rules for this reconciliation
+
+- Keep all six rows classified as `SUPPORTING DESIGN ONLY — NOT EXACT TRACEABILITY`.
+- Do not promote the Chapter 463 section leads to exact HLD locators, or the LLD-02/03/etc. labels to exact requirement-level LLD locators, without an approved versioned source explicitly binding the requirement/SRS/TRC to that location.
+- Do not convert candidate object names, API intent, or event intent into approved schema/operation/payload definitions.
+- Reuse the existing six canonical B01 cases and the existing candidate-oracle CSV. Do not create duplicate UAT IDs or treat candidate oracles as approved.
+- Preserve Option A and all existing requirement/SRS/TRC IDs. The source-precedence decision `B01-CH463-SOURCE-CORRECTION-DECISION-001` is already resolved; the remaining blockers are approval, exact locators, contracts, measurable oracle approval, and separate D10 execution authorization.
+
+**Disposition:** useful row-level source candidates reconciled into the existing implementation-to-design crosswalk; exact approved HLD→LLD remains 0/6, fully verified DATA/API/EVENT slots or approved N/A remain 0/18, approved acceptance oracles remain 0/6. Business UAT remains HOLD / NOT AUTHORIZED / NOT EXECUTED.
+
+
+## Procurement catalogue candidate IDs recovered from the existing UAT readiness workbook — 2026-10-19
+
+Source consulted: `B01_CH463_UAT_Evidence_Readiness_v1.2_owner_decision_capture.xlsx` in the project Library. These identifiers are **candidate search leads**; the workbook explicitly marks the inspected rows Draft / Not Approved or says exact Chapter 463 applicability must be verified. This section records the candidates to accelerate the controlled join; it does not promote them to approved contracts.
+
+| Requirement area | Existing candidate catalogue rows identified | Verified limitation / required next check |
+|---|---|---|
+| REQ-46301 — authoritative record/lifecycle | `ENT-PROC-001–018` in `EPER_Master_Repository_v57.5.xlsx`, sheet `11_Data_Entities`; `PROC-OBJ-001–010`, sheet `89_PROC_Object_Catalog`; lifecycle candidates in `97_PROC_Lifecycle_States` including `LC-PROC-007–013` | Catalogue rows are Draft. Need exact procurement object/entity rows, field/key/relationship/lifecycle definitions, owner, approved version and requirement-level binding. |
+| REQ-46302 — authorization | `AUTH-PROC-007` (Purchase Requisition), `AUTH-PROC-008` (Purchase Order), `SOD-PROC-006` (requisition create/final approval conflict) | Rows are Draft. Need approved role×action×resource×tenant/delegation matrix, thresholds, expiry/substitution and SoD policy; do not infer expected denial/approval solely from the candidate labels. |
+| REQ-46303 — validation | `LC-PROC-007–013` and procurement rule/threshold candidates referenced by the readiness workbook | Lifecycle rows are Draft. Exact required fields, guards, threshold values, error codes and permitted transitions need approved policy/configuration. |
+| REQ-46304 — audit/events | `EVT-PROC-007` PurchaseRequisitionSubmitted; `EVT-PROC-008` PurchaseRequisitionApproved; `EVT-PROC-009` PurchaseOrderApproved; `EVT-PROC-010` PurchaseOrderDispatched; `EVT-PROC-011` PurchaseOrderChanged; `EVT-PROC-012` ProcurementFulfilmentChanged | Event rows are Draft. Lifecycle rows use differing names such as `RequisitionSubmitted`, `RequisitionDecisionRecorded`, `PurchaseOrderDecisionRecorded`, and `PurchaseOrderFulfilmentChanged`. Do not treat names as aliases without an approved mapping; producer, payload schema/version, delivery and retention remain open. |
+| REQ-46305 — exception/recovery | Procurement lifecycle and integration/recovery candidates in `97_PROC_Lifecycle_States` and `104_PROC_API_Contracts` (`CON-PROC-012–017`) | Candidate contracts are Draft. Need approved exception taxonomy, retry/backoff, idempotency, DLQ/replay, compensation, escalation and terminal-state policy. |
+| REQ-46306 — governed reporting | `API-PROC-024` Query KPIs in `103_PROC_API_Catalog` | Marked Draft; a catalogue label is not an approved OpenAPI operation. Need exact operation/request/response/error schemas, KPI formula book, read-model owner, lineage, freshness, reconciliation tolerance and report-access policy. |
+
+### Shared catalogue baselines — existence does not equal requirement approval
+
+- `EM-DATA-001_Database_Dictionary_ER_Model_v1.docx`: initial data design baseline; exact approved Chapter 463 entity/schema locator and procurement-specific approval not verified.
+- `EM-API-001_OpenAPI_Specification_v1.docx`: initial build-ready API baseline; global `/api/v1`, auth, tenant, correlation and idempotency conventions are context, not proof of a specific approved procurement operation.
+- `EM-EVT-001_Event_Schema_Catalogue_v1.docx`: initial event baseline; common envelope/delivery/retry/replay conventions are context, not proof of an approved Chapter 463 producer or payload schema.
+- `EM-OPS_463-500_DATA_API_EVENT_Requirement_Reconciliation_v1.xlsx`: explicitly states requirement-level exact joins are not fully promoted and execution/contract-test evidence is not established.
+
+**Disposition:** this pass narrows the remaining work to validating the named candidate catalogue rows and their approvals. It does not change the controlled gate counts: exact approved HLD→LLD pairs 0/6; verified full DATA/API/EVENT bindings or approved N/A 0/18; approved oracles 0/6. Keep the six canonical cases `B01-463-01`–`B01-463-06` unchanged and `NOT_RUN`. No UAT authorization is implied.
+
+## 6. Closure reconciliation against recorded baseline approvals (2026-10-20)
+
+The controlled BRD/SRS and consolidated LLD baseline approvals are recorded in the repository. The crosswalk therefore treats those baseline approvals as existing evidence, while keeping the **exact requirement-level binding** open. A component heading or registry descriptor is not an exact approved locator.
+
+| Requirement | Supporting LLD anchor | Exact HLD→LLD binding still needed | Requirement-specific business decision / oracle still needed |
+|---|---|---|---|
+| REQ-46301 | `LLD-CMP-008` Domain; `LLD-CMP-007` Application Services; consolidated LLD sections LLD-02/LLD-03 | Exact approved HLD section + LLD section/page/table row, version and approval/change reference | Authoritative procurement object(s), relationships, mandatory fields, lifecycle and duplicate/version-conflict expected state |
+| REQ-46302 | `LLD-CMP-003` Identity; `LLD-CMP-004` Authorization; `LLD-CMP-005` Tenant Management; LLD-05 | Exact approved HLD security/tenant policy locator paired with exact LLD locator | Approved actor/role/action/resource/tenant matrix, delegation/SoD, denied response, zero-side-effect assertion and audit requirement |
+| REQ-46303 | `LLD-CMP-007` Application Services; `LLD-CMP-010` Rules; `LLD-CMP-008` Domain; LLD-02/LLD-06 | Exact approved HLD domain/rules locator paired with exact LLD locator | Procurement-specific mandatory-field catalogue, rule version, validation order, boundary fixture and deterministic rejection outcomes |
+| REQ-46304 | `LLD-CMP-017` Audit; `LLD-CMP-018` Observability; LLD-03/LLD-09 | Exact approved HLD audit/security locator paired with exact LLD locator | Material event taxonomy, required audit schema, actor/correlation fields, integrity, retention, access/retrieval and failure behavior |
+| REQ-46305 | `LLD-CMP-009` Workflow; `LLD-CMP-010` Rules; `LLD-CMP-011` Integration | Exact approved HLD workflow/integration locator paired with exact LLD locator | Resolve procurement-match exception vs general procurement exception scope; approve retry/idempotency/recovery/escalation/terminal-state rules |
+| REQ-46306 | `LLD-CMP-016` Reporting/Analytics; `LLD-CMP-014` Search | Exact approved HLD reporting/data-lineage locator paired with exact LLD locator | Approved report/KPI catalogue, formula, fixture totals, filters/tenant scope, freshness, time zone, lineage and tolerance |
+
+### Contract-slot disposition (all six requirements)
+
+The `DATA:*`, `API:*`, and `EVENT:*` values in `eper/contracts/index.ts` are registered descriptor IDs at version `v1`. They are **not** complete approved contracts. For each of the 18 slots, closure requires either (a) the exact controlled schema/operation/event identifier, version and stable locator plus approval reference, or (b) an explicit approved N/A decision with rationale. Empty, draft, or implementation-derived entries do not count as N/A.
+
+### Controlled action order
+
+1. Preserve the recorded baseline approval references and confirm the named BRD/SRS files resolve to those controlled versions.
+2. Retrieve direct requirement rows from the authoritative HLD/LLD and traceability source. If absent, raise a controlled traceability change request rather than inventing page/section locators.
+3. Resolve the six requirement-specific decisions above and bind approved DATA/API/EVENT slots or approved N/A decisions.
+4. Approve the candidate oracle matrix and controlled fixtures; keep all six canonical cases `NOT_RUN` until D10 authorization and environment preflight are recorded.
+
+**Current gate remains unchanged:** exact HLD→LLD pairs 0/6; complete approved contract slots or approved N/A 0/18; approved measurable oracles 0/6; business execution 0/6. This table is a closure worklist, not approval evidence.

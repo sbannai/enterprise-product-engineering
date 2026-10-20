@@ -26,13 +26,59 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
     }
   }
 
+  private validException(value: unknown): value is WorkflowException {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const item = value as WorkflowException;
+    const states: readonly string[] = ["OPEN", "RETRYING", "RESOLVED", "ESCALATED"];
+    return typeof item.id === "string" && !!item.id.trim() &&
+      typeof item.tenantId === "string" && !!item.tenantId.trim() &&
+      typeof item.requirementId === "string" && !!item.requirementId.trim() &&
+      typeof item.code === "string" && !!item.code.trim() &&
+      typeof item.message === "string" && !!item.message.trim() &&
+      states.includes(item.state) &&
+      Number.isInteger(item.retryCount) && item.retryCount >= 0 &&
+      typeof item.idempotencyKey === "string" && !!item.idempotencyKey.trim() &&
+      typeof item.createdAt === "string" && !Number.isNaN(Date.parse(item.createdAt)) &&
+      typeof item.updatedAt === "string" && !Number.isNaN(Date.parse(item.updatedAt)) &&
+      (item.owner === undefined || (typeof item.owner === "string" && !!item.owner.trim()));
+  }
+
+  private validAuditEvidence(value: unknown): value is AuditEvidence {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const item = value as AuditEvidence;
+    if (typeof item.id !== "string" || !item.id.trim() ||
+      typeof item.tenantId !== "string" || !item.tenantId.trim() ||
+      typeof item.requirementId !== "string" || !item.requirementId.trim() ||
+      typeof item.action !== "string" || !item.action.trim() ||
+      typeof item.principalId !== "string" || !item.principalId.trim() ||
+      typeof item.correlationId !== "string" || !item.correlationId.trim() ||
+      typeof item.occurredAt !== "string" || Number.isNaN(Date.parse(item.occurredAt)) ||
+      typeof item.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(item.integrityHash)) return false;
+    return this.verify(item);
+  }
+
   private readState(): StateDocument {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
-      if (Array.isArray(parsed)) return { schemaVersion: 1, exceptions: parsed as WorkflowException[], lifecycleEvidence: [] };
-      if (!parsed || typeof parsed !== "object") throw new Error();
-      const state = parsed as StateDocument;
-      if (state.schemaVersion !== 1 || !Array.isArray(state.exceptions) || !Array.isArray(state.lifecycleEvidence)) throw new Error();
+      let state: StateDocument;
+      if (Array.isArray(parsed)) {
+        state = { schemaVersion: 1, exceptions: parsed as WorkflowException[], lifecycleEvidence: [] };
+      } else {
+        if (!parsed || typeof parsed !== "object") throw new Error();
+        const candidate = parsed as StateDocument;
+        if (candidate.schemaVersion !== 1 || !Array.isArray(candidate.exceptions) || !Array.isArray(candidate.lifecycleEvidence)) throw new Error();
+        state = candidate;
+      }
+      if (!state.exceptions.every(value => this.validException(value)) ||
+        !state.lifecycleEvidence.every(value => this.validAuditEvidence(value))) throw new Error();
+      // Reuse the in-memory store's duplicate-ID/idempotency consistency checks.
+      new InMemoryExceptionStore(state.exceptions);
+      const evidenceKeys = new Set<string>();
+      for (const entry of state.lifecycleEvidence) {
+        const key = JSON.stringify([entry.tenantId, entry.id]);
+        if (evidenceKeys.has(key)) throw new Error();
+        evidenceKeys.add(key);
+      }
       return state;
     } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
@@ -74,15 +120,27 @@ export class JsonFileExceptionStore implements ExceptionStore, Pick<AuditEvidenc
   private auditMaterial(entry: Omit<AuditEvidence, "integrityHash">): string {
     const serialized = JSON.stringify(entry.payload);
     if (serialized === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
-    const payload = JSON.parse(serialized);
+    let payload: unknown;
+    try { payload = JSON.parse(serialized); }
+    catch { throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE"); }
     return JSON.stringify({ id: entry.id, tenantId: entry.tenantId, requirementId: entry.requirementId,
       action: entry.action, principalId: entry.principalId, correlationId: entry.correlationId,
       occurredAt: entry.occurredAt, payload });
   }
 
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
-    if (!input.action || !input.occurredAt) throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    if (!input || typeof input !== "object" ||
+      typeof input.id !== "string" || !input.id.trim() ||
+      typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+      typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+      typeof input.principalId !== "string" || !input.principalId.trim() ||
+      typeof input.correlationId !== "string" || !input.correlationId.trim()) {
+      throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
+    }
+    if (typeof input.action !== "string" || !input.action.trim() ||
+      typeof input.occurredAt !== "string" || !input.occurredAt.trim()) {
+      throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    }
     if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
     const state = this.readState();
     if (state.lifecycleEvidence.some(entry => entry.tenantId === input.tenantId && entry.id === input.id)) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");

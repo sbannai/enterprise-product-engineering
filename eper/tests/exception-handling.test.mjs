@@ -89,3 +89,22 @@ test("retry count increments only on retry transitions", () => {
   assert.equal(store.transition("tenant-a", "ex-1", { state: "RESOLVED" }).retryCount, 2);
   assert.equal(store.get("tenant-a", "ex-1").retryCount, 2);
 });
+
+test("exception creation rejects malformed timestamps and optional owner values", () => {
+  const store = new InMemoryExceptionStore();
+  assert.throws(() => store.create({ ...base, id: "bad-time", createdAt: "not-a-date" }), /EXCEPTION_TIMESTAMP_INVALID/);
+  assert.throws(() => store.create({ ...base, id: "bad-owner", owner: " " }), /EXCEPTION_OWNER_INVALID/);
+  assert.equal(store.get("tenant-a", "bad-time"), undefined);
+  assert.equal(store.get("tenant-a", "bad-owner"), undefined);
+});
+
+test("exception transition rejects malformed patches without changing stored state", () => {
+  const store = new InMemoryExceptionStore();
+  store.create(base);
+  assert.throws(() => store.transition("tenant-a", "ex-1", null), /EXCEPTION_PATCH_INVALID/);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { state: "UNKNOWN" }), /EXCEPTION_STATE_INVALID/);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { owner: " " }), /EXCEPTION_OWNER_INVALID/);
+  assert.throws(() => store.transition("tenant-a", "ex-1", { message: " " }), /EXCEPTION_MESSAGE_INVALID/);
+  assert.equal(store.get("tenant-a", "ex-1").state, "OPEN");
+  assert.equal(store.get("tenant-a", "ex-1").retryCount, 0);
+});

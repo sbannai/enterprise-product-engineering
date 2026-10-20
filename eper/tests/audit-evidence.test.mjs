@@ -74,3 +74,12 @@ test("audit evidence rejects missing action and timestamp", () => {
     /AUDIT_EVIDENCE_TIMESTAMP_INVALID/,
   );
 });
+
+test("audit evidence rejects malformed runtime context before storing an entry", () => {
+  const store = new InMemoryAuditEvidenceStore();
+  assert.throws(() => store.append(null), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, id: 17 }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, principalId: " " }), /AUDIT_EVIDENCE_CONTEXT_REQUIRED/);
+  assert.throws(() => store.append({ ...evidence, action: 42 }), /AUDIT_EVIDENCE_FIELDS_REQUIRED/);
+  assert.equal(store.listByRequirement("tenant-a", "REQ-46304").length, 0);
+});

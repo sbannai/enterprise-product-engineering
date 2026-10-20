@@ -22,19 +22,27 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: eper/package-lock.json
+      - name: Initialize clean evidence directory
+        run: |
+          echo "EVIDENCE_DIR=$RUNNER_TEMP/eper-reexec-evidence-$GITHUB_RUN_ID" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/eper-reexec-evidence-$GITHUB_RUN_ID"
       - name: Install dependencies
         run: npm ci
       - name: Build candidate
         run: npm run build
-      - name: Execute 228 requirement test suite
-        run: npm test
-      - name: Record execution metadata
+      - name: Execute automated test suite and retain complete log
+        run: |
+          set +e
+          npm test 2>&1 | tee "$EVIDENCE_DIR/npm-test.log"
+          test_status=${PIPESTATUS[0]}
+          printf "npm_test_exit_code=%s\\n" "$test_status" >> "$EVIDENCE_DIR/npm-test.log"
+          exit "$test_status"
+      - name: Record current-run metadata and bounded interpretation
         if: always()
         run: |
-          mkdir -p reexec-evidence
           {
             echo "program=EPER-REEXEC-001"
-            echo "classification=NEW CONTROLLED EXECUTION EVIDENCE — NOT HISTORICAL EVIDENCE"
+            echo "classification=NEW CONTROLLED AUTOMATED QA EVIDENCE — NOT BUSINESS UAT"
             echo "population=228 requirements / 38 chapters"
             echo "commit=${{github.sha}}"
             echo "run_id=${{github.run_id}}"
@@ -45,11 +53,25 @@ jobs:
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
             echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          } > reexec-evidence/execution-metadata.txt
-      - name: Upload execution evidence
+            echo "business_acceptance=NOT_EXECUTED"
+            echo "formal_uat_signoff=NOT_EXECUTED"
+            echo "historical_evidence_reused=NO"
+          } > "$EVIDENCE_DIR/execution-metadata.txt"
+          {
+            echo "# EPER controlled automated QA run"
+            echo
+            echo "- Commit: ${{github.sha}}"
+            echo "- Run: ${{github.run_id}}"
+            echo "- Evidence class: new automated QA evidence only"
+            echo "- Business UAT: NOT EXECUTED"
+            echo "- Formal sign-off: NOT EXECUTED"
+            echo
+            echo "The complete npm test output is in npm-test.log. No prior-run summary or other repository evidence files are copied into this artifact."
+          } > "$EVIDENCE_DIR/README.md"
+      - name: Upload only current-run evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: EPER-REEXEC-001-${{github.run_id}}
-          path: eper/reexec-evidence/execution-metadata.txt
+          path: ${{runner.temp}}/eper-reexec-evidence-${{github.run_id}}/
           if-no-files-found: error

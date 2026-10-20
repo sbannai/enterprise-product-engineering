@@ -36,3 +36,15 @@ test("business validation rejects duplicate and invalid rules", () => {
   assert.throws(() => engine.addRule({ id: "r1", evaluate: () => null }), /VALIDATION_RULE_DUPLICATE/);
   assert.throws(() => engine.addRule({ id: "", evaluate: () => null }), /VALIDATION_RULE_INVALID/);
 });
+
+test("business validation rejects malformed runtime rule results", () => {
+  const engine = new BusinessValidationEngine();
+  engine.addRule({ id: "bad-result", evaluate: () => ({ code: "BROKEN", message: "Broken", severity: "INFO" }) });
+  assert.throws(() => engine.validate({}), /VALIDATION_RULE_RESULT_INVALID/);
+});
+
+test("business validation rejects null and malformed rule registrations", () => {
+  const engine = new BusinessValidationEngine();
+  assert.throws(() => engine.addRule(null), /VALIDATION_RULE_INVALID/);
+  assert.throws(() => engine.addRule({ id: " ", evaluate: () => null }), /VALIDATION_RULE_INVALID/);
+});

@@ -35,8 +35,21 @@ export class InMemoryGovernedReportingService {
   }
 
   publish(row: ReportRow): void {
-    if (!row.tenantId || !row.reportId || !row.generatedAt) {
+    if (!row || typeof row !== "object" ||
+      typeof row.tenantId !== "string" || !row.tenantId.trim() ||
+      typeof row.reportId !== "string" || !row.reportId.trim() ||
+      typeof row.generatedAt !== "string" || !row.generatedAt.trim()) {
       throw new Error("REPORT_CONTEXT_REQUIRED");
+    }
+    if (Number.isNaN(Date.parse(row.generatedAt))) {
+      throw new Error("REPORT_TIMESTAMP_INVALID");
+    }
+    if (!row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
+      throw new Error("REPORT_VALUES_INVALID");
+    }
+    if (!Array.isArray(row.sourceRequirementIds) ||
+      row.sourceRequirementIds.some((id) => typeof id !== "string" || !id.trim())) {
+      throw new Error("REPORT_PROVENANCE_INVALID");
     }
     if (row.sourceRequirementIds.length === 0) {
       throw new Error("REPORT_PROVENANCE_REQUIRED");
@@ -45,8 +58,14 @@ export class InMemoryGovernedReportingService {
   }
 
   query(request: ReportQuery): readonly ReportRow[] {
-    if (!request.tenantId || !request.reportId) {
+    if (!request || typeof request !== "object" || Array.isArray(request) ||
+      typeof request.tenantId !== "string" || !request.tenantId.trim() ||
+      typeof request.reportId !== "string" || !request.reportId.trim()) {
       throw new Error("REPORT_QUERY_CONTEXT_REQUIRED");
+    }
+    if (request.filters !== undefined &&
+      (!request.filters || typeof request.filters !== "object" || Array.isArray(request.filters))) {
+      throw new Error("REPORT_FILTERS_INVALID");
     }
 
     const limit = request.limit ?? 100;

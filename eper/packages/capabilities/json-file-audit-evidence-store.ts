@@ -9,45 +9,104 @@ export class JsonFileAuditEvidenceStore implements AuditEvidenceStore {
     if (!filePath?.trim()) throw new Error("PERSISTENCE_PATH_REQUIRED");
     mkdirSync(dirname(filePath), { recursive: true, mode: 0o700 });
     try { readFileSync(filePath, "utf8"); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; this.commit([]); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      this.commit([]);
+    }
   }
-  private key(tenantId: string, id: string): string { return JSON.stringify([tenantId, id]); }
+
+  private key(tenantId: string, id: string): string {
+    return JSON.stringify([tenantId, id]);
+  }
+
+  private validEvidence(value: unknown): value is AuditEvidence {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const entry = value as AuditEvidence;
+    if (typeof entry.id !== "string" || !entry.id.trim() ||
+      typeof entry.tenantId !== "string" || !entry.tenantId.trim() ||
+      typeof entry.requirementId !== "string" || !entry.requirementId.trim() ||
+      typeof entry.action !== "string" || !entry.action.trim() ||
+      typeof entry.principalId !== "string" || !entry.principalId.trim() ||
+      typeof entry.correlationId !== "string" || !entry.correlationId.trim() ||
+      typeof entry.occurredAt !== "string" || Number.isNaN(Date.parse(entry.occurredAt)) ||
+      typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) return false;
+    return this.verify(entry);
+  }
+
   private read(): AuditEvidence[] {
-    try { const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8")); if (!Array.isArray(parsed)) throw new Error(); return parsed as AuditEvidence[]; }
-    catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
+      if (!Array.isArray(parsed) || !parsed.every(entry => this.validEvidence(entry))) throw new Error();
+      const keys = new Set<string>();
+      for (const entry of parsed as AuditEvidence[]) {
+        const key = this.key(entry.tenantId, entry.id);
+        if (keys.has(key)) throw new Error();
+        keys.add(key);
+      }
+      return parsed as AuditEvidence[];
+    } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
+
   private commit(entries: AuditEvidence[]): void {
     const temporary = `${this.filePath}.${randomUUID()}.tmp`;
     writeFileSync(temporary, JSON.stringify(entries), { encoding: "utf8", mode: 0o600, flag: "wx" });
     renameSync(temporary, this.filePath);
   }
+
   private material(entry: Omit<AuditEvidence, "integrityHash">): string {
     const serialized = JSON.stringify(entry.payload);
     if (serialized === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
-    const payload = JSON.parse(serialized);
-    return JSON.stringify({ id: entry.id, tenantId: entry.tenantId, requirementId: entry.requirementId, action: entry.action, principalId: entry.principalId, correlationId: entry.correlationId, occurredAt: entry.occurredAt, payload });
+    let payload: unknown;
+    try { payload = JSON.parse(serialized); }
+    catch { throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE"); }
+    return JSON.stringify({
+      id: entry.id, tenantId: entry.tenantId, requirementId: entry.requirementId,
+      action: entry.action, principalId: entry.principalId, correlationId: entry.correlationId,
+      occurredAt: entry.occurredAt, payload,
+    });
   }
+
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
-    if (!input.action || !input.occurredAt) throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    if (!input || typeof input !== "object" ||
+      typeof input.id !== "string" || !input.id.trim() ||
+      typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+      typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+      typeof input.principalId !== "string" || !input.principalId.trim() ||
+      typeof input.correlationId !== "string" || !input.correlationId.trim()) {
+      throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
+    }
+    if (typeof input.action !== "string" || !input.action.trim() ||
+      typeof input.occurredAt !== "string" || !input.occurredAt.trim()) {
+      throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    }
     if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
+    const material = this.material(input);
     const entries = this.read();
-    if (entries.some(e => this.key(e.tenantId,e.id)===this.key(input.tenantId,input.id))) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
-    const integrityHash = createHash("sha256").update(this.material(input)).digest("hex");
+    if (entries.some(entry => this.key(entry.tenantId, entry.id) === this.key(input.tenantId, input.id))) {
+      throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
+    }
+    const integrityHash = createHash("sha256").update(material).digest("hex");
     const entry = JSON.parse(JSON.stringify({ ...input, integrityHash })) as AuditEvidence;
-    entries.push(entry); this.commit(entries);
+    entries.push(entry);
+    this.commit(entries);
     return JSON.parse(JSON.stringify(entry)) as AuditEvidence;
   }
+
   get(tenantId: string, id: string): AuditEvidence | undefined {
-    const entry=this.read().find(e=>this.key(e.tenantId,e.id)===this.key(tenantId,id));
+    const entry = this.read().find(value => this.key(value.tenantId, value.id) === this.key(tenantId, id));
     return entry ? JSON.parse(JSON.stringify(entry)) as AuditEvidence : undefined;
   }
+
   listByRequirement(tenantId: string, requirementId: string): readonly AuditEvidence[] {
-    return this.read().filter(e=>e.tenantId===tenantId&&e.requirementId===requirementId).map(e=>JSON.parse(JSON.stringify(e)) as AuditEvidence);
+    return this.read().filter(entry => entry.tenantId === tenantId && entry.requirementId === requirementId)
+      .map(entry => JSON.parse(JSON.stringify(entry)) as AuditEvidence);
   }
+
   verify(entry: AuditEvidence): boolean {
-    if (!entry || !/^[a-f0-9]{64}$/.test(entry.integrityHash||"")) return false;
-    try { const { integrityHash, ...material }=entry; return createHash("sha256").update(this.material(material)).digest("hex")===integrityHash; }
-    catch { return false; }
+    if (!entry || typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) return false;
+    try {
+      const { integrityHash, ...material } = entry;
+      return createHash("sha256").update(this.material(material)).digest("hex") === integrityHash;
+    } catch { return false; }
   }
 }

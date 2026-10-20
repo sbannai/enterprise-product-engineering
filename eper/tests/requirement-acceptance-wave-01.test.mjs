@@ -75,6 +75,22 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
   const requirement = req("REQ-46302");
   assert.equal(requirement.pattern, "XX02");
   const service = new AuthorizationService();
+  // Policies belong to the authorization policy store, not the request payload.
+  // Register both effects so this test proves DENY precedence rather than only default-deny.
+  service.addPolicy({
+    tenantId: "wave-01-ch463",
+    principalId: "actor-46302",
+    actions: ["material.update"],
+    resources: ["authoritative-record"],
+    effect: "ALLOW",
+  });
+  service.addPolicy({
+    tenantId: "wave-01-ch463",
+    principalId: "actor-46302",
+    actions: ["material.update"],
+    resources: ["authoritative-record"],
+    effect: "DENY",
+  });
 
   const decision = await service.execute(requirement, {
     context: context("req-46302-deny-precedence"),
@@ -86,13 +102,10 @@ test("REQ-46302 / SRS-FR-2324: role authorization enforces allow, deny precedenc
         action: "material.update",
         resource: "authoritative-record",
       },
-      policies: [
-        { tenantId: "wave-01-ch463", principalId: "actor-46302", actions: ["material.update"], resources: ["authoritative-record"], effect: "ALLOW" },
-        { tenantId: "wave-01-ch463", principalId: "actor-46302", actions: ["material.update"], resources: ["authoritative-record"], effect: "DENY" },
-      ],
     },
   });
   assert.equal(decision.data.payload.decision.effect, "DENY");
+  assert.equal(decision.data.payload.decision.reason, "EXPLICIT_DENY_POLICY");
 
   const defaultDeny = await service.execute(requirement, {
     context: context("req-46302-default-deny"),
@@ -280,4 +293,64 @@ test("REQ-46306 / SRS-FR-2328: governed reporting publishes, queries and isolate
     },
   });
   assert.equal(other.data.payload.rows.length, 0);
+});
+
+test("REQ-46301 / SRS-FR-2323: cross-tenant reads and mutations cannot access another tenant's record", async () => {
+  const requirement = req("REQ-46301");
+  const service = new AuthoritativeRecordService();
+  await service.execute(requirement, {
+    context: context("req-46301-tenant-a-create"),
+    payload: {
+      operation: "create",
+      record: {
+        id: "req-46301-cross-tenant-record",
+        tenantId: "wave-01-ch463",
+        version: 1,
+        state: "OPEN",
+        data: { protected: true },
+      },
+    },
+  });
+
+  const otherTenantContext = {
+    tenantId: "different-tenant",
+    principalId: "actor-other-tenant",
+    correlationId: "req-46301-tenant-b",
+  };
+  const otherTenantRead = await service.execute(requirement, {
+    context: otherTenantContext,
+    payload: { operation: "get", id: "req-46301-cross-tenant-record" },
+  });
+  assert.equal(otherTenantRead.data.payload.record, undefined);
+
+  assert.throws(
+    () => service.execute(requirement, {
+      context: otherTenantContext,
+      payload: {
+        operation: "update",
+        id: "req-46301-cross-tenant-record",
+        expectedVersion: 1,
+        patch: { state: "TAMPERED" },
+      },
+    }),
+    /RECORD_NOT_FOUND/,
+  );
+  assert.throws(
+    () => service.execute(requirement, {
+      context: otherTenantContext,
+      payload: {
+        operation: "delete",
+        id: "req-46301-cross-tenant-record",
+        expectedVersion: 1,
+      },
+    }),
+    /RECORD_NOT_FOUND/,
+  );
+
+  const ownerRead = await service.execute(requirement, {
+    context: context("req-46301-owner-verification"),
+    payload: { operation: "get", id: "req-46301-cross-tenant-record" },
+  });
+  assert.equal(ownerRead.data.payload.record.state, "OPEN");
+  assert.equal(ownerRead.data.payload.record.data.protected, true);
 });

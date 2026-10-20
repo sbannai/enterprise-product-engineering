@@ -79,3 +79,18 @@ test("authorization rejects incomplete context", () => {
     /AUTHORIZATION_CONTEXT_REQUIRED/,
   );
 });
+
+test("authorization rejects malformed policies without mutating policy state", () => {
+  const service = new InMemoryAuthorizationService();
+  assert.throws(() => service.addPolicy(null), /AUTHORIZATION_POLICY_INVALID/);
+  assert.throws(() => service.addPolicy({ tenantId: "tenant-a", actions: "READ", resources: ["record:r1"], effect: "ALLOW" }), /AUTHORIZATION_POLICY_INVALID/);
+  assert.throws(() => service.addPolicy({ tenantId: "tenant-a", actions: [" "], resources: ["record:r1"], effect: "ALLOW" }), /AUTHORIZATION_POLICY_INVALID/);
+  assert.throws(() => service.addPolicy({ tenantId: "tenant-a", actions: ["READ"], resources: ["record:r1"], effect: "MAYBE" }), /AUTHORIZATION_POLICY_INVALID/);
+  assert.equal(service.snapshot().length, 0);
+});
+
+test("authorization rejects malformed requests with a stable context error", () => {
+  const service = new InMemoryAuthorizationService();
+  assert.throws(() => service.decide(null), /AUTHORIZATION_CONTEXT_REQUIRED/);
+  assert.throws(() => service.decide({ tenantId: "tenant-a", principalId: "user-a", action: 7, resource: "record:r1" }), /AUTHORIZATION_CONTEXT_REQUIRED/);
+});
