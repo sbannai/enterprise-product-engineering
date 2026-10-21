@@ -79,6 +79,7 @@ export interface StoredPaymentReceipt {
   documentSha256: string | null;
   documentPdf: Buffer | null;
   issuedAt: string;
+  transactionSnapshot?: TrustedTransactionSnapshot | null;
 }
 
 export class PostgresPaymentStore {
@@ -215,9 +216,10 @@ export class PostgresPaymentStore {
       const result = await client.query<{
         order_id: string | number; receipt_public_id: string; receipt_number: string;
         document_sha256: string | null; document_pdf: Buffer | null; issued_at: Date | string;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
       }>(
         `SELECT r.payment_order_id AS order_id, r.receipt_public_id, r.receipt_number,
-                r.document_sha256, r.document_pdf, r.issued_at
+                r.document_sha256, r.document_pdf, r.issued_at, r.transaction_snapshot
            FROM eper_payment_receipts r
            JOIN eper_payment_orders o ON o.id = r.payment_order_id
           WHERE r.tenant_id = $1 AND r.receipt_public_id = $2 AND o.status = 'captured'`,
@@ -308,6 +310,7 @@ export class PostgresPaymentStore {
       return row ? {
         receiptPublicId: row.receipt_public_id, orderId: String(row.order_id), receiptNumber: row.receipt_number,
         documentSha256: row.document_sha256, documentPdf: row.document_pdf, issuedAt: new Date(row.issued_at).toISOString(),
+        transactionSnapshot: row.transaction_snapshot,
       } : null;
     } finally {
       client.release();
