@@ -41,7 +41,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" };
+  | { ok: false; reason: "idempotency_conflict" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
 
 export interface StoredPaymentOrder {
   id: string;
@@ -117,6 +117,51 @@ export class PostgresPaymentStore {
         orderId: String(row.order_id), receiptNumber: row.receipt_number,
         documentSha256: row.document_sha256, issuedAt: new Date(row.issued_at).toISOString(),
       } : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Persist the SHA-256 of the exact PDF bytes issued for a tenant-scoped receipt. */
+  async persistReceiptDocumentHash(
+    tenantId: string,
+    orderId: string,
+    documentSha256: string,
+  ): Promise<PersistResult<{ documentSha256: string }>> {
+    if (!tenantId.trim() || !/^\\d+$/.test(orderId) || !/^[a-f0-9]{64}$/i.test(documentSha256)) {
+      throw new Error("INVALID_RECEIPT_DOCUMENT_HASH_INPUT");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ document_sha256: string | null }>(
+        `SELECT document_sha256
+           FROM eper_payment_receipts
+          WHERE tenant_id = $1 AND payment_order_id = $2
+          FOR UPDATE`,
+        [tenantId, orderId],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "not_found" };
+      }
+      const normalizedHash = documentSha256.toLowerCase();
+      if (row.document_sha256 && row.document_sha256.toLowerCase() !== normalizedHash) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "receipt_document_conflict" };
+      }
+      await client.query(
+        `UPDATE eper_payment_receipts
+            SET document_sha256 = $3
+          WHERE tenant_id = $1 AND payment_order_id = $2`,
+        [tenantId, orderId, normalizedHash],
+      );
+      await client.query("COMMIT");
+      return { ok: true, value: { documentSha256: normalizedHash } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
     } finally {
       client.release();
     }
