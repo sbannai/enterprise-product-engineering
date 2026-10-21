@@ -6,6 +6,7 @@ import { handlePaymentRoute } from "./payments.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import type { TrustedReceiptNumberSource } from "./payments.js";
+import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -62,7 +63,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -102,6 +103,9 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (typeof options.receiptNumberSource !== "function") {
         blockers.push("receipt_numbering_policy_unconfigured");
       }
+      if (!options.transactionSnapshotSource || typeof options.transactionSnapshotSource.findTransaction !== "function") {
+        blockers.push("trusted_transaction_authority_unavailable");
+      }
       if (process.env.NODE_ENV === "production") {
         blockers.push("production_payment_enablement_requires_authorized_readiness_review");
       }
@@ -115,7 +119,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
     // Payment routes are independent of the opt-in UAT capability endpoint.
-    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
+    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource, options.transactionSnapshotSource)) return;
 
     // Publicly reachable, controlled UAT route. It is separate from the local-only route below.
     const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
