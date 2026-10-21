@@ -18,6 +18,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
   const secret = "razorpay-test-secret";
   const token = "t".repeat(40);
   let orderCount = 0;
+  let requestedOrderPayload;
   let nextPayment = {
     id: "pay_test_001",
     order_id: "order_test_001",
@@ -39,6 +40,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
+      requestedOrderPayload = JSON.parse(String(init?.body ?? "{}"));
       orderCount += 1;
       return new Response(JSON.stringify({ id: orderCount === 1 ? "order_test_001" : "order_test_002" }), {
         status: 200, headers: { "content-type": "application/json" },
@@ -83,12 +85,15 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
       method: "POST", headers,
       body: JSON.stringify({
         tenantId: "tenant-a", reference: "invoice-001",
-        amountPaise: 12500, currency: "INR",
+        // Deliberately contradict the trusted invoice amount; client input must not control the gateway order.
+        amountPaise: 1, currency: "INR",
       }),
     });
     assert.equal(created.status, 201);
     const createdBody = await created.json();
     assert.equal(createdBody.payment.razorpayOrderId, "order_test_001");
+    assert.equal(requestedOrderPayload.amount, 12500, "gateway order amount must come from the trusted invoice, not client amountPaise");
+    assert.equal(requestedOrderPayload.currency, "INR");
     assert.equal(createdBody.payment.invoiceSourceId, "test-fee-ledger");
     assert.equal(createdBody.payment.invoiceSourceVersion, "v1");
     assert.equal(createdBody.payment.invoiceApprovedAt, "2026-10-20T12:00:00.000Z");
