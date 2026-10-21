@@ -74,8 +74,8 @@ jobs:
                       detail = str(blocker.get("detail", "")).replace("|", "\\|").replace("\n", " ")
                       ids = blocker.get("gate_ids") or blocker.get("requirement_ids") or []
                       scope = ", ".join(str(item) for item in ids)
-                      if len(scope) > 180:
-                          scope = scope[:177] + "..."
+                      # Keep the complete blocker ID list visible in the job summary;
+                      # truncation makes requirement-level remediation ambiguous.
                       scope = scope.replace("|", "\\|")
                       out.write(f"| {gate} | {blocker.get('count', '—')} | {scope or 'See count / gate register'} | {detail} |\n")
               else:
