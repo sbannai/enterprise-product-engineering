@@ -76,6 +76,20 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     const createdBody = await created.json();
     assert.equal(createdBody.payment.razorpayOrderId, "order_test_001");
 
+    // Production must reject client-supplied amounts even when the test-only
+    // override is accidentally present in the environment.
+    process.env.NODE_ENV = "production";
+    const productionOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        tenantId: "tenant-a", reference: "invoice-production",
+        amountPaise: 1, currency: "INR",
+      }),
+    });
+    assert.equal(productionOrder.status, 503);
+    assert.equal((await productionOrder.json()).error, "server_side_amount_authority_required");
+    process.env.NODE_ENV = "test";
+
     const badSignature = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
       body: JSON.stringify({
