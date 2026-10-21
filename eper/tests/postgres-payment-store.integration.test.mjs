@@ -43,8 +43,16 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       amountMinor: 12500, currency: "INR", tenantId,
       receiptNumber: "EPER-INT-" + randomUUID().replaceAll("-", "").slice(0, 20),
     };
-    const captured = await store.capturePayment(capture);
-    assert.deepEqual(captured, { ok: true, value: { receiptNumber: capture.receiptNumber } });
+    // Exercise concurrent delivery, not just a sequential replay: the database
+    // uniqueness constraint must allow exactly one transaction to issue a receipt.
+    const concurrent = await Promise.all([
+      store.capturePayment(capture),
+      store.capturePayment(capture),
+    ]);
+    assert.equal(concurrent.filter((result) => result.ok).length, 1);
+    assert.equal(concurrent.filter((result) => !result.ok && result.reason === "duplicate_event").length, 1);
+    assert.ok(concurrent.every((result) =>
+      result.ok || (!result.ok && result.reason === "duplicate_event")));
 
     const duplicate = await store.capturePayment(capture);
     assert.deepEqual(duplicate, { ok: false, reason: "duplicate_event" });
