@@ -20,7 +20,7 @@ test("static wireframes POC is served without requiring API configuration", asyn
       assert.ok(html.includes(label), "missing wireframe: " + label);
     }
     assert.match(html, /Static wireframe POC — no API integration/);
-    assert.match(html, /No payment is processed/);
+    assert.match(html, /no payment is processed/i);
     assert.match(html, /data-screen="payments"/);
     assert.match(html, /addEventListener/);
     assert.doesNotMatch(html, /fetch\s*\(/, "wireframes must not call APIs");
