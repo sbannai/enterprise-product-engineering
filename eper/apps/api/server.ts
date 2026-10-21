@@ -7,6 +7,7 @@ import { LocalizationService, type SupportedLocale, type SupportedCurrency } fro
 import { PaymentReceiptService } from "../../packages/payments/payment-receipt.js";
 import { MarketPriceBookService, type MarketPriceEntry } from "../../packages/pricing/market-price-book.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
+import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
 import { WorkflowConfigurationService, WorkflowConfigurationError } from "../../packages/workflows/workflow-configuration.js";
 
@@ -97,6 +98,18 @@ export function createAppServer(): Server {
     response.setHeader("cache-control", "no-store");
 
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    if (isWireframesUiRequest(request)) {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+      });
+      response.end(wireframesUiHtml);
+      return;
+    }
 
     if (isAdminWorkflowUiRequest(request)) {
       if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
