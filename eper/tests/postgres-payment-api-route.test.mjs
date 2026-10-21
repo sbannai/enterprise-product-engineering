@@ -24,6 +24,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let webhookGatewayAmount = 12500;
   let verifiedCaptureCalls = 0;
   let gatewayAmount = 12500;
+  let gatewayReportedPaymentId = providerPaymentId;
   let gatewayVerificationCalls = 0;
   let persistedPdf = null;
   let order = {
@@ -55,7 +56,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     if (url === "https://api.razorpay.com/v1/payments/" + providerPaymentId) {
       gatewayVerificationCalls += 1;
       return new Response(JSON.stringify({
-        id: providerPaymentId, order_id: providerOrderId, amount: gatewayAmount, currency: "INR", status: "captured",
+        id: gatewayReportedPaymentId, order_id: providerOrderId, amount: gatewayAmount, currency: "INR", status: "captured",
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
     return nativeFetch(input, init);
@@ -369,6 +370,21 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(mismatchedVerification.status, 400);
     assert.equal((await mismatchedVerification.json()).error, "gateway_payment_details_mismatch");
     assert.equal(verifiedCaptureCalls, 0, "mismatched amount must never reach capture persistence");
+
+    // The provider lookup must confirm the exact payment ID requested by the signed checkout response.
+    gatewayAmount = 12500;
+    gatewayReportedPaymentId = "pay_different_from_requested";
+    const mismatchedPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(mismatchedPaymentIdVerification.status, 400);
+    assert.equal((await mismatchedPaymentIdVerification.json()).error, "gateway_payment_details_mismatch");
+    assert.equal(verifiedCaptureCalls, 0, "a different provider payment ID must never reach capture persistence");
+    gatewayReportedPaymentId = providerPaymentId;
 
     gatewayAmount = "12500";
     gatewayVerificationCalls = 0; // Ignore the preceding valid-ID amount-mismatch lookup.
