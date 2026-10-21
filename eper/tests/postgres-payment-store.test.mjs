@@ -340,3 +340,43 @@ test("PostgresPaymentStore rejects reuse of an idempotency key for a different p
   assert.equal(fake.calls.at(-1).sql, "COMMIT");
   assert.equal(fake.released, 1);
 });
+
+test("PostgresPaymentStore persists an immutable PDF hash for a valid numeric order ID", async () => {
+  const calls = [];
+  let storedHash = null;
+  const store = new PostgresPaymentStore({
+    async connect() {
+      return {
+        async query(sql, values = []) {
+          const normalized = sql.replace(/\\s+/g, " ").trim();
+          calls.push({ sql: normalized, values });
+          if (normalized.startsWith("SELECT document_sha256")) {
+            return { rows: [{ document_sha256: storedHash }], rowCount: 1 };
+          }
+          if (normalized.startsWith("UPDATE eper_payment_receipts")) {
+            storedHash = values[2];
+            return { rows: [], rowCount: 1 };
+          }
+          return { rows: [], rowCount: null };
+        },
+        release() {},
+      };
+    },
+  });
+  const hash = "a".repeat(64);
+  assert.deepEqual(
+    await store.persistReceiptDocumentHash("tenant-a", "41", hash),
+    { ok: true, value: { documentSha256: hash } },
+  );
+  assert.deepEqual(
+    await store.persistReceiptDocumentHash("tenant-a", "41", hash),
+    { ok: true, value: { documentSha256: hash } },
+  );
+  assert.deepEqual(
+    await store.persistReceiptDocumentHash("tenant-a", "41", "b".repeat(64)),
+    { ok: false, reason: "receipt_document_conflict" },
+  );
+  assert.equal(calls.filter(({ sql }) => sql.startsWith("UPDATE eper_payment_receipts")).length, 2);
+  assert.ok(calls.some(({ sql }) => sql === "COMMIT"));
+  assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
+});
