@@ -58,9 +58,10 @@ test("PostgresPaymentStore atomically records a capture and receipt", async () =
     amountMinor: 12500,
     currency: "INR",
     tenantId: "tenant-a",
+    receiptNumber: "APPROVED-RECEIPT-00041",
   });
   assert.equal(result.ok, true);
-  assert.match(result.value.receiptNumber, /^EPER-\d{4}-[A-F0-9]{8}$/);
+  assert.equal(result.value.receiptNumber, "APPROVED-RECEIPT-00041");
   assert.ok(fake.calls.some(({ sql }) => sql.includes("SET status = 'captured', provider_payment_id = $2")));
   assert.ok(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")));
   assert.equal(fake.calls.at(-1).sql, "COMMIT");
@@ -79,6 +80,7 @@ test("PostgresPaymentStore rolls back duplicate provider events without issuing 
     amountMinor: 12500,
     currency: "INR",
     tenantId: "tenant-a",
+    receiptNumber: "APPROVED-RECEIPT-00042",
   });
   assert.deepEqual(result, { ok: false, reason: "duplicate_event" });
   assert.ok(fake.calls.some(({ sql }) => sql === "ROLLBACK"));
