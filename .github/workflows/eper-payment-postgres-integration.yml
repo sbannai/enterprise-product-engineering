@@ -48,5 +48,7 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/001_payment_transactions.sql
       - name: Apply payment order reservation migration
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/002_payment_order_reservation.sql
+      - name: Apply receipt document persistence migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/003_receipt_document_bytes.sql
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
