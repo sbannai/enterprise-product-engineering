@@ -64,7 +64,7 @@ export async function runMigrations(connectionString, options = {}) {
       // psql use. Strip only those outer wrappers so schema changes and the ledger
       // insert commit atomically when run through this deploy-time runner.
       const body = sql
-        .replace(/^\s*BEGIN\s*;?/i, "")
+        .replace(/(^|\n)\s*BEGIN\s*;?/i, "$1")
         .replace(/\s*COMMIT\s*;?\s*$/i, "");
 
       await client.query("BEGIN");
