@@ -51,6 +51,20 @@ export class PostgresPaymentStore {
    * to tenant + key; a retry must compare the stored order's invoice/amount.
    */
   async insertOrder(input: PersistPaymentOrderInput): Promise<PersistResult<{ id: string; providerOrderId: string }>> {
+    if (
+      !input.tenantId.trim() ||
+      !input.invoiceReference.trim() ||
+      !input.idempotencyKey.trim() ||
+      !input.providerOrderId.trim() ||
+      !input.invoiceSourceId.trim() ||
+      !input.invoiceSourceVersion.trim() ||
+      !Number.isSafeInteger(input.amountMinor) ||
+      input.amountMinor <= 0 ||
+      input.currency !== "INR" ||
+      !Number.isFinite(Date.parse(input.invoiceApprovedAt))
+    ) {
+      throw new Error("INVALID_PAYMENT_ORDER_INPUT");
+    }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -85,7 +99,8 @@ export class PostgresPaymentStore {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
-      const sameRequest = row.invoice_reference === input.invoiceReference &&
+      const sameRequest = row.provider_order_id === input.providerOrderId &&
+        row.invoice_reference === input.invoiceReference &&
         Number(row.amount_minor) === input.amountMinor && row.currency === input.currency;
       await client.query("COMMIT");
       return sameRequest
