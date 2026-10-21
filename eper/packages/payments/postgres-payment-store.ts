@@ -574,10 +574,11 @@ export class PostgresPaymentStore {
     ) {
       throw new Error("INVALID_CAPTURE_INPUT");
     }
-    if (input.transactionSnapshot) {
+    const transactionSnapshot = input.transactionSnapshot;
+    if (transactionSnapshot) {
       const validation = await resolveTrustedTransactionSnapshot(
-        { findTransaction: async () => input.transactionSnapshot ?? null },
-        { tenantId: input.tenantId, reference: input.transactionSnapshot.reference },
+        { findTransaction: async () => transactionSnapshot },
+        { tenantId: input.tenantId, reference: transactionSnapshot.reference },
       );
       if (!validation.ok) throw new Error("INVALID_TRANSACTION_SNAPSHOT:" + validation.error);
     }
