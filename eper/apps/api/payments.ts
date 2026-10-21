@@ -196,7 +196,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (reservation.value.providerOrderId) {
         json(res, 200, {
           payment: {
-            id: reservation.value.id, tenantId, reference,
+            id: reservation.value.transactionPublicId, tenantId, reference,
             amountPaise, currency, status: "CREATED",
             razorpayOrderId: reservation.value.providerOrderId,
           },
@@ -241,7 +241,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       }
       json(res, 201, {
         payment: {
-          id: completed.value.id, tenantId, reference,
+          id: completed.value.transactionPublicId, tenantId, reference,
           amountPaise, currency, status: "CREATED",
           razorpayOrderId: completed.value.providerOrderId,
         },
