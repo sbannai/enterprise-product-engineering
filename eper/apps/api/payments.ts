@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
+import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 
 type PaymentStatus = "CREATED" | "PAID";
 export type TrustedReceiptNumberSource = (input: { tenantId: string; transactionPublicId: string; providerPaymentId: string }) => Promise<string>;
@@ -132,7 +133,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource, transactionSnapshotSource?: TrustedTransactionSnapshotSource): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
   // payment mutation or receipt issuance in production until a transactional store is wired.
@@ -168,6 +169,13 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
       if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
       if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
+      const snapshot = await resolveTrustedTransactionSnapshot(transactionSnapshotSource, {
+        tenantId: order.tenantId, reference: order.invoiceReference,
+      });
+      if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
+      if (snapshot.transaction.amountDueMinor !== payment.amount || snapshot.transaction.currency !== "INR") {
+        json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
+      }
       const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
         tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id,
       });
@@ -176,7 +184,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
         providerOrderId: payment.order_id, providerPaymentId: payment.id,
-        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber,
+        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber, transactionSnapshot: snapshot.transaction,
       });
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
@@ -224,6 +232,24 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     }
     const amountPaise = authority.invoice.amountDuePaise;
     const currency = authority.invoice.currency;
+
+    // Durable PostgreSQL checkout requires a separately sourced transaction snapshot.
+    if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      const snapshot = await resolveTrustedTransactionSnapshot(transactionSnapshotSource, { tenantId, reference });
+      if (!snapshot.ok) {
+        const status = snapshot.error === "transaction_not_found" ? 404
+          : snapshot.error === "transaction_tenant_mismatch" ? 403
+          : snapshot.error === "transaction_not_payable" ? 409
+          : snapshot.error === "transaction_amount_invalid" || snapshot.error === "transaction_currency_unsupported" ||
+            snapshot.error === "transaction_reference_mismatch" || snapshot.error === "transaction_total_mismatch" ||
+            snapshot.error === "transaction_line_items_invalid" || snapshot.error === "transaction_adjustments_invalid" ? 422
+          : 503;
+        json(res, status, { error: snapshot.error }); return true;
+      }
+      if (snapshot.transaction.amountDueMinor !== amountPaise || snapshot.transaction.currency !== currency) {
+        json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
+      }
+    }
 
     // Explicit opt-in for controlled UAT. Production remains blocked above until
     // verification, webhook capture, and durable receipt retrieval are also wired.
