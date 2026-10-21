@@ -200,7 +200,10 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     const verifiedBody = await verified.json();
     assert.equal(verifiedBody.payment.status, "PAID");
     assert.ok(verifiedBody.payment.receiptNumber);
-    assert.match(verifiedBody.receiptUrl, /^\/api\/payments\/.+\/receipt\.pdf$/);
+    assert.match(verifiedBody.payment.receiptId, /^[0-9a-f-]{36}$/i);
+    assert.match(verifiedBody.payment.id, /^[0-9a-f-]{36}$/i);
+    assert.notEqual(verifiedBody.payment.receiptId, verifiedBody.payment.id);
+    assert.match(verifiedBody.receiptUrl, /^\/api\/payments\/receipts\/[0-9a-f-]{36}\.pdf$/i);
 
     const receipt = await nativeFetch(base + verifiedBody.receiptUrl, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-a" },
