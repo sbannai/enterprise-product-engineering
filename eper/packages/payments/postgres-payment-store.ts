@@ -127,7 +127,7 @@ export class PostgresPaymentStore {
 
   /** Lookup by the immutable public transaction UUID exposed by the API. */
   async findOrderByTransactionPublicId(tenantId: string, transactionPublicId: string): Promise<StoredPaymentOrder | null> {
-    if (!tenantId.trim() || !/^[0-9a-f-]{36}$/i.test(transactionPublicId)) throw new Error("INVALID_PAYMENT_LOOKUP");
+    if (!tenantId.trim() || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(transactionPublicId)) throw new Error("INVALID_PAYMENT_LOOKUP");
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
@@ -206,7 +206,7 @@ export class PostgresPaymentStore {
 
   /** Find a receipt by its public UUID for the dedicated download route. */
   async findReceiptByPublicId(tenantId: string, receiptPublicId: string): Promise<StoredPaymentReceipt | null> {
-    if (!tenantId.trim() || !/^[0-9a-f-]{36}$/i.test(receiptPublicId)) throw new Error("INVALID_RECEIPT_LOOKUP");
+    if (!tenantId.trim() || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receiptPublicId)) throw new Error("INVALID_RECEIPT_LOOKUP");
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
