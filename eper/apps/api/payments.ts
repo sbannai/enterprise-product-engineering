@@ -305,11 +305,14 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
   if (req.method === "POST" && pathname === "/api/payments/verify") {
     let input: any;
     try { input = JSON.parse((await body(req)).toString("utf8")); } catch { json(res, 400, { error: "invalid_json" }); return true; }
-    const orderId = String(input?.razorpay_order_id ?? "");
-    const paymentId = String(input?.razorpay_payment_id ?? "");
-    const signature = String(input?.razorpay_signature ?? "");
-    const expected = createHmac("sha256", cfg.keySecret).update(orderId + "|" + paymentId).digest("hex");
-    if (!orderId || !paymentId || !validSignature(expected, signature)) { json(res, 400, { error: "payment_signature_invalid" }); return true; }
+    const orderId = input?.razorpay_order_id;
+    const paymentId = input?.razorpay_payment_id;
+    const signature = input?.razorpay_signature;
+    if (typeof orderId !== "string" || !orderId.trim() || orderId !== orderId.trim() || orderId.length > 200 ||
+        typeof paymentId !== "string" || !paymentId.trim() || paymentId !== paymentId.trim() || paymentId.length > 200 ||
+        typeof signature !== "string" || !signature || !validSignature(createHmac("sha256", cfg.keySecret).update(orderId + "|" + paymentId).digest("hex"), signature)) {
+      json(res, 400, { error: "payment_signature_invalid" }); return true;
+    }
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
       const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
       if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
