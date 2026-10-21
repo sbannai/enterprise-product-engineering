@@ -139,7 +139,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
     });
     assert.equal(download.status, 200);
-    assert.match(download.headers.get("content-type") ?? "", /application\\/pdf/);
+    assert.match(download.headers.get("content-type") ?? "", /application\/pdf/);
     assert.match(download.headers.get("content-disposition") ?? "", new RegExp(receiptPublicId.replaceAll("-", "\\-") + "\\.pdf"));
     const bytes = Buffer.from(await download.arrayBuffer());
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
