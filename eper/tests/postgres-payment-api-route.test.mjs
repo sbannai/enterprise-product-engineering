@@ -164,6 +164,29 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await mismatchedWebhook.json()).error, "gateway_payment_details_mismatch");
     assert.equal(webhookCaptureCalls, 0, "mismatched webhook amount must not reach capture persistence");
 
+    // A valid signature must not make an otherwise invalid currency or payment state acceptable.
+    for (const [eventId, overrides] of [
+      ["evt_route_test_currency", { currency: "USD" }],
+      ["evt_route_test_status", { status: "authorized" }],
+    ]) {
+      const invalidEvent = JSON.stringify({
+        event: "payment.captured",
+        payload: { payment: { entity: {
+          id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
+          ...overrides,
+        } } },
+      });
+      const invalidSignature = createHmac("sha256", "route-webhook-secret").update(invalidEvent).digest("hex");
+      const invalidWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-razorpay-signature": invalidSignature, "x-razorpay-event-id": eventId },
+        body: invalidEvent,
+      });
+      assert.equal(invalidWebhook.status, 409);
+      assert.equal((await invalidWebhook.json()).error, "gateway_payment_details_mismatch");
+      assert.equal(webhookCaptureCalls, 0, "invalid currency/status must not reach capture persistence");
+    }
+
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
