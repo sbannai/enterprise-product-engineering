@@ -143,7 +143,7 @@ export class PostgresPaymentStore {
 
   /** Internal-key lookup used only after resolving an authenticated receipt record. */
   async findOrderByInternalId(tenantId: string, orderId: string): Promise<StoredPaymentOrder | null> {
-    if (!tenantId.trim() || !/^\\d+$/.test(orderId)) throw new Error("INVALID_PAYMENT_LOOKUP");
+    if (!tenantId.trim() || !/^\d+$/.test(orderId)) throw new Error("INVALID_PAYMENT_LOOKUP");
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
