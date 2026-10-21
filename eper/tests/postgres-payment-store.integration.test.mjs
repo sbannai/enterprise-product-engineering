@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 import { runMigrations } from "../scripts/migrate-payments.mjs";
 
@@ -31,6 +34,38 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
     await pool.end();
   }
 });
+test("migration runner rejects checksum drift and does not record failed migrations", { skip: !databaseUrl }, async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "eper-payment-migrations-"));
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  try {
+    const changedExisting = join(temporaryRoot, "changed-existing");
+    await mkdir(changedExisting);
+    const original = await readFile(new URL("../packages/payments/migrations/001_payment_transactions.sql", import.meta.url), "utf8");
+    await writeFile(join(changedExisting, "001_payment_transactions.sql"), original + "\n-- intentional checksum drift test\n");
+    await assert.rejects(
+      runMigrations(databaseUrl, { directory: changedExisting }),
+      /EPER_PAYMENT_MIGRATION_CHECKSUM_MISMATCH:001_payment_transactions\.sql/,
+    );
+
+    const failingMigration = join(temporaryRoot, "failing-migration");
+    await mkdir(failingMigration);
+    await writeFile(join(failingMigration, "006_intentional_failure.sql"), "SELECT * FROM eper_intentionally_missing_migration_test_table;\n");
+    await assert.rejects(
+      runMigrations(databaseUrl, { directory: failingMigration }),
+      /eper_intentionally_missing_migration_test_table/,
+    );
+    const ledger = await pool.query(
+      "SELECT migration_name FROM eper_payment_schema_migrations WHERE migration_name = $1",
+      ["006_intentional_failure.sql"],
+    );
+    assert.equal(ledger.rowCount, 0, "a failed schema change must not be marked applied");
+  } finally {
+    await pool.end();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 test("PostgresPaymentStore persists idempotent orders and captures exactly once", { skip: !databaseUrl }, async () => {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: databaseUrl, max: 4 });
