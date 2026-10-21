@@ -94,6 +94,21 @@ async function saveLedger(file: string, ledger: Ledger): Promise<void> {
   await writeFile(temp, JSON.stringify(ledger), { mode: 0o600 });
   await rename(temp, file);
 }
+async function safeReceiptNumber(
+  source: TrustedReceiptNumberSource | undefined,
+  input: { tenantId: string; transactionPublicId: string; providerPaymentId: string },
+): Promise<string | null> {
+  if (!source) return null;
+  try {
+    const value = await source(input);
+    return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(value) ? value : null;
+  } catch {
+    // Receipt policy is an external business dependency. A transient failure must
+    // fail closed as a controlled 503, not escape the HTTP request handler.
+    return null;
+  }
+}
+
 function config(): { keyId: string; keySecret: string; webhookSecret: string; token: string; ledgerFile: string } | null {
   const keyId = process.env.RAZORPAY_KEY_ID ?? "";
   const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
@@ -153,9 +168,10 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
       if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
       if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
-      if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
-      const receiptNumber = await receiptNumberSource({ tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id });
-      if (typeof receiptNumber !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(receiptNumber)) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
+        tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id,
+      });
+      if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const result = await paymentStore.capturePayment({
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
@@ -333,9 +349,10 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           gatewayPayment.currency !== order.currency || gatewayPayment.status !== "captured") {
         json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
       }
-      if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
-      const receiptNumber = await receiptNumberSource({ tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId });
-      if (typeof receiptNumber !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(receiptNumber)) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
+        tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId,
+      });
+      if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const captured = await paymentStore.captureVerifiedPayment({
         tenantId, providerOrderId: orderId, providerPaymentId: paymentId,
         amountMinor: order.amountMinor, currency: "INR", receiptNumber,
