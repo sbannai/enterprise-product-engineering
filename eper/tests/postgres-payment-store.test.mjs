@@ -210,3 +210,26 @@ test("PostgresPaymentStore flags provider event ID reuse with a different payloa
   assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
   assert.equal(fake.released, 1);
 });
+
+test("PostgresPaymentStore rejects a repeated event ID whose event type differs", async () => {
+  const fake = makePool({
+    duplicateEvent: true,
+    duplicateEventPayloadSha256: "a".repeat(64),
+    duplicateEventType: "payment.authorized",
+  });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.capturePayment({
+    providerEventId: "evt_type_conflict",
+    eventType: "payment.captured",
+    payloadSha256: "a".repeat(64),
+    providerOrderId: "order_test_41",
+    providerPaymentId: "pay_test_41",
+    amountMinor: 12500,
+    currency: "INR",
+    tenantId: "tenant-a",
+    receiptNumber: "APPROVED-RECEIPT-00045",
+  });
+  assert.deepEqual(result, { ok: false, reason: "event_conflict" });
+  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
+  assert.equal(fake.released, 1);
+});
