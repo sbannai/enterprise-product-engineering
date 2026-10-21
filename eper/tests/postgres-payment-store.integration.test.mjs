@@ -295,3 +295,51 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     await pool.end();
   }
 });
+
+
+test("PostgresPaymentStore requires reconciliation for an expired order-creation lease", { skip: !databaseUrl }, async () => {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  try {
+    const store = new PostgresPaymentStore(pool);
+    const input = {
+      tenantId: "lease-" + randomUUID(),
+      invoiceReference: "invoice-" + randomUUID(),
+      idempotencyKey: "lease-idem-" + randomUUID(),
+      amountMinor: 12500,
+      currency: "INR",
+      invoiceSourceId: "integration-test-authority",
+      invoiceSourceVersion: "fixture-v1",
+      invoiceApprovedAt: new Date().toISOString(),
+    };
+
+    const first = await store.reserveOrder(input);
+    assert.equal(first.ok, true);
+    if (!first.ok) return;
+    assert.equal(first.value.providerOrderId, null);
+
+    const expired = await pool.query(
+      `UPDATE eper_payment_orders
+          SET creation_lease_until = NOW() - INTERVAL '1 second'
+        WHERE tenant_id = $1 AND idempotency_key = $2 AND status = 'creating'`,
+      [input.tenantId, input.idempotencyKey],
+    );
+    assert.equal(expired.rowCount, 1);
+
+    const retry = await store.reserveOrder(input);
+    assert.deepEqual(retry, { ok: false, reason: "order_creation_reconciliation_required" });
+
+    const persisted = await pool.query(
+      `SELECT status, provider_order_id, creation_attempts
+         FROM eper_payment_orders
+        WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [input.tenantId, input.idempotencyKey],
+    );
+    assert.equal(persisted.rows.length, 1);
+    assert.equal(persisted.rows[0].status, "creating");
+    assert.equal(persisted.rows[0].provider_order_id, null);
+    assert.equal(persisted.rows[0].creation_attempts, 1, "retry must not reserve another provider creation attempt");
+  } finally {
+    await pool.end();
+  }
+});
