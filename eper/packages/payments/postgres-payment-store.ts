@@ -144,7 +144,7 @@ export class PostgresPaymentStore {
     orderId: string,
     documentPdf: Buffer,
   ): Promise<PersistResult<{ documentSha256: string }>> {
-    if (!tenantId.trim() || !/^\\d+$/.test(orderId) || !Buffer.isBuffer(documentPdf) ||
+    if (!tenantId.trim() || !/^\d+$/.test(orderId) || !Buffer.isBuffer(documentPdf) ||
         documentPdf.length < 8 || documentPdf.subarray(0, 5).toString("ascii") !== "%PDF-") {
       throw new Error("INVALID_RECEIPT_DOCUMENT_INPUT");
     }
