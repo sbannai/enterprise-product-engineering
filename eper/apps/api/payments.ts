@@ -9,6 +9,9 @@ interface PaymentRecord {
   id: string;
   tenantId: string;
   reference: string;
+  invoiceSourceId: string;
+  invoiceSourceVersion: string;
+  invoiceApprovedAt: string;
   amountPaise: number;
   currency: string;
   status: PaymentStatus;
@@ -176,7 +179,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     });
     if (!orderResponse.ok) { json(res, 502, { error: "gateway_order_creation_failed" }); return true; }
     const order: any = await orderResponse.json();
-    const record: PaymentRecord = { id: randomUUID(), tenantId, reference, amountPaise, currency, status: "CREATED", razorpayOrderId: order.id, createdAt: new Date().toISOString() };
+    const record: PaymentRecord = { id: randomUUID(), tenantId, reference, invoiceSourceId: authority.invoice.sourceId, invoiceSourceVersion: authority.invoice.sourceVersion, invoiceApprovedAt: authority.invoice.approvedAt, amountPaise, currency, status: "CREATED", razorpayOrderId: order.id, createdAt: new Date().toISOString() };
     ledger.records.push(record); await saveLedger(cfg.ledgerFile, ledger);
     json(res, 201, { payment: record, keyId: cfg.keyId }); return true;
   }
