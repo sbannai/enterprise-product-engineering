@@ -129,7 +129,7 @@ test("payment readiness fails closed when PostgreSQL connectivity probe fails", 
   try {
     await withServer(createAppServer({
       paymentStore: { async checkConnectivity() { throw new Error("database connection failed"); } },
-      invoiceAmountSource: {},
+      invoiceAmountSource: { async findInvoice() { return null; } },
       receiptNumberSource: async () => "TEST-RECEIPT",
     }), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
@@ -180,7 +180,7 @@ test("payment readiness reports configured when PostgreSQL is reachable outside 
   try {
     await withServer(createAppServer({
       paymentStore: { async checkConnectivity() { return true; } },
-      invoiceAmountSource: {},
+      invoiceAmountSource: { async findInvoice() { return null; } },
       receiptNumberSource: async () => "TEST-RECEIPT",
     }), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
