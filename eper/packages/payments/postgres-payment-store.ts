@@ -27,6 +27,17 @@ export interface PersistPaymentOrderInput {
   invoiceSourceVersion: string;
   invoiceApprovedAt: string;
 }
+export interface ReservePaymentOrderInput {
+  tenantId: string;
+  invoiceReference: string;
+  idempotencyKey: string;
+  amountMinor: number;
+  currency: "INR";
+  invoiceSourceId: string;
+  invoiceSourceVersion: string;
+  invoiceApprovedAt: string;
+}
+
 export interface CapturedPaymentInput {
   providerEventId: string;
   eventType: string;
@@ -41,7 +52,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
+  | { ok: false; reason: "idempotency_conflict" | "order_creation_in_progress" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
 
 export interface StoredPaymentOrder {
   id: string;
@@ -51,7 +62,7 @@ export interface StoredPaymentOrder {
   providerPaymentId: string | null;
   amountMinor: number;
   currency: "INR";
-  status: "created" | "authorized" | "captured" | "failed" | "refunded";
+  status: "creating" | "created" | "authorized" | "captured" | "failed" | "refunded";
   createdAt: string;
 }
 export interface StoredPaymentReceipt {
@@ -159,6 +170,118 @@ export class PostgresPaymentStore {
       );
       await client.query("COMMIT");
       return { ok: true, value: { documentSha256: normalizedHash } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Reserve a tenant-scoped idempotency key before calling Razorpay.
+   * A retry never starts another remote order while the reservation is active.
+   */
+  async reserveOrder(input: ReservePaymentOrderInput): Promise<PersistResult<{ id: string; providerOrderId: string | null }>> {
+    if (
+      !input.tenantId.trim() || !input.invoiceReference.trim() || !input.idempotencyKey.trim() ||
+      !input.invoiceSourceId.trim() || !input.invoiceSourceVersion.trim() ||
+      !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 ||
+      input.currency !== "INR" || !Number.isFinite(Date.parse(input.invoiceApprovedAt))
+    ) throw new Error("INVALID_PAYMENT_ORDER_RESERVATION_INPUT");
+
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const inserted = await client.query<{ id: string | number }>(
+        `INSERT INTO eper_payment_orders
+          (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
+           amount_minor, currency, invoice_source_id, invoice_source_version,
+           invoice_approved_at, status, creation_lease_until, creation_attempts)
+         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8,
+                 'creating', NOW() + INTERVAL '2 minutes', 1)
+         ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+         RETURNING id`,
+        [input.tenantId, input.invoiceReference, input.idempotencyKey, input.amountMinor,
+          input.currency, input.invoiceSourceId, input.invoiceSourceVersion, input.invoiceApprovedAt],
+      );
+      if (inserted.rows[0]) {
+        await client.query("COMMIT");
+        return { ok: true, value: { id: String(inserted.rows[0].id), providerOrderId: null } };
+      }
+      const existing = await client.query<{
+        id: string | number; provider_order_id: string | null; invoice_reference: string;
+        amount_minor: string | number; currency: string; invoice_source_id: string;
+        invoice_source_version: string; status: StoredPaymentOrder["status"];
+      }>(
+        `SELECT id, provider_order_id, invoice_reference, amount_minor, currency,
+                invoice_source_id, invoice_source_version, status
+           FROM eper_payment_orders
+          WHERE tenant_id = $1 AND idempotency_key = $2
+          FOR UPDATE`,
+        [input.tenantId, input.idempotencyKey],
+      );
+      const row = existing.rows[0];
+      if (!row || row.invoice_reference !== input.invoiceReference ||
+          Number(row.amount_minor) !== input.amountMinor || row.currency !== input.currency ||
+          row.invoice_source_id !== input.invoiceSourceId ||
+          row.invoice_source_version !== input.invoiceSourceVersion) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
+      if (row.status === "creating") {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "order_creation_in_progress" };
+      }
+      if (!row.provider_order_id) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
+      await client.query("COMMIT");
+      return { ok: true, value: { id: String(row.id), providerOrderId: row.provider_order_id } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Attach the provider order to the reserved row; safe to repeat with the same ID. */
+  async completeOrderCreation(tenantId: string, idempotencyKey: string, providerOrderId: string): Promise<PersistResult<{ id: string; providerOrderId: string }>> {
+    if (!tenantId.trim() || !idempotencyKey.trim() || !providerOrderId.trim()) {
+      throw new Error("INVALID_PAYMENT_ORDER_COMPLETION_INPUT");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string | number; provider_order_id: string | null; status: string }>(
+        `SELECT id, provider_order_id, status FROM eper_payment_orders
+          WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
+        [tenantId, idempotencyKey],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "not_found" };
+      }
+      if (row.provider_order_id === providerOrderId && row.status === "created") {
+        await client.query("COMMIT");
+        return { ok: true, value: { id: String(row.id), providerOrderId } };
+      }
+      if (row.status !== "creating" || row.provider_order_id !== null) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
+      await client.query(
+        `UPDATE eper_payment_orders
+            SET provider_order_id = $3, status = 'created',
+                creation_lease_until = NULL, last_creation_error = NULL, updated_at = NOW()
+          WHERE id = $1 AND tenant_id = $2`,
+        [row.id, tenantId, providerOrderId],
+      );
+      await client.query("COMMIT");
+      return { ok: true, value: { id: String(row.id), providerOrderId } };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
