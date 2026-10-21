@@ -365,7 +365,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
   if (req.method === "GET" && publicReceiptMatch && paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
     const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
     if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
-    const receipt = await paymentStore.findReceiptByPublicId(tenantId, publicReceiptMatch[1]);
+    let receipt = await paymentStore.findReceiptByPublicId(tenantId, publicReceiptMatch[1]);
     if (!receipt) { json(res, 404, { error: "receipt_not_found" }); return true; }
     const order = await paymentStore.findOrderByInternalId(tenantId, receipt.orderId);
     if (!order || order.status !== "captured" || !order.providerPaymentId) { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
@@ -385,7 +385,13 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (!stored?.documentPdf || stored.receiptPublicId !== receipt.receiptPublicId) {
         json(res, 503, { error: "receipt_document_persistence_failed" }); return true;
       }
+      receipt = stored;
       pdf = stored.documentPdf;
+    }
+    const actualDigest = createHash("sha256").update(pdf).digest("hex");
+    if (!receipt.documentSha256 || !/^[a-f0-9]{64}$/i.test(receipt.documentSha256) ||
+        actualDigest !== receipt.documentSha256.toLowerCase()) {
+      json(res, 503, { error: "receipt_document_integrity_failed" }); return true;
     }
     res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + receipt.receiptPublicId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
     res.end(pdf); return true;
