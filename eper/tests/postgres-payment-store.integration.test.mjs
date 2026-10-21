@@ -27,6 +27,7 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
         "003_receipt_document_bytes.sql",
         "004_unique_public_payment_identifiers.sql",
         "005_immutable_receipt_records.sql",
+        "006_immutable_receipt_transaction_snapshot.sql",
       ],
     );
     for (const row of result.rows) assert.match(row.sha256.trim(), /^[a-f0-9]{64}$/);
