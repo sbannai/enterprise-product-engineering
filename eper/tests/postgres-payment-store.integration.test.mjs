@@ -105,6 +105,34 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.equal(await store.findOrder(tenantId, "order_does_not_exist"), null);
     assert.equal(await store.findReceipt("another-tenant", storedOrder.id), null);
 
+    // Reserve-first order creation prevents a retry from issuing a second
+    // Razorpay order while the first remote creation is in progress.
+    const reservationKey = "reserve-" + randomUUID();
+    const reservationInput = {
+      tenantId, invoiceReference: "invoice-reserve-" + randomUUID(),
+      idempotencyKey: reservationKey, amountMinor: 7400, currency: "INR",
+      invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "fixture-v1",
+      invoiceApprovedAt: new Date().toISOString(),
+    };
+    const reservation = await store.reserveOrder(reservationInput);
+    assert.equal(reservation.ok, true);
+    if (!reservation.ok) return;
+    assert.equal(reservation.value.providerOrderId, null);
+    assert.deepEqual(await store.reserveOrder(reservationInput), {
+      ok: false, reason: "order_creation_in_progress",
+    });
+    const reservedProviderOrder = "order_" + randomUUID().replaceAll("-", "");
+    const completedReservation = await store.completeOrderCreation(tenantId, reservationKey, reservedProviderOrder);
+    assert.deepEqual(completedReservation, {
+      ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
+    });
+    assert.deepEqual(await store.reserveOrder(reservationInput), {
+      ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
+    });
+    assert.deepEqual(await store.completeOrderCreation(tenantId, reservationKey, reservedProviderOrder), {
+      ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
+    });
+
     // Race two different provider orders using the same tenant-scoped key.
     // Exactly one may win; the losing request must not be reported as a retry.
     const raceKey = "race-" + randomUUID();
