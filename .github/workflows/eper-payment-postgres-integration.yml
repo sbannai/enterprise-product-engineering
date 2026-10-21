@@ -42,6 +42,8 @@ jobs:
       - run: npm ci
       - run: npm install --no-save --package-lock=false pg@8
       - run: npm run build
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply payment schema to disposable PostgreSQL
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/001_payment_transactions.sql
       - name: Exercise real PostgreSQL transactions and constraints
