@@ -43,8 +43,84 @@ export type PersistResult<T> =
   | { ok: true; value: T }
   | { ok: false; reason: "idempotency_conflict" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" };
 
+export interface StoredPaymentOrder {
+  id: string;
+  tenantId: string;
+  invoiceReference: string;
+  providerOrderId: string;
+  providerPaymentId: string | null;
+  amountMinor: number;
+  currency: "INR";
+  status: "created" | "authorized" | "captured" | "failed" | "refunded";
+  createdAt: string;
+}
+export interface StoredPaymentReceipt {
+  orderId: string;
+  receiptNumber: string;
+  documentSha256: string | null;
+  issuedAt: string;
+}
+
 export class PostgresPaymentStore {
   constructor(private readonly pool: SqlPool) {}
+
+  /** Tenant-scoped lookup used by API verification and receipt routes. */
+  async findOrder(tenantId: string, providerOrderId: string): Promise<StoredPaymentOrder | null> {
+    if (!tenantId.trim() || !providerOrderId.trim()) throw new Error("INVALID_PAYMENT_LOOKUP");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        id: string | number; tenant_id: string; invoice_reference: string;
+        provider_order_id: string; provider_payment_id: string | null;
+        amount_minor: string | number; currency: string; status: StoredPaymentOrder["status"];
+        created_at: Date | string;
+      }>(
+        `SELECT id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
+                amount_minor, currency, status, created_at
+           FROM eper_payment_orders
+          WHERE tenant_id = $1 AND provider_order_id = $2`,
+        [tenantId, providerOrderId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      if (row.currency !== "INR" || !["created", "authorized", "captured", "failed", "refunded"].includes(row.status)) {
+        throw new Error("PAYMENT_ORDER_PERSISTENCE_INVALID");
+      }
+      return {
+        id: String(row.id), tenantId: row.tenant_id, invoiceReference: row.invoice_reference,
+        providerOrderId: row.provider_order_id, providerPaymentId: row.provider_payment_id,
+        amountMinor: Number(row.amount_minor), currency: "INR", status: row.status,
+        createdAt: new Date(row.created_at).toISOString(),
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Tenant-scoped receipt lookup; callers must still authorize the requesting principal. */
+  async findReceipt(tenantId: string, orderId: string): Promise<StoredPaymentReceipt | null> {
+    if (!tenantId.trim() || !/^\\d+$/.test(orderId)) throw new Error("INVALID_RECEIPT_LOOKUP");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        order_id: string | number; receipt_number: string; document_sha256: string | null;
+        issued_at: Date | string;
+      }>(
+        `SELECT r.payment_order_id AS order_id, r.receipt_number, r.document_sha256, r.issued_at
+           FROM eper_payment_receipts r
+           JOIN eper_payment_orders o ON o.id = r.payment_order_id
+          WHERE r.tenant_id = $1 AND r.payment_order_id = $2`,
+        [tenantId, orderId],
+      );
+      const row = result.rows[0];
+      return row ? {
+        orderId: String(row.order_id), receiptNumber: row.receipt_number,
+        documentSha256: row.document_sha256, issuedAt: new Date(row.issued_at).toISOString(),
+      } : null;
+    } finally {
+      client.release();
+    }
+  }
 
   /**
    * Inserts a verified server-created provider order. Idempotency is scoped
