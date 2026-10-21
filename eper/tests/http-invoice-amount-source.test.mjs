@@ -124,7 +124,11 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
       assert.equal(url.searchParams.get("tenantId"), "tenant-e2e");
       assert.equal(url.searchParams.get("reference"), "INV-E2E-001");
       authorityCalls += 1;
-      return new Response(JSON.stringify(invoice), {
+      return new Response(JSON.stringify({
+        ...invoice,
+        tenantId: "tenant-e2e",
+        reference: "INV-E2E-001",
+      }), {
         status: 200, headers: { "content-type": "application/json" },
       });
     },
