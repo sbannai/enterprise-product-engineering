@@ -254,3 +254,34 @@ test("API rejects a paid invoice returned by the configured authority before res
     }
   }
 });
+
+
+test("HTTP invoice authority bounds upstream response bodies before JSON parsing", async () => {
+  const declaredTooLarge = new HttpInvoiceAmountSource({
+    endpoint: "https://fees.example.test/invoices",
+    bearerToken: "approved-test-token-that-is-long-enough",
+    fetchImpl: async () => new Response("{}", {
+      status: 200, headers: { "content-length": String(64 * 1024 + 1) },
+    }),
+  });
+  await assert.rejects(
+    declaredTooLarge.findInvoice({ tenantId: "tenant-a", reference: "INV-1" }),
+    /EPER_INVOICE_AUTHORITY_RESPONSE_TOO_LARGE/,
+  );
+
+  const streamedTooLarge = new HttpInvoiceAmountSource({
+    endpoint: "https://fees.example.test/invoices",
+    bearerToken: "approved-test-token-that-is-long-enough",
+    fetchImpl: async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(40 * 1024));
+        controller.enqueue(new Uint8Array(30 * 1024));
+        controller.close();
+      },
+    }), { status: 200 }),
+  });
+  await assert.rejects(
+    streamedTooLarge.findInvoice({ tenantId: "tenant-a", reference: "INV-1" }),
+    /EPER_INVOICE_AUTHORITY_RESPONSE_TOO_LARGE/,
+  );
+});
