@@ -185,3 +185,72 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
     }
   }
 });
+
+
+test("API rejects a paid invoice returned by the configured authority before reservation or gateway calls", async () => {
+  const { createAppServer } = await import("../dist/apps/api/server.js");
+  const envKeys = [
+    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+  ];
+  const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const nativeFetch = globalThis.fetch;
+  const token = "paid-invoice-route-test-token".padEnd(40, "x");
+  let gatewayCalls = 0;
+  let reservationCalls = 0;
+  Object.assign(process.env, {
+    RAZORPAY_KEY_ID: "rzp_test_key",
+    RAZORPAY_KEY_SECRET: "gateway-test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
+    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-paid-invoice-test.json",
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+  });
+  globalThis.fetch = async (...args) => {
+    gatewayCalls += 1;
+    return nativeFetch(...args);
+  };
+  const paidInvoiceSource = new HttpInvoiceAmountSource({
+    endpoint: "https://fees.example.test/api/invoices/lookup",
+    bearerToken: "approved-test-token-that-is-long-enough",
+    fetchImpl: async () => new Response(JSON.stringify({ ...invoice, status: "PAID" }), {
+      status: 200, headers: { "content-type": "application/json" },
+    }),
+  });
+  const paymentStore = {
+    async reserveOrder() {
+      reservationCalls += 1;
+      throw new Error("paid invoices must be rejected before reservation");
+    },
+  };
+  const server = createAppServer({ invoiceAmountSource: paidInvoiceSource, paymentStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await nativeFetch(`http://127.0.0.1:${address.port}/api/payments/orders`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-tenant-id": "tenant-a",
+        "content-type": "application/json",
+        "idempotency-key": "paid-invoice-route-001",
+      },
+      body: JSON.stringify({ tenantId: "tenant-a", reference: "INV 2026/001", amountPaise: 1 }),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: "invoice_not_payable" });
+    assert.equal(gatewayCalls, 0);
+    assert.equal(reservationCalls, 0);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    globalThis.fetch = nativeFetch;
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
