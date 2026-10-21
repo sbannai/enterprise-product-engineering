@@ -146,6 +146,25 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     assert.equal(productionOrderBody.payment.amountPaise, 5000);
     assert.equal(productionOrderBody.payment.currency, "INR");
     assert.equal(productionOrderBody.payment.razorpayOrderId, "order_test_002");
+
+    // Without a wired trusted source, production order creation must fail closed.
+    const unconfiguredServer = createAppServer();
+    try {
+      await new Promise((resolve, reject) => {
+        unconfiguredServer.once("error", reject);
+        unconfiguredServer.listen(0, "127.0.0.1", resolve);
+      });
+      const unconfiguredAddress = unconfiguredServer.address();
+      assert.ok(unconfiguredAddress && typeof unconfiguredAddress === "object");
+      const unconfiguredOrder = await nativeFetch(`http://127.0.0.1:${unconfiguredAddress.port}/api/payments/orders`, {
+        method: "POST", headers,
+        body: JSON.stringify({ tenantId: "tenant-a", reference: "invoice-no-source", amountPaise: 1, currency: "INR" }),
+      });
+      assert.equal(unconfiguredOrder.status, 503);
+      assert.equal((await unconfiguredOrder.json()).error, "invoice_source_unavailable");
+    } finally {
+      await new Promise((resolve) => unconfiguredServer.close(resolve));
+    }
     process.env.NODE_ENV = "test";
 
     const badSignature = await nativeFetch(`${base}/api/payments/verify`, {
