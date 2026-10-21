@@ -122,6 +122,14 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const duplicate = await store.capturePayment(capture);
     assert.deepEqual(duplicate, { ok: false, reason: "duplicate_event" });
 
+    // A provider event ID is immutable: replaying that ID with a different
+    // payload digest must be treated as a conflict, not silently deduplicated.
+    const conflictingEventReplay = await store.capturePayment({
+      ...capture,
+      payloadSha256: createHash("sha256").update("tampered payload for " + providerEventId).digest("hex"),
+    });
+    assert.deepEqual(conflictingEventReplay, { ok: false, reason: "event_conflict" });
+
     // A distinct provider event for the same already-captured payment must reuse
     // the existing receipt rather than issue a second receipt.
     const repeatedCapture = await store.capturePayment({
