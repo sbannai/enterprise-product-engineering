@@ -81,6 +81,17 @@ test("runtime invoice authority stays absent when unconfigured and rejects parti
     () => createConfiguredHttpInvoiceAmountSource({ EPER_INVOICE_AUTHORITY_URL: "https://fees.example.test/invoices" }),
     /EPER_INVOICE_AUTHORITY_CONFIGURATION_INCOMPLETE/,
   );
+  assert.throws(
+    () => createConfiguredHttpInvoiceAmountSource({ EPER_INVOICE_AUTHORITY_TOKEN: "approved-test-token-that-is-long-enough" }),
+    /EPER_INVOICE_AUTHORITY_CONFIGURATION_INCOMPLETE/,
+  );
+  assert.throws(
+    () => createConfiguredHttpInvoiceAmountSource({
+      EPER_INVOICE_AUTHORITY_URL: "http://fees.example.test/invoices",
+      EPER_INVOICE_AUTHORITY_TOKEN: "approved-test-token-that-is-long-enough",
+    }),
+    /EPER_INVOICE_AUTHORITY_URL_INVALID/,
+  );
   const source = createConfiguredHttpInvoiceAmountSource({
     EPER_INVOICE_AUTHORITY_URL: "https://fees.example.test/invoices",
     EPER_INVOICE_AUTHORITY_TOKEN: "approved-test-token-that-is-long-enough",
