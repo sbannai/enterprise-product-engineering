@@ -142,12 +142,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const providerEventId = req.headers["x-razorpay-event-id"];
       if (typeof providerEventId !== "string" || !providerEventId.trim() || providerEventId.length > 200 ||
           typeof payment?.order_id !== "string" || typeof payment?.id !== "string" ||
-          payment.status !== "captured" || !Number.isSafeInteger(Number(payment.amount)) || payment.currency !== "INR") {
+          payment.status !== "captured" || typeof payment.amount !== "number" || !Number.isSafeInteger(payment.amount) || payment.currency !== "INR") {
         json(res, 400, { error: "captured_payment_event_invalid" }); return true;
       }
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
       if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
-      if (Number(payment.amount) !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
+      if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
       if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const receiptNumber = await receiptNumberSource({ tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id });
       if (typeof receiptNumber !== "string" || !receiptNumber.trim()) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
@@ -155,7 +155,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
         providerOrderId: payment.order_id, providerPaymentId: payment.id,
-        amountMinor: Number(payment.amount), currency: "INR", tenantId: order.tenantId, receiptNumber,
+        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber,
       });
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
