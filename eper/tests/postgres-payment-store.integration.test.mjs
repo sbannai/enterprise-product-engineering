@@ -343,3 +343,46 @@ test("PostgresPaymentStore requires reconciliation for an expired order-creation
     await pool.end();
   }
 });
+
+
+test("PostgresPaymentStore serializes concurrent reservations for the same idempotency key", { skip: !databaseUrl }, async () => {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  try {
+    const store = new PostgresPaymentStore(pool);
+    const input = {
+      tenantId: "concurrent-lease-" + randomUUID(),
+      invoiceReference: "invoice-" + randomUUID(),
+      idempotencyKey: "idem-" + randomUUID(),
+      amountMinor: 12500,
+      currency: "INR",
+      invoiceSourceId: "integration-test-authority",
+      invoiceSourceVersion: "fixture-v1",
+      invoiceApprovedAt: new Date().toISOString(),
+    };
+
+    const results = await Promise.all([
+      store.reserveOrder(input),
+      store.reserveOrder(input),
+    ]);
+    assert.equal(results.filter((result) => result.ok).length, 1);
+    assert.equal(
+      results.filter((result) => !result.ok && result.reason === "order_creation_in_progress").length,
+      1,
+      "concurrent duplicate reservation must observe the existing creation lease",
+    );
+
+    const persisted = await pool.query(
+      `SELECT status, provider_order_id, creation_attempts
+         FROM eper_payment_orders
+        WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [input.tenantId, input.idempotencyKey],
+    );
+    assert.equal(persisted.rows.length, 1, "only one durable reservation may exist");
+    assert.equal(persisted.rows[0].status, "creating");
+    assert.equal(persisted.rows[0].provider_order_id, null);
+    assert.equal(persisted.rows[0].creation_attempts, 1);
+  } finally {
+    await pool.end();
+  }
+});
