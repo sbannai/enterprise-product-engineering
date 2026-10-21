@@ -521,6 +521,12 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(repeatedDownload.status, 200);
     assert.deepEqual(Buffer.from(await repeatedDownload.arrayBuffer()), bytes);
 
+    // Reject malformed UUID-shaped receipt paths before any receipt lookup.
+    const malformedReceiptId = await nativeFetch(`${base}/api/payments/receipts/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaZ.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
+    });
+    assert.equal(malformedReceiptId.status, 404);
+
     // Persisted PDF bytes must match the stored digest before they are served.
     persistedPdf = Buffer.from(bytes);
     persistedPdf[persistedPdf.length - 10] ^= 0x01;
