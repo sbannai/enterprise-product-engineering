@@ -76,6 +76,25 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     const createdBody = await created.json();
     assert.equal(createdBody.payment.razorpayOrderId, "order_test_001");
 
+    // A correctly signed capture webhook must transition the matching order to
+    // PAID, using the raw request bytes for HMAC verification.
+    const captureEvent = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: "pay_test_001", order_id: "order_test_001",
+        amount: 12500, currency: "INR", status: "captured",
+      } } },
+    });
+    const webhookSignature = createHmac("sha256", "webhook-test-secret")
+      .update(captureEvent).digest("hex");
+    const captureWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": webhookSignature },
+      body: captureEvent,
+    });
+    assert.equal(captureWebhook.status, 200);
+    assert.equal((await captureWebhook.json()).received, true);
+
     // Production must reject client-supplied amounts even when the test-only
     // override is accidentally present in the environment.
     process.env.NODE_ENV = "production";
