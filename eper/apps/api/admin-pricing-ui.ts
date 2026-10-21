@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { applicationToastMarkup } from "./app-toast.js";
+import { enterpriseDesignSystemCss } from "./design-system.js";
 
 /** Minimal same-origin admin console. Secrets are never persisted in browser storage. */
 export const adminPricingUiHtml = String.raw`<!doctype html>
@@ -30,6 +31,7 @@ button{font:inherit;font-weight:700;border:0;border-radius:9px;padding:10px 14px
 .vendor-option{border:1px solid var(--line);padding:12px;border-radius:10px;display:flex;gap:10px;align-items:flex-start}.vendor-option input{width:auto;margin-top:4px}.vendor-option strong{display:block}.vendor-option small{display:block;color:var(--muted)}
 footer{font-size:12px;color:var(--muted);margin-top:20px}
 @media(max-width:780px){.span-8,.span-7,.span-6,.span-5,.span-4{grid-column:span 12}.formgrid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.toolbar .field{min-width:100%}.header-note{width:100%}}
+${enterpriseDesignSystemCss}
 </style>
 </head>
 <body>
