@@ -144,7 +144,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const bytes = Buffer.from(await download.arrayBuffer());
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
-    assert.ok(bytes.includes(Buffer.from(transactionPublicId)) === false); // PDF identifies the receipt and payment reference, not the DB transaction UUID as its receipt ID.
+    assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
 
     const crossTenant = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
