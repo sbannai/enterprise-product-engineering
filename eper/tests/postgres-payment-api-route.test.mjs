@@ -371,6 +371,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(verifiedCaptureCalls, 0, "mismatched amount must never reach capture persistence");
 
     gatewayAmount = "12500";
+    gatewayVerificationCalls = 0; // Ignore the preceding valid-ID amount-mismatch lookup.
     const numericPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
       headers,
