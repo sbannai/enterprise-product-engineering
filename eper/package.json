@@ -7,6 +7,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/apps/api/main.js",
+    "migrate:payments": "node scripts/migrate-payments.mjs",
     "test": "npm run build && node --test tests/*.test.mjs"
   },
   "devDependencies": {
