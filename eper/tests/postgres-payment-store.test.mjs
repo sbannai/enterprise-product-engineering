@@ -122,3 +122,34 @@ test("PostgresPaymentStore rejects invalid capture input before opening a transa
   );
   assert.equal(connectCalls, 0);
 });
+
+test("PostgresPaymentStore rejects invalid order input before opening a transaction", async () => {
+  let connectCalls = 0;
+  const store = new PostgresPaymentStore({
+    async connect() {
+      connectCalls += 1;
+      throw new Error("database should not be touched for invalid input");
+    },
+  });
+  const validInput = {
+    tenantId: "tenant-a",
+    invoiceReference: "invoice-41",
+    idempotencyKey: "tenant-a:invoice-41",
+    providerOrderId: "order_test_41",
+    amountMinor: 12500,
+    currency: "INR",
+    invoiceSourceId: "approved-invoice-service",
+    invoiceSourceVersion: "v3",
+    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
+  };
+
+  await assert.rejects(
+    store.insertOrder({ ...validInput, amountMinor: -1 }),
+    /INVALID_PAYMENT_ORDER_INPUT/,
+  );
+  await assert.rejects(
+    store.insertOrder({ ...validInput, invoiceApprovedAt: "not-a-date" }),
+    /INVALID_PAYMENT_ORDER_INPUT/,
+  );
+  assert.equal(connectCalls, 0);
+});
