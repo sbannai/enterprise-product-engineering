@@ -108,6 +108,26 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       providerOrderId, providerPaymentId: "pay_" + randomUUID().replaceAll("-", ""),
       amountMinor: 12500, currency: "INR", tenantId,
       receiptNumber: "EPER-INT-" + randomUUID().replaceAll("-", "").slice(0, 20),
+      transactionSnapshot: {
+        tenantId,
+        reference: invoiceReference,
+        kind: "ECOMMERCE",
+        description: "Integration test checkout",
+        amountDueMinor: 12500,
+        currency: "INR",
+        status: "DUE",
+        lineItems: [
+          { sourceLineId: "line-a", description: "Item A", quantity: 2, unitPriceMinor: 5000, lineTotalMinor: 10000 },
+          { sourceLineId: "line-b", description: "Item B", quantity: 1, unitPriceMinor: 3000, lineTotalMinor: 3000 },
+        ],
+        adjustments: [
+          { kind: "DISCOUNT", description: "Checkout discount", amountMinor: -1000 },
+          { kind: "TAX", description: "Tax", amountMinor: 500 },
+        ],
+        sourceId: "integration-test-authority",
+        sourceVersion: "fixture-v1",
+        approvedAt: new Date().toISOString(),
+      },
     };
     // Exercise concurrent delivery, not just a sequential replay: the database
     // uniqueness constraint must allow exactly one transaction to issue a receipt.
@@ -145,7 +165,8 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     }
 
     const persisted = await pool.query(
-      `SELECT o.status, o.provider_payment_id, r.receipt_number, COUNT(r.id) OVER () AS receipt_count
+      `SELECT o.status, o.provider_payment_id, r.receipt_number, r.transaction_snapshot,
+              COUNT(r.id) OVER () AS receipt_count
          FROM eper_payment_orders o
          JOIN eper_payment_receipts r ON r.payment_order_id = o.id
         WHERE o.tenant_id = $1 AND o.idempotency_key = $2`,
@@ -156,6 +177,8 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.equal(persisted.rows[0].provider_payment_id, capture.providerPaymentId);
     assert.equal(persisted.rows[0].receipt_number, capture.receiptNumber);
     assert.equal(Number(persisted.rows[0].receipt_count), 1);
+    assert.deepEqual(persisted.rows[0].transaction_snapshot, capture.transactionSnapshot,
+      "the validated source snapshot must be persisted atomically with the issued receipt");
 
     const storedOrder = await store.findOrder(tenantId, providerOrderId);
     assert.ok(storedOrder);
