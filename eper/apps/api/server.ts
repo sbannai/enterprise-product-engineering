@@ -4,6 +4,7 @@ import { executeIntegratedRequirement } from "../../packages/capability-router.j
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
 import { handlePaymentRoute } from "./payments.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
+import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -60,7 +61,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -79,7 +80,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
     // Payment routes are independent of the opt-in UAT capability endpoint.
-    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource)) return;
+    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore)) return;
 
     // Publicly reachable, controlled UAT route. It is separate from the local-only route below.
     const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
