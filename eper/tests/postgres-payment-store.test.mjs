@@ -172,6 +172,19 @@ test("PostgresPaymentStore rejects invalid order input before opening a transact
   assert.equal(connectCalls, 0);
 });
 
+test("PostgresPaymentStore rejects non-numeric receipt order IDs before database access", async () => {
+  let connectCalls = 0;
+  const store = new PostgresPaymentStore({
+    async connect() {
+      connectCalls += 1;
+      throw new Error("database should not be touched for invalid input");
+    },
+  });
+  await assert.rejects(store.findReceipt("tenant-a", "not-a-numeric-id"), /INVALID_RECEIPT_LOOKUP/);
+  await assert.rejects(store.findReceipt("tenant-a", "../41"), /INVALID_RECEIPT_LOOKUP/);
+  assert.equal(connectCalls, 0);
+});
+
 test("PostgresPaymentStore rejects receipt identifiers unsafe for headers or filenames", async () => {
   let connectCalls = 0;
   const store = new PostgresPaymentStore({
