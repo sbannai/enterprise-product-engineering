@@ -197,7 +197,7 @@ export class PostgresPaymentStore {
    * Reserve a tenant-scoped idempotency key before calling Razorpay.
    * A retry never starts another remote order while the reservation is active.
    */
-  async reserveOrder(input: ReservePaymentOrderInput): Promise<PersistResult<{ id: string; providerOrderId: string | null }>> {
+  async reserveOrder(input: ReservePaymentOrderInput): Promise<PersistResult<{ id: string; transactionPublicId: string; providerOrderId: string | null }>> {
     if (
       !input.tenantId.trim() || !input.invoiceReference.trim() || !input.idempotencyKey.trim() ||
       !input.invoiceSourceId.trim() || !input.invoiceSourceVersion.trim() ||
@@ -208,7 +208,7 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const inserted = await client.query<{ id: string | number }>(
+      const inserted = await client.query<{ id: string | number; transaction_public_id: string }>(
         `INSERT INTO eper_payment_orders
           (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
            amount_minor, currency, invoice_source_id, invoice_source_version,
@@ -216,20 +216,20 @@ export class PostgresPaymentStore {
          VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8,
                  'creating', NOW() + INTERVAL '2 minutes', 1)
          ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
-         RETURNING id`,
+         RETURNING id, transaction_public_id`,
         [input.tenantId, input.invoiceReference, input.idempotencyKey, input.amountMinor,
           input.currency, input.invoiceSourceId, input.invoiceSourceVersion, input.invoiceApprovedAt],
       );
       if (inserted.rows[0]) {
         await client.query("COMMIT");
-        return { ok: true, value: { id: String(inserted.rows[0].id), providerOrderId: null } };
+        return { ok: true, value: { id: String(inserted.rows[0].id), transactionPublicId: inserted.rows[0].transaction_public_id, providerOrderId: null } };
       }
       const existing = await client.query<{
-        id: string | number; provider_order_id: string | null; invoice_reference: string;
+        id: string | number; transaction_public_id: string; provider_order_id: string | null; invoice_reference: string;
         amount_minor: string | number; currency: string; invoice_source_id: string;
         invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
       }>(
-        `SELECT id, provider_order_id, invoice_reference, amount_minor, currency,
+        `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
@@ -261,7 +261,7 @@ export class PostgresPaymentStore {
         return { ok: false, reason: "idempotency_conflict" };
       }
       await client.query("COMMIT");
-      return { ok: true, value: { id: String(row.id), providerOrderId: row.provider_order_id } };
+      return { ok: true, value: { id: String(row.id), transactionPublicId: row.transaction_public_id, providerOrderId: row.provider_order_id } };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
@@ -271,15 +271,15 @@ export class PostgresPaymentStore {
   }
 
   /** Attach the provider order to the reserved row; safe to repeat with the same ID. */
-  async completeOrderCreation(tenantId: string, idempotencyKey: string, providerOrderId: string): Promise<PersistResult<{ id: string; providerOrderId: string }>> {
+  async completeOrderCreation(tenantId: string, idempotencyKey: string, providerOrderId: string): Promise<PersistResult<{ id: string; transactionPublicId: string; providerOrderId: string }>> {
     if (!tenantId.trim() || !idempotencyKey.trim() || !providerOrderId.trim()) {
       throw new Error("INVALID_PAYMENT_ORDER_COMPLETION_INPUT");
     }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const result = await client.query<{ id: string | number; provider_order_id: string | null; status: string }>(
-        `SELECT id, provider_order_id, status FROM eper_payment_orders
+      const result = await client.query<{ id: string | number; transaction_public_id: string; provider_order_id: string | null; status: string }>(
+        `SELECT id, transaction_public_id, provider_order_id, status FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
         [tenantId, idempotencyKey],
       );
@@ -290,7 +290,7 @@ export class PostgresPaymentStore {
       }
       if (row.provider_order_id === providerOrderId && row.status === "created") {
         await client.query("COMMIT");
-        return { ok: true, value: { id: String(row.id), providerOrderId } };
+        return { ok: true, value: { id: String(row.id), transactionPublicId: row.transaction_public_id, providerOrderId } };
       }
       if (row.status !== "creating" || row.provider_order_id !== null) {
         await client.query("ROLLBACK");
