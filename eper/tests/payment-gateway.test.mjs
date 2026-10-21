@@ -141,7 +141,8 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     assert.equal(duplicateCapture.status, 200);
     assert.equal((await duplicateCapture.json()).received, true);
 
-    // Production ignores a tampered client amount and uses the trusted invoice amount.
+    // Production must fail closed while the payment ledger is JSON-file based:
+    // atomic rename is not a cross-process transaction or idempotency guarantee.
     process.env.NODE_ENV = "production";
     const productionOrder = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers,
@@ -150,13 +151,12 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
         amountPaise: 1, currency: "INR",
       }),
     });
-    assert.equal(productionOrder.status, 201);
-    const productionOrderBody = await productionOrder.json();
-    assert.equal(productionOrderBody.payment.amountPaise, 5000);
-    assert.equal(productionOrderBody.payment.currency, "INR");
-    assert.equal(productionOrderBody.payment.razorpayOrderId, "order_test_002");
+    assert.equal(productionOrder.status, 503);
+    assert.equal((await productionOrder.json()).error, "payment_persistence_not_production_ready");
 
-    // Without a wired trusted source, production order creation must fail closed.
+    // Keep the isolated missing-invoice-source check independent of the production persistence guard.
+    process.env.NODE_ENV = "test";
+    // Without a wired trusted source, order creation must fail closed.
     const unconfiguredServer = createAppServer();
     try {
       await new Promise((resolve, reject) => {
