@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
@@ -9,11 +9,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migrationDirectory = join(here, "..", "packages", "payments", "migrations");
 const connectionString = process.env.EPER_PAYMENT_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
 
-if (!connectionString.trim()) {
-  console.error("EPER_PAYMENT_DATABASE_URL_REQUIRED");
-  process.exitCode = 1;
-} else {
-  await runMigrations(connectionString);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (!connectionString.trim()) {
+    console.error("EPER_PAYMENT_DATABASE_URL_REQUIRED");
+    process.exitCode = 1;
+  } else {
+    await runMigrations(connectionString);
+  }
 }
 
 export async function runMigrations(connectionString, options = {}) {
