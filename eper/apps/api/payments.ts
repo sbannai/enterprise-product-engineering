@@ -51,7 +51,7 @@ function pdfEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "?");
 }
 function receiptPdf(record: PaymentRecord): Buffer {
-  const lines = [
+  const sourceLines = [
     "EPER PAYMENT RECEIPT",
     "Receipt ID: " + (record.receiptId ?? ""),
     "Receipt number: " + (record.receiptNumber ?? ""),
@@ -73,17 +73,51 @@ function receiptPdf(record: PaymentRecord): Buffer {
       "Source: " + record.transactionSnapshot.sourceId + " " + record.transactionSnapshot.sourceVersion,
     ] : []),
   ];
-  const stream = "BT /F1 16 Tf 50 790 Td (" + pdfEscape(lines[0]) + ") Tj /F1 10 Tf " +
-    lines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
-  const objects = [
+
+  // Wrap long fields before pagination so descriptions cannot escape the printable area.
+  const wrapped: string[] = [];
+  for (const line of sourceLines) {
+    const safe = line.replace(/[\r\n\t]+/g, " ");
+    if (!safe.length) { wrapped.push(""); continue; }
+    for (let offset = 0; offset < safe.length; offset += 82) {
+      wrapped.push((offset ? "  " : "") + safe.slice(offset, offset + 82));
+    }
+  }
+
+  const pageCapacity = 34;
+  const pages: string[][] = [];
+  for (let offset = 0; offset < wrapped.length; offset += pageCapacity) {
+    pages.push(wrapped.slice(offset, offset + pageCapacity));
+  }
+  if (!pages.length) pages.push(["EPER PAYMENT RECEIPT"]);
+
+  const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    "<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\nstream\n" + stream + "\nendstream",
+    "<< /Type /Pages /Kids [" + pages.map((_, index) => (3 + index * 2) + " 0 R").join(" ") +
+      "] /Count " + pages.length + " >>",
   ];
-  let pdf = "%PDF-1.4\n"; const offsets = [0];
-  for (let i = 0; i < objects.length; i++) { offsets.push(Buffer.byteLength(pdf, "ascii")); pdf += (i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n"; }
+  for (let index = 0; index < pages.length; index++) {
+    const pageObjectId = 3 + index * 2;
+    const contentObjectId = pageObjectId + 1;
+    const lines = pages[index];
+    const stream = "BT /F1 " + (index === 0 ? "16" : "10") + " Tf 50 790 Td (" +
+      pdfEscape(index === 0 ? lines[0] : "EPER PAYMENT RECEIPT (continued)") + ") Tj /F1 10 Tf " +
+      (index === 0 ? lines.slice(1) : lines).map(line =>
+        "0 -18 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
+    objects.push(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 " +
+        (3 + pages.length * 2) + " 0 R >> >> /Contents " + contentObjectId + " 0 R >>",
+    );
+    objects.push("<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\nstream\n" + stream + "\nendstream");
+  }
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let i = 0; i < objects.length; i++) {
+    offsets.push(Buffer.byteLength(pdf, "ascii"));
+    pdf += (i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
+  }
   const xref = Buffer.byteLength(pdf, "ascii");
   pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
   for (const offset of offsets.slice(1)) pdf += String(offset).padStart(10, "0") + " 00000 n \n";
