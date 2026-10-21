@@ -148,7 +148,7 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       ok: true, value: { id: reservation.value.id, transactionPublicId: reservation.value.transactionPublicId, providerOrderId: reservedProviderOrder },
     });
     assert.deepEqual(await store.completeOrderCreation(tenantId, reservationKey, reservedProviderOrder), {
-      ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
+      ok: true, value: { id: reservation.value.id, transactionPublicId: reservation.value.transactionPublicId, providerOrderId: reservedProviderOrder },
     });
 
     // Race two different provider orders using the same tenant-scoped key.
