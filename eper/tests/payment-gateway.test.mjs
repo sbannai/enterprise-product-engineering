@@ -241,3 +241,105 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test("PostgreSQL-backed order route reserves idempotency before calling Razorpay", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "eper-payment-pg-route-"));
+  const envKeys = [
+    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+  ];
+  const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const nativeFetch = globalThis.fetch;
+  const token = "p".repeat(40);
+  let gatewayCalls = 0;
+  let reservations = 0;
+  let completions = 0;
+  let storedOrderId = null;
+
+  Object.assign(process.env, {
+    RAZORPAY_KEY_ID: "rzp_test_key",
+    RAZORPAY_KEY_SECRET: "razorpay-test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
+    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+  });
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url === "https://api.razorpay.com/v1/orders") {
+      gatewayCalls += 1;
+      return new Response(JSON.stringify({ id: "order_pg_test_001" }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
+    return nativeFetch(input, init);
+  };
+
+  const paymentStore = {
+    async reserveOrder(input) {
+      reservations += 1;
+      assert.equal(input.tenantId, "tenant-a");
+      assert.equal(input.invoiceReference, "invoice-pg-001");
+      assert.equal(input.idempotencyKey, "req-pg-001");
+      assert.equal(input.amountMinor, 12500);
+      assert.equal(input.invoiceSourceId, "test-fee-ledger");
+      assert.equal(input.invoiceSourceVersion, "v1");
+      assert.equal(input.invoiceApprovedAt, "2026-10-20T12:00:00.000Z");
+      return { ok: true, value: { id: "991", providerOrderId: storedOrderId } };
+    },
+    async completeOrderCreation(tenantId, key, providerOrderId) {
+      completions += 1;
+      assert.equal(tenantId, "tenant-a");
+      assert.equal(key, "req-pg-001");
+      storedOrderId = providerOrderId;
+      return { ok: true, value: { id: "991", providerOrderId } };
+    },
+  };
+  const invoiceAmountSource = {
+    async findInvoice({ tenantId, reference }) {
+      return tenantId === "tenant-a" && reference === "invoice-pg-001" ? {
+        tenantId, reference, amountDuePaise: 12500, currency: "INR", status: "DUE",
+        sourceId: "test-fee-ledger", sourceVersion: "v1",
+        approvedAt: "2026-10-20T12:00:00.000Z",
+      } : null;
+    },
+  };
+  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "x-tenant-id": "tenant-a",
+      "content-type": "application/json",
+      "idempotency-key": "req-pg-001",
+    };
+    const request = () => nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers,
+      body: JSON.stringify({ tenantId: "tenant-a", reference: "invoice-pg-001", amountPaise: 1 }),
+    });
+    const first = await request();
+    assert.equal(first.status, 201);
+    assert.equal((await first.json()).payment.razorpayOrderId, "order_pg_test_001");
+    const retry = await request();
+    assert.equal(retry.status, 200);
+    assert.equal((await retry.json()).payment.razorpayOrderId, "order_pg_test_001");
+    assert.equal(reservations, 2);
+    assert.equal(completions, 1);
+    assert.equal(gatewayCalls, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    globalThis.fetch = nativeFetch;
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
