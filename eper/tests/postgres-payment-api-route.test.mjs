@@ -18,6 +18,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   const providerPaymentId = "pay_route_test";
   const receiptNumber = "EPER-TEST-0001";
   let receiptNumberSourceValue = receiptNumber;
+  let receiptNumberSourceThrows = false;
   let captured = false;
   let webhookCaptureCalls = 0;
   let originalWebhookPayloadSha256 = null;
@@ -125,7 +126,10 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         };
       },
     },
-    receiptNumberSource: async () => receiptNumberSourceValue,
+    receiptNumberSource: async () => {
+      if (receiptNumberSourceThrows) throw new Error("approved receipt policy temporarily unavailable");
+      return receiptNumberSourceValue;
+    },
   });
 
   try {
@@ -449,6 +453,19 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(invalidReceiptNumberVerification.status, 503);
     assert.equal((await invalidReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
     assert.equal(verifiedCaptureCalls, 0, "oversized receipt number policy output must not reach verification capture persistence");
+    receiptNumberSourceThrows = true;
+    const unavailableReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(unavailableReceiptNumberVerification.status, 503);
+    assert.equal((await unavailableReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
+    assert.equal(verifiedCaptureCalls, 0, "receipt numbering authority failure must not reach capture persistence");
+    receiptNumberSourceThrows = false;
+
     receiptNumberSourceValue = "INVALID RECEIPT";
     const malformedReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
