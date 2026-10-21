@@ -369,6 +369,18 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(verifiedCaptureCalls, 0, "mismatched amount must never reach capture persistence");
 
     gatewayAmount = "12500";
+    const numericPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-tenant-id": tenantId },
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: 12345,
+        razorpay_signature: createHmac("sha256", "route-key-secret").update(providerOrderId + "|12345").digest("hex"),
+      }),
+    });
+    assert.equal(numericPaymentIdVerification.status, 400);
+    assert.equal((await numericPaymentIdVerification.json()).error, "payment_signature_invalid");
+    assert.equal(gatewayVerificationCalls, 0, "non-string payment ID must be rejected before gateway lookup");
+
     const paddedPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-tenant-id": tenantId },
