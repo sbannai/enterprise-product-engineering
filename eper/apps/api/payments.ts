@@ -387,7 +387,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 200, { payment: record, receiptUrl: "/api/payments/receipts/" + record.receiptId + ".pdf" }); return true;
   }
 
-  const publicReceiptMatch = /^\/api\/payments\/receipts\/([0-9a-f-]{36})\.pdf$/i.exec(pathname);
+  const publicReceiptMatch = /^\/api\/payments\/receipts\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf$/i.exec(pathname);
   if (req.method === "GET" && publicReceiptMatch && paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
     const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
     if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
