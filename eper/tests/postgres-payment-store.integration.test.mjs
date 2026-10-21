@@ -79,7 +79,28 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const storedReceipt = await store.findReceipt(tenantId, storedOrder.id);
     assert.ok(storedReceipt);
     assert.equal(storedReceipt.receiptNumber, capture.receiptNumber);
-    assert.equal(storedReceipt.documentSha256, null); // PDF generation/hash is a separate, still-required layer.
+    assert.equal(storedReceipt.documentSha256, null);
+
+    // The API must hash the exact generated PDF bytes and persist that immutable digest.
+    const receiptPdfHash = createHash("sha256").update("%PDF-1.4\\nEPER integration receipt").digest("hex");
+    assert.deepEqual(
+      await store.persistReceiptDocumentHash(tenantId, storedOrder.id, receiptPdfHash),
+      { ok: true, value: { documentSha256: receiptPdfHash } },
+    );
+    assert.deepEqual(
+      await store.persistReceiptDocumentHash(tenantId, storedOrder.id, receiptPdfHash),
+      { ok: true, value: { documentSha256: receiptPdfHash } },
+    );
+    assert.deepEqual(
+      await store.persistReceiptDocumentHash(tenantId, storedOrder.id, "a".repeat(64)),
+      { ok: false, reason: "receipt_document_conflict" },
+    );
+    const hashedReceipt = await store.findReceipt(tenantId, storedOrder.id);
+    assert.equal(hashedReceipt.documentSha256, receiptPdfHash);
+    assert.deepEqual(
+      await store.persistReceiptDocumentHash("another-tenant", storedOrder.id, receiptPdfHash),
+      { ok: false, reason: "not_found" },
+    );
 
     assert.equal(await store.findOrder(tenantId, "order_does_not_exist"), null);
     assert.equal(await store.findReceipt("another-tenant", storedOrder.id), null);
