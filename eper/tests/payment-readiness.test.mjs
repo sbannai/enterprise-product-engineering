@@ -185,6 +185,7 @@ test("payment readiness reports configured when PostgreSQL is reachable outside 
       paymentStore: { async checkConnectivity() { return true; } },
       invoiceAmountSource: { async findInvoice() { return null; } },
       receiptNumberSource: async () => "TEST-RECEIPT",
+      transactionSnapshotSource: { async findTransaction() { return null; } },
     }), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
       assert.equal(response.status, 200);
