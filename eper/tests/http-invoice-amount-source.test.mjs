@@ -163,7 +163,29 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
       return { ok: true, value: { id: "101", transactionPublicId: "txn-invoice-e2e", providerOrderId } };
     },
   };
-  const server = createAppServer({ invoiceAmountSource: sourceWithTestTransport, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource: sourceWithTestTransport,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-e2e" || reference !== "INV-E2E-001") return null;
+        return {
+          tenantId,
+          reference,
+          kind: "GENERAL",
+          description: "Approved fee transaction",
+          amountDueMinor: 12500,
+          currency: "INR",
+          status: "DUE",
+          lineItems: [],
+          adjustments: [],
+          sourceId: invoice.sourceId,
+          sourceVersion: invoice.sourceVersion,
+          approvedAt: invoice.approvedAt,
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
