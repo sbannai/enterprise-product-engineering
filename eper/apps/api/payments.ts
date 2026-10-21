@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
+import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 
 type PaymentStatus = "CREATED" | "PAID";
 interface PaymentRecord {
@@ -112,7 +113,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
   // payment mutation or receipt issuance in production until a transactional store is wired.
@@ -170,6 +171,84 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     }
     const amountPaise = authority.invoice.amountDuePaise;
     const currency = authority.invoice.currency;
+
+    // Explicit opt-in for controlled UAT. Production remains blocked above until
+    // verification, webhook capture, and durable receipt retrieval are also wired.
+    if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      const idempotencyKey = String(req.headers["idempotency-key"] ?? "").trim();
+      if (!idempotencyKey || idempotencyKey.length > 200) {
+        json(res, 400, { error: "valid_idempotency_key_required" }); return true;
+      }
+      const reservation = await paymentStore.reserveOrder({
+        tenantId, invoiceReference: reference, idempotencyKey,
+        amountMinor: amountPaise, currency: "INR",
+        invoiceSourceId: authority.invoice.sourceId,
+        invoiceSourceVersion: authority.invoice.sourceVersion,
+        invoiceApprovedAt: authority.invoice.approvedAt,
+      });
+      if (!reservation.ok) {
+        const status = reservation.reason === "idempotency_conflict" ? 409
+          : reservation.reason === "order_creation_in_progress" ? 409
+          : reservation.reason === "order_creation_reconciliation_required" ? 503
+          : 500;
+        json(res, status, { error: reservation.reason }); return true;
+      }
+      if (reservation.value.providerOrderId) {
+        json(res, 200, {
+          payment: {
+            id: reservation.value.id, tenantId, reference,
+            amountPaise, currency, status: "CREATED",
+            razorpayOrderId: reservation.value.providerOrderId,
+          },
+          keyId: cfg.keyId,
+        });
+        return true;
+      }
+
+      let orderResponse: Response;
+      try {
+        orderResponse = await fetch("https://api.razorpay.com/v1/orders", {
+          method: "POST",
+          headers: {
+            authorization: "Basic " + Buffer.from(cfg.keyId + ":" + cfg.keySecret).toString("base64"),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: amountPaise, currency,
+            receipt: (tenantId + "-" + idempotencyKey).slice(0, 40),
+            notes: { tenantId, reference, idempotencyKey },
+          }),
+        });
+      } catch {
+        // The provider may have received the request despite a network failure.
+        // Keep the reservation; retries require reconciliation rather than another chargeable order.
+        json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
+      }
+      if (!orderResponse.ok) {
+        json(res, 502, { error: "gateway_order_creation_failed" }); return true;
+      }
+      let order: any;
+      try { order = await orderResponse.json(); } catch {
+        json(res, 502, { error: "gateway_order_response_invalid" }); return true;
+      }
+      if (typeof order?.id !== "string" || !order.id.trim()) {
+        json(res, 502, { error: "gateway_order_response_invalid" }); return true;
+      }
+      const completed = await paymentStore.completeOrderCreation(tenantId, idempotencyKey, order.id);
+      if (!completed.ok) {
+        // Do not call the provider again. The persisted reservation must be reconciled.
+        json(res, 503, { error: "payment_order_persistence_reconciliation_required" }); return true;
+      }
+      json(res, 201, {
+        payment: {
+          id: completed.value.id, tenantId, reference,
+          amountPaise, currency, status: "CREATED",
+          razorpayOrderId: completed.value.providerOrderId,
+        },
+        keyId: cfg.keyId,
+      });
+      return true;
+    }
     const ledger = await readLedger(cfg.ledgerFile);
     const existing = ledger.records.find(item => item.tenantId === tenantId && item.reference === reference);
     if (existing) {
