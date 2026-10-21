@@ -87,3 +87,38 @@ test("PostgresPaymentStore rolls back duplicate provider events without issuing 
   assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
   assert.equal(fake.released, 1);
 });
+
+test("PostgresPaymentStore rejects invalid capture input before opening a transaction", async () => {
+  let connectCalls = 0;
+  const store = new PostgresPaymentStore({
+    async connect() {
+      connectCalls += 1;
+      throw new Error("database should not be touched for invalid input");
+    },
+  });
+  const validInput = {
+    providerEventId: "evt_invalid",
+    eventType: "payment.captured",
+    payloadSha256: "c".repeat(64),
+    providerOrderId: "order_test_41",
+    providerPaymentId: "pay_test_41",
+    amountMinor: 12500,
+    currency: "INR",
+    tenantId: "tenant-a",
+    receiptNumber: "BUSINESS-APPROVED-RECEIPT-001",
+  };
+
+  await assert.rejects(
+    store.capturePayment({ ...validInput, eventType: "payment.authorized" }),
+    /INVALID_CAPTURE_INPUT/,
+  );
+  await assert.rejects(
+    store.capturePayment({ ...validInput, payloadSha256: "not-a-sha256" }),
+    /INVALID_CAPTURE_INPUT/,
+  );
+  await assert.rejects(
+    store.capturePayment({ ...validInput, amountMinor: 0 }),
+    /INVALID_CAPTURE_INPUT/,
+  );
+  assert.equal(connectCalls, 0);
+});
