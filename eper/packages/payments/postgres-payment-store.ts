@@ -212,10 +212,10 @@ export class PostgresPaymentStore {
       const existing = await client.query<{
         id: string | number; provider_order_id: string | null; invoice_reference: string;
         amount_minor: string | number; currency: string; invoice_source_id: string;
-        invoice_source_version: string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
+        invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
       }>(
         `SELECT id, provider_order_id, invoice_reference, amount_minor, currency,
-                invoice_source_id, invoice_source_version, status, creation_lease_until
+                invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
           FOR UPDATE`,
@@ -225,7 +225,8 @@ export class PostgresPaymentStore {
       if (!row || row.invoice_reference !== input.invoiceReference ||
           Number(row.amount_minor) !== input.amountMinor || row.currency !== input.currency ||
           row.invoice_source_id !== input.invoiceSourceId ||
-          row.invoice_source_version !== input.invoiceSourceVersion) {
+          row.invoice_source_version !== input.invoiceSourceVersion ||
+          new Date(row.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString()) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
