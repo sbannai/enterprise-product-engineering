@@ -534,3 +534,72 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test("PostgreSQL order creation fails closed without an authoritative invoice source", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "eper-payment-no-invoice-source-"));
+  const envKeys = [
+    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+  ];
+  const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const nativeFetch = globalThis.fetch;
+  const token = "s".repeat(40);
+  let gatewayCalls = 0;
+  let storeCalls = 0;
+
+  Object.assign(process.env, {
+    RAZORPAY_KEY_ID: "rzp_test_key",
+    RAZORPAY_KEY_SECRET: "test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "test-webhook-secret",
+    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+  });
+  globalThis.fetch = async (...args) => {
+    gatewayCalls += 1;
+    return nativeFetch(...args);
+  };
+  const paymentStore = {
+    async reserveOrder() {
+      storeCalls += 1;
+      throw new Error("must not reserve an order before invoice authority is verified");
+    },
+  };
+  // Deliberately omit invoiceAmountSource to model the current unconfigured integration.
+  const server = createAppServer({ paymentStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await nativeFetch(`http://127.0.0.1:${address.port}/api/payments/orders`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-tenant-id": "tenant-no-invoice-source",
+        "content-type": "application/json",
+        "idempotency-key": "no-invoice-source-001",
+      },
+      body: JSON.stringify({
+        tenantId: "tenant-no-invoice-source",
+        reference: "invoice-not-connected",
+        amountPaise: 1,
+      }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "invoice_source_unavailable" });
+    assert.equal(gatewayCalls, 0, "missing invoice authority must never contact Razorpay");
+    assert.equal(storeCalls, 0, "missing invoice authority must never reserve a payment order");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    globalThis.fetch = nativeFetch;
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
