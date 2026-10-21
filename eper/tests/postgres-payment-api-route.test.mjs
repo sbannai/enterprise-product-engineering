@@ -256,7 +256,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
 
     const paddedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": " evt_route_test_padded " },
+      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test padded" },
       body: event,
     });
     assert.equal(paddedEventId.status, 400);
