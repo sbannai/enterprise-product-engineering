@@ -81,6 +81,17 @@ export interface StoredPaymentReceipt {
 export class PostgresPaymentStore {
   constructor(private readonly pool: SqlPool) {}
 
+  /** Minimal live connectivity probe for readiness; does not read or mutate payment data. */
+  async checkConnectivity(): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ ok: number }>("SELECT 1 AS ok");
+      return result.rows[0]?.ok === 1;
+    } finally {
+      client.release();
+    }
+  }
+
   /** Tenant-scoped lookup used by API verification and receipt routes. */
   async findOrder(tenantId: string, providerOrderId: string): Promise<StoredPaymentOrder | null> {
     if (!tenantId.trim() || !providerOrderId.trim()) throw new Error("INVALID_PAYMENT_LOOKUP");
