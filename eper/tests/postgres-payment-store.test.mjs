@@ -27,6 +27,9 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
       if (sql.includes("INSERT INTO eper_payment_webhook_events")) {
         return { rows: duplicateEvent ? [] : [{ provider_event_id: values[0] }], rowCount: duplicateEvent ? 0 : 1 };
       }
+      if (sql.includes("SELECT receipt_public_id FROM eper_payment_receipts")) {
+        return { rows: [{ receipt_public_id: "9e3b1a60-2f44-4b4e-8a18-7f8e61a5d932" }], rowCount: 1 };
+      }
       if (sql.includes("SELECT event_type, payload_sha256")) {
         return {
           rows: duplicateEvent ? [{ event_type: duplicateEventType, payload_sha256: duplicateEventPayloadSha256 }] : [],
