@@ -95,6 +95,15 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.match(storedReceipt.receiptPublicId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     assert.notEqual(storedReceipt.receiptPublicId, storedOrder.transactionPublicId);
     assert.equal(storedReceipt.receiptNumber, capture.receiptNumber);
+    const verifiedRetry = await store.captureVerifiedPayment({
+      tenantId, providerOrderId, providerPaymentId: capture.providerPaymentId,
+      amountMinor: 12500, currency: "INR", receiptNumber: capture.receiptNumber,
+    });
+    assert.equal(verifiedRetry.ok, true);
+    if (verifiedRetry.ok) {
+      assert.equal(verifiedRetry.value.transactionPublicId, storedOrder.transactionPublicId);
+      assert.equal(verifiedRetry.value.receiptPublicId, storedReceipt.receiptPublicId);
+    }
     assert.equal(storedReceipt.documentSha256, null);
     assert.equal(storedReceipt.documentPdf, null);
 
