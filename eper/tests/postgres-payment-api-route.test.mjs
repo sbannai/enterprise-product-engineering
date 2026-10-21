@@ -221,6 +221,22 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(webhookCaptureCalls, 0, "fractional/zero amount must not reach capture persistence");
     }
 
+    const missingOrderEvent = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: providerPaymentId, order_id: "order_not_in_persisted_store", amount: 12500, currency: "INR", status: "captured",
+      } } },
+    });
+    const missingOrderSignature = createHmac("sha256", "route-webhook-secret").update(missingOrderEvent).digest("hex");
+    const missingOrderWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": missingOrderSignature, "x-razorpay-event-id": "evt_route_test_missing_order" },
+      body: missingOrderEvent,
+    });
+    assert.equal(missingOrderWebhook.status, 503);
+    assert.equal((await missingOrderWebhook.json()).error, "payment_order_not_persisted_retry_webhook");
+    assert.equal(webhookCaptureCalls, 0, "unknown order must not reach capture persistence");
+
     const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature },
