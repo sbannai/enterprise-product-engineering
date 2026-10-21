@@ -89,6 +89,9 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     assert.equal(created.status, 201);
     const createdBody = await created.json();
     assert.equal(createdBody.payment.razorpayOrderId, "order_test_001");
+    assert.equal(createdBody.payment.invoiceSourceId, "test-fee-ledger");
+    assert.equal(createdBody.payment.invoiceSourceVersion, "v1");
+    assert.equal(createdBody.payment.invoiceApprovedAt, "2026-10-20T12:00:00.000Z");
 
     // A correctly signed capture webhook must transition the matching order to
     // PAID, using the raw request bytes for HMAC verification.
