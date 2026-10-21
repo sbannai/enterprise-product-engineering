@@ -2,14 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created" } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41" } = {}) {
   const calls = [];
   let released = 0;
   const client = {
     async query(sql, values = []) {
       calls.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
       if (sql.includes("INSERT INTO eper_payment_orders")) {
-        return { rows: [{ id: 41, provider_order_id: "order_test_41" }], rowCount: 1 };
+        return { rows: orderInsertConflict ? [] : [{ id: 41, provider_order_id: "order_test_41" }], rowCount: orderInsertConflict ? 0 : 1 };
+      }
+      if (sql.includes("SELECT id, provider_order_id, invoice_reference, amount_minor, currency")) {
+        return {
+          rows: orderInsertConflict ? [{
+            id: 41,
+            provider_order_id: existingOrderProviderId,
+            invoice_reference: existingOrderInvoiceReference,
+            amount_minor: 12500,
+            currency: "INR",
+          }] : [],
+          rowCount: orderInsertConflict ? 1 : 0,
+        };
       }
       if (sql.includes("INSERT INTO eper_payment_webhook_events")) {
         return { rows: duplicateEvent ? [] : [{ provider_event_id: values[0] }], rowCount: duplicateEvent ? 0 : 1 };
@@ -276,4 +288,23 @@ test("PostgresPaymentStore rejects capture for an already captured order", async
   assert.deepEqual(result, { ok: false, reason: "payment_mismatch" });
   assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
   assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
+});
+
+test("PostgresPaymentStore rejects reuse of an idempotency key for a different provider order", async () => {
+  const fake = makePool({ orderInsertConflict: true, existingOrderProviderId: "order_original_41" });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.insertOrder({
+    tenantId: "tenant-a",
+    invoiceReference: "invoice-41",
+    idempotencyKey: "tenant-a:invoice-41",
+    providerOrderId: "order_retried_41",
+    amountMinor: 12500,
+    currency: "INR",
+    invoiceSourceId: "approved-invoice-service",
+    invoiceSourceVersion: "v3",
+    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
+  });
+  assert.deepEqual(result, { ok: false, reason: "idempotency_conflict" });
+  assert.equal(fake.calls.at(-1).sql, "COMMIT");
+  assert.equal(fake.released, 1);
 });
