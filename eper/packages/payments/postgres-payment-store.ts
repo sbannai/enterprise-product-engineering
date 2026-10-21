@@ -304,7 +304,7 @@ export class PostgresPaymentStore {
         [row.id, tenantId, providerOrderId],
       );
       await client.query("COMMIT");
-      return { ok: true, value: { id: String(row.id), providerOrderId } };
+      return { ok: true, value: { id: String(row.id), transactionPublicId: row.transaction_public_id, providerOrderId } };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
