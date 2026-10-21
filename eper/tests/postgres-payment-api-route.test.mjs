@@ -84,8 +84,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.deepEqual(input.transactionSnapshot, {
         tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
         description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
-        lineItems: [{ sourceLineId: "line-route-1", description: "Checkout item", sku: "SKU-1", quantity: 1, unitPriceMinor: 12500, lineTotalMinor: 12500 }],
-        adjustments: [], sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+        lineItems: Array.from({ length: 40 }, (_, index) => ({
+          sourceLineId: "line-route-" + (index + 1),
+          description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
+          sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
+        })),
+        adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
+        sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
       });
       captured = true;
       receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
