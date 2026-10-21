@@ -18,6 +18,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   const providerPaymentId = "pay_route_test";
   const receiptNumber = "EPER-TEST-0001";
   let captured = false;
+  let webhookCaptureCalls = 0;
+  let webhookGatewayAmount = 12500;
   let verifiedCaptureCalls = 0;
   let gatewayAmount = 12500;
   let persistedPdf = null;
@@ -64,7 +66,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
+      webhookCaptureCalls += 1;
       assert.equal(input.providerEventId, "evt_route_test_001");
+      assert.equal(input.amountMinor, webhookGatewayAmount);
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.receiptNumber, receiptNumber);
       captured = true;
@@ -140,10 +144,21 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const event = JSON.stringify({
       event: "payment.captured",
       payload: { payment: { entity: {
-        id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
+        id: providerPaymentId, order_id: providerOrderId, amount: gatewayAmount, currency: "INR", status: "captured",
       } } },
     });
     const signature = createHmac("sha256", "route-webhook-secret").update(event).digest("hex");
+    webhookGatewayAmount = 12000;
+    const mismatchedWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_mismatch" },
+      body: event,
+    });
+    assert.equal(mismatchedWebhook.status, 409);
+    assert.equal((await mismatchedWebhook.json()).error, "gateway_payment_details_mismatch");
+    assert.equal(webhookCaptureCalls, 0, "mismatched webhook amount must not reach capture persistence");
+
+    webhookGatewayAmount = 12500;
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
@@ -151,6 +166,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(webhook.status, 200);
     assert.equal(captured, true);
+    assert.equal(webhookCaptureCalls, 1);
     const webhookBody = await webhook.json();
     assert.equal(webhookBody.receiptId, receiptPublicId);
     assert.equal(webhookBody.receiptNumber, receiptNumber);
