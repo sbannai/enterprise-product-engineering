@@ -59,7 +59,7 @@ test("payment readiness keeps production payment enablement blocked pending auth
   try {
     await withServer(createAppServer({
       paymentStore: { async checkConnectivity() { return true; } },
-      invoiceAmountSource: {},
+      invoiceAmountSource: { async findInvoice() { return null; } },
       receiptNumberSource: async () => "TEST-RECEIPT",
     }), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
@@ -93,6 +93,33 @@ test("payment readiness fails closed when PostgreSQL connectivity probe fails", 
       const body = await response.json();
       assert.equal(body.status, "blocked");
       assert.deepEqual(body.blockers, ["postgres_payment_database_unreachable"]);
+    });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
+
+test("payment readiness rejects present-but-invalid invoice and receipt adapters", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test" });
+  try {
+    await withServer(createAppServer({
+      paymentStore: { async checkConnectivity() { return true; } },
+      invoiceAmountSource: {},
+      receiptNumberSource: {},
+    }), async (base) => {
+      const response = await fetch(`${base}/readyz/payments`);
+      assert.equal(response.status, 503);
+      const body = await response.json();
+      assert.equal(body.status, "blocked");
+      assert.deepEqual(body.blockers, [
+        "trusted_invoice_authority_unavailable",
+        "receipt_numbering_policy_unconfigured",
+      ]);
     });
   } finally {
     for (const key of keys) {
