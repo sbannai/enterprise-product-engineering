@@ -274,6 +274,22 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(webhookCaptureCalls, 0, "invalid receipt number policy output must not reach capture persistence");
     receiptNumberSourceValue = receiptNumber;
 
+    const blankGatewayPaymentIdEventPayload = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: "  ", order_id: providerOrderId, amount: webhookGatewayAmount, currency: "INR", status: "captured",
+      } } },
+    });
+    const blankGatewayPaymentIdSignature = createHmac("sha256", "route-webhook-secret").update(blankGatewayPaymentIdEventPayload).digest("hex");
+    const blankGatewayPaymentIdEvent = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": blankGatewayPaymentIdSignature, "x-razorpay-event-id": "evt_blank_payment_id" },
+      body: blankGatewayPaymentIdEventPayload,
+    });
+    assert.equal(blankGatewayPaymentIdEvent.status, 400);
+    assert.equal((await blankGatewayPaymentIdEvent.json()).error, "captured_payment_event_invalid");
+    assert.equal(webhookCaptureCalls, 0, "blank gateway payment ID must not reach capture persistence");
+
     const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature },
