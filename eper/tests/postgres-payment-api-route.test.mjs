@@ -512,3 +512,28 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     }
   }
 });
+
+test("PostgreSQL payment mode fails closed when the durable payment store is not injected", async () => {
+  const oldPersistence = process.env.EPER_PAYMENT_PERSISTENCE;
+  const oldNodeEnv = process.env.NODE_ENV;
+  process.env.EPER_PAYMENT_PERSISTENCE = "postgres";
+  process.env.NODE_ENV = "test";
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/payments/orders`, { method: "POST" });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "payment_persistence_store_unavailable" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    if (oldPersistence === undefined) delete process.env.EPER_PAYMENT_PERSISTENCE;
+    else process.env.EPER_PAYMENT_PERSISTENCE = oldPersistence;
+    if (oldNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = oldNodeEnv;
+  }
+});
