@@ -4,8 +4,15 @@ on:
   pull_request:
     paths:
       - "eper/packages/payments/**"
+      - "eper/apps/api/main.ts"
+      - "eper/apps/api/server.ts"
+      - "eper/apps/api/payments.ts"
+      - "eper/Dockerfile"
+      - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-payment-store.integration.test.mjs"
       - "eper/tests/postgres-payment-api-route.test.mjs"
+      - "eper/tests/postgres-payment-runtime.test.mjs"
+      - "eper/tests/payment-production-guard.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
