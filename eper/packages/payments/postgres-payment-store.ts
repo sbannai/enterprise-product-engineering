@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { TrustedTransactionSnapshot } from "./transaction-receipt-contract.js";
 /**
  * PostgreSQL persistence primitives for EPER payments.
  *
@@ -50,6 +51,8 @@ export interface CapturedPaymentInput {
   tenantId: string;
   /** Supplied by the business-approved receipt numbering policy; never generated here. */
   receiptNumber: string;
+  /** Optional until the approved transaction source is wired into the capture route. When present, stored atomically with receipt issuance. */
+  transactionSnapshot?: TrustedTransactionSnapshot;
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
@@ -611,7 +614,15 @@ export class PostgresPaymentStore {
         return { ok: false, reason: "not_found" };
       }
       if (order.tenant_id !== input.tenantId || Number(order.amount_minor) !== input.amountMinor ||
-          order.currency !== input.currency) {
+          order.currency !== input.currency ||
+          (input.transactionSnapshot !== undefined && (
+            input.transactionSnapshot.tenantId !== input.tenantId ||
+            input.transactionSnapshot.reference !== (await client.query<{ invoice_reference: string }>(
+              "SELECT invoice_reference FROM eper_payment_orders WHERE id = $1", [order.id],
+            )).rows[0]?.invoice_reference ||
+            input.transactionSnapshot.amountDueMinor !== input.amountMinor ||
+            input.transactionSnapshot.currency !== input.currency
+          ))) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "payment_mismatch" };
       }
@@ -649,9 +660,9 @@ export class PostgresPaymentStore {
       const receiptNumber = input.receiptNumber;
       // Receipt PDF generation happens in a later layer; the event hash is not a PDF hash.
       await client.query(
-        `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number)
-         VALUES ($1, $2, $3)`,
-        [order.tenant_id, order.id, receiptNumber],
+        `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number, transaction_snapshot)
+         VALUES ($1, $2, $3, $4::jsonb)`,
+        [order.tenant_id, order.id, receiptNumber, input.transactionSnapshot ? JSON.stringify(input.transactionSnapshot) : null],
       );
       const receiptPublicId = String((await client.query<{ receipt_public_id: string }>(
         `SELECT receipt_public_id FROM eper_payment_receipts WHERE payment_order_id = $1`,
