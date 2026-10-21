@@ -203,6 +203,24 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await stringAmountWebhook.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "string-valued amount must not reach capture persistence");
 
+    for (const [eventId, amount] of [["evt_route_test_fractional_amount", 12500.5], ["evt_route_test_zero_amount", 0]]) {
+      const invalidAmountEvent = JSON.stringify({
+        event: "payment.captured",
+        payload: { payment: { entity: {
+          id: providerPaymentId, order_id: providerOrderId, amount, currency: "INR", status: "captured",
+        } } },
+      });
+      const invalidAmountSignature = createHmac("sha256", "route-webhook-secret").update(invalidAmountEvent).digest("hex");
+      const invalidAmountWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-razorpay-signature": invalidAmountSignature, "x-razorpay-event-id": eventId },
+        body: invalidAmountEvent,
+      });
+      assert.equal(invalidAmountWebhook.status, 400);
+      assert.equal((await invalidAmountWebhook.json()).error, "captured_payment_event_invalid");
+      assert.equal(webhookCaptureCalls, 0, "fractional/zero amount must not reach capture persistence");
+    }
+
     const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature },
