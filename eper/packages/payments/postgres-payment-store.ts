@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * PostgreSQL persistence primitives for EPER payments.
  *
@@ -69,6 +70,7 @@ export interface StoredPaymentReceipt {
   orderId: string;
   receiptNumber: string;
   documentSha256: string | null;
+  documentPdf: Buffer | null;
   issuedAt: string;
 }
 
@@ -115,9 +117,9 @@ export class PostgresPaymentStore {
     try {
       const result = await client.query<{
         order_id: string | number; receipt_number: string; document_sha256: string | null;
-        issued_at: Date | string;
+        document_pdf: Buffer | null; issued_at: Date | string;
       }>(
-        `SELECT r.payment_order_id AS order_id, r.receipt_number, r.document_sha256, r.issued_at
+        `SELECT r.payment_order_id AS order_id, r.receipt_number, r.document_sha256, r.document_pdf, r.issued_at
            FROM eper_payment_receipts r
            JOIN eper_payment_orders o ON o.id = r.payment_order_id
           WHERE r.tenant_id = $1 AND r.payment_order_id = $2`,
@@ -126,8 +128,62 @@ export class PostgresPaymentStore {
       const row = result.rows[0];
       return row ? {
         orderId: String(row.order_id), receiptNumber: row.receipt_number,
-        documentSha256: row.document_sha256, issuedAt: new Date(row.issued_at).toISOString(),
+        documentSha256: row.document_sha256, documentPdf: row.document_pdf, issuedAt: new Date(row.issued_at).toISOString(),
       } : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Store exact PDF bytes once. Subsequent requests must use the persisted bytes;
+   * regenerating a different PDF for an already issued receipt is rejected.
+   */
+  async persistReceiptDocument(
+    tenantId: string,
+    orderId: string,
+    documentPdf: Buffer,
+  ): Promise<PersistResult<{ documentSha256: string }>> {
+    if (!tenantId.trim() || !/^\\d+$/.test(orderId) || !Buffer.isBuffer(documentPdf) ||
+        documentPdf.length < 8 || documentPdf.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      throw new Error("INVALID_RECEIPT_DOCUMENT_INPUT");
+    }
+    const documentSha256 = createHash("sha256").update(documentPdf).digest("hex");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ document_sha256: string | null; document_pdf: Buffer | null }>(
+        `SELECT document_sha256, document_pdf
+           FROM eper_payment_receipts
+          WHERE tenant_id = $1 AND payment_order_id = $2
+          FOR UPDATE`,
+        [tenantId, orderId],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "not_found" };
+      }
+      if (row.document_sha256 || row.document_pdf) {
+        const same = row.document_sha256?.toLowerCase() === documentSha256 &&
+          Buffer.isBuffer(row.document_pdf) && row.document_pdf.equals(documentPdf);
+        if (!same) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "receipt_document_conflict" };
+        }
+      } else {
+        await client.query(
+          `UPDATE eper_payment_receipts
+              SET document_sha256 = $3, document_pdf = $4
+            WHERE tenant_id = $1 AND payment_order_id = $2`,
+          [tenantId, orderId, documentSha256, documentPdf],
+        );
+      }
+      await client.query("COMMIT");
+      return { ok: true, value: { documentSha256 } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
     } finally {
       client.release();
     }
