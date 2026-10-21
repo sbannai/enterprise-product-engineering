@@ -101,6 +101,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(input.providerOrderId, providerOrderId);
       assert.equal(input.providerPaymentId, providerPaymentId);
       assert.equal(input.receiptNumber, receiptNumber);
+      assert.equal(input.transactionSnapshot.reference, "invoice-route-test");
+      assert.equal(input.transactionSnapshot.lineItems[0].description, "Checkout item");
+      receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
     },
     async findReceiptByPublicId(requestTenant, id) {
