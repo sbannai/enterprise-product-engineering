@@ -142,7 +142,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const providerEventId = req.headers["x-razorpay-event-id"];
       if (typeof providerEventId !== "string" || !providerEventId.trim() || providerEventId.length > 200 ||
           typeof payment?.order_id !== "string" || typeof payment?.id !== "string" ||
-          payment.status !== "captured" || typeof payment.amount !== "number" || !Number.isSafeInteger(payment.amount) || payment.currency !== "INR") {
+          payment.status !== "captured" || typeof payment.amount !== "number" || !Number.isSafeInteger(payment.amount) || payment.amount <= 0 || payment.currency !== "INR") {
         json(res, 400, { error: "captured_payment_event_invalid" }); return true;
       }
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
