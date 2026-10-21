@@ -125,6 +125,27 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const hashedReceipt = await store.findReceipt(tenantId, storedOrder.id);
     assert.equal(hashedReceipt.documentSha256, receiptPdfHash);
     assert.deepEqual(hashedReceipt.documentPdf, receiptPdf);
+
+    // Database-level guard must reject changing an issued receipt number or its exact PDF bytes.
+    await assert.rejects(
+      pool.query(
+        "UPDATE eper_payment_receipts SET receipt_number = $1 WHERE tenant_id = $2 AND payment_order_id = $3",
+        ["EPER-MUTATED-RECEIPT", tenantId, storedOrder.id],
+      ),
+      /EPER_PAYMENT_RECEIPT_IDENTITY_IMMUTABLE/,
+    );
+    await assert.rejects(
+      pool.query(
+        "UPDATE eper_payment_receipts SET document_pdf = $1 WHERE tenant_id = $2 AND payment_order_id = $3",
+        [Buffer.from("%PDF-1.4\\nmutated persisted bytes\\n%%EOF", "ascii"), tenantId, storedOrder.id],
+      ),
+      /EPER_PAYMENT_RECEIPT_DOCUMENT_IMMUTABLE/,
+    );
+    const stillImmutable = await store.findReceipt(tenantId, storedOrder.id);
+    assert.equal(stillImmutable.receiptNumber, capture.receiptNumber);
+    assert.equal(stillImmutable.documentSha256, receiptPdfHash);
+    assert.deepEqual(stillImmutable.documentPdf, receiptPdf);
+
     assert.deepEqual(
       await store.persistReceiptDocument("another-tenant", storedOrder.id, receiptPdf),
       { ok: false, reason: "not_found" },
