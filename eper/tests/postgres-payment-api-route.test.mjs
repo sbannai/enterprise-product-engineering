@@ -81,6 +81,12 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(input.amountMinor, webhookGatewayAmount);
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.receiptNumber, receiptNumber);
+      assert.deepEqual(input.transactionSnapshot, {
+        tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
+        description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
+        lineItems: [{ sourceLineId: "line-route-1", description: "Checkout item", sku: "SKU-1", quantity: 1, unitPriceMinor: 12500, lineTotalMinor: 12500 }],
+        adjustments: [], sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+      });
       captured = true;
       order = { ...order, status: "captured", providerPaymentId };
       return { ok: true, value: { receiptPublicId, receiptNumber } };
@@ -129,6 +135,17 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     receiptNumberSource: async () => {
       if (receiptNumberSourceThrows) throw new Error("approved receipt policy temporarily unavailable");
       return receiptNumberSourceValue;
+    },
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId: requestedTenant, reference }) {
+        if (requestedTenant !== tenantId || reference !== "invoice-route-test") return null;
+        return {
+          tenantId, reference, kind: "ECOMMERCE", description: "Route test checkout",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [{ sourceLineId: "line-route-1", description: "Checkout item", sku: "SKU-1", quantity: 1, unitPriceMinor: 12500, lineTotalMinor: 12500 }],
+          adjustments: [], sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
     },
   });
 
