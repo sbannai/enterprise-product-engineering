@@ -19,6 +19,7 @@ interface PaymentRecord {
   razorpayOrderId: string;
   razorpayPaymentId?: string;
   receiptNumber?: string;
+  receiptId?: string;
   createdAt: string;
   paidAt?: string;
 }
@@ -49,7 +50,8 @@ function pdfEscape(value: string): string {
 function receiptPdf(record: PaymentRecord): Buffer {
   const lines = [
     "EPER PAYMENT RECEIPT",
-    "Receipt: " + (record.receiptNumber ?? ""),
+    "Receipt ID: " + (record.receiptId ?? ""),
+    "Receipt number: " + (record.receiptNumber ?? ""),
     "Payment reference: " + record.reference,
     "Payment ID: " + (record.razorpayPaymentId ?? ""),
     "Amount: " + (record.amountPaise / 100).toFixed(2) + " " + record.currency,
@@ -140,6 +142,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         if (record && record.status !== "PAID" && payment.status === "captured" && Number(payment.amount) === record.amountPaise && payment.currency === record.currency) {
           record.status = "PAID"; record.razorpayPaymentId = String(payment.id);
           record.receiptNumber = "EPER-" + new Date().getUTCFullYear() + "-" + randomUUID().slice(0, 8).toUpperCase();
+          record.receiptId = randomUUID();
           record.paidAt = new Date().toISOString();
           await saveLedger(cfg.ledgerFile, ledger);
         }
@@ -292,6 +295,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (record.status !== "PAID") {
       record.status = "PAID"; record.razorpayPaymentId = paymentId;
       record.receiptNumber = "EPER-" + new Date().getUTCFullYear() + "-" + randomUUID().slice(0, 8).toUpperCase();
+      record.receiptId = randomUUID();
       record.paidAt = new Date().toISOString(); await saveLedger(cfg.ledgerFile, ledger);
     } else if (record.razorpayPaymentId !== paymentId) { json(res, 409, { error: "order_already_paid_with_different_payment" }); return true; }
     json(res, 200, { payment: record, receiptUrl: "/api/payments/" + record.id + "/receipt.pdf" }); return true;
@@ -304,8 +308,9 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (!record) { json(res, 404, { error: "payment_not_found" }); return true; }
     if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
+    if (!record.receiptId) { record.receiptId = randomUUID(); await saveLedger(cfg.ledgerFile, ledger); }
     const pdf = receiptPdf(record);
-    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptNumber + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
     res.end(pdf); return true;
   }
 
