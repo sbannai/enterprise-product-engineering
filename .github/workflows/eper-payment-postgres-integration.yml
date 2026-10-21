@@ -46,5 +46,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply payment schema to disposable PostgreSQL
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/001_payment_transactions.sql
+      - name: Apply payment order reservation migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/002_payment_order_reservation.sql
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
