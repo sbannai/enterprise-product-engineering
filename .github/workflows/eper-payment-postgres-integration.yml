@@ -57,5 +57,7 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/003_receipt_document_bytes.sql
       - name: Apply unique public transaction and receipt identifier migration
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/004_unique_public_payment_identifiers.sql
+      - name: Apply database-enforced receipt immutability migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/payments/migrations/005_immutable_receipt_records.sql
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
