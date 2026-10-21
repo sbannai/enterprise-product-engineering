@@ -15,6 +15,7 @@ on:
       - "eper/tests/postgres-payment-runtime.test.mjs"
       - "eper/tests/payment-production-guard.test.mjs"
       - "eper/tests/payment-gateway.test.mjs"
+      - "eper/tests/payment-readiness.test.mjs"
       - "eper/tests/invoice-amount-authority.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
@@ -61,6 +62,8 @@ jobs:
         run: node --test tests/postgres-payment-store.test.mjs
       - name: Test production payment routes remain fail-closed
         run: node --test tests/payment-production-guard.test.mjs
+      - name: Test payment readiness blockers and production review gate
+        run: node --test tests/payment-readiness.test.mjs
       - name: Test gateway signature and receipt safety regressions
         run: node --test tests/payment-gateway.test.mjs
       - name: Test trusted invoice amount authority contract
