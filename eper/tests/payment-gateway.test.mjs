@@ -17,6 +17,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
   const nativeFetch = globalThis.fetch;
   const secret = "razorpay-test-secret";
   const token = "t".repeat(40);
+  let orderCount = 0;
   let nextPayment = {
     id: "pay_test_001",
     order_id: "order_test_001",
@@ -38,7 +39,8 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
-      return new Response(JSON.stringify({ id: "order_test_001" }), {
+      orderCount += 1;
+      return new Response(JSON.stringify({ id: orderCount === 1 ? "order_test_001" : "order_test_002" }), {
         status: 200, headers: { "content-type": "application/json" },
       });
     }
@@ -50,7 +52,19 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     return nativeFetch(input, init);
   };
 
-  const server = createAppServer();
+  const invoiceAmountSource = {
+    async findInvoice({ tenantId, reference }) {
+      if (tenantId !== "tenant-a") return null;
+      return {
+        tenantId, reference,
+        amountDuePaise: reference === "invoice-production" ? 5000 : 12500,
+        currency: "INR", status: "DUE",
+        sourceId: "test-fee-ledger", sourceVersion: "v1",
+        approvedAt: "2026-10-20T12:00:00.000Z",
+      };
+    },
+  };
+  const server = createAppServer({ invoiceAmountSource });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -115,8 +129,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     assert.equal(captureWebhook.status, 200);
     assert.equal((await captureWebhook.json()).received, true);
 
-    // Production must reject client-supplied amounts even when the test-only
-    // override is accidentally present in the environment.
+    // Production ignores a tampered client amount and uses the trusted invoice amount.
     process.env.NODE_ENV = "production";
     const productionOrder = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers,
@@ -125,8 +138,11 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
         amountPaise: 1, currency: "INR",
       }),
     });
-    assert.equal(productionOrder.status, 503);
-    assert.equal((await productionOrder.json()).error, "server_side_amount_authority_required");
+    assert.equal(productionOrder.status, 201);
+    const productionOrderBody = await productionOrder.json();
+    assert.equal(productionOrderBody.payment.amountPaise, 5000);
+    assert.equal(productionOrderBody.payment.currency, "INR");
+    assert.equal(productionOrderBody.payment.razorpayOrderId, "order_test_002");
     process.env.NODE_ENV = "test";
 
     const badSignature = await nativeFetch(`${base}/api/payments/verify`, {
