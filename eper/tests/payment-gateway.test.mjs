@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -667,6 +667,94 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: "receipt_document_integrity_failed" });
     assert.equal(orderLookups, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+
+test("PostgreSQL receipt download persists PDF once and serves identical bytes on retries", async () => {
+  const envKeys = [
+    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+  ];
+  const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const token = "receipt-stability-test-token".padEnd(40, "x");
+  const receiptPublicId = "f6e51a2e-80de-45e6-ae93-f10a46f3b6e9";
+  let persistedPdf = null;
+  let persistedDigest = null;
+  let persistCalls = 0;
+  Object.assign(process.env, {
+    RAZORPAY_KEY_ID: "rzp_test_key",
+    RAZORPAY_KEY_SECRET: "gateway-test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
+    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+  });
+  const paymentStore = {
+    async findReceiptByPublicId(tenantId, requestedId) {
+      if (tenantId !== "tenant-a" || requestedId !== receiptPublicId) return null;
+      return {
+        receiptPublicId, orderId: "41", receiptNumber: "APPROVED-RECEIPT-00041",
+        documentSha256: persistedDigest, documentPdf: persistedPdf,
+        issuedAt: "2026-10-21T07:00:00.000Z",
+      };
+    },
+    async findOrderByInternalId(tenantId, orderId) {
+      assert.equal(tenantId, "tenant-a");
+      assert.equal(orderId, "41");
+      return {
+        id: "41", transactionPublicId: "a6e51a2e-80de-45e6-ae93-f10a46f3b6e9",
+        tenantId: "tenant-a", invoiceReference: "INV-41", providerOrderId: "order_41",
+        providerPaymentId: "pay_41", amountMinor: 12500, currency: "INR",
+        status: "captured", createdAt: "2026-10-21T06:00:00.000Z",
+      };
+    },
+    async persistReceiptDocument(tenantId, orderId, pdf) {
+      assert.equal(tenantId, "tenant-a");
+      assert.equal(orderId, "41");
+      persistCalls += 1;
+      if (persistedPdf && !persistedPdf.equals(pdf)) return { ok: false, reason: "receipt_document_conflict" };
+      persistedPdf = Buffer.from(pdf);
+      persistedDigest = createHash("sha256").update(persistedPdf).digest("hex");
+      return { ok: true, value: { documentSha256: persistedDigest } };
+    },
+    async findReceipt(tenantId, orderId) {
+      assert.equal(tenantId, "tenant-a");
+      assert.equal(orderId, "41");
+      return {
+        receiptPublicId, orderId, receiptNumber: "APPROVED-RECEIPT-00041",
+        documentSha256: persistedDigest, documentPdf: persistedPdf,
+        issuedAt: "2026-10-21T07:00:00.000Z",
+      };
+    },
+  };
+  const server = createAppServer({ paymentStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = `http://127.0.0.1:${address.port}/api/payments/receipts/${receiptPublicId}.pdf`;
+    const headers = { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-a" };
+    const first = await fetch(url, { headers });
+    assert.equal(first.status, 200);
+    const firstBytes = Buffer.from(await first.arrayBuffer());
+    assert.ok(firstBytes.subarray(0, 5).equals(Buffer.from("%PDF-")));
+    assert.equal(persistCalls, 1);
+
+    const second = await fetch(url, { headers });
+    assert.equal(second.status, 200);
+    const secondBytes = Buffer.from(await second.arrayBuffer());
+    assert.deepEqual(secondBytes, firstBytes);
+    assert.equal(persistCalls, 1, "retry must serve persisted PDF without re-issuing the receipt");
+    assert.equal(createHash("sha256").update(secondBytes).digest("hex"), persistedDigest);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const [key, value] of Object.entries(oldEnv)) {
