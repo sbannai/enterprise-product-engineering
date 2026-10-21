@@ -17,6 +17,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   const providerOrderId = "order_route_test";
   const providerPaymentId = "pay_route_test";
   const receiptNumber = "EPER-TEST-0001";
+  let receiptNumberSourceValue = receiptNumber;
   let captured = false;
   let webhookCaptureCalls = 0;
   let webhookGatewayAmount = 12500;
@@ -121,7 +122,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         };
       },
     },
-    receiptNumberSource: async () => receiptNumber,
+    receiptNumberSource: async () => receiptNumberSourceValue,
   });
 
   try {
@@ -260,6 +261,17 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(paddedEventId.status, 400);
     assert.equal((await paddedEventId.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "padded provider event ID must not reach capture persistence");
+
+    receiptNumberSourceValue = " EPER-TEST-PADDED ";
+    const paddedReceiptNumberEvent = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
+      body: event,
+    });
+    assert.equal(paddedReceiptNumberEvent.status, 503);
+    assert.equal((await paddedReceiptNumberEvent.json()).error, "receipt_number_policy_unconfigured");
+    assert.equal(webhookCaptureCalls, 0, "invalid receipt number policy output must not reach capture persistence");
+    receiptNumberSourceValue = receiptNumber;
 
     const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
