@@ -61,6 +61,9 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertEqual(report["counts"]["requirementsNotRun"], 1)
         self.assertFalse(report["businessUatExecuted"])
         self.assertTrue(report["blockers"])
+        acceptance_blocker = next(b for b in report["blockers"]
+                                  if b["gate"] == "requirement-level business acceptance")
+        self.assertEqual(acceptance_blocker["requirement_ids"], ["REQ-46301"])
 
     def test_complete_population_is_only_ready_for_owner_confirmation(self):
         cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
