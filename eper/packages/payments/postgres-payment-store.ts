@@ -590,8 +590,8 @@ export class PostgresPaymentStore {
         id: string | number; tenant_id: string; amount_minor: string | number;
         currency: string; status: string; provider_payment_id: string | null;
       }>(
-        \`SELECT id, tenant_id, amount_minor, currency, status, provider_payment_id
-           FROM eper_payment_orders WHERE provider_order_id = $1 FOR UPDATE\`,
+        `SELECT id, tenant_id, amount_minor, currency, status, provider_payment_id
+           FROM eper_payment_orders WHERE provider_order_id = $1 FOR UPDATE`,
         [input.providerOrderId],
       );
       const order = orderResult.rows[0];
@@ -610,13 +610,13 @@ export class PostgresPaymentStore {
           return { ok: false, reason: "payment_mismatch" };
         }
         const existingReceipt = await client.query<{ receipt_public_id: string; receipt_number: string }>(
-          \`SELECT receipt_public_id, receipt_number FROM eper_payment_receipts WHERE payment_order_id = $1\`,
+          `SELECT receipt_public_id, receipt_number FROM eper_payment_receipts WHERE payment_order_id = $1`,
           [order.id],
         );
         if (!existingReceipt.rows[0]) throw new Error("RECEIPT_PERSISTENCE_MISSING");
         await client.query(
-          \`UPDATE eper_payment_webhook_events SET processed_at = NOW()
-            WHERE provider = 'razorpay' AND provider_event_id = $1\`,
+          `UPDATE eper_payment_webhook_events SET processed_at = NOW()
+            WHERE provider = 'razorpay' AND provider_event_id = $1`,
           [input.providerEventId],
         );
         await client.query("COMMIT");
@@ -630,26 +630,26 @@ export class PostgresPaymentStore {
         return { ok: false, reason: "payment_mismatch" };
       }
       await client.query(
-        \`UPDATE eper_payment_orders
+        `UPDATE eper_payment_orders
             SET status = 'captured', provider_payment_id = $2, updated_at = NOW()
-          WHERE id = $1\`,
+          WHERE id = $1`,
         [order.id, input.providerPaymentId],
       );
       const receiptNumber = input.receiptNumber;
       // Receipt PDF generation happens in a later layer; the event hash is not a PDF hash.
       await client.query(
-        \`INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number)
-         VALUES ($1, $2, $3)\`,
+        `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number)
+         VALUES ($1, $2, $3)`,
         [order.tenant_id, order.id, receiptNumber],
       );
       const receiptPublicId = String((await client.query<{ receipt_public_id: string }>(
-        \`SELECT receipt_public_id FROM eper_payment_receipts WHERE payment_order_id = $1\`,
+        `SELECT receipt_public_id FROM eper_payment_receipts WHERE payment_order_id = $1`,
         [order.id],
       )).rows[0]?.receipt_public_id ?? "");
       if (!receiptPublicId) throw new Error("RECEIPT_PUBLIC_ID_MISSING");
       await client.query(
-        \`UPDATE eper_payment_webhook_events SET processed_at = NOW()
-          WHERE provider = 'razorpay' AND provider_event_id = $1\`,
+        `UPDATE eper_payment_webhook_events SET processed_at = NOW()
+          WHERE provider = 'razorpay' AND provider_event_id = $1`,
         [input.providerEventId],
       );
       await client.query("COMMIT");
