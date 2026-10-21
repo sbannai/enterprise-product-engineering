@@ -45,6 +45,11 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         status: 200, headers: { "content-type": "application/json" },
       });
     }
+    if (url === "https://api.razorpay.com/v1/payments/" + providerPaymentId) {
+      return new Response(JSON.stringify({
+        id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     return nativeFetch(input, init);
   };
 
@@ -63,6 +68,16 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       captured = true;
       order = { ...order, status: "captured", providerPaymentId };
       return { ok: true, value: { receiptPublicId, receiptNumber } };
+    },
+    async findOrder(requestTenant, id) {
+      return requestTenant === tenantId && id === providerOrderId ? { ...order } : null;
+    },
+    async captureVerifiedPayment(input) {
+      assert.equal(input.tenantId, tenantId);
+      assert.equal(input.providerOrderId, providerOrderId);
+      assert.equal(input.providerPaymentId, providerPaymentId);
+      assert.equal(input.receiptNumber, receiptNumber);
+      return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
     },
     async findReceiptByPublicId(requestTenant, id) {
       return requestTenant === tenantId && id === receiptPublicId ? { ...receipt, documentPdf: persistedPdf } : null;
@@ -134,6 +149,23 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const webhookBody = await webhook.json();
     assert.equal(webhookBody.receiptId, receiptPublicId);
     assert.equal(webhookBody.receiptNumber, receiptNumber);
+    assert.equal(webhookBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
+
+    const verificationSignature = createHmac("sha256", "route-secret")
+      .update(providerOrderId + "|" + providerPaymentId).digest("hex");
+    const verified = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(verified.status, 200);
+    const verifiedBody = await verified.json();
+    assert.equal(verifiedBody.payment.id, transactionPublicId);
+    assert.equal(verifiedBody.payment.receiptId, receiptPublicId);
+    assert.equal(verifiedBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
 
     const download = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
