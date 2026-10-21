@@ -18,6 +18,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   const providerPaymentId = "pay_route_test";
   const receiptNumber = "EPER-TEST-0001";
   let captured = false;
+  let verifiedCaptureCalls = 0;
+  let gatewayAmount = 12500;
   let persistedPdf = null;
   let order = {
     id: "41", transactionPublicId, tenantId, invoiceReference: "invoice-route-test",
@@ -47,7 +49,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     }
     if (url === "https://api.razorpay.com/v1/payments/" + providerPaymentId) {
       return new Response(JSON.stringify({
-        id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
+        id: providerPaymentId, order_id: providerOrderId, amount: gatewayAmount, currency: "INR", status: "captured",
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
     return nativeFetch(input, init);
@@ -73,6 +75,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       return requestTenant === tenantId && id === providerOrderId ? { ...order } : null;
     },
     async captureVerifiedPayment(input) {
+      verifiedCaptureCalls += 1;
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.providerOrderId, providerOrderId);
       assert.equal(input.providerPaymentId, providerPaymentId);
@@ -155,6 +158,19 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
 
     const verificationSignature = createHmac("sha256", "route-secret")
       .update(providerOrderId + "|" + providerPaymentId).digest("hex");
+    gatewayAmount = 12000;
+    const mismatchedVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(mismatchedVerification.status, 400);
+    assert.equal((await mismatchedVerification.json()).error, "gateway_payment_details_mismatch");
+    assert.equal(verifiedCaptureCalls, 0, "mismatched amount must never reach capture persistence");
+
+    gatewayAmount = 12500;
     const verified = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
       headers,
@@ -164,6 +180,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       }),
     });
     assert.equal(verified.status, 200);
+    assert.equal(verifiedCaptureCalls, 1);
     const verifiedBody = await verified.json();
     assert.equal(verifiedBody.payment.id, transactionPublicId);
     assert.equal(verifiedBody.payment.receiptId, receiptPublicId);
