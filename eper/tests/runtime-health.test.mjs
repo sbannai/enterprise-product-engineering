@@ -109,7 +109,8 @@ test("local capability API authenticates and routes a requirement to its concret
     assert.equal(body.result.pattern, "XX03");
     assert.equal(body.result.status, "EXECUTED");
     assert.equal(body.result.data.payload.operation, "validate");
-    assert.equal(body.result.data.payload.validation.valid, true);
+    assert.equal(body.result.data.payload.validation.valid, false);
+    assert.deepEqual(body.result.data.payload.validation.issues.map(issue => issue.code), ["VALIDATION_RULESET_NOT_CONFIGURED"]);
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
@@ -197,7 +198,8 @@ test("public UAT capability API requires bearer token and explicit public-endpoi
     assert.equal(body.result.requirementId, "REQ-46303");
     assert.equal(body.result.pattern, "XX03");
     assert.equal(body.result.status, "EXECUTED");
-    assert.equal(body.result.data.payload.validation.valid, true);
+    assert.equal(body.result.data.payload.validation.valid, false);
+    assert.deepEqual(body.result.data.payload.validation.issues.map(issue => issue.code), ["VALIDATION_RULESET_NOT_CONFIGURED"]);
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];

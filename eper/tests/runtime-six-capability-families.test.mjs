@@ -66,7 +66,8 @@ test("HTTP execution reaches each of the six concrete capability families", asyn
         payload: { operation: "validate", input: { accepted: true } },
         verify: (data) => {
           assert.equal(data.operation, "validate");
-          assert.equal(data.validation.valid, true);
+          assert.equal(data.validation.valid, false);
+          assert.deepEqual(data.validation.issues.map(issue => issue.code), ["VALIDATION_RULESET_NOT_CONFIGURED"]);
         },
       },
       {
