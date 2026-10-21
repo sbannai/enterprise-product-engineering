@@ -351,3 +351,91 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test("PostgreSQL-backed order route does not create a second gateway order after an ambiguous provider timeout", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "eper-payment-pg-timeout-"));
+  const envKeys = [
+    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+  ];
+  const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const nativeFetch = globalThis.fetch;
+  const token = "q".repeat(40);
+  let gatewayCalls = 0;
+  let reservations = 0;
+
+  Object.assign(process.env, {
+    RAZORPAY_KEY_ID: "rzp_test_key",
+    RAZORPAY_KEY_SECRET: "razorpay-test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
+    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+  });
+  globalThis.fetch = async (input) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url === "https://api.razorpay.com/v1/orders") {
+      gatewayCalls += 1;
+      // Simulate a timeout after the provider may already have accepted the request.
+      throw new TypeError("simulated network timeout");
+    }
+    return nativeFetch(input);
+  };
+
+  const paymentStore = {
+    async reserveOrder() {
+      reservations += 1;
+      if (reservations === 1) {
+        return { ok: true, value: { id: "992", transactionPublicId: "txn-public-992", providerOrderId: null } };
+      }
+      return { ok: false, reason: "order_creation_reconciliation_required" };
+    },
+  };
+  const invoiceAmountSource = {
+    async findInvoice({ tenantId, reference }) {
+      return tenantId === "tenant-a" && reference === "invoice-timeout-001" ? {
+        tenantId, reference, amountDuePaise: 12500, currency: "INR", status: "DUE",
+        sourceId: "test-fee-ledger", sourceVersion: "v1",
+        approvedAt: "2026-10-20T12:00:00.000Z",
+      } : null;
+    },
+  };
+  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = `http://127.0.0.1:${address.port}`;
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "x-tenant-id": "tenant-a",
+      "content-type": "application/json",
+      "idempotency-key": "req-timeout-001",
+    };
+    const request = () => nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers,
+      body: JSON.stringify({ tenantId: "tenant-a", reference: "invoice-timeout-001", amountPaise: 1 }),
+    });
+
+    const first = await request();
+    assert.equal(first.status, 503);
+    assert.equal((await first.json()).error, "gateway_order_creation_outcome_unknown");
+    const retry = await request();
+    assert.equal(retry.status, 503);
+    assert.equal((await retry.json()).error, "order_creation_reconciliation_required");
+    assert.equal(gatewayCalls, 1, "ambiguous provider timeout must not trigger a second gateway order");
+    assert.equal(reservations, 2);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    globalThis.fetch = nativeFetch;
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
