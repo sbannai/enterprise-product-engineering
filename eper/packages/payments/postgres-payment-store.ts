@@ -52,7 +52,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "order_creation_in_progress" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
+  | { ok: false; reason: "idempotency_conflict" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
 
 export interface StoredPaymentOrder {
   id: string;
@@ -212,10 +212,10 @@ export class PostgresPaymentStore {
       const existing = await client.query<{
         id: string | number; provider_order_id: string | null; invoice_reference: string;
         amount_minor: string | number; currency: string; invoice_source_id: string;
-        invoice_source_version: string; status: StoredPaymentOrder["status"];
+        invoice_source_version: string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
       }>(
         `SELECT id, provider_order_id, invoice_reference, amount_minor, currency,
-                invoice_source_id, invoice_source_version, status
+                invoice_source_id, invoice_source_version, status, creation_lease_until
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
           FOR UPDATE`,
@@ -230,8 +230,15 @@ export class PostgresPaymentStore {
         return { ok: false, reason: "idempotency_conflict" };
       }
       if (row.status === "creating") {
+        // An expired lease is not permission to call Razorpay again: the previous
+        // process may have created a remote order before crashing. Require explicit
+        // provider-side reconciliation rather than risking duplicate payable orders.
+        const leaseExpired = row.creation_lease_until !== null &&
+          new Date(row.creation_lease_until).getTime() <= Date.now();
         await client.query("ROLLBACK");
-        return { ok: false, reason: "order_creation_in_progress" };
+        return { ok: false, reason: leaseExpired
+          ? "order_creation_reconciliation_required"
+          : "order_creation_in_progress" };
       }
       if (!row.provider_order_id) {
         await client.query("ROLLBACK");
