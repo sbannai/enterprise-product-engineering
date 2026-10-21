@@ -17,17 +17,19 @@ async function withServer(server, run) {
 }
 
 test("payment readiness lists missing prerequisites without exposing configuration", async () => {
-  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "EPER_INVOICE_AUTHORITY_TOKEN"];
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "EPER_INVOICE_AUTHORITY_TOKEN", "EPER_BUILD_ID"];
   const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_PAYMENT_PERSISTENCE: "json-file",
     NODE_ENV: "test",
     EPER_INVOICE_AUTHORITY_TOKEN: "never-echo-this-secret-value",
+    EPER_BUILD_ID: "0123456789abcdef0123456789abcdef01234567",
   });
   try {
     await withServer(createAppServer(), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
       assert.equal(response.status, 503);
+      assert.equal(response.headers.get("cache-control"), "no-store");
       const body = await response.json();
       assert.equal(body.status, "blocked");
       assert.equal(body.subsystem, "payments");
@@ -37,6 +39,10 @@ test("payment readiness lists missing prerequisites without exposing configurati
         "receipt_numbering_policy_unconfigured",
       ]);
       assert.equal(JSON.stringify(body).includes("never-echo-this-secret-value"), false);
+      // Overall API health is independent from the blocked payment subsystem.
+      const health = await fetch(`${base}/health`);
+      assert.equal(health.status, 200);
+      assert.equal((await health.json()).status, "ok");
     });
   } finally {
     for (const key of keys) {
