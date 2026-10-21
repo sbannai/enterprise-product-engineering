@@ -141,6 +141,32 @@ export class PostgresPaymentStore {
     } finally { client.release(); }
   }
 
+  /** Internal-key lookup used only after resolving an authenticated receipt record. */
+  async findOrderByInternalId(tenantId: string, orderId: string): Promise<StoredPaymentOrder | null> {
+    if (!tenantId.trim() || !/^\\d+$/.test(orderId)) throw new Error("INVALID_PAYMENT_LOOKUP");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
+        provider_order_id: string; provider_payment_id: string | null; amount_minor: string | number;
+        currency: string; status: StoredPaymentOrder["status"]; created_at: Date | string;
+      }>(
+        `SELECT id, transaction_public_id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
+                amount_minor, currency, status, created_at
+           FROM eper_payment_orders WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, orderId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      return {
+        id: String(row.id), transactionPublicId: row.transaction_public_id, tenantId: row.tenant_id,
+        invoiceReference: row.invoice_reference, providerOrderId: row.provider_order_id,
+        providerPaymentId: row.provider_payment_id, amountMinor: Number(row.amount_minor),
+        currency: "INR", status: row.status, createdAt: new Date(row.created_at).toISOString(),
+      };
+    } finally { client.release(); }
+  }
+
   /** Provider order IDs are globally unique in the schema; webhook tenant is resolved from this row. */
   async findOrderByProviderOrderId(providerOrderId: string): Promise<StoredPaymentOrder | null> {
     if (!providerOrderId.trim()) throw new Error("INVALID_PAYMENT_LOOKUP");
