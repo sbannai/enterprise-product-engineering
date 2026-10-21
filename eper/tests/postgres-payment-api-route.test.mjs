@@ -187,6 +187,22 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(webhookCaptureCalls, 0, "invalid currency/status must not reach capture persistence");
     }
 
+    const stringAmountEvent = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: providerPaymentId, order_id: providerOrderId, amount: "12500", currency: "INR", status: "captured",
+      } } },
+    });
+    const stringAmountSignature = createHmac("sha256", "route-webhook-secret").update(stringAmountEvent).digest("hex");
+    const stringAmountWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": stringAmountSignature, "x-razorpay-event-id": "evt_route_test_string_amount" },
+      body: stringAmountEvent,
+    });
+    assert.equal(stringAmountWebhook.status, 400);
+    assert.equal((await stringAmountWebhook.json()).error, "captured_payment_event_invalid");
+    assert.equal(webhookCaptureCalls, 0, "string-valued amount must not reach capture persistence");
+
     const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature },
