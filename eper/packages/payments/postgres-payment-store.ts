@@ -114,6 +114,141 @@ export class PostgresPaymentStore {
     }
   }
 
+  /** Lookup by the immutable public transaction UUID exposed by the API. */
+  async findOrderByTransactionPublicId(tenantId: string, transactionPublicId: string): Promise<StoredPaymentOrder | null> {
+    if (!tenantId.trim() || !/^[0-9a-f-]{36}$/i.test(transactionPublicId)) throw new Error("INVALID_PAYMENT_LOOKUP");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
+        provider_order_id: string; provider_payment_id: string | null; amount_minor: string | number;
+        currency: string; status: StoredPaymentOrder["status"]; created_at: Date | string;
+      }>(
+        `SELECT id, transaction_public_id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
+                amount_minor, currency, status, created_at
+           FROM eper_payment_orders
+          WHERE tenant_id = $1 AND transaction_public_id = $2`,
+        [tenantId, transactionPublicId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      return {
+        id: String(row.id), transactionPublicId: row.transaction_public_id, tenantId: row.tenant_id,
+        invoiceReference: row.invoice_reference, providerOrderId: row.provider_order_id,
+        providerPaymentId: row.provider_payment_id, amountMinor: Number(row.amount_minor),
+        currency: "INR", status: row.status, createdAt: new Date(row.created_at).toISOString(),
+      };
+    } finally { client.release(); }
+  }
+
+  /** Provider order IDs are globally unique in the schema; webhook tenant is resolved from this row. */
+  async findOrderByProviderOrderId(providerOrderId: string): Promise<StoredPaymentOrder | null> {
+    if (!providerOrderId.trim()) throw new Error("INVALID_PAYMENT_LOOKUP");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
+        provider_order_id: string; provider_payment_id: string | null; amount_minor: string | number;
+        currency: string; status: StoredPaymentOrder["status"]; created_at: Date | string;
+      }>(
+        `SELECT id, transaction_public_id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
+                amount_minor, currency, status, created_at
+           FROM eper_payment_orders WHERE provider_order_id = $1`,
+        [providerOrderId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      return {
+        id: String(row.id), transactionPublicId: row.transaction_public_id, tenantId: row.tenant_id,
+        invoiceReference: row.invoice_reference, providerOrderId: row.provider_order_id,
+        providerPaymentId: row.provider_payment_id, amountMinor: Number(row.amount_minor),
+        currency: "INR", status: row.status, createdAt: new Date(row.created_at).toISOString(),
+      };
+    } finally { client.release(); }
+  }
+
+  /** Find a receipt by its public UUID for the dedicated download route. */
+  async findReceiptByPublicId(tenantId: string, receiptPublicId: string): Promise<StoredPaymentReceipt | null> {
+    if (!tenantId.trim() || !/^[0-9a-f-]{36}$/i.test(receiptPublicId)) throw new Error("INVALID_RECEIPT_LOOKUP");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        order_id: string | number; receipt_public_id: string; receipt_number: string;
+        document_sha256: string | null; document_pdf: Buffer | null; issued_at: Date | string;
+      }>(
+        `SELECT r.payment_order_id AS order_id, r.receipt_public_id, r.receipt_number,
+                r.document_sha256, r.document_pdf, r.issued_at
+           FROM eper_payment_receipts r
+           JOIN eper_payment_orders o ON o.id = r.payment_order_id
+          WHERE r.tenant_id = $1 AND r.receipt_public_id = $2 AND o.status = 'captured'`,
+        [tenantId, receiptPublicId],
+      );
+      const row = result.rows[0];
+      return row ? {
+        receiptPublicId: row.receipt_public_id, orderId: String(row.order_id),
+        receiptNumber: row.receipt_number, documentSha256: row.document_sha256,
+        documentPdf: row.document_pdf, issuedAt: new Date(row.issued_at).toISOString(),
+      } : null;
+    } finally { client.release(); }
+  }
+
+  /** Atomically persist a provider-verified capture (without fabricating a webhook event ID). */
+  async captureVerifiedPayment(input: {
+    tenantId: string; providerOrderId: string; providerPaymentId: string;
+    amountMinor: number; currency: "INR"; receiptNumber: string;
+  }): Promise<PersistResult<{ receiptPublicId: string; receiptNumber: string; transactionPublicId: string }>> {
+    if (!input.tenantId.trim() || !input.providerOrderId.trim() || !input.providerPaymentId.trim() ||
+        !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 ||
+        !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(input.receiptNumber)) {
+      throw new Error("INVALID_VERIFIED_CAPTURE_INPUT");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{
+        id: string | number; transaction_public_id: string; tenant_id: string;
+        amount_minor: string | number; currency: string; status: string; provider_payment_id: string | null;
+      }>(
+        `SELECT id, transaction_public_id, tenant_id, amount_minor, currency, status, provider_payment_id
+           FROM eper_payment_orders WHERE tenant_id = $1 AND provider_order_id = $2 FOR UPDATE`,
+        [input.tenantId, input.providerOrderId],
+      );
+      const order = result.rows[0];
+      if (!order || Number(order.amount_minor) !== input.amountMinor || order.currency !== input.currency ||
+          !["created", "authorized", "captured"].includes(order.status) ||
+          (order.status === "captured" && order.provider_payment_id !== input.providerPaymentId)) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: order ? "payment_mismatch" : "not_found" };
+      }
+      if (order.status !== "captured") {
+        await client.query(
+          `UPDATE eper_payment_orders SET status = 'captured', provider_payment_id = $2, updated_at = NOW()
+            WHERE id = $1`,
+          [order.id, input.providerPaymentId],
+        );
+        await client.query(
+          `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number)
+           VALUES ($1, $2, $3)`,
+          [input.tenantId, order.id, input.receiptNumber],
+        );
+      }
+      const receipt = await client.query<{ receipt_public_id: string; receipt_number: string }>(
+        `SELECT receipt_public_id, receipt_number FROM eper_payment_receipts WHERE payment_order_id = $1`,
+        [order.id],
+      );
+      if (!receipt.rows[0]) throw new Error("RECEIPT_PERSISTENCE_MISSING");
+      await client.query("COMMIT");
+      return { ok: true, value: {
+        receiptPublicId: receipt.rows[0].receipt_public_id,
+        receiptNumber: receipt.rows[0].receipt_number,
+        transactionPublicId: order.transaction_public_id,
+      } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
+  }
+
   /** Tenant-scoped receipt lookup; callers must still authorize the requesting principal. */
   async findReceipt(tenantId: string, orderId: string): Promise<StoredPaymentReceipt | null> {
     if (!tenantId.trim() || !/^\d+$/.test(orderId)) throw new Error("INVALID_RECEIPT_LOOKUP");
