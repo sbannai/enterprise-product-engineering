@@ -180,6 +180,19 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.deepEqual(persisted.rows[0].transaction_snapshot, capture.transactionSnapshot,
       "the validated source snapshot must be persisted atomically with the issued receipt");
 
+    await assert.rejects(
+      pool.query(
+        `UPDATE eper_payment_receipts
+            SET transaction_snapshot = '{}'::jsonb
+          WHERE payment_order_id = (
+            SELECT id FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2
+          )`,
+        [tenantId, idempotencyKey],
+      ),
+      /EPER_PAYMENT_RECEIPT_SNAPSHOT_IMMUTABLE/,
+      "the database trigger must reject edits to an issued receipt snapshot",
+    );
+
     const storedOrder = await store.findOrder(tenantId, providerOrderId);
     assert.ok(storedOrder);
     assert.match(storedOrder.transactionPublicId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
