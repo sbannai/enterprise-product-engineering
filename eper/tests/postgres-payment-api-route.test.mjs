@@ -496,6 +496,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
     });
     assert.equal(crossTenant.status, 404);
+
+    // PostgreSQL mode must never fall back to the legacy JSON-ledger receipt route.
+    const legacyReceipt = await nativeFetch(`${base}/api/payments/${transactionPublicId}/receipt.pdf`, {
+      headers: { "x-tenant-id": tenantId },
+    });
+    assert.equal(legacyReceipt.status, 410);
+    assert.equal((await legacyReceipt.json()).error, "legacy_receipt_route_disabled_in_postgres_mode");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     globalThis.fetch = nativeFetch;
