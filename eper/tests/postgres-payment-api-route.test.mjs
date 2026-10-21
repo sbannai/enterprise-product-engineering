@@ -66,9 +66,10 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
-      // Model the durable idempotency result for a replayed provider event.
+      // Model durable idempotency and payload-conflict behavior for provider event IDs.
       if (captured && input.providerEventId === "evt_route_test_001") {
-        return { ok: false, reason: "duplicate_event" };
+        const originalPayloadSha256 = createHash("sha256").update(event).digest("hex");
+        return { ok: false, reason: input.payloadSha256 === originalPayloadSha256 ? "duplicate_event" : "event_conflict" };
       }
       webhookCaptureCalls += 1;
       assert.equal(input.providerEventId, "evt_route_test_001");
