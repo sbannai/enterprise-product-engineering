@@ -189,51 +189,6 @@ export class PostgresPaymentStore {
     }
   }
 
-  /** Persist the SHA-256 of the exact PDF bytes issued for a tenant-scoped receipt. */
-  async persistReceiptDocumentHash(
-    tenantId: string,
-    orderId: string,
-    documentSha256: string,
-  ): Promise<PersistResult<{ documentSha256: string }>> {
-    if (!tenantId.trim() || !/^\d+$/.test(orderId) || !/^[a-f0-9]{64}$/i.test(documentSha256)) {
-      throw new Error("INVALID_RECEIPT_DOCUMENT_HASH_INPUT");
-    }
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const result = await client.query<{ document_sha256: string | null }>(
-        `SELECT document_sha256
-           FROM eper_payment_receipts
-          WHERE tenant_id = $1 AND payment_order_id = $2
-          FOR UPDATE`,
-        [tenantId, orderId],
-      );
-      const row = result.rows[0];
-      if (!row) {
-        await client.query("ROLLBACK");
-        return { ok: false, reason: "not_found" };
-      }
-      const normalizedHash = documentSha256.toLowerCase();
-      if (row.document_sha256 && row.document_sha256.toLowerCase() !== normalizedHash) {
-        await client.query("ROLLBACK");
-        return { ok: false, reason: "receipt_document_conflict" };
-      }
-      await client.query(
-        `UPDATE eper_payment_receipts
-            SET document_sha256 = $3
-          WHERE tenant_id = $1 AND payment_order_id = $2`,
-        [tenantId, orderId, normalizedHash],
-      );
-      await client.query("COMMIT");
-      return { ok: true, value: { documentSha256: normalizedHash } };
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
   /**
    * Reserve a tenant-scoped idempotency key before calling Razorpay.
    * A retry never starts another remote order while the reservation is active.
