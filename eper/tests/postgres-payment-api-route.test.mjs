@@ -371,6 +371,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(verifiedCaptureCalls, 0, "mismatched amount must never reach capture persistence");
 
     gatewayAmount = "12500";
+    const gatewayLookupsBeforeNumericId = gatewayVerificationCalls;
     const numericPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
       headers,
@@ -381,8 +382,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(numericPaymentIdVerification.status, 400);
     assert.equal((await numericPaymentIdVerification.json()).error, "payment_signature_invalid");
-    assert.equal(gatewayVerificationCalls, 0, "non-string payment ID must be rejected before gateway lookup");
+    assert.equal(gatewayVerificationCalls, gatewayLookupsBeforeNumericId, "non-string payment ID must be rejected before gateway lookup");
 
+    const gatewayLookupsBeforePaddedId = gatewayVerificationCalls;
     const paddedPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
       headers,
@@ -393,7 +395,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(paddedPaymentIdVerification.status, 400);
     assert.equal((await paddedPaymentIdVerification.json()).error, "payment_signature_invalid");
-    assert.equal(gatewayVerificationCalls, 0, "malformed payment ID must be rejected before gateway lookup");
+    assert.equal(gatewayVerificationCalls, gatewayLookupsBeforePaddedId, "malformed payment ID must be rejected before gateway lookup");
 
     const stringAmountVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
