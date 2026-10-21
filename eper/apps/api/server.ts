@@ -80,6 +80,28 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
+    if (request.method === "GET" && requestUrl.pathname === "/readyz/payments") {
+      // Dedicated subsystem readiness is intentionally separate from /health:
+      // capability API health must not imply payment readiness, and payment
+      // blockers must not expose configuration values or secret material.
+      const blockers: string[] = [];
+      if (process.env.EPER_PAYMENT_PERSISTENCE !== "postgres" || !options.paymentStore) {
+        blockers.push("durable_postgres_payment_store_unavailable");
+      }
+      if (!options.invoiceAmountSource) blockers.push("trusted_invoice_authority_unavailable");
+      if (!options.receiptNumberSource) blockers.push("receipt_numbering_policy_unconfigured");
+      if (process.env.NODE_ENV === "production") {
+        blockers.push("production_payment_enablement_requires_authorized_readiness_review");
+      }
+      const ready = blockers.length === 0;
+      sendJson(response, ready ? 200 : 503, {
+        status: ready ? "ready" : "blocked",
+        subsystem: "payments",
+        blockers,
+      });
+      return;
+    }
+
     // Payment routes are independent of the opt-in UAT capability endpoint.
     if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
 
