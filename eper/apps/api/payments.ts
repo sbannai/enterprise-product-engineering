@@ -54,6 +54,7 @@ function receiptPdf(record: PaymentRecord): Buffer {
     "Receipt ID: " + (record.receiptId ?? ""),
     "Receipt number: " + (record.receiptNumber ?? ""),
     "Payment reference: " + record.reference,
+    "Transaction ID: " + record.id,
     "Payment ID: " + (record.razorpayPaymentId ?? ""),
     "Amount: " + (record.amountPaise / 100).toFixed(2) + " " + record.currency,
     "Tenant: " + record.tenantId,
@@ -159,7 +160,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
       }
-      json(res, 200, { received: true, ...(result.ok ? { receiptId: result.value.receiptPublicId, receiptNumber: result.value.receiptNumber } : {}) });
+      json(res, 200, { received: true, ...(result.ok ? { receiptId: result.value.receiptPublicId, receiptNumber: result.value.receiptNumber, receiptUrl: "/api/payments/receipts/" + result.value.receiptPublicId + ".pdf" } : {}) });
       return true;
     }
     if (event?.event === "payment.captured") {
