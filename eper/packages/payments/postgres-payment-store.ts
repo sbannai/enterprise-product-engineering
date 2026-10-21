@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { TrustedTransactionSnapshot } from "./transaction-receipt-contract.js";
+import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshot } from "./transaction-receipt-contract.js";
 /**
  * PostgreSQL persistence primitives for EPER payments.
  *
@@ -573,6 +573,13 @@ export class PostgresPaymentStore {
       !/^[a-f0-9]{64}$/i.test(input.payloadSha256)
     ) {
       throw new Error("INVALID_CAPTURE_INPUT");
+    }
+    if (input.transactionSnapshot) {
+      const validation = await resolveTrustedTransactionSnapshot(
+        { findTransaction: async () => input.transactionSnapshot ?? null },
+        { tenantId: input.tenantId, reference: input.transactionSnapshot.reference },
+      );
+      if (!validation.ok) throw new Error("INVALID_TRANSACTION_SNAPSHOT:" + validation.error);
     }
     const client = await this.pool.connect();
     try {
