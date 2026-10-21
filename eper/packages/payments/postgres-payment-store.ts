@@ -238,26 +238,32 @@ export class PostgresPaymentStore {
   /** Atomically persist a provider-verified capture (without fabricating a webhook event ID). */
   async captureVerifiedPayment(input: {
     tenantId: string; providerOrderId: string; providerPaymentId: string;
-    amountMinor: number; currency: "INR"; receiptNumber: string;
+    amountMinor: number; currency: "INR"; receiptNumber: string; transactionSnapshot: TrustedTransactionSnapshot;
   }): Promise<PersistResult<{ receiptPublicId: string; receiptNumber: string; transactionPublicId: string }>> {
     if (!input.tenantId.trim() || !input.providerOrderId.trim() || !input.providerPaymentId.trim() ||
         !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 ||
         !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(input.receiptNumber)) {
       throw new Error("INVALID_VERIFIED_CAPTURE_INPUT");
     }
+    const snapshotValidation = await resolveTrustedTransactionSnapshot({
+      async findTransaction() { return input.transactionSnapshot; },
+    }, { tenantId: input.tenantId, reference: input.transactionSnapshot.reference });
+    if (!snapshotValidation.ok || snapshotValidation.transaction.amountDueMinor !== input.amountMinor ||
+        snapshotValidation.transaction.currency !== input.currency) throw new Error("INVALID_VERIFIED_CAPTURE_TRANSACTION_SNAPSHOT");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const result = await client.query<{
-        id: string | number; transaction_public_id: string; tenant_id: string;
+        id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
         amount_minor: string | number; currency: string; status: string; provider_payment_id: string | null;
       }>(
-        `SELECT id, transaction_public_id, tenant_id, amount_minor, currency, status, provider_payment_id
+        `SELECT id, transaction_public_id, tenant_id, invoice_reference, amount_minor, currency, status, provider_payment_id
            FROM eper_payment_orders WHERE tenant_id = $1 AND provider_order_id = $2 FOR UPDATE`,
         [input.tenantId, input.providerOrderId],
       );
       const order = result.rows[0];
-      if (!order || Number(order.amount_minor) !== input.amountMinor || order.currency !== input.currency ||
+      if (!order || order.invoice_reference !== snapshotValidation.transaction.reference ||
+          Number(order.amount_minor) !== input.amountMinor || order.currency !== input.currency ||
           !["created", "authorized", "captured"].includes(order.status) ||
           (order.status === "captured" && order.provider_payment_id !== input.providerPaymentId)) {
         await client.query("ROLLBACK");
@@ -270,9 +276,9 @@ export class PostgresPaymentStore {
           [order.id, input.providerPaymentId],
         );
         await client.query(
-          `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number)
-           VALUES ($1, $2, $3)`,
-          [input.tenantId, order.id, input.receiptNumber],
+          `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number, transaction_snapshot)
+           VALUES ($1, $2, $3, $4::jsonb)`,
+          [input.tenantId, order.id, input.receiptNumber, JSON.stringify(snapshotValidation.transaction)],
         );
       }
       const receipt = await client.query<{ receipt_public_id: string; receipt_number: string }>(
