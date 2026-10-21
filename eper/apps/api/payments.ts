@@ -114,6 +114,12 @@ function bearer(req: IncomingMessage, token: string): boolean {
  */
 export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
+  // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
+  // payment mutation or receipt issuance in production until a transactional store is wired.
+  if (process.env.NODE_ENV === "production") {
+    json(res, 503, { error: "payment_persistence_not_production_ready" });
+    return true;
+  }
   const cfg = config();
   if (!cfg) { json(res, 503, { error: "payment_gateway_unconfigured" }); return true; }
 
