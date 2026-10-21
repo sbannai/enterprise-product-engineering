@@ -314,7 +314,22 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
       } : null;
     },
   };
-  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
+        return {
+          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [], adjustments: [],
+          sourceId: "test-fee-ledger", sourceVersion: "v1",
+          approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -402,7 +417,22 @@ test("PostgreSQL-backed order route does not create a second gateway order after
       } : null;
     },
   };
-  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
+        return {
+          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [], adjustments: [],
+          sourceId: "test-fee-ledger", sourceVersion: "v1",
+          approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -496,7 +526,22 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
       } : null;
     },
   };
-  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
+        return {
+          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [], adjustments: [],
+          sourceId: "test-fee-ledger", sourceVersion: "v1",
+          approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
