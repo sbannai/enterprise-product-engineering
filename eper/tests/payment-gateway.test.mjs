@@ -78,6 +78,26 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
 
     // A correctly signed capture webhook must transition the matching order to
     // PAID, using the raw request bytes for HMAC verification.
+    const pendingEvent = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: "pay_test_001", order_id: "order_test_001",
+        amount: 12500, currency: "INR", status: "authorized",
+      } } },
+    });
+    const pendingSignature = createHmac("sha256", "webhook-test-secret")
+      .update(pendingEvent).digest("hex");
+    const pendingWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": pendingSignature },
+      body: pendingEvent,
+    });
+    assert.equal(pendingWebhook.status, 200);
+    const pendingReceipt = await nativeFetch(`${base}/api/payments/${createdBody.payment.id}/receipt.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-a" },
+    });
+    assert.equal(pendingReceipt.status, 409);
+
     const captureEvent = JSON.stringify({
       event: "payment.captured",
       payload: { payment: { entity: {
