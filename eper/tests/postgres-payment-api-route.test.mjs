@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 test("PostgreSQL route exposes stable transaction UUID and downloads persisted receipt by its own UUID", async () => {
@@ -89,8 +89,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(requestTenant, tenantId);
       assert.equal(id, "41");
       persistedPdf = Buffer.from(pdf);
-      receipt = { ...receipt, documentPdf: persistedPdf, documentSha256: "test-digest" };
-      return { ok: true, value: { documentSha256: "test-digest" } };
+      const documentSha256 = createHash("sha256").update(persistedPdf).digest("hex");
+      receipt = { ...receipt, documentPdf: persistedPdf, documentSha256 };
+      return { ok: true, value: { documentSha256 } };
     },
     async findReceipt(requestTenant, id) {
       return requestTenant === tenantId && id === "41" ? { ...receipt, documentPdf: persistedPdf } : null;
@@ -183,6 +184,15 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(repeatedDownload.status, 200);
     assert.deepEqual(Buffer.from(await repeatedDownload.arrayBuffer()), bytes);
+
+    // Persisted PDF bytes must match the stored digest before they are served.
+    persistedPdf = Buffer.from(bytes);
+    persistedPdf[persistedPdf.length - 10] ^= 0x01;
+    const corruptedDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
+    });
+    assert.equal(corruptedDownload.status, 503);
+    assert.equal((await corruptedDownload.json()).error, "receipt_document_integrity_failed");
 
     const crossTenant = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
