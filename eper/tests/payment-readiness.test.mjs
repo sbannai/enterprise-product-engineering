@@ -52,6 +52,50 @@ test("payment readiness lists missing prerequisites without exposing configurati
   }
 });
 
+test("payment readiness rejects invoice sources without a callable lookup method", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test" });
+  try {
+    await withServer(createAppServer({
+      paymentStore: { async checkConnectivity() { return true; } },
+      invoiceAmountSource: {},
+      receiptNumberSource: async () => "TEST-RECEIPT",
+    }), async (base) => {
+      const response = await fetch(`${base}/readyz/payments`);
+      assert.equal(response.status, 503);
+      assert.deepEqual((await response.json()).blockers, ["trusted_invoice_authority_unavailable"]);
+    });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
+
+test("payment readiness rejects non-callable receipt numbering source", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test" });
+  try {
+    await withServer(createAppServer({
+      paymentStore: { async checkConnectivity() { return true; } },
+      invoiceAmountSource: { async findInvoice() { return null; } },
+      receiptNumberSource: {},
+    }), async (base) => {
+      const response = await fetch(`${base}/readyz/payments`);
+      assert.equal(response.status, 503);
+      assert.deepEqual((await response.json()).blockers, ["receipt_numbering_policy_unconfigured"]);
+    });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
+
 test("payment readiness keeps production payment enablement blocked pending authorized review", async () => {
   const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
   const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
