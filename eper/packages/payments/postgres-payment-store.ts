@@ -128,7 +128,6 @@ export class PostgresPaymentStore {
     orderId: string,
     documentSha256: string,
   ): Promise<PersistResult<{ documentSha256: string }>> {
-    if (!tenantId.trim() || !/^\\d+$/.test(orderId) || !/^[a-f0-9]{64}$/i.test(documentSha256)) {
     if (!tenantId.trim() || !/^\d+$/.test(orderId) || !/^[a-f0-9]{64}$/i.test(documentSha256)) {
     }
     const client = await this.pool.connect();
