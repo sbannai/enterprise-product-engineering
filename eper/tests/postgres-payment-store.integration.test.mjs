@@ -208,6 +208,7 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const verifiedRetry = await store.captureVerifiedPayment({
       tenantId, providerOrderId, providerPaymentId: capture.providerPaymentId,
       amountMinor: 12500, currency: "INR", receiptNumber: capture.receiptNumber,
+      transactionSnapshot: capture.transactionSnapshot,
     });
     assert.equal(verifiedRetry.ok, true);
     if (verifiedRetry.ok) {
