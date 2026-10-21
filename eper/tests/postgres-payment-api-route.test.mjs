@@ -449,6 +449,17 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(invalidReceiptNumberVerification.status, 503);
     assert.equal((await invalidReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
     assert.equal(verifiedCaptureCalls, 0, "oversized receipt number policy output must not reach verification capture persistence");
+    receiptNumberSourceValue = "INVALID RECEIPT";
+    const malformedReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(malformedReceiptNumberVerification.status, 503);
+    assert.equal((await malformedReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
+    assert.equal(verifiedCaptureCalls, 0, "malformed receipt policy output must not reach capture persistence");
     receiptNumberSourceValue = receiptNumber;
 
     const verified = await nativeFetch(`${base}/api/payments/verify`, {
