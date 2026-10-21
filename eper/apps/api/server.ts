@@ -96,8 +96,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           blockers.push("postgres_payment_database_unreachable");
         }
       }
-      if (!options.invoiceAmountSource) blockers.push("trusted_invoice_authority_unavailable");
-      if (!options.receiptNumberSource) blockers.push("receipt_numbering_policy_unconfigured");
+      if (!options.invoiceAmountSource || typeof options.invoiceAmountSource.findInvoice !== "function") {
+        blockers.push("trusted_invoice_authority_unavailable");
+      }
+      if (typeof options.receiptNumberSource !== "function") {
+        blockers.push("receipt_numbering_policy_unconfigured");
+      }
       if (process.env.NODE_ENV === "production") {
         blockers.push("production_payment_enablement_requires_authorized_readiness_review");
       }
