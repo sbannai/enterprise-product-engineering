@@ -386,13 +386,20 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           gatewayPayment.currency !== order.currency || gatewayPayment.status !== "captured") {
         json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
       }
+      const snapshot = await resolveTrustedTransactionSnapshot(transactionSnapshotSource, {
+        tenantId, reference: order.invoiceReference,
+      });
+      if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
+      if (snapshot.transaction.amountDueMinor !== gatewayPayment.amount || snapshot.transaction.currency !== gatewayPayment.currency) {
+        json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
+      }
       const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
         tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId,
       });
       if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const captured = await paymentStore.captureVerifiedPayment({
         tenantId, providerOrderId: orderId, providerPaymentId: paymentId,
-        amountMinor: order.amountMinor, currency: "INR", receiptNumber,
+        amountMinor: order.amountMinor, currency: "INR", receiptNumber, transactionSnapshot: snapshot.transaction,
       });
       if (!captured.ok) { json(res, captured.reason === "payment_mismatch" ? 409 : 404, { error: captured.reason }); return true; }
       json(res, 200, {
