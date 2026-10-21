@@ -65,7 +65,39 @@ export class HttpInvoiceAmountSource implements TrustedInvoiceAmountSource {
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error("EPER_INVOICE_AUTHORITY_REQUEST_FAILED");
-    const value: unknown = await response.json();
+
+    // Bound untrusted upstream response bodies before JSON parsing to prevent an
+    // invoice-authority outage or compromised endpoint from exhausting API memory.
+    const maxResponseBytes = 64 * 1024;
+    const declaredLength = response.headers.get("content-length");
+    if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxResponseBytes) {
+      await response.body?.cancel();
+      throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_TOO_LARGE");
+    }
+    if (!response.body) throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_INVALID");
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > maxResponseBytes) {
+          await reader.cancel();
+          throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_TOO_LARGE");
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"));
+    } catch {
+      throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_INVALID");
+    }
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_INVALID");
     }
