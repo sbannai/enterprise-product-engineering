@@ -2,7 +2,7 @@ import type {
   TransactionSnapshotLookup,
   TrustedTransactionSnapshot,
   TrustedTransactionSnapshotSource,
-} from "./transaction-amount-authority.js";
+} from "./transaction-receipt-contract.js";
 
 export interface HttpTransactionAuthorityConfig {
   endpoint: string;
