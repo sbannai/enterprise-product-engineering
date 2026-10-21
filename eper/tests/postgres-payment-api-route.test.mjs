@@ -371,26 +371,26 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     gatewayAmount = "12500";
     const numericPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-tenant-id": tenantId },
+      headers,
       body: JSON.stringify({
         razorpay_order_id: providerOrderId, razorpay_payment_id: 12345,
         razorpay_signature: createHmac("sha256", "route-key-secret").update(providerOrderId + "|12345").digest("hex"),
       }),
     });
     assert.equal(numericPaymentIdVerification.status, 401);
-    assert.equal((await numericPaymentIdVerification.json()).error, "unauthorized");
+    assert.equal((await numericPaymentIdVerification.json()).error, "payment_signature_invalid");
     assert.equal(gatewayVerificationCalls, 0, "non-string payment ID must be rejected before gateway lookup");
 
     const paddedPaymentIdVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-tenant-id": tenantId },
+      headers,
       body: JSON.stringify({
         razorpay_order_id: providerOrderId, razorpay_payment_id: ` ${providerPaymentId}`,
         razorpay_signature: createHmac("sha256", "route-key-secret").update(providerOrderId + "|" + ` ${providerPaymentId}`).digest("hex"),
       }),
     });
     assert.equal(paddedPaymentIdVerification.status, 401);
-    assert.equal((await paddedPaymentIdVerification.json()).error, "unauthorized");
+    assert.equal((await paddedPaymentIdVerification.json()).error, "payment_signature_invalid");
     assert.equal(gatewayVerificationCalls, 0, "malformed payment ID must be rejected before gateway lookup");
 
     const stringAmountVerification = await nativeFetch(`${base}/api/payments/verify`, {
