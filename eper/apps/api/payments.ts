@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 
 type PaymentStatus = "CREATED" | "PAID";
 interface PaymentRecord {
@@ -108,7 +109,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   const cfg = config();
   if (!cfg) { json(res, 503, { error: "payment_gateway_unconfigured" }); return true; }
@@ -145,15 +146,21 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const tenantId = typeof input?.tenantId === "string" ? input.tenantId.trim() : "";
     const reference = typeof input?.reference === "string" ? input.reference.trim() : "";
     if (!tenantId || !tenantMatches(req, tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
-    const amountPaise = input?.amountPaise;
-    const currency = typeof input?.currency === "string" ? input.currency.toUpperCase() : "INR";
-    // Payment amount must come from a trusted server-side invoice/fee source, not an arbitrary client value.
-    if (process.env.NODE_ENV === "production" || process.env.EPER_PAYMENT_ALLOW_CLIENT_AMOUNT !== "true") {
-      json(res, 503, { error: "server_side_amount_authority_required" }); return true;
+    if (!tenantId || !reference) {
+      json(res, 400, { error: "tenant_and_invoice_reference_required" }); return true;
     }
-    if (!tenantId || !reference || !Number.isSafeInteger(amountPaise) || amountPaise <= 0 || currency !== "INR") {
-      json(res, 400, { error: "tenant_reference_positive_amount_paise_and_inr_required" }); return true;
+    // Never use browser-supplied amounts. Resolve from the injected tenant-scoped invoice source.
+    const authority = await resolveTrustedInvoiceAmount(invoiceAmountSource, { tenantId, reference });
+    if (!authority.ok) {
+      const status = authority.error === "invoice_not_found" ? 404
+        : authority.error === "invoice_tenant_mismatch" ? 403
+        : authority.error === "invoice_not_payable" ? 409
+        : authority.error === "invoice_amount_invalid" || authority.error === "invoice_currency_unsupported" || authority.error === "invoice_reference_mismatch" ? 422
+        : 503;
+      json(res, status, { error: authority.error }); return true;
     }
+    const amountPaise = authority.invoice.amountDuePaise;
+    const currency = authority.invoice.currency;
     const ledger = await readLedger(cfg.ledgerFile);
     const existing = ledger.records.find(item => item.tenantId === tenantId && item.reference === reference);
     if (existing) {
