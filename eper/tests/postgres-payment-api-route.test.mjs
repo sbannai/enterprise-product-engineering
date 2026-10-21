@@ -66,6 +66,10 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
+      // Model the durable idempotency result for a replayed provider event.
+      if (captured && input.providerEventId === "evt_route_test_001") {
+        return { ok: false, reason: "duplicate_event" };
+      }
       webhookCaptureCalls += 1;
       assert.equal(input.providerEventId, "evt_route_test_001");
       assert.equal(input.amountMinor, webhookGatewayAmount);
