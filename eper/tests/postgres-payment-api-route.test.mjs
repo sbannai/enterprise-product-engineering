@@ -352,6 +352,30 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await mismatchedVerification.json()).error, "gateway_payment_details_mismatch");
     assert.equal(verifiedCaptureCalls, 0, "mismatched amount must never reach capture persistence");
 
+    gatewayAmount = "12500";
+    const stringAmountVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(stringAmountVerification.status, 400);
+    assert.equal((await stringAmountVerification.json()).error, "gateway_payment_details_mismatch");
+    assert.equal(verifiedCaptureCalls, 0, "string-valued gateway amount must not reach verification capture persistence");
+
+    gatewayAmount = 12500.5;
+    const fractionalAmountVerification = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        razorpay_order_id: providerOrderId, razorpay_payment_id: providerPaymentId,
+        razorpay_signature: verificationSignature,
+      }),
+    });
+    assert.equal(fractionalAmountVerification.status, 400);
+    assert.equal((await fractionalAmountVerification.json()).error, "gateway_payment_details_mismatch");
+    assert.equal(verifiedCaptureCalls, 0, "fractional gateway amount must not reach verification capture persistence");
+
     gatewayAmount = 12500;
     receiptNumberSourceValue = " ".repeat(101);
     const invalidReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
