@@ -87,6 +87,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const blockers: string[] = [];
       if (process.env.EPER_PAYMENT_PERSISTENCE !== "postgres" || !options.paymentStore) {
         blockers.push("durable_postgres_payment_store_unavailable");
+      } else {
+        try {
+          if (typeof options.paymentStore.checkConnectivity !== "function" || !(await options.paymentStore.checkConnectivity())) {
+            blockers.push("postgres_payment_database_unreachable");
+          }
+        } catch {
+          blockers.push("postgres_payment_database_unreachable");
+        }
       }
       if (!options.invoiceAmountSource) blockers.push("trusted_invoice_authority_unavailable");
       if (!options.receiptNumberSource) blockers.push("receipt_numbering_policy_unconfigured");
