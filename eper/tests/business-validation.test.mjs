@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BusinessValidationEngine } from "../dist/packages/capabilities/business-validation.js";
 
-test("business validation accepts input when all rules pass", () => {
+test("business validation fails closed when no approved rules are configured", () => {
+  const engine = new BusinessValidationEngine();
+  const result = engine.validate({ any: "input" });
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.issues, [{
+    code: "VALIDATION_RULESET_NOT_CONFIGURED",
+    message: "No approved business validation rules are configured",
+    severity: "ERROR",
+  }]);
+});
+
+test("business validation accepts input when all configured rules pass", () => {
   const engine = new BusinessValidationEngine();
   engine.addRule({
     id: "required-name",
