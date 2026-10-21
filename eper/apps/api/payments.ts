@@ -125,6 +125,10 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 503, { error: "payment_persistence_not_production_ready" });
     return true;
   }
+  if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres" && !paymentStore) {
+    json(res, 503, { error: "payment_persistence_store_unavailable" });
+    return true;
+  }
   const cfg = config();
   if (!cfg) { json(res, 503, { error: "payment_gateway_unconfigured" }); return true; }
 
@@ -414,6 +418,10 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
   }
 
   const receiptMatch = /^\/api\/payments\/([^/]+)\/receipt\.pdf$/.exec(pathname);
+  if (req.method === "GET" && receiptMatch && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+    json(res, 410, { error: "legacy_receipt_route_disabled_in_postgres_mode" });
+    return true;
+  }
   if (req.method === "GET" && receiptMatch) {
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.id === decodeURIComponent(receiptMatch[1]));
