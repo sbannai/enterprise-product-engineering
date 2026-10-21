@@ -70,7 +70,7 @@ export type TransactionSnapshotResult =
 
 const payable = new Set<TransactionPayability>(["DUE", "PARTIALLY_PAID"]);
 const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
-const isMinor = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
+const isMinor = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
 /** Resolve and validate a source-owned transaction snapshot before payment-order creation. */
 export async function resolveTrustedTransactionSnapshot(
