@@ -153,3 +153,33 @@ test("PostgresPaymentStore rejects invalid order input before opening a transact
   );
   assert.equal(connectCalls, 0);
 });
+
+test("PostgresPaymentStore rejects receipt identifiers unsafe for headers or filenames", async () => {
+  let connectCalls = 0;
+  const store = new PostgresPaymentStore({
+    async connect() {
+      connectCalls += 1;
+      throw new Error("database should not be touched for invalid input");
+    },
+  });
+  const validInput = {
+    providerEventId: "evt_receipt",
+    eventType: "payment.captured",
+    payloadSha256: "d".repeat(64),
+    providerOrderId: "order_test_41",
+    providerPaymentId: "pay_test_41",
+    amountMinor: 12500,
+    currency: "INR",
+    tenantId: "tenant-a",
+    receiptNumber: "APPROVED-RECEIPT-00043",
+  };
+  await assert.rejects(
+    store.capturePayment({ ...validInput, receiptNumber: 'RECEIPT-43"\\r\\nX-Injected: yes' }),
+    /INVALID_CAPTURE_INPUT/,
+  );
+  await assert.rejects(
+    store.capturePayment({ ...validInput, receiptNumber: "x".repeat(81) }),
+    /INVALID_CAPTURE_INPUT/,
+  );
+  assert.equal(connectCalls, 0);
+});
