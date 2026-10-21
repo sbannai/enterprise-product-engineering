@@ -20,6 +20,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let receiptNumberSourceValue = receiptNumber;
   let captured = false;
   let webhookCaptureCalls = 0;
+  let originalWebhookPayloadSha256 = null;
   let webhookGatewayAmount = 12500;
   let verifiedCaptureCalls = 0;
   let gatewayAmount = 12500;
@@ -69,8 +70,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     async capturePayment(input) {
       // Model durable idempotency and payload-conflict behavior for provider event IDs.
       if (captured && input.providerEventId === "evt_route_test_001") {
-        const originalPayloadSha256 = createHash("sha256").update(event).digest("hex");
-        return { ok: false, reason: input.payloadSha256 === originalPayloadSha256 ? "duplicate_event" : "event_conflict" };
+        return { ok: false, reason: input.payloadSha256 === originalWebhookPayloadSha256 ? "duplicate_event" : "event_conflict" };
       }
       webhookCaptureCalls += 1;
       assert.equal(input.providerEventId, "evt_route_test_001");
@@ -154,6 +154,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       } } },
     });
     const signature = createHmac("sha256", "route-webhook-secret").update(event).digest("hex");
+    originalWebhookPayloadSha256 = createHash("sha256").update(event).digest("hex");
     const mismatchedEvent = JSON.stringify({
       event: "payment.captured",
       payload: { payment: { entity: {
