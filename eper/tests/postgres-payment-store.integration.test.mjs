@@ -72,12 +72,15 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
 
     const storedOrder = await store.findOrder(tenantId, providerOrderId);
     assert.ok(storedOrder);
+    assert.match(storedOrder.transactionPublicId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     assert.equal(storedOrder.status, "captured");
     assert.equal(storedOrder.providerPaymentId, capture.providerPaymentId);
     assert.equal(storedOrder.amountMinor, 12500);
 
     const storedReceipt = await store.findReceipt(tenantId, storedOrder.id);
     assert.ok(storedReceipt);
+    assert.match(storedReceipt.receiptPublicId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.notEqual(storedReceipt.receiptPublicId, storedOrder.transactionPublicId);
     assert.equal(storedReceipt.receiptNumber, capture.receiptNumber);
     assert.equal(storedReceipt.documentSha256, null);
     assert.equal(storedReceipt.documentPdf, null);
@@ -139,10 +142,10 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const reservedProviderOrder = "order_" + randomUUID().replaceAll("-", "");
     const completedReservation = await store.completeOrderCreation(tenantId, reservationKey, reservedProviderOrder);
     assert.deepEqual(completedReservation, {
-      ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
+      ok: true, value: { id: reservation.value.id, transactionPublicId: reservation.value.transactionPublicId, providerOrderId: reservedProviderOrder },
     });
     assert.deepEqual(await store.reserveOrder(reservationInput), {
-      ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
+      ok: true, value: { id: reservation.value.id, transactionPublicId: reservation.value.transactionPublicId, providerOrderId: reservedProviderOrder },
     });
     assert.deepEqual(await store.completeOrderCreation(tenantId, reservationKey, reservedProviderOrder), {
       ok: true, value: { id: reservation.value.id, providerOrderId: reservedProviderOrder },
