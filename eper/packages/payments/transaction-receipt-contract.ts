@@ -134,8 +134,19 @@ export async function resolveTrustedTransactionSnapshot(
     ) return { ok: false, error: "transaction_adjustments_invalid" };
     adjustmentsTotal += adjustment.amountMinor;
   }
+  // E-commerce snapshots must reconcile from checkout lines. A GENERAL transaction
+  // may legitimately be a source-owned invoice/fee summary with no line-level detail;
+  // in that case the trusted source amount is authoritative. If any detail is supplied,
+  // require the supplied detail to reconcile exactly.
+  const summaryOnlyGeneral =
+    transaction.kind === "GENERAL" &&
+    transaction.lineItems.length === 0 &&
+    transaction.adjustments.length === 0;
   const computedTotal = lineTotal + adjustmentsTotal;
-  if (!Number.isSafeInteger(computedTotal) || computedTotal <= 0 || computedTotal !== transaction.amountDueMinor) {
+  if (
+    !summaryOnlyGeneral &&
+    (!Number.isSafeInteger(computedTotal) || computedTotal <= 0 || computedTotal !== transaction.amountDueMinor)
+  ) {
     return { ok: false, error: "transaction_total_mismatch" };
   }
 
