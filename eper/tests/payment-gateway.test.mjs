@@ -622,10 +622,11 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
   });
+  let orderLookups = 0;
   const paymentStore = {
     async findReceiptByPublicId(tenantId, requestedId) {
-      assert.equal(tenantId, "tenant-a");
       assert.equal(requestedId, receiptPublicId);
+      if (tenantId !== "tenant-a") return null;
       return {
         receiptPublicId, orderId: "41", receiptNumber: "APPROVED-RECEIPT-00041",
         documentSha256: "0".repeat(64), documentPdf: storedPdf,
@@ -633,6 +634,7 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
       };
     },
     async findOrderByInternalId(tenantId, orderId) {
+      orderLookups += 1;
       assert.equal(tenantId, "tenant-a");
       assert.equal(orderId, "41");
       return {
@@ -651,11 +653,20 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     });
     const address = server.address();
     assert.ok(address && typeof address === "object");
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/payments/receipts/${receiptPublicId}.pdf`, {
+    const base = `http://127.0.0.1:${address.port}/api/payments/receipts/${receiptPublicId}.pdf`;
+    const crossTenant = await fetch(base, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-b" },
+    });
+    assert.equal(crossTenant.status, 404);
+    assert.deepEqual(await crossTenant.json(), { error: "receipt_not_found" });
+    assert.equal(orderLookups, 0, "cross-tenant receipt requests must not reach order lookup");
+
+    const response = await fetch(base, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-a" },
     });
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: "receipt_document_integrity_failed" });
+    assert.equal(orderLookups, 1);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const [key, value] of Object.entries(oldEnv)) {
