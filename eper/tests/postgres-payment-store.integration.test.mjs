@@ -57,6 +57,19 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const duplicate = await store.capturePayment(capture);
     assert.deepEqual(duplicate, { ok: false, reason: "duplicate_event" });
 
+    // A distinct provider event for the same already-captured payment must reuse
+    // the existing receipt rather than issue a second receipt.
+    const repeatedCapture = await store.capturePayment({
+      ...capture,
+      providerEventId: "evt_repeat_" + randomUUID().replaceAll("-", ""),
+      payloadSha256: createHash("sha256").update("repeat" + providerOrderId).digest("hex"),
+    });
+    assert.equal(repeatedCapture.ok, true);
+    if (repeatedCapture.ok) {
+      assert.equal(repeatedCapture.value.receiptPublicId, concurrent.find((result) => result.ok).value.receiptPublicId);
+      assert.equal(repeatedCapture.value.receiptNumber, capture.receiptNumber);
+    }
+
     const persisted = await pool.query(
       `SELECT o.status, o.provider_payment_id, r.receipt_number, COUNT(r.id) OVER () AS receipt_count
          FROM eper_payment_orders o
