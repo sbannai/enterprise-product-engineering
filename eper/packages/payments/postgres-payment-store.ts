@@ -36,6 +36,8 @@ export interface CapturedPaymentInput {
   amountMinor: number;
   currency: "INR";
   tenantId: string;
+  /** Supplied by the business-approved receipt numbering policy; never generated here. */
+  receiptNumber: string;
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
@@ -102,6 +104,19 @@ export class PostgresPaymentStore {
    * marks the order paid, and issues exactly one receipt record.
    */
   async capturePayment(input: CapturedPaymentInput): Promise<PersistResult<{ receiptNumber: string }>> {
+    if (
+      input.eventType !== "payment.captured" ||
+      !input.providerEventId.trim() ||
+      !input.providerOrderId.trim() ||
+      !input.providerPaymentId.trim() ||
+      !input.tenantId.trim() ||
+      !input.receiptNumber.trim() ||
+      !Number.isSafeInteger(input.amountMinor) ||
+      input.amountMinor <= 0 ||
+      !/^[a-f0-9]{64}$/i.test(input.payloadSha256)
+    ) {
+      throw new Error("INVALID_CAPTURE_INPUT");
+    }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -135,14 +150,13 @@ export class PostgresPaymentStore {
         await client.query("ROLLBACK");
         return { ok: false, reason: "payment_mismatch" };
       }
-      const year = new Date().getUTCFullYear();
-      const receiptNumber = `EPER-${year}-${cryptoRandomToken()}`;
       await client.query(
         `UPDATE eper_payment_orders
-            SET status = 'captured', updated_at = NOW()
+            SET status = 'captured', provider_payment_id = $2, updated_at = NOW()
           WHERE id = $1`,
-        [order.id],
+        [order.id, input.providerPaymentId],
       );
+      const receiptNumber = input.receiptNumber;
       // Receipt PDF generation happens in a later layer; do not mislabel the webhook
       // payload hash as a receipt-document hash.
       await client.query(
@@ -168,7 +182,3 @@ export class PostgresPaymentStore {
   }
 }
 
-function cryptoRandomToken(): string {
-  // UUID hex without dashes; receipt numbering policy still requires business approval.
-  return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
-}
