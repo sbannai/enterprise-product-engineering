@@ -172,6 +172,25 @@ test("PostgresPaymentStore rejects invalid order input before opening a transact
   assert.equal(connectCalls, 0);
 });
 
+test("PostgresPaymentStore validates receipt PDF hashes before database access", async () => {
+  let connectCalls = 0;
+  const store = new PostgresPaymentStore({
+    async connect() {
+      connectCalls += 1;
+      throw new Error("database should not be touched for invalid input");
+    },
+  });
+  await assert.rejects(
+    store.persistReceiptDocumentHash("tenant-a", "41", "not-a-sha256"),
+    /INVALID_RECEIPT_DOCUMENT_HASH_INPUT/,
+  );
+  await assert.rejects(
+    store.persistReceiptDocumentHash("tenant-a", "../41", "a".repeat(64)),
+    /INVALID_RECEIPT_DOCUMENT_HASH_INPUT/,
+  );
+  assert.equal(connectCalls, 0);
+});
+
 test("PostgresPaymentStore rejects non-numeric receipt order IDs before database access", async () => {
   let connectCalls = 0;
   const store = new PostgresPaymentStore({
