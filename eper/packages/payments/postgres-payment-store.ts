@@ -129,6 +129,7 @@ export class PostgresPaymentStore {
     documentSha256: string,
   ): Promise<PersistResult<{ documentSha256: string }>> {
     if (!tenantId.trim() || !/^\d+$/.test(orderId) || !/^[a-f0-9]{64}$/i.test(documentSha256)) {
+      throw new Error("INVALID_RECEIPT_DOCUMENT_HASH_INPUT");
     }
     const client = await this.pool.connect();
     try {
