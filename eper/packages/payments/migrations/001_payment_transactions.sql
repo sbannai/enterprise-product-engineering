@@ -1,8 +1,6 @@
 -- EPER payment persistence baseline (PostgreSQL).
--- This migration defines durable constraints only; it does not wire a database
--- adapter or authorize production payments. Keep the production fail-closed
--- guard enabled until the adapter and integration tests are complete.
-
+-- Schema only: production payment routes remain fail-closed until a real Pool,
+-- the authoritative invoice source, and integration tests are wired.
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS eper_payment_orders (
@@ -12,14 +10,13 @@ CREATE TABLE IF NOT EXISTS eper_payment_orders (
   idempotency_key TEXT NOT NULL,
   provider TEXT NOT NULL CHECK (provider = 'razorpay'),
   provider_order_id TEXT UNIQUE,
+  provider_payment_id TEXT UNIQUE,
   amount_minor BIGINT NOT NULL CHECK (amount_minor > 0),
   currency CHAR(3) NOT NULL CHECK (currency = 'INR'),
   invoice_source_id TEXT NOT NULL,
   invoice_source_version TEXT NOT NULL,
   invoice_approved_at TIMESTAMPTZ NOT NULL,
-  status TEXT NOT NULL CHECK (
-    status IN ('created', 'authorized', 'captured', 'failed', 'refunded')
-  ),
+  status TEXT NOT NULL CHECK (status IN ('created', 'authorized', 'captured', 'failed', 'refunded')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (tenant_id, idempotency_key)
@@ -44,7 +41,7 @@ CREATE TABLE IF NOT EXISTS eper_payment_receipts (
   tenant_id TEXT NOT NULL,
   payment_order_id BIGINT NOT NULL REFERENCES eper_payment_orders(id),
   receipt_number TEXT NOT NULL,
-  document_sha256 CHAR(64) NOT NULL,
+  document_sha256 CHAR(64),
   issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (tenant_id, receipt_number),
   UNIQUE (payment_order_id)
