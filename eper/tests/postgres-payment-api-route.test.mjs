@@ -131,6 +131,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const createdBody = await created.json();
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
+    assert.notEqual(createdBody.payment.id, receiptPublicId);
 
     const event = JSON.stringify({
       event: "payment.captured",
@@ -177,6 +178,11 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
     assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
+    const repeatedDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
+    });
+    assert.equal(repeatedDownload.status, 200);
+    assert.deepEqual(Buffer.from(await repeatedDownload.arrayBuffer()), bytes);
 
     const crossTenant = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
