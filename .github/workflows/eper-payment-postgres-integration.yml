@@ -6,6 +6,7 @@ on:
       - "eper/packages/payments/**"
       - "eper/tests/postgres-payment-store.integration.test.mjs"
       - "eper/package.json"
+      - "eper/package-lock.json"
       - "eper/tsconfig.json"
       - ".github/workflows/eper-payment-postgres-integration.yml"
   workflow_dispatch:
@@ -40,7 +41,6 @@ jobs:
           cache: npm
           cache-dependency-path: eper/package-lock.json
       - run: npm ci
-      - run: npm install --no-save --package-lock=false pg@8
       - run: npm run build
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
