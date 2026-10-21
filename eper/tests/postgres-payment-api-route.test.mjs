@@ -377,7 +377,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: createHmac("sha256", "route-key-secret").update(providerOrderId + "|12345").digest("hex"),
       }),
     });
-    assert.equal(numericPaymentIdVerification.status, 401);
+    assert.equal(numericPaymentIdVerification.status, 400);
     assert.equal((await numericPaymentIdVerification.json()).error, "payment_signature_invalid");
     assert.equal(gatewayVerificationCalls, 0, "non-string payment ID must be rejected before gateway lookup");
 
@@ -389,7 +389,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: createHmac("sha256", "route-key-secret").update(providerOrderId + "|" + ` ${providerPaymentId}`).digest("hex"),
       }),
     });
-    assert.equal(paddedPaymentIdVerification.status, 401);
+    assert.equal(paddedPaymentIdVerification.status, 400);
     assert.equal((await paddedPaymentIdVerification.json()).error, "payment_signature_invalid");
     assert.equal(gatewayVerificationCalls, 0, "malformed payment ID must be rejected before gateway lookup");
 
