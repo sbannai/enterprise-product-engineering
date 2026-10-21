@@ -273,22 +273,6 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await oversizedEventId.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "oversized provider event ID must not reach capture persistence");
 
-    const eventConflictPayload = JSON.stringify({
-      event: "payment.captured",
-      payload: { payment: { entity: {
-        id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
-        notes: { replay: "different-payload-same-event-id" },
-      } } },
-    });
-    const eventConflictSignature = createHmac("sha256", "route-webhook-secret").update(eventConflictPayload).digest("hex");
-    const eventConflict = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": eventConflictSignature, "x-razorpay-event-id": "evt_route_test_001" },
-      body: eventConflictPayload,
-    });
-    assert.equal(eventConflict.status, 409);
-    assert.equal((await eventConflict.json()).error, "event_conflict");
-    assert.equal(webhookCaptureCalls, 1, "same event ID with a different payload must not capture again");
 
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
@@ -311,6 +295,24 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(duplicateEventId.status, 200);
     assert.equal(webhookCaptureCalls, 1, "replayed provider event must not issue a second capture");
     assert.equal((await duplicateEventId.json()).received, true);
+
+    const eventConflictPayload = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
+        notes: { replay: "different-payload-same-event-id" },
+      } } },
+    });
+    const eventConflictSignature = createHmac("sha256", "route-webhook-secret").update(eventConflictPayload).digest("hex");
+    const eventConflict = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": eventConflictSignature, "x-razorpay-event-id": "evt_route_test_001" },
+      body: eventConflictPayload,
+    });
+    assert.equal(eventConflict.status, 409);
+    assert.equal((await eventConflict.json()).error, "event_conflict");
+    assert.equal(webhookCaptureCalls, 1, "same event ID with a different payload must not capture again");
+
 
 
     const verificationSignature = createHmac("sha256", "route-secret")
