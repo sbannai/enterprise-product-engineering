@@ -35,7 +35,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   };
   let receipt = {
     receiptPublicId, orderId: "41", receiptNumber, documentSha256: null,
-    documentPdf: null, issuedAt: "2026-10-21T00:00:01.000Z",
+    documentPdf: null, issuedAt: "2026-10-21T00:00:01.000Z", transactionSnapshot: null,
   };
   Object.assign(process.env, {
     RAZORPAY_KEY_ID: "rzp_test_key",
@@ -88,6 +88,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         adjustments: [], sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
       });
       captured = true;
+      receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       order = { ...order, status: "captured", providerPaymentId };
       return { ok: true, value: { receiptPublicId, receiptNumber } };
     },
@@ -532,6 +533,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
     assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
+    assert.ok(bytes.includes(Buffer.from("Checkout item")), "receipt PDF must render source-authoritative checkout line items");
     const repeatedDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
     });
