@@ -320,8 +320,9 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (!gatewayResponse.ok) { json(res, 502, { error: "gateway_payment_verification_failed" }); return true; }
       const gatewayPayment: any = await gatewayResponse.json();
       if (gatewayPayment.order_id !== orderId || gatewayPayment.id !== paymentId ||
-          Number(gatewayPayment.amount) !== order.amountMinor || gatewayPayment.currency !== order.currency ||
-          gatewayPayment.status !== "captured") {
+          typeof gatewayPayment.amount !== "number" || !Number.isSafeInteger(gatewayPayment.amount) ||
+          gatewayPayment.amount <= 0 || gatewayPayment.amount !== order.amountMinor ||
+          gatewayPayment.currency !== order.currency || gatewayPayment.status !== "captured") {
         json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
       }
       if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
