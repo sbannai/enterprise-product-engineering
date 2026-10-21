@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured" } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created" } = {}) {
   const calls = [];
   let released = 0;
   const client = {
@@ -21,7 +21,7 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
         };
       }
       if (sql.includes("SELECT id, tenant_id, amount_minor")) {
-        return { rows: [{ id: 41, tenant_id: "tenant-a", amount_minor: 12500, currency: "INR", status: "created" }], rowCount: 1 };
+        return { rows: [{ id: 41, tenant_id: orderTenantId, amount_minor: orderAmountMinor, currency: "INR", status: orderStatus }], rowCount: 1 };
       }
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
       return { rows: [], rowCount: 1 };
@@ -232,4 +232,48 @@ test("PostgresPaymentStore rejects a repeated event ID whose event type differs"
   assert.deepEqual(result, { ok: false, reason: "event_conflict" });
   assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
   assert.equal(fake.released, 1);
+});
+
+test("PostgresPaymentStore rolls back a capture when the order tenant or amount mismatches", async () => {
+  for (const options of [
+    { orderTenantId: "tenant-b" },
+    { orderAmountMinor: 12501 },
+  ]) {
+    const fake = makePool(options);
+    const store = new PostgresPaymentStore(fake.pool);
+    const result = await store.capturePayment({
+      providerEventId: "evt_mismatch",
+      eventType: "payment.captured",
+      payloadSha256: "9".repeat(64),
+      providerOrderId: "order_test_41",
+      providerPaymentId: "pay_test_41",
+      amountMinor: 12500,
+      currency: "INR",
+      tenantId: "tenant-a",
+      receiptNumber: "APPROVED-RECEIPT-00046",
+    });
+    assert.deepEqual(result, { ok: false, reason: "payment_mismatch" });
+    assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+    assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
+    assert.equal(fake.released, 1);
+  }
+});
+
+test("PostgresPaymentStore rejects capture for an already captured order", async () => {
+  const fake = makePool({ orderStatus: "captured" });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.capturePayment({
+    providerEventId: "evt_already_captured",
+    eventType: "payment.captured",
+    payloadSha256: "8".repeat(64),
+    providerOrderId: "order_test_41",
+    providerPaymentId: "pay_test_41",
+    amountMinor: 12500,
+    currency: "INR",
+    tenantId: "tenant-a",
+    receiptNumber: "APPROVED-RECEIPT-00047",
+  });
+  assert.deepEqual(result, { ok: false, reason: "payment_mismatch" });
+  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
 });
