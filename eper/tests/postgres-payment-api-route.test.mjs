@@ -196,6 +196,19 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await missingEventId.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "webhook without provider event ID must not reach capture persistence");
 
+    const oversizedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-razorpay-signature": signature,
+        "x-razorpay-event-id": "e".repeat(201),
+      },
+      body: event,
+    });
+    assert.equal(oversizedEventId.status, 400);
+    assert.equal((await oversizedEventId.json()).error, "captured_payment_event_invalid");
+    assert.equal(webhookCaptureCalls, 0, "oversized provider event ID must not reach capture persistence");
+
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
