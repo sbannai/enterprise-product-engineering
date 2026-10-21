@@ -5,6 +5,7 @@ on:
     paths:
       - "eper/packages/payments/**"
       - "eper/tests/postgres-payment-store.integration.test.mjs"
+      - "eper/tests/postgres-payment-api-route.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -44,6 +45,8 @@ jobs:
       - run: npm run build
       - name: Test PostgreSQL runtime pool configuration
         run: node --test tests/postgres-payment-runtime.test.mjs
+      - name: Test PostgreSQL-backed payment and receipt API flow
+        run: node --test tests/postgres-payment-api-route.test.mjs
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply payment schema to disposable PostgreSQL
