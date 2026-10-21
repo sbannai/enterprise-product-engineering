@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured" } = {}) {
   const calls = [];
   let released = 0;
   const client = {
@@ -13,6 +13,12 @@ function makePool({ duplicateEvent = false } = {}) {
       }
       if (sql.includes("INSERT INTO eper_payment_webhook_events")) {
         return { rows: duplicateEvent ? [] : [{ provider_event_id: values[0] }], rowCount: duplicateEvent ? 0 : 1 };
+      }
+      if (sql.includes("SELECT event_type, payload_sha256")) {
+        return {
+          rows: duplicateEvent ? [{ event_type: duplicateEventType, payload_sha256: duplicateEventPayloadSha256 }] : [],
+          rowCount: duplicateEvent ? 1 : 0,
+        };
       }
       if (sql.includes("SELECT id, tenant_id, amount_minor")) {
         return { rows: [{ id: 41, tenant_id: "tenant-a", amount_minor: 12500, currency: "INR", status: "created" }], rowCount: 1 };
@@ -182,4 +188,25 @@ test("PostgresPaymentStore rejects receipt identifiers unsafe for headers or fil
     /INVALID_CAPTURE_INPUT/,
   );
   assert.equal(connectCalls, 0);
+});
+
+test("PostgresPaymentStore flags provider event ID reuse with a different payload", async () => {
+  const fake = makePool({ duplicateEvent: true, duplicateEventPayloadSha256: "e".repeat(64) });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.capturePayment({
+    providerEventId: "evt_duplicate",
+    eventType: "payment.captured",
+    payloadSha256: "f".repeat(64),
+    providerOrderId: "order_test_41",
+    providerPaymentId: "pay_test_41",
+    amountMinor: 12500,
+    currency: "INR",
+    tenantId: "tenant-a",
+    receiptNumber: "APPROVED-RECEIPT-00044",
+  });
+  assert.deepEqual(result, { ok: false, reason: "event_conflict" });
+  assert.ok(fake.calls.some(({ sql }) => sql.includes("SELECT event_type, payload_sha256")));
+  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_receipts")), false);
+  assert.equal(fake.released, 1);
 });
