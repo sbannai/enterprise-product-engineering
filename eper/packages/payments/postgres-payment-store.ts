@@ -143,11 +143,13 @@ export class PostgresPaymentStore {
           WHERE id = $1`,
         [order.id],
       );
+      // Receipt PDF generation happens in a later layer; do not mislabel the webhook
+      // payload hash as a receipt-document hash.
       await client.query(
         `INSERT INTO eper_payment_receipts
-          (tenant_id, payment_order_id, receipt_number, document_sha256)
-         VALUES ($1, $2, $3, $4)`,
-        [order.tenant_id, order.id, receiptNumber, input.payloadSha256],
+          (tenant_id, payment_order_id, receipt_number)
+         VALUES ($1, $2, $3)`,
+        [order.tenant_id, order.id, receiptNumber],
       );
       await client.query(
         `UPDATE eper_payment_webhook_events
