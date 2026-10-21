@@ -69,6 +69,31 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.equal(persisted.rows[0].provider_payment_id, capture.providerPaymentId);
     assert.equal(persisted.rows[0].receipt_number, capture.receiptNumber);
     assert.equal(Number(persisted.rows[0].receipt_count), 1);
+
+    // Race two different provider orders using the same tenant-scoped key.
+    // Exactly one may win; the losing request must not be reported as a retry.
+    const raceKey = "race-" + randomUUID();
+    const raceBase = {
+      ...common,
+      invoiceReference: "invoice-race-" + randomUUID(),
+      idempotencyKey: raceKey,
+    };
+    const raced = await Promise.all([
+      store.insertOrder({ ...raceBase, providerOrderId: "order_" + randomUUID().replaceAll("-", "") }),
+      store.insertOrder({ ...raceBase, providerOrderId: "order_" + randomUUID().replaceAll("-", "") }),
+    ]);
+    assert.equal(raced.filter((result) => result.ok).length, 1);
+    assert.deepEqual(raced.filter((result) => !result.ok), [
+      { ok: false, reason: "idempotency_conflict" },
+    ]);
+
+    const raceRows = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM eper_payment_orders
+        WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [tenantId, raceKey],
+    );
+    assert.equal(raceRows.rows[0].count, 1);
   } finally {
     await pool.end();
   }
