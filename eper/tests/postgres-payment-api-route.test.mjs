@@ -194,6 +194,23 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(corruptedDownload.status, 503);
     assert.equal((await corruptedDownload.json()).error, "receipt_document_integrity_failed");
 
+    // A missing or malformed persisted digest must fail closed even when the PDF bytes are intact.
+    persistedPdf = Buffer.from(bytes);
+    receipt = { ...receipt, documentPdf: persistedPdf, documentSha256: null };
+    const missingDigestDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
+    });
+    assert.equal(missingDigestDownload.status, 503);
+    assert.equal((await missingDigestDownload.json()).error, "receipt_document_integrity_failed");
+
+    receipt = { ...receipt, documentPdf: persistedPdf, documentSha256: "not-a-sha256-digest" };
+    const malformedDigestDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
+    });
+    assert.equal(malformedDigestDownload.status, 503);
+    assert.equal((await malformedDigestDownload.json()).error, "receipt_document_integrity_failed");
+
+    receipt = { ...receipt, documentPdf: persistedPdf, documentSha256: createHash("sha256").update(persistedPdf).digest("hex") };
     const crossTenant = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
     });
