@@ -13,6 +13,8 @@ on:
       - "eper/tests/postgres-payment-api-route.test.mjs"
       - "eper/tests/postgres-payment-runtime.test.mjs"
       - "eper/tests/payment-production-guard.test.mjs"
+      - "eper/tests/payment-gateway.test.mjs"
+      - "eper/tests/invoice-amount-authority.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -56,6 +58,10 @@ jobs:
         run: node --test tests/postgres-payment-api-route.test.mjs
       - name: Test production payment routes remain fail-closed
         run: node --test tests/payment-production-guard.test.mjs
+      - name: Test gateway signature and receipt safety regressions
+        run: node --test tests/payment-gateway.test.mjs
+      - name: Test trusted invoice amount authority contract
+        run: node --test tests/invoice-amount-authority.test.mjs
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply all payment migrations through the deployment runner
