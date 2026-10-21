@@ -6,6 +6,7 @@ import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "..
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 
 type PaymentStatus = "CREATED" | "PAID";
+export type TrustedReceiptNumberSource = (input: { tenantId: string; transactionPublicId: string; providerPaymentId: string }) => Promise<string>;
 interface PaymentRecord {
   id: string;
   tenantId: string;
@@ -115,7 +116,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
   // payment mutation or receipt issuance in production until a transactional store is wired.
@@ -134,6 +135,33 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (typeof signature !== "string" || !validSignature(expected, signature)) { json(res, 401, { error: "invalid_webhook_signature" }); return true; }
     let event: any;
     try { event = JSON.parse(raw.toString("utf8")); } catch { json(res, 400, { error: "invalid_json" }); return true; }
+    if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      if (event?.event !== "payment.captured") { json(res, 200, { received: true, ignored: true }); return true; }
+      const payment = event?.payload?.payment?.entity;
+      const providerEventId = req.headers["x-razorpay-event-id"];
+      if (typeof providerEventId !== "string" || !providerEventId.trim() || providerEventId.length > 200 ||
+          typeof payment?.order_id !== "string" || typeof payment?.id !== "string" ||
+          payment.status !== "captured" || !Number.isSafeInteger(Number(payment.amount)) || payment.currency !== "INR") {
+        json(res, 400, { error: "captured_payment_event_invalid" }); return true;
+      }
+      const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
+      if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
+      if (Number(payment.amount) !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
+      if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      const receiptNumber = await receiptNumberSource({ tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id });
+      if (typeof receiptNumber !== "string" || !receiptNumber.trim()) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      const result = await paymentStore.capturePayment({
+        providerEventId, eventType: "payment.captured",
+        payloadSha256: createHash("sha256").update(raw).digest("hex"),
+        providerOrderId: payment.order_id, providerPaymentId: payment.id,
+        amountMinor: Number(payment.amount), currency: "INR", tenantId: order.tenantId, receiptNumber,
+      });
+      if (!result.ok && result.reason !== "duplicate_event") {
+        json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
+      }
+      json(res, 200, { received: true, ...(result.ok ? { receiptId: result.value.receiptPublicId, receiptNumber: result.value.receiptNumber } : {}) });
+      return true;
+    }
     if (event?.event === "payment.captured") {
       const payment = event?.payload?.payment?.entity;
       if (payment?.order_id && payment?.id) {
@@ -280,6 +308,37 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const signature = String(input?.razorpay_signature ?? "");
     const expected = createHmac("sha256", cfg.keySecret).update(orderId + "|" + paymentId).digest("hex");
     if (!orderId || !paymentId || !validSignature(expected, signature)) { json(res, 400, { error: "payment_signature_invalid" }); return true; }
+    if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
+      if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
+      const order = await paymentStore.findOrder(tenantId, orderId);
+      if (!order) { json(res, 404, { error: "order_not_found" }); return true; }
+      const gatewayResponse = await fetch("https://api.razorpay.com/v1/payments/" + encodeURIComponent(paymentId), {
+        headers: { authorization: "Basic " + Buffer.from(cfg.keyId + ":" + cfg.keySecret).toString("base64") },
+      });
+      if (!gatewayResponse.ok) { json(res, 502, { error: "gateway_payment_verification_failed" }); return true; }
+      const gatewayPayment: any = await gatewayResponse.json();
+      if (gatewayPayment.order_id !== orderId || gatewayPayment.id !== paymentId ||
+          Number(gatewayPayment.amount) !== order.amountMinor || gatewayPayment.currency !== order.currency ||
+          gatewayPayment.status !== "captured") {
+        json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
+      }
+      if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      const receiptNumber = await receiptNumberSource({ tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId });
+      if (typeof receiptNumber !== "string" || !receiptNumber.trim()) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      const captured = await paymentStore.captureVerifiedPayment({
+        tenantId, providerOrderId: orderId, providerPaymentId: paymentId,
+        amountMinor: order.amountMinor, currency: "INR", receiptNumber,
+      });
+      if (!captured.ok) { json(res, captured.reason === "payment_mismatch" ? 409 : 404, { error: captured.reason }); return true; }
+      json(res, 200, {
+        payment: { id: captured.value.transactionPublicId, tenantId, reference: order.invoiceReference,
+          amountPaise: order.amountMinor, currency: order.currency, status: "PAID", razorpayOrderId: orderId,
+          razorpayPaymentId: paymentId, receiptNumber: captured.value.receiptNumber, receiptId: captured.value.receiptPublicId },
+        receiptUrl: "/api/payments/receipts/" + captured.value.receiptPublicId + ".pdf",
+      });
+      return true;
+    }
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.razorpayOrderId === orderId);
     if (!record) { json(res, 404, { error: "order_not_found" }); return true; }
@@ -299,6 +358,36 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       record.paidAt = new Date().toISOString(); await saveLedger(cfg.ledgerFile, ledger);
     } else if (record.razorpayPaymentId !== paymentId) { json(res, 409, { error: "order_already_paid_with_different_payment" }); return true; }
     json(res, 200, { payment: record, receiptUrl: "/api/payments/" + record.id + "/receipt.pdf" }); return true;
+  }
+
+  const publicReceiptMatch = /^\\/api\\/payments\\/receipts\\/([0-9a-f-]{36})\\.pdf$/i.exec(pathname);
+  if (req.method === "GET" && publicReceiptMatch && paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+    const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
+    if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
+    const receipt = await paymentStore.findReceiptByPublicId(tenantId, publicReceiptMatch[1]);
+    if (!receipt) { json(res, 404, { error: "receipt_not_found" }); return true; }
+    const order = await paymentStore.findOrderByInternalId(tenantId, receipt.orderId);
+    if (!order || order.status !== "captured" || !order.providerPaymentId) { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
+    let pdf = receipt.documentPdf;
+    if (!pdf) {
+      pdf = receiptPdf({
+        id: order.transactionPublicId, tenantId, reference: order.invoiceReference,
+        invoiceSourceId: "", invoiceSourceVersion: "", invoiceApprovedAt: "",
+        amountPaise: order.amountMinor, currency: order.currency, status: "PAID",
+        razorpayOrderId: order.providerOrderId, razorpayPaymentId: order.providerPaymentId,
+        receiptNumber: receipt.receiptNumber, receiptId: receipt.receiptPublicId,
+        createdAt: order.createdAt, paidAt: receipt.issuedAt,
+      });
+      const persisted = await paymentStore.persistReceiptDocument(tenantId, order.id, pdf);
+      if (!persisted.ok) { json(res, 503, { error: "receipt_document_persistence_failed" }); return true; }
+      const stored = await paymentStore.findReceipt(tenantId, order.id);
+      if (!stored?.documentPdf || stored.receiptPublicId !== receipt.receiptPublicId) {
+        json(res, 503, { error: "receipt_document_persistence_failed" }); return true;
+      }
+      pdf = stored.documentPdf;
+    }
+    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + receipt.receiptPublicId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+    res.end(pdf); return true;
   }
 
   const receiptMatch = /^\/api\/payments\/([^/]+)\/receipt\.pdf$/.exec(pathname);
