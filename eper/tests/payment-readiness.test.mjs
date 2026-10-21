@@ -52,7 +52,7 @@ test("payment readiness keeps production payment enablement blocked pending auth
   Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "production" });
   try {
     await withServer(createAppServer({
-      paymentStore: {},
+      paymentStore: { async checkConnectivity() { return true; } },
       invoiceAmountSource: {},
       receiptNumberSource: async () => "TEST-RECEIPT",
     }), async (base) => {
@@ -63,6 +63,54 @@ test("payment readiness keeps production payment enablement blocked pending auth
       assert.deepEqual(body.blockers, [
         "production_payment_enablement_requires_authorized_readiness_review",
       ]);
+    });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
+
+test("payment readiness fails closed when PostgreSQL connectivity probe fails", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test" });
+  try {
+    await withServer(createAppServer({
+      paymentStore: { async checkConnectivity() { throw new Error("database connection failed"); } },
+      invoiceAmountSource: {},
+      receiptNumberSource: async () => "TEST-RECEIPT",
+    }), async (base) => {
+      const response = await fetch(`${base}/readyz/payments`);
+      assert.equal(response.status, 503);
+      const body = await response.json();
+      assert.equal(body.status, "blocked");
+      assert.deepEqual(body.blockers, ["postgres_payment_database_unreachable"]);
+    });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
+
+test("payment readiness reports configured when PostgreSQL is reachable outside production", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test" });
+  try {
+    await withServer(createAppServer({
+      paymentStore: { async checkConnectivity() { return true; } },
+      invoiceAmountSource: {},
+      receiptNumberSource: async () => "TEST-RECEIPT",
+    }), async (base) => {
+      const response = await fetch(`${base}/readyz/payments`);
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.status, "ready");
+      assert.deepEqual(body.blockers, []);
     });
   } finally {
     for (const key of keys) {
