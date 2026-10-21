@@ -148,17 +148,22 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       } } },
     });
     const signature = createHmac("sha256", "route-webhook-secret").update(event).digest("hex");
-    webhookGatewayAmount = 12000;
+    const mismatchedEvent = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: {
+        id: providerPaymentId, order_id: providerOrderId, amount: 12000, currency: "INR", status: "captured",
+      } } },
+    });
+    const mismatchedSignature = createHmac("sha256", "route-webhook-secret").update(mismatchedEvent).digest("hex");
     const mismatchedWebhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_mismatch" },
-      body: event,
+      headers: { "content-type": "application/json", "x-razorpay-signature": mismatchedSignature, "x-razorpay-event-id": "evt_route_test_mismatch" },
+      body: mismatchedEvent,
     });
     assert.equal(mismatchedWebhook.status, 409);
     assert.equal((await mismatchedWebhook.json()).error, "gateway_payment_details_mismatch");
     assert.equal(webhookCaptureCalls, 0, "mismatched webhook amount must not reach capture persistence");
 
-    webhookGatewayAmount = 12500;
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
