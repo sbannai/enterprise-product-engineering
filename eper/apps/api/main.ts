@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
@@ -12,7 +13,13 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const paymentPool = postgresPaymentMode ? createPostgresPaymentPool() : null;
 const paymentStore = paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
-const server = createAppServer({ paymentStore });
+// Receipt numbering is an explicit operator/business configuration. Never silently
+// choose a receipt-numbering policy; capture routes fail closed when the prefix is absent.
+const receiptPrefix = process.env.EPER_PAYMENT_RECEIPT_NUMBER_PREFIX?.trim();
+const receiptNumberSource = receiptPrefix && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,19}$/.test(receiptPrefix)
+  ? async () => `${receiptPrefix}-${new Date().getUTCFullYear()}-${randomUUID().toUpperCase()}`
+  : undefined;
+const server = createAppServer({ paymentStore, receiptNumberSource });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
