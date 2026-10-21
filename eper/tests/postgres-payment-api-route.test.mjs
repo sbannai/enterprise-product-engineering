@@ -250,14 +250,6 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await malformedEventId.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "blank provider event ID must not reach capture persistence");
 
-    const duplicateEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
-      body: event,
-    });
-    assert.equal(duplicateEventId.status, 200);
-    assert.equal(webhookCaptureCalls, 1, "replayed provider event must not issue a second capture");
-    assert.equal((await duplicateEventId.json()).received, true);
 
     const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
@@ -293,6 +285,16 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(webhookBody.receiptId, receiptPublicId);
     assert.equal(webhookBody.receiptNumber, receiptNumber);
     assert.equal(webhookBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
+
+    const duplicateEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
+      body: event,
+    });
+    assert.equal(duplicateEventId.status, 200);
+    assert.equal(webhookCaptureCalls, 1, "replayed provider event must not issue a second capture");
+    assert.equal((await duplicateEventId.json()).received, true);
+
 
     const verificationSignature = createHmac("sha256", "route-secret")
       .update(providerOrderId + "|" + providerPaymentId).digest("hex");
