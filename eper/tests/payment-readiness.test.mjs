@@ -37,6 +37,7 @@ test("payment readiness lists missing prerequisites without exposing configurati
         "durable_postgres_payment_store_unavailable",
         "trusted_invoice_authority_unavailable",
         "receipt_numbering_policy_unconfigured",
+        "trusted_transaction_authority_unavailable",
       ]);
       assert.equal(JSON.stringify(body).includes("never-echo-this-secret-value"), false);
       // Overall API health is independent from the blocked payment subsystem.
@@ -64,7 +65,7 @@ test("payment readiness rejects invoice sources without a callable lookup method
     }), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
       assert.equal(response.status, 503);
-      assert.deepEqual((await response.json()).blockers, ["trusted_invoice_authority_unavailable"]);
+      assert.deepEqual((await response.json()).blockers, ["trusted_invoice_authority_unavailable", "trusted_transaction_authority_unavailable"]);
     });
   } finally {
     for (const key of keys) {
@@ -86,7 +87,7 @@ test("payment readiness rejects non-callable receipt numbering source", async ()
     }), async (base) => {
       const response = await fetch(`${base}/readyz/payments`);
       assert.equal(response.status, 503);
-      assert.deepEqual((await response.json()).blockers, ["receipt_numbering_policy_unconfigured"]);
+      assert.deepEqual((await response.json()).blockers, ["receipt_numbering_policy_unconfigured", "trusted_transaction_authority_unavailable"]);
     });
   } finally {
     for (const key of keys) {
@@ -111,6 +112,7 @@ test("payment readiness keeps production payment enablement blocked pending auth
       const body = await response.json();
       assert.equal(body.status, "blocked");
       assert.deepEqual(body.blockers, [
+        "trusted_transaction_authority_unavailable",
         "production_payment_enablement_requires_authorized_readiness_review",
       ]);
     });
@@ -136,7 +138,7 @@ test("payment readiness fails closed when PostgreSQL connectivity probe fails", 
       assert.equal(response.status, 503);
       const body = await response.json();
       assert.equal(body.status, "blocked");
-      assert.deepEqual(body.blockers, ["postgres_payment_database_unreachable"]);
+      assert.deepEqual(body.blockers, ["postgres_payment_database_unreachable", "trusted_transaction_authority_unavailable"]);
     });
   } finally {
     for (const key of keys) {
@@ -163,6 +165,7 @@ test("payment readiness rejects present-but-invalid invoice and receipt adapters
       assert.deepEqual(body.blockers, [
         "trusted_invoice_authority_unavailable",
         "receipt_numbering_policy_unconfigured",
+        "trusted_transaction_authority_unavailable",
       ]);
     });
   } finally {
