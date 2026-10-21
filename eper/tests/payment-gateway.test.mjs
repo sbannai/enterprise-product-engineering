@@ -603,3 +603,63 @@ test("PostgreSQL order creation fails closed without an authoritative invoice so
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test("PostgreSQL receipt download fails closed when persisted PDF digest does not match", async () => {
+  const envKeys = [
+    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+  ];
+  const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const token = "receipt-integrity-test-token".padEnd(40, "x");
+  const receiptPublicId = "d6e51a2e-80de-45e6-ae93-f10a46f3b6e9";
+  const storedPdf = Buffer.from("%PDF-1.4\noriginal receipt\n%%EOF", "ascii");
+  Object.assign(process.env, {
+    RAZORPAY_KEY_ID: "rzp_test_key",
+    RAZORPAY_KEY_SECRET: "gateway-test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
+    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+  });
+  const paymentStore = {
+    async findReceiptByPublicId(tenantId, requestedId) {
+      assert.equal(tenantId, "tenant-a");
+      assert.equal(requestedId, receiptPublicId);
+      return {
+        receiptPublicId, orderId: "41", receiptNumber: "APPROVED-RECEIPT-00041",
+        documentSha256: "0".repeat(64), documentPdf: storedPdf,
+        issuedAt: "2026-10-21T07:00:00.000Z",
+      };
+    },
+    async findOrderByInternalId(tenantId, orderId) {
+      assert.equal(tenantId, "tenant-a");
+      assert.equal(orderId, "41");
+      return {
+        id: "41", transactionPublicId: "a6e51a2e-80de-45e6-ae93-f10a46f3b6e9",
+        tenantId: "tenant-a", invoiceReference: "INV-41", providerOrderId: "order_41",
+        providerPaymentId: "pay_41", amountMinor: 12500, currency: "INR",
+        status: "captured", createdAt: "2026-10-21T06:00:00.000Z",
+      };
+    },
+  };
+  const server = createAppServer({ paymentStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-a" },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "receipt_document_integrity_failed" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const [key, value] of Object.entries(oldEnv)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
