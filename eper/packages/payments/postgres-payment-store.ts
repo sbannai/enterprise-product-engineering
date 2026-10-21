@@ -609,10 +609,10 @@ export class PostgresPaymentStore {
         return { ok: false, reason: "duplicate_event" };
       }
       const orderResult = await client.query<{
-        id: string | number; tenant_id: string; amount_minor: string | number;
-        currency: string; status: string; provider_payment_id: string | null;
+        id: string | number; tenant_id: string; invoice_reference: string;
+        amount_minor: string | number; currency: string; status: string; provider_payment_id: string | null;
       }>(
-        `SELECT id, tenant_id, amount_minor, currency, status, provider_payment_id
+        `SELECT id, tenant_id, invoice_reference, amount_minor, currency, status, provider_payment_id
            FROM eper_payment_orders WHERE provider_order_id = $1 FOR UPDATE`,
         [input.providerOrderId],
       );
@@ -625,9 +625,7 @@ export class PostgresPaymentStore {
           order.currency !== input.currency ||
           (input.transactionSnapshot !== undefined && (
             input.transactionSnapshot.tenantId !== input.tenantId ||
-            input.transactionSnapshot.reference !== (await client.query<{ invoice_reference: string }>(
-              "SELECT invoice_reference FROM eper_payment_orders WHERE id = $1", [order.id],
-            )).rows[0]?.invoice_reference ||
+            input.transactionSnapshot.reference !== order.invoice_reference ||
             input.transactionSnapshot.amountDueMinor !== input.amountMinor ||
             input.transactionSnapshot.currency !== input.currency
           ))) {
