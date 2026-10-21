@@ -61,23 +61,23 @@ jobs:
           errors = report.get("integrityErrors", [])
           with summary_path.open("a", encoding="utf-8") as out:
               out.write("## EPER Business UAT readiness\n\n")
-              out.write(f"**Status: {report.get('readiness', 'UNKNOWN')}** — this is a read-only register audit, not Business UAT execution or acceptance.\\n\\n")
-              out.write(f"**Business UAT executed:** {report.get('businessUatExecuted', False)}\\n\\n")
-              out.write("| Control | Count |\\n|---|---:|\\n")
+              out.write(f"**Status: {report.get('readiness', 'UNKNOWN')}** — this is a read-only register audit, not Business UAT execution or acceptance.\n\n")
+              out.write(f"**Business UAT executed:** {report.get('businessUatExecuted', False)}\n\n")
+              out.write("| Control | Count |\n|---|---:|\n")
               for key, value in counts.items():
-                  out.write(f"| {key} | {value} |\\n")
-              out.write("\\n### Blocking controls\\n\\n")
+                  out.write(f"| {key} | {value} |\n")
+              out.write("\n### Blocking controls\n\n")
               if blockers:
-                  out.write("| Gate | Affected items | IDs / scope | Detail |\\n|---|---:|---|---|\\n")
+                  out.write("| Gate | Affected items | IDs / scope | Detail |\n|---|---:|---|---|\n")
                   for blocker in blockers:
-                      gate = str(blocker.get("gate", "Unspecified")).replace("|", "\\\\|")
-                      detail = str(blocker.get("detail", "")).replace("|", "\\\\|").replace("\\n", " ")
+                      gate = str(blocker.get("gate", "Unspecified")).replace("|", "\\|")
+                      detail = str(blocker.get("detail", "")).replace("|", "\\|").replace("\n", " ")
                       ids = blocker.get("gate_ids") or blocker.get("requirement_ids") or []
                       scope = ", ".join(str(item) for item in ids)
                       if len(scope) > 180:
                           scope = scope[:177] + "..."
-                      scope = scope.replace("|", "\\\\|")
-                      out.write(f"| {gate} | {blocker.get('count', '—')} | {scope or 'See count / gate register'} | {detail} |\\n")
+                      scope = scope.replace("|", "\\|")
+                      out.write(f"| {gate} | {blocker.get('count', '—')} | {scope or 'See count / gate register'} | {detail} |\n")
               else:
                   out.write("No register blockers were reported. Business-owner confirmation may still be required.\n")
               if errors:
