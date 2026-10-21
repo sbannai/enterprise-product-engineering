@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eper.invalid/contracts/ch463-implementation-derived-draft-v1.schema.json",
+  "title": "Chapter 463 implementation-derived contract shapes (DRAFT)",
+  "description": "Recovered from current EPER service TypeScript interfaces and implementation inventory. These are engineering shapes only, not approved procurement-domain schemas, API contracts, or event payloads. Replace the placeholder host before publishing; do not treat this URI as a live endpoint.",
+  "x-contract-status": "DRAFT_TECHNICAL_NOT_APPROVED",
+  "x-scope": ["REQ-46301", "REQ-46302", "REQ-46303", "REQ-46304", "REQ-46305", "REQ-46306"],
+  "$defs": {
+    "tenantContext": {
+      "type": "object",
+      "required": ["tenantId", "principalId", "correlationId"],
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1 },
+        "principalId": { "type": "string", "minLength": 1 },
+        "correlationId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "capabilityInput": {
+      "type": "object",
+      "required": ["context", "payload"],
+      "properties": {
+        "context": { "$ref": "#/$defs/tenantContext" },
+        "payload": {}
+      },
+      "additionalProperties": false,
+      "description": "Service code currently permits omitted context at prepare(), but operations that require tenant context fail later. Required context here represents the recommended explicit boundary and must be reconciled with the approved API contract."
+    },
+    "capabilityResult": {
+      "type": "object",
+      "required": ["requirementId", "pattern", "status", "data"],
+      "properties": {
+        "requirementId": { "type": "string", "pattern": "^REQ-\\d{5}$" },
+        "pattern": { "enum": ["XX01", "XX02", "XX03", "XX04", "XX05", "XX06"] },
+        "status": { "const": "EXECUTED" },
+        "data": {
+          "type": "object",
+          "required": ["payload", "contracts"],
+          "properties": {
+            "payload": {},
+            "contracts": {
+              "type": "object",
+              "required": ["data", "api", "event"],
+              "properties": {
+                "data": { "$ref": "#/$defs/contractDescriptor" },
+                "api": { "$ref": "#/$defs/contractDescriptor" },
+                "event": { "$ref": "#/$defs/contractDescriptor" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Mirrors the current generic capability result shape; EXECUTED is not equivalent to business success or acceptance."
+    },
+    "contractDescriptor": {
+      "type": "object",
+      "required": ["id", "kind", "capability", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["DATA", "API", "EVENT"] },
+        "capability": { "type": "string", "minLength": 1 },
+        "version": { "const": "v1" }
+      },
+      "additionalProperties": false,
+      "description": "Registry descriptor only; it is not the DATA schema, API operation, or EVENT payload definition."
+    },
+    "authoritativeRecord": {
+      "type": "object",
+      "required": ["id", "tenantId", "version", "state", "data"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenantId": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 },
+        "state": { "type": "string", "minLength": 1, "description": "Unrestricted string in current implementation; approved lifecycle enum is TBD_SOURCE_REQUIRED." },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": false,
+      "x-requirement": "REQ-46301",
+      "x-approval-status": "NOT_APPROVED"
+    },
+    "authorizationRequest": {
+      "type": "object",
+      "required": ["tenantId", "principalId", "action", "resource"],
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1 },
+        "principalId": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "minLength": 1 },
+        "resource": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false,
+      "x-requirement": "REQ-46302",
+      "x-approval-status": "NOT_APPROVED"
+    },
+    "validationIssue": {
+      "type": "object",
+      "required": ["code", "message", "severity"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "severity": { "enum": ["ERROR", "WARNING", "INFO"] }
+      },
+      "additionalProperties": false,
+      "x-requirement": "REQ-46303",
+      "x-approval-status": "NOT_APPROVED"
+    },
+    "auditEvidence": {
+      "type": "object",
+      "required": ["id", "tenantId", "requirementId", "action", "principalId", "correlationId", "occurredAt", "payload", "integrityHash"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenantId": { "type": "string", "minLength": 1 },
+        "requirementId": { "type": "string", "pattern": "^REQ-\\d{5}$" },
+        "action": { "type": "string", "minLength": 1 },
+        "principalId": { "type": "string", "minLength": 1 },
+        "correlationId": { "type": "string", "minLength": 1 },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "payload": {},
+        "integrityHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false,
+      "x-requirement": "REQ-46304",
+      "x-approval-status": "NOT_APPROVED",
+      "description": "Current SHA-256 integrity hash is not proof of tamper-proof storage or trusted timestamping."
+    },
+    "workflowException": {
+      "type": "object",
+      "required": ["id", "tenantId", "requirementId", "code", "message", "state", "retryCount", "idempotencyKey", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tenantId": { "type": "string", "minLength": 1 },
+        "requirementId": { "type": "string", "pattern": "^REQ-\\d{5}$" },
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "state": { "enum": ["OPEN", "RETRYING", "RESOLVED", "ESCALATED"] },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "idempotencyKey": { "type": "string", "minLength": 1 },
+        "owner": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false,
+      "x-requirement": "REQ-46305",
+      "x-approval-status": "NOT_APPROVED",
+      "description": "Observed state set only; retry scheduler, backoff and escalation delivery are not implemented by this schema."
+    },
+    "reportRow": {
+      "type": "object",
+      "required": ["tenantId", "reportId", "values", "sourceRequirementIds", "generatedAt"],
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1 },
+        "reportId": { "type": "string", "minLength": 1 },
+        "values": { "type": "object" },
+        "sourceRequirementIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^REQ-\\d{5}$" }
+        },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false,
+      "x-requirement": "REQ-46306",
+      "x-approval-status": "NOT_APPROVED",
+      "description": "Observed reporting row shape only; metric definitions, lineage completeness and freshness policy remain open."
+    }
+  },
+  "x-unresolved-contracts": {
+    "api": "No approved operation IDs, HTTP paths, request/response/error contract, or compatibility policy established by this artifact.",
+    "event": "No approved event envelope/payload, producer, delivery/retry/order guarantees, or N/A decisions established by this artifact.",
+    "procurement-domain": "No approved mapping from these generic capability shapes to requisition, supplier, sourcing event, purchase order, contract, receipt, or invoice aggregates."
+  }
+}
