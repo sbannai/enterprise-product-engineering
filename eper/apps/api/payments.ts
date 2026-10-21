@@ -358,7 +358,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       record.receiptId = randomUUID();
       record.paidAt = new Date().toISOString(); await saveLedger(cfg.ledgerFile, ledger);
     } else if (record.razorpayPaymentId !== paymentId) { json(res, 409, { error: "order_already_paid_with_different_payment" }); return true; }
-    json(res, 200, { payment: record, receiptUrl: "/api/payments/" + record.id + "/receipt.pdf" }); return true;
+    json(res, 200, { payment: record, receiptUrl: "/api/payments/receipts/" + record.receiptId + ".pdf" }); return true;
   }
 
   const publicReceiptMatch = /^\/api\/payments\/receipts\/([0-9a-f-]{36})\.pdf$/i.exec(pathname);
@@ -388,6 +388,17 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       pdf = stored.documentPdf;
     }
     res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + receipt.receiptPublicId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+    res.end(pdf); return true;
+  }
+
+  if (req.method === "GET" && publicReceiptMatch) {
+    const ledger = await readLedger(cfg.ledgerFile);
+    const record = ledger.records.find(item => item.receiptId === publicReceiptMatch[1]);
+    if (!record) { json(res, 404, { error: "receipt_not_found" }); return true; }
+    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
+    const pdf = receiptPdf(record);
+    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
     res.end(pdf); return true;
   }
 
