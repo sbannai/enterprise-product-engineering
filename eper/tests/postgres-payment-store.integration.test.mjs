@@ -80,25 +80,28 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.ok(storedReceipt);
     assert.equal(storedReceipt.receiptNumber, capture.receiptNumber);
     assert.equal(storedReceipt.documentSha256, null);
+    assert.equal(storedReceipt.documentPdf, null);
 
-    // The API must hash the exact generated PDF bytes and persist that immutable digest.
-    const receiptPdfHash = createHash("sha256").update("%PDF-1.4\\nEPER integration receipt").digest("hex");
+    // Persist exact issued PDF bytes with their digest; retries must be byte-identical.
+    const receiptPdf = Buffer.from("%PDF-1.4\\nEPER integration receipt\\n%%EOF", "ascii");
+    const receiptPdfHash = createHash("sha256").update(receiptPdf).digest("hex");
     assert.deepEqual(
-      await store.persistReceiptDocumentHash(tenantId, storedOrder.id, receiptPdfHash),
+      await store.persistReceiptDocument(tenantId, storedOrder.id, receiptPdf),
       { ok: true, value: { documentSha256: receiptPdfHash } },
     );
     assert.deepEqual(
-      await store.persistReceiptDocumentHash(tenantId, storedOrder.id, receiptPdfHash),
+      await store.persistReceiptDocument(tenantId, storedOrder.id, receiptPdf),
       { ok: true, value: { documentSha256: receiptPdfHash } },
     );
     assert.deepEqual(
-      await store.persistReceiptDocumentHash(tenantId, storedOrder.id, "a".repeat(64)),
+      await store.persistReceiptDocument(tenantId, storedOrder.id, Buffer.from("%PDF-1.4\\nchanged receipt\\n%%EOF", "ascii")),
       { ok: false, reason: "receipt_document_conflict" },
     );
     const hashedReceipt = await store.findReceipt(tenantId, storedOrder.id);
     assert.equal(hashedReceipt.documentSha256, receiptPdfHash);
+    assert.deepEqual(hashedReceipt.documentPdf, receiptPdf);
     assert.deepEqual(
-      await store.persistReceiptDocumentHash("another-tenant", storedOrder.id, receiptPdfHash),
+      await store.persistReceiptDocument("another-tenant", storedOrder.id, receiptPdf),
       { ok: false, reason: "not_found" },
     );
 
