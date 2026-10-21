@@ -56,7 +56,9 @@ export type PersistResult<T> =
   | { ok: false; reason: "idempotency_conflict" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
 
 export interface StoredPaymentOrder {
+  /** Internal database key; use transactionPublicId in external APIs. */
   id: string;
+  transactionPublicId: string;
   tenantId: string;
   invoiceReference: string;
   providerOrderId: string;
@@ -67,6 +69,8 @@ export interface StoredPaymentOrder {
   createdAt: string;
 }
 export interface StoredPaymentReceipt {
+  /** Stable public UUID used as the downloadable receipt identifier. */
+  receiptPublicId: string;
   orderId: string;
   receiptNumber: string;
   documentSha256: string | null;
@@ -83,12 +87,12 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        id: string | number; tenant_id: string; invoice_reference: string;
+        id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
         provider_order_id: string; provider_payment_id: string | null;
         amount_minor: string | number; currency: string; status: StoredPaymentOrder["status"];
         created_at: Date | string;
       }>(
-        `SELECT id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
+        `SELECT id, transaction_public_id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
                 amount_minor, currency, status, created_at
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND provider_order_id = $2`,
@@ -100,7 +104,7 @@ export class PostgresPaymentStore {
         throw new Error("PAYMENT_ORDER_PERSISTENCE_INVALID");
       }
       return {
-        id: String(row.id), tenantId: row.tenant_id, invoiceReference: row.invoice_reference,
+        id: String(row.id), transactionPublicId: row.transaction_public_id, tenantId: row.tenant_id, invoiceReference: row.invoice_reference,
         providerOrderId: row.provider_order_id, providerPaymentId: row.provider_payment_id,
         amountMinor: Number(row.amount_minor), currency: "INR", status: row.status,
         createdAt: new Date(row.created_at).toISOString(),
@@ -116,10 +120,10 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        order_id: string | number; receipt_number: string; document_sha256: string | null;
+        order_id: string | number; receipt_public_id: string; receipt_number: string; document_sha256: string | null;
         document_pdf: Buffer | null; issued_at: Date | string;
       }>(
-        `SELECT r.payment_order_id AS order_id, r.receipt_number, r.document_sha256, r.document_pdf, r.issued_at
+        `SELECT r.payment_order_id AS order_id, r.receipt_public_id, r.receipt_number, r.document_sha256, r.document_pdf, r.issued_at
            FROM eper_payment_receipts r
            JOIN eper_payment_orders o ON o.id = r.payment_order_id
           WHERE r.tenant_id = $1 AND r.payment_order_id = $2`,
@@ -127,7 +131,7 @@ export class PostgresPaymentStore {
       );
       const row = result.rows[0];
       return row ? {
-        orderId: String(row.order_id), receiptNumber: row.receipt_number,
+        receiptPublicId: row.receipt_public_id, orderId: String(row.order_id), receiptNumber: row.receipt_number,
         documentSha256: row.document_sha256, documentPdf: row.document_pdf, issuedAt: new Date(row.issued_at).toISOString(),
       } : null;
     } finally {
@@ -381,7 +385,7 @@ export class PostgresPaymentStore {
    * Atomically deduplicates a provider event, validates the captured payment,
    * marks the order paid, and issues exactly one receipt record.
    */
-  async capturePayment(input: CapturedPaymentInput): Promise<PersistResult<{ receiptNumber: string }>> {
+  async capturePayment(input: CapturedPaymentInput): Promise<PersistResult<{ receiptPublicId: string; receiptNumber: string }>> {
     if (
       input.eventType !== "payment.captured" ||
       !input.providerEventId.trim() ||
@@ -451,9 +455,15 @@ export class PostgresPaymentStore {
       await client.query(
         `INSERT INTO eper_payment_receipts
           (tenant_id, payment_order_id, receipt_number)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1, $2, $3)
+         RETURNING receipt_public_id`,
         [order.tenant_id, order.id, receiptNumber],
       );
+      const receiptPublicId = String((await client.query<{ receipt_public_id: string }>(
+        `SELECT receipt_public_id FROM eper_payment_receipts WHERE payment_order_id = $1`,
+        [order.id],
+      )).rows[0]?.receipt_public_id ?? "");
+      if (!receiptPublicId) throw new Error("RECEIPT_PUBLIC_ID_MISSING");
       await client.query(
         `UPDATE eper_payment_webhook_events
             SET processed_at = NOW()
@@ -461,7 +471,7 @@ export class PostgresPaymentStore {
         [input.providerEventId],
       );
       await client.query("COMMIT");
-      return { ok: true, value: { receiptNumber } };
+      return { ok: true, value: { receiptPublicId, receiptNumber } };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
