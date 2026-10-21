@@ -24,6 +24,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let webhookGatewayAmount = 12500;
   let verifiedCaptureCalls = 0;
   let gatewayAmount = 12500;
+  let gatewayVerificationCalls = 0;
   let persistedPdf = null;
   let order = {
     id: "41", transactionPublicId, tenantId, invoiceReference: "invoice-route-test",
@@ -52,6 +53,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       });
     }
     if (url === "https://api.razorpay.com/v1/payments/" + providerPaymentId) {
+      gatewayVerificationCalls += 1;
       return new Response(JSON.stringify({
         id: providerPaymentId, order_id: providerOrderId, amount: gatewayAmount, currency: "INR", status: "captured",
       }), { status: 200, headers: { "content-type": "application/json" } });
