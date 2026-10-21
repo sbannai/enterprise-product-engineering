@@ -41,7 +41,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "not_found" | "payment_mismatch" | "duplicate_event" };
+  | { ok: false; reason: "idempotency_conflict" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" };
 
 export class PostgresPaymentStore {
   constructor(private readonly pool: SqlPool) {}
@@ -144,7 +144,18 @@ export class PostgresPaymentStore {
         [input.providerEventId, input.eventType, input.payloadSha256],
       );
       if (!event.rows.length) {
+        const priorEvent = await client.query<{ event_type: string; payload_sha256: string }>(
+          `SELECT event_type, payload_sha256
+             FROM eper_payment_webhook_events
+            WHERE provider = 'razorpay' AND provider_event_id = $1`,
+          [input.providerEventId],
+        );
+        const prior = priorEvent.rows[0];
         await client.query("ROLLBACK");
+        if (!prior || prior.event_type !== input.eventType ||
+            prior.payload_sha256.toLowerCase() !== input.payloadSha256.toLowerCase()) {
+          return { ok: false, reason: "event_conflict" };
+        }
         return { ok: false, reason: "duplicate_event" };
       }
       const orderResult = await client.query<{
