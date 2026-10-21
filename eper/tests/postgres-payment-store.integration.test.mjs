@@ -121,6 +121,9 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.deepEqual(await store.reserveOrder(reservationInput), {
       ok: false, reason: "order_creation_in_progress",
     });
+    assert.deepEqual(await store.reserveOrder({
+      ...reservationInput, invoiceApprovedAt: new Date(Date.parse(reservationInput.invoiceApprovedAt) + 1000).toISOString(),
+    }), { ok: false, reason: "idempotency_conflict" });
     // An expired lease must not trigger a blind second Razorpay request: the
     // previous process may have created the remote order before it crashed.
     await pool.query(
