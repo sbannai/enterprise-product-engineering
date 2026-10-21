@@ -2,8 +2,35 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
+import { runMigrations } from "../scripts/migrate-payments.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
+
+test("payment migrations are checksummed and safely re-runnable", { skip: !databaseUrl }, async () => {
+  // CI already invokes the runner once before this test. A second invocation
+  // must be a no-op for the same files and database.
+  await runMigrations(databaseUrl);
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  try {
+    const result = await pool.query(
+      "SELECT migration_name, sha256 FROM eper_payment_schema_migrations ORDER BY migration_name",
+    );
+    assert.deepEqual(
+      result.rows.map((row) => row.migration_name),
+      [
+        "001_payment_transactions.sql",
+        "002_payment_order_reservation.sql",
+        "003_receipt_document_bytes.sql",
+        "004_unique_public_payment_identifiers.sql",
+        "005_immutable_receipt_records.sql",
+      ],
+    );
+    for (const row of result.rows) assert.match(row.sha256.trim(), /^[a-f0-9]{64}$/);
+  } finally {
+    await pool.end();
+  }
+});
 test("PostgresPaymentStore persists idempotent orders and captures exactly once", { skip: !databaseUrl }, async () => {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: databaseUrl, max: 4 });
