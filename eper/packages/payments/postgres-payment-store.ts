@@ -125,7 +125,7 @@ export class PostgresPaymentStore {
       !input.providerOrderId.trim() ||
       !input.providerPaymentId.trim() ||
       !input.tenantId.trim() ||
-      !input.receiptNumber.trim() ||
+      !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(input.receiptNumber) ||
       !Number.isSafeInteger(input.amountMinor) ||
       input.amountMinor <= 0 ||
       !/^[a-f0-9]{64}$/i.test(input.payloadSha256)
