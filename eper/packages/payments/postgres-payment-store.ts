@@ -99,7 +99,7 @@ export class PostgresPaymentStore {
 
   /** Tenant-scoped receipt lookup; callers must still authorize the requesting principal. */
   async findReceipt(tenantId: string, orderId: string): Promise<StoredPaymentReceipt | null> {
-    if (!tenantId.trim() || !/^\\d+$/.test(orderId)) throw new Error("INVALID_RECEIPT_LOOKUP");
+    if (!tenantId.trim() || !/^\d+$/.test(orderId)) throw new Error("INVALID_RECEIPT_LOOKUP");
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
