@@ -50,7 +50,8 @@ test("migration runner rejects checksum drift and does not record failed migrati
 
     const failingMigration = join(temporaryRoot, "failing-migration");
     await mkdir(failingMigration);
-    await writeFile(join(failingMigration, "006_intentional_failure.sql"), "SELECT * FROM eper_intentionally_missing_migration_test_table;\n");
+    const rollbackProbe = "eper_migration_rollback_probe_" + randomUUID().replaceAll("-", "");
+    await writeFile(join(failingMigration, "006_intentional_failure.sql"), `CREATE TABLE ${rollbackProbe} (id INTEGER);\nSELECT * FROM eper_intentionally_missing_migration_test_table;\n`);
     await assert.rejects(
       runMigrations(databaseUrl, { directory: failingMigration }),
       /eper_intentionally_missing_migration_test_table/,
@@ -60,6 +61,8 @@ test("migration runner rejects checksum drift and does not record failed migrati
       ["006_intentional_failure.sql"],
     );
     assert.equal(ledger.rowCount, 0, "a failed schema change must not be marked applied");
+    const probe = await pool.query("SELECT to_regclass($1) AS relation", [rollbackProbe]);
+    assert.equal(probe.rows[0].relation, null, "DDL preceding a failed statement must roll back atomically");
   } finally {
     await pool.end();
     await rm(temporaryRoot, { recursive: true, force: true });
