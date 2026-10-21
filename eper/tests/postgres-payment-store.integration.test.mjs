@@ -70,6 +70,20 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.equal(persisted.rows[0].receipt_number, capture.receiptNumber);
     assert.equal(Number(persisted.rows[0].receipt_count), 1);
 
+    const storedOrder = await store.findOrder(tenantId, providerOrderId);
+    assert.ok(storedOrder);
+    assert.equal(storedOrder.status, "captured");
+    assert.equal(storedOrder.providerPaymentId, capture.providerPaymentId);
+    assert.equal(storedOrder.amountMinor, 12500);
+
+    const storedReceipt = await store.findReceipt(tenantId, storedOrder.id);
+    assert.ok(storedReceipt);
+    assert.equal(storedReceipt.receiptNumber, capture.receiptNumber);
+    assert.equal(storedReceipt.documentSha256, null); // PDF generation/hash is a separate, still-required layer.
+
+    assert.equal(await store.findOrder(tenantId, "order_does_not_exist"), null);
+    assert.equal(await store.findReceipt("another-tenant", storedOrder.id), null);
+
     // Race two different provider orders using the same tenant-scoped key.
     // Exactly one may win; the losing request must not be reported as a retry.
     const raceKey = "race-" + randomUUID();
