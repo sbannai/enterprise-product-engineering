@@ -150,7 +150,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
       if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const receiptNumber = await receiptNumberSource({ tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id });
-      if (typeof receiptNumber !== "string" || !receiptNumber.trim()) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      if (typeof receiptNumber !== "string" || !receiptNumber.trim() || receiptNumber !== receiptNumber.trim() || receiptNumber.length > 100) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const result = await paymentStore.capturePayment({
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
@@ -326,7 +326,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       }
       if (!receiptNumberSource) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const receiptNumber = await receiptNumberSource({ tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId });
-      if (typeof receiptNumber !== "string" || !receiptNumber.trim()) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
+      if (typeof receiptNumber !== "string" || !receiptNumber.trim() || receiptNumber !== receiptNumber.trim() || receiptNumber.length > 100) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const captured = await paymentStore.captureVerifiedPayment({
         tenantId, providerOrderId: orderId, providerPaymentId: paymentId,
         amountMinor: order.amountMinor, currency: "INR", receiptNumber,
