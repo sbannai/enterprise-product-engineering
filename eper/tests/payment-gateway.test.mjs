@@ -132,6 +132,15 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     assert.equal(captureWebhook.status, 200);
     assert.equal((await captureWebhook.json()).received, true);
 
+    // A duplicate signed capture must be harmless and must not create a second receipt.
+    const duplicateCapture = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-razorpay-signature": webhookSignature },
+      body: captureEvent,
+    });
+    assert.equal(duplicateCapture.status, 200);
+    assert.equal((await duplicateCapture.json()).received, true);
+
     // Production ignores a tampered client amount and uses the trusted invoice amount.
     process.env.NODE_ENV = "production";
     const productionOrder = await nativeFetch(`${base}/api/payments/orders`, {
@@ -189,6 +198,8 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     });
     assert.equal(verified.status, 200);
     const verifiedBody = await verified.json();
+    assert.equal(verifiedBody.payment.status, "PAID");
+    assert.ok(verifiedBody.payment.receiptNumber);
     assert.match(verifiedBody.receiptUrl, /^\/api\/payments\/.+\/receipt\.pdf$/);
 
     const receipt = await nativeFetch(base + verifiedBody.receiptUrl, {
