@@ -172,7 +172,7 @@ test("PostgresPaymentStore rejects invalid order input before opening a transact
   assert.equal(connectCalls, 0);
 });
 
-test("PostgresPaymentStore validates receipt PDF hashes before database access", async () => {
+test("PostgresPaymentStore validates receipt PDF bytes before database access", async () => {
   let connectCalls = 0;
   const store = new PostgresPaymentStore({
     async connect() {
@@ -181,16 +181,15 @@ test("PostgresPaymentStore validates receipt PDF hashes before database access",
     },
   });
   await assert.rejects(
-    store.persistReceiptDocumentHash("tenant-a", "41", "not-a-sha256"),
-    /INVALID_RECEIPT_DOCUMENT_HASH_INPUT/,
+    store.persistReceiptDocument("tenant-a", "41", Buffer.from("not a PDF")),
+    /INVALID_RECEIPT_DOCUMENT_INPUT/,
   );
   await assert.rejects(
-    store.persistReceiptDocumentHash("tenant-a", "../41", "a".repeat(64)),
-    /INVALID_RECEIPT_DOCUMENT_HASH_INPUT/,
+    store.persistReceiptDocument("tenant-a", "../41", Buffer.from("%PDF-1.4\\nvalid-looking PDF")),
+    /INVALID_RECEIPT_DOCUMENT_INPUT/,
   );
   assert.equal(connectCalls, 0);
 });
-
 test("PostgresPaymentStore rejects non-numeric receipt order IDs before database access", async () => {
   let connectCalls = 0;
   const store = new PostgresPaymentStore({
@@ -341,20 +340,22 @@ test("PostgresPaymentStore rejects reuse of an idempotency key for a different p
   assert.equal(fake.released, 1);
 });
 
-test("PostgresPaymentStore persists an immutable PDF hash for a valid numeric order ID", async () => {
+test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid numeric order ID", async () => {
   const calls = [];
   let storedHash = null;
+  let storedPdf = null;
   const store = new PostgresPaymentStore({
     async connect() {
       return {
         async query(sql, values = []) {
           const normalized = sql.replace(/\\s+/g, " ").trim();
           calls.push({ sql: normalized, values });
-          if (normalized.startsWith("SELECT document_sha256")) {
-            return { rows: [{ document_sha256: storedHash }], rowCount: 1 };
+          if (normalized.startsWith("SELECT document_sha256, document_pdf")) {
+            return { rows: [{ document_sha256: storedHash, document_pdf: storedPdf }], rowCount: 1 };
           }
           if (normalized.startsWith("UPDATE eper_payment_receipts")) {
             storedHash = values[2];
+            storedPdf = values[3];
             return { rows: [], rowCount: 1 };
           }
           return { rows: [], rowCount: null };
@@ -363,20 +364,23 @@ test("PostgresPaymentStore persists an immutable PDF hash for a valid numeric or
       };
     },
   });
-  const hash = "a".repeat(64);
+  const pdf = Buffer.from("%PDF-1.4\\nreceipt\\n%%EOF", "ascii");
+  const hash = createHash("sha256").update(pdf).digest("hex");
   assert.deepEqual(
-    await store.persistReceiptDocumentHash("tenant-a", "41", hash),
+    await store.persistReceiptDocument("tenant-a", "41", pdf),
     { ok: true, value: { documentSha256: hash } },
   );
   assert.deepEqual(
-    await store.persistReceiptDocumentHash("tenant-a", "41", hash),
+    await store.persistReceiptDocument("tenant-a", "41", pdf),
     { ok: true, value: { documentSha256: hash } },
   );
   assert.deepEqual(
-    await store.persistReceiptDocumentHash("tenant-a", "41", "b".repeat(64)),
+    await store.persistReceiptDocument("tenant-a", "41", Buffer.from("%PDF-1.4\\nchanged\\n%%EOF", "ascii")),
     { ok: false, reason: "receipt_document_conflict" },
   );
-  assert.equal(calls.filter(({ sql }) => sql.startsWith("UPDATE eper_payment_receipts")).length, 2);
+  assert.equal(storedHash, hash);
+  assert.deepEqual(storedPdf, pdf);
+  assert.equal(calls.filter(({ sql }) => sql.startsWith("UPDATE eper_payment_receipts")).length, 1);
   assert.ok(calls.some(({ sql }) => sql === "COMMIT"));
   assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
 });
