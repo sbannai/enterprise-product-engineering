@@ -126,7 +126,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (payment?.order_id && payment?.id) {
         const ledger = await readLedger(cfg.ledgerFile);
         const record = ledger.records.find(item => item.razorpayOrderId === payment.order_id);
-        if (record && record.status !== "PAID" && Number(payment.amount) === record.amountPaise && payment.currency === record.currency) {
+        if (record && record.status !== "PAID" && payment.status === "captured" && Number(payment.amount) === record.amountPaise && payment.currency === record.currency) {
           record.status = "PAID"; record.razorpayPaymentId = String(payment.id);
           record.receiptNumber = "EPER-" + new Date().getUTCFullYear() + "-" + randomUUID().slice(0, 8).toUpperCase();
           record.paidAt = new Date().toISOString();
