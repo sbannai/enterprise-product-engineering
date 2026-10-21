@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
-import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
+import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshot, type TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 
 type PaymentStatus = "CREATED" | "PAID";
 export type TrustedReceiptNumberSource = (input: { tenantId: string; transactionPublicId: string; providerPaymentId: string }) => Promise<string>;
@@ -24,6 +24,7 @@ interface PaymentRecord {
   receiptId?: string;
   createdAt: string;
   paidAt?: string;
+  transactionSnapshot?: TrustedTransactionSnapshot;
 }
 interface Ledger { records: PaymentRecord[]; }
 
@@ -61,6 +62,16 @@ function receiptPdf(record: PaymentRecord): Buffer {
     "Tenant: " + record.tenantId,
     "Paid at: " + (record.paidAt ?? ""),
     "Status: PAID",
+    ...(record.transactionSnapshot ? [
+      "Transaction type: " + record.transactionSnapshot.kind,
+      "Transaction description: " + record.transactionSnapshot.description,
+      ...record.transactionSnapshot.lineItems.map((item) =>
+        "Item: " + item.description + " | Qty " + item.quantity + " | Unit " +
+        (item.unitPriceMinor / 100).toFixed(2) + " | Total " + (item.lineTotalMinor / 100).toFixed(2)),
+      ...record.transactionSnapshot.adjustments.map((item) =>
+        "Adjustment: " + item.kind + " " + item.description + " " + (item.amountMinor / 100).toFixed(2)),
+      "Source: " + record.transactionSnapshot.sourceId + " " + record.transactionSnapshot.sourceVersion,
+    ] : []),
   ];
   const stream = "BT /F1 16 Tf 50 790 Td (" + pdfEscape(lines[0]) + ") Tj /F1 10 Tf " +
     lines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
@@ -430,6 +441,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         razorpayOrderId: order.providerOrderId, razorpayPaymentId: order.providerPaymentId,
         receiptNumber: receipt.receiptNumber, receiptId: receipt.receiptPublicId,
         createdAt: order.createdAt, paidAt: receipt.issuedAt,
+        transactionSnapshot: receipt.transactionSnapshot ?? undefined,
       });
       const persisted = await paymentStore.persistReceiptDocument(tenantId, order.id, pdf);
       if (!persisted.ok) { json(res, 503, { error: "receipt_document_persistence_failed" }); return true; }
