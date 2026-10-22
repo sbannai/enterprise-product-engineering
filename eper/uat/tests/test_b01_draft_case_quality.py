@@ -41,6 +41,13 @@ class B01DraftCaseQualityTests(unittest.TestCase):
         self.assertEqual(len(set(requirement_ids)), 48)
         self.assertEqual(set(requirement_ids), EXPECTED_REQUIREMENTS)
 
+    def test_requirement_to_srs_mapping_is_exact_and_contiguous(self):
+        ordered = sorted(self.cases, key=lambda row: (int(row["chapter"]), row["requirement_id"]))
+        for index, row in enumerate(ordered):
+            expected_srs = f"SRS-FR-{2323 + index}"
+            self.assertEqual(row["srs_id"], expected_srs, row["requirement_id"])
+            self.assertEqual(row["brd_id"], f"BRD-001-{row['requirement_id']}", row["requirement_id"])
+
     def test_each_chapter_covers_all_six_capability_patterns(self):
         for chapter in range(463, 471):
             chapter_rows = [row for row in self.cases if int(row["chapter"]) == chapter]
