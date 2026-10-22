@@ -105,13 +105,23 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       return requestTenant === tenantId && id === providerOrderId ? { ...order } : null;
     },
     async captureVerifiedPayment(input) {
-      verifiedCaptureCalls += 1;
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.providerOrderId, providerOrderId);
       assert.equal(input.providerPaymentId, providerPaymentId);
+      // The webhook already captured this exact payment and issued the receipt.
+      // Model the store's idempotent retry path: return the existing receipt and
+      // do not count it as a new capture or mutate the original snapshot.
+      if (captured) {
+        assert.equal(order.providerPaymentId, input.providerPaymentId);
+        assert.equal(input.receiptNumber, receiptNumber);
+        return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
+      }
+      verifiedCaptureCalls += 1;
       assert.equal(input.receiptNumber, receiptNumber);
       assert.equal(input.transactionSnapshot.reference, "invoice-route-test");
       assert.equal(input.transactionSnapshot.lineItems[0].description, "Checkout item 1");
+      captured = true;
+      order = { ...order, status: "captured", providerPaymentId: input.providerPaymentId };
       receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
     },
