@@ -1,0 +1,232 @@
+openapi: 3.1.0
+info:
+  title: EPER Multi-Application and KPI API (Proposed)
+  version: 0.1.0-proposed
+  description: >-
+    Proposal only. Routes and schemas require reconciliation with the repository's
+    actual identity provider, persistence implementation, and domain-owner decisions.
+    This specification does not authorize production exposure.
+servers:
+  - url: /api/v1
+    description: Relative API root; deployment host is not specified.
+security:
+  - bearerAuth: []
+tags:
+  - name: Applications
+  - name: Memberships
+  - name: Workflows
+  - name: KPIs
+paths:
+  /tenants/{tenantId}/applications:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Applications]
+      operationId: listApplications
+      summary: List applications visible to the authenticated tenant member
+      responses:
+        '200':
+          description: Authorized application list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Application' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Applications]
+      operationId: createApplication
+      summary: Create an application within the authenticated tenant
+      description: Server must derive tenant membership from the verified principal; URL tenantId is not an authorization grant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, environment]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                environment: { type: string, enum: [development, test, uat, production] }
+      responses:
+        '201':
+          description: Application created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /tenants/{tenantId}/applications/{applicationId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [Applications]
+      operationId: getApplication
+      summary: Read an authorized application
+      responses:
+        '200':
+          description: Application
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Applications]
+      operationId: updateApplication
+      summary: Update permitted application metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                status: { type: string, enum: [active, suspended, archived] }
+      responses:
+        '200':
+          description: Updated application
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tenants/{tenantId}/applications/{applicationId}/kpis:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [KPIs]
+      operationId: getApplicationKpis
+      summary: Read aggregate KPIs for an authorized application
+      description: All aggregates and dimensions must be tenant- and application-scoped server-side. Demo values must never be returned as live values.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: bucket
+          in: query
+          required: false
+          schema: { type: string, enum: [hour, day, week], default: day }
+        - name: metric
+          in: query
+          required: false
+          schema: { type: array, items: { type: string }, maxItems: 30 }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: KPI summary with freshness metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [applicationId, from, to, bucket, dataStatus, computedAt, items]
+                properties:
+                  applicationId: { type: string }
+                  from: { type: string, format: date-time }
+                  to: { type: string, format: date-time }
+                  bucket: { type: string, enum: [hour, day, week] }
+                  dataStatus: { type: string, enum: [available, empty, stale, unavailable] }
+                  computedAt: { type: [string, 'null'], format: date-time }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/KpiValue' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Proposed scheme only; actual identity provider and token claims are not yet approved.
+  parameters:
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    ApplicationId:
+      name: applicationId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Unauthorized:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Forbidden:
+      description: Authenticated principal lacks required tenant/application scope or action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotFound:
+      description: Resource not found or not visible to this principal
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+    Application:
+      type: object
+      required: [applicationId, tenantId, name, status, environment, createdAt]
+      properties:
+        applicationId: { type: string }
+        tenantId: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [active, suspended, archived] }
+        environment: { type: string, enum: [development, test, uat, production] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    KpiValue:
+      type: object
+      required: [metricKey, label, value, unit, status]
+      properties:
+        metricKey: { type: string }
+        label: { type: string }
+        value: { type: [number, 'null'] }
+        unit: { type: string }
+        numerator: { type: [number, 'null'] }
+        denominator: { type: [number, 'null'] }
+        status: { type: string, enum: [available, empty, stale, unavailable] }
+        series:
+          type: array
+          items:
+            type: object
+            required: [bucketStart, value]
+            properties:
+              bucketStart: { type: string, format: date-time }
+              value: { type: [number, 'null'] }
+    ApiError:
+      type: object
+      required: [error, correlationId]
+      properties:
+        error: { type: string }
+        message: { type: string }
+        correlationId: { type: string }
