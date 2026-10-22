@@ -31,7 +31,7 @@ test("draft prices are not quotable and missing market price fails closed", () =
   assert.throws(() => service.quote({ productId: "uat-fee", marketId: "GB" }), /APPROVED_MARKET_PRICE_NOT_FOUND/);
 });
 
-test("ambiguous active price configuration fails closed", () => {
+test("ambiguous active price configuration fails closed for quotes", () => {
   const service = new MarketPriceBookService([
     ...entries,
     { ...entries[0], amountMinor: 15000, priceBookVersion: "test-v2" },
@@ -40,7 +40,7 @@ test("ambiguous active price configuration fails closed", () => {
 });
 
 test("invalid amount and invalid effective window are rejected at configuration time", () => {
-  assert.throws(() => new MarketPriceBookService([{ ...entries[0], amountMinor: 0 }], now), /MARKET_PRICE_AMOUNT_INVALID/);
+  assert.throws(() => new MarketPriceBookService([{ ...entries[0], amountMinor: 0 }], now), /MARKET_PRICE_CONFIGURATION_INVALID/);
   assert.throws(() => new MarketPriceBookService([{ ...entries[0], effectiveTo: "2025-01-01T00:00:00.000Z" }], now), /MARKET_PRICE_EFFECTIVE_WINDOW_INVALID/);
 });
 
@@ -50,4 +50,30 @@ test("market list contains effective approved entries only", () => {
     { marketId: "AE", currency: "AED" },
     { marketId: "IN", currency: "INR" },
   ]);
+});
+
+test("market list fails closed for duplicate active records even when currencies match", () => {
+  const service = new MarketPriceBookService([
+    ...entries,
+    { ...entries[0], amountMinor: 12550, priceBookVersion: "test-v2" },
+  ], now);
+  assert.throws(() => service.listMarkets("uat-fee"), /MARKET_PRICE_CONFIGURATION_AMBIGUOUS/);
+});
+
+test("non-ISO currency codes are rejected", () => {
+  assert.throws(
+    () => new MarketPriceBookService([{ ...entries[0], currency: "inr" }], now),
+    /MARKET_PRICE_CONFIGURATION_INVALID/,
+  );
+});
+
+test("invalid clock values fail closed", () => {
+  const service = new MarketPriceBookService(entries, () => new Date(Number.NaN));
+  assert.throws(() => service.quote({ productId: "uat-fee", marketId: "IN" }), /MARKET_PRICE_CLOCK_INVALID/);
+});
+
+test("blank quote and market-list identifiers are rejected", () => {
+  const service = new MarketPriceBookService(entries, now);
+  assert.throws(() => service.quote({ productId: " ", marketId: "IN" }), /MARKET_PRICE_REQUEST_INVALID/);
+  assert.throws(() => service.listMarkets(" "), /MARKET_PRICE_REQUEST_INVALID/);
 });
