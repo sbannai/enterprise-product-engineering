@@ -2,6 +2,9 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
+import { ApplicationPermissionAdminService } from "../../packages/tenant/application-grants.js";
+import { JsonFileApplicationGrantStore, JsonLinesPermissionAuditSink } from "../../packages/tenant/json-file-application-grants.js";
+import type { ApplicationEnvironment, ApplicationGrant } from "../../packages/tenant/application-access.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -73,6 +76,80 @@ export function createAppServer(): Server {
         service: "eper-api",
         buildId: buildIdIsCommit ? buildId : null,
       });
+      return;
+    }
+
+    // Opt-in local/UAT permission editor API. Acting identity and scope come only from server config.
+    const permissionMatch = /^\\/internal\\/permissions\\/([^/]+)$/.exec(requestUrl.pathname);
+    if ((request.method === "PUT" || request.method === "GET") && permissionMatch) {
+      if (process.env.EPER_LOCAL_PERMISSION_API !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+
+      const token = process.env.EPER_LOCAL_PERMISSION_TOKEN ?? "";
+      const tenantId = process.env.EPER_LOCAL_PERMISSION_TENANT_ID ?? "";
+      const applicationId = process.env.EPER_LOCAL_PERMISSION_APPLICATION_ID ?? "";
+      const environment = process.env.EPER_LOCAL_PERMISSION_ENVIRONMENT ?? "";
+      const actorPrincipalId = process.env.EPER_LOCAL_PERMISSION_ACTOR_ID ?? "";
+      const grantsFile = process.env.EPER_LOCAL_PERMISSION_GRANTS_FILE ?? "";
+      const auditFile = process.env.EPER_LOCAL_PERMISSION_AUDIT_FILE ?? "";
+      if (token.length < 32 || !tenantId || !applicationId || !actorPrincipalId ||
+          !["development", "test", "uat", "production"].includes(environment) || !grantsFile || !auditFile) {
+        sendJson(response, 503, { error: "local_permission_api_unconfigured" });
+        return;
+      }
+      if (!bearerMatches(request, token)) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+
+      let targetPrincipalId: string;
+      try {
+        targetPrincipalId = decodeURIComponent(permissionMatch[1]);
+      } catch {
+        sendJson(response, 400, { error: "invalid_principal_id_encoding" });
+        return;
+      }
+      if (!targetPrincipalId.trim() || targetPrincipalId.length > 200) {
+        sendJson(response, 400, { error: "invalid_principal_id" });
+        return;
+      }
+
+      try {
+        const scope = { tenantId, applicationId, environment: environment as ApplicationEnvironment };
+        const store = new JsonFileApplicationGrantStore(grantsFile);
+        if (request.method === "GET") {
+          const visible = store.list().filter((grant) =>
+            grant.tenantId === scope.tenantId &&
+            grant.applicationId === scope.applicationId &&
+            grant.environment === scope.environment &&
+            grant.principalId === targetPrincipalId
+          );
+          sendJson(response, 200, { scope, principalId: targetPrincipalId, grants: visible });
+          return;
+        }
+
+        const body = await readJson(request);
+        if (!Array.isArray(body.grants)) {
+          sendJson(response, 400, { error: "grants_array_required" });
+          return;
+        }
+        const audit = new JsonLinesPermissionAuditSink(auditFile);
+        const admin = new ApplicationPermissionAdminService(store, audit);
+        const actor = { principalId: actorPrincipalId, tenantIds: [tenantId], platformAdmin: false };
+        const result = admin.replaceGrants(actor, scope, targetPrincipalId, body.grants as ApplicationGrant[]);
+        if (!result.ok) {
+          sendJson(response, result.status, { error: result.reason });
+          return;
+        }
+        sendJson(response, 200, { scope, principalId: targetPrincipalId, grants: result.grants, auditEvent: result.auditEvent });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "permission_api_failed";
+        sendJson(response, message === "REQUEST_BODY_TOO_LARGE" ? 413 : 400, {
+          error: message === "REQUEST_BODY_TOO_LARGE" ? message : "invalid_permission_request",
+        });
+      }
       return;
     }
 
