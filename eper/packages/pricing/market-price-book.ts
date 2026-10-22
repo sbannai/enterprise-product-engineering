@@ -93,15 +93,18 @@ export class MarketPriceBookService {
     }
 
     const byMarket = new Map<string, string>();
+    const seenMarkets = new Set<string>();
     for (const entry of this.entries) {
       if (entry.productId !== productId || entry.status !== "APPROVED" || !this.isEffective(entry, now)) {
         continue;
       }
 
-      const existingCurrency = byMarket.get(entry.marketId);
-      if (existingCurrency !== undefined && existingCurrency !== entry.currency) {
+      // Listing a market must not hide duplicate active price records, even when
+      // their currency matches. Quotes fail closed for this condition too.
+      if (seenMarkets.has(entry.marketId)) {
         throw new Error("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
       }
+      seenMarkets.add(entry.marketId);
       byMarket.set(entry.marketId, entry.currency);
     }
 
