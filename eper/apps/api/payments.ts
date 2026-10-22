@@ -74,12 +74,24 @@ export function receiptPdf(record: PaymentRecord): Buffer {
     ] : []),
   ];
 
-  // Keep line layout deterministic, but paginate before content can run below the page.
-  // 27 lines at 24pt spacing fit within the A4 content area with comfortable margins.
+  // Wrap every logical line before pagination so long product descriptions and
+  // references cannot run past the page edge. Fixed-width chunks preserve every
+  // character deterministically, including unusually long unbroken identifiers.
+  const maxLineChars = 78;
+  const wrappedLines = lines.flatMap((line) => {
+    if (line.length <= maxLineChars) return [line];
+    const chunks: string[] = [];
+    for (let offset = 0; offset < line.length; offset += maxLineChars) {
+      chunks.push(line.slice(offset, offset + maxLineChars));
+    }
+    return chunks;
+  });
+
+  // 27 rendered lines at 24pt spacing fit within the A4 content area.
   const linesPerPage = 27;
   const pages: string[][] = [];
-  for (let i = 0; i < lines.length; i += linesPerPage) {
-    pages.push(lines.slice(i, i + linesPerPage));
+  for (let i = 0; i < wrappedLines.length; i += linesPerPage) {
+    pages.push(wrappedLines.slice(i, i + linesPerPage));
   }
   const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
