@@ -84,8 +84,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.deepEqual(input.transactionSnapshot, {
         tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
         description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
-        lineItems: [{ sourceLineId: "line-route-1", description: "Checkout item", sku: "SKU-1", quantity: 1, unitPriceMinor: 12500, lineTotalMinor: 12500 }],
-        adjustments: [], sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+        lineItems: Array.from({ length: 40 }, (_, index) => ({
+          sourceLineId: "line-route-" + (index + 1),
+          description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
+          sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
+        })),
+        adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
+        sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
       });
       captured = true;
       receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
@@ -102,7 +107,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(input.providerPaymentId, providerPaymentId);
       assert.equal(input.receiptNumber, receiptNumber);
       assert.equal(input.transactionSnapshot.reference, "invoice-route-test");
-      assert.equal(input.transactionSnapshot.lineItems[0].description, "Checkout item");
+      assert.equal(input.transactionSnapshot.lineItems[0].description, "Checkout item 1");
       receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
     },
@@ -146,8 +151,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         return {
           tenantId, reference, kind: "ECOMMERCE", description: "Route test checkout",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
-          lineItems: [{ sourceLineId: "line-route-1", description: "Checkout item", sku: "SKU-1", quantity: 1, unitPriceMinor: 12500, lineTotalMinor: 12500 }],
-          adjustments: [], sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+          lineItems: Array.from({ length: 40 }, (_, index) => ({
+            sourceLineId: "line-route-" + (index + 1),
+            description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
+            sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
+          })),
+          adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
+          sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
         };
       },
     },
@@ -536,7 +546,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
     assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
-    assert.ok(bytes.includes(Buffer.from("Checkout item")), "receipt PDF must render source-authoritative checkout line items");
+    assert.ok(bytes.includes(Buffer.from("Checkout item 1")), "receipt PDF must render source-authoritative checkout line items");
+    assert.ok(bytes.includes(Buffer.from("Checkout final item")), "long descriptions must be preserved across wrapped PDF lines");
+    assert.ok(bytes.includes(Buffer.from("/Count 3")), "40-item receipt with a long description must paginate across all content pages");
     const repeatedDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
     });
