@@ -93,3 +93,19 @@ test("unsafe minor-unit amounts, invalid statuses, and invalid timestamps fail c
     /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
   );
 });
+
+
+test("impossible calendar dates and incomplete timestamps fail configuration validation", () => {
+  for (const effectiveFrom of [
+    "2026-02-30T00:00:00.000Z",
+    "2026-13-01T00:00:00.000Z",
+    "2026-01-01",
+    "2026-01-01T24:00:00Z",
+  ]) {
+    assert.throws(
+      () => new MarketPriceBookService([{ ...entries[0], effectiveFrom }], now),
+      /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
+      effectiveFrom,
+    );
+  }
+});
