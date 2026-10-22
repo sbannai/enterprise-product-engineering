@@ -38,18 +38,22 @@ export class MarketPriceBookService {
   private readonly clock: Clock;
 
   constructor(entries: readonly MarketPriceBookEntry[], clock: Clock = () => new Date()) {
+    if (!Array.isArray(entries)) {
+      throw new Error("MARKET_PRICE_CONFIGURATION_INVALID");
+    }
     this.entries = entries.map((entry) => ({ ...entry }));
     this.clock = clock;
     this.validateConfiguration();
   }
 
   quote(request: MarketPriceQuoteRequest): MarketPriceQuote {
-    if (!request.productId?.trim() || !request.marketId?.trim()) {
+    if (!request || typeof request.productId !== "string" || !request.productId.trim() ||
+        typeof request.marketId !== "string" || !request.marketId.trim()) {
       throw new Error("MARKET_PRICE_REQUEST_INVALID");
     }
 
     const now = this.clock();
-    if (!Number.isFinite(now.getTime())) {
+    if (!now || !Number.isFinite(now.getTime())) {
       throw new Error("MARKET_PRICE_CLOCK_INVALID");
     }
 
@@ -83,12 +87,12 @@ export class MarketPriceBookService {
   }
 
   listMarkets(productId: string): MarketSummary[] {
-    if (!productId?.trim()) {
+    if (typeof productId !== "string" || !productId.trim()) {
       throw new Error("MARKET_PRICE_REQUEST_INVALID");
     }
 
     const now = this.clock();
-    if (!Number.isFinite(now.getTime())) {
+    if (!now || !Number.isFinite(now.getTime())) {
       throw new Error("MARKET_PRICE_CLOCK_INVALID");
     }
 
@@ -122,12 +126,13 @@ export class MarketPriceBookService {
   private validateConfiguration(): void {
     for (const entry of this.entries) {
       if (
-        !entry.productId?.trim() ||
-        !entry.marketId?.trim() ||
-        !entry.currency?.trim() ||
-        !entry.priceBookId?.trim() ||
-        !entry.priceBookVersion?.trim() ||
-        !entry.status?.trim()
+        !entry ||
+        typeof entry.productId !== "string" || !entry.productId.trim() ||
+        typeof entry.marketId !== "string" || !entry.marketId.trim() ||
+        typeof entry.currency !== "string" || !/^[A-Z]{3}$/.test(entry.currency) ||
+        typeof entry.priceBookId !== "string" || !entry.priceBookId.trim() ||
+        typeof entry.priceBookVersion !== "string" || !entry.priceBookVersion.trim() ||
+        typeof entry.status !== "string" || !entry.status.trim()
       ) {
         throw new Error("MARKET_PRICE_CONFIGURATION_INVALID");
       }
@@ -136,6 +141,10 @@ export class MarketPriceBookService {
         throw new Error("MARKET_PRICE_AMOUNT_INVALID");
       }
 
+      if (typeof entry.effectiveFrom !== "string" ||
+          (entry.effectiveTo !== undefined && typeof entry.effectiveTo !== "string")) {
+        throw new Error("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+      }
       const from = Date.parse(entry.effectiveFrom);
       const to = entry.effectiveTo === undefined ? Number.POSITIVE_INFINITY : Date.parse(entry.effectiveTo);
       if (!Number.isFinite(from) || !(to > from)) {
