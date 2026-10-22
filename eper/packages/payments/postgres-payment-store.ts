@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshot } from "./transaction-receipt-contract.js";
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
+  if (value && typeof value === "object") {
+    return "{" + Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => JSON.stringify(key) + ":" + stableJson(item))
+      .join(",") + "}";
+  }
+  return JSON.stringify(value) ?? "null";
+}
 /**
  * PostgreSQL persistence primitives for EPER payments.
  *
@@ -425,9 +436,11 @@ export class PostgresPaymentStore {
         id: string | number; transaction_public_id: string; provider_order_id: string | null; invoice_reference: string;
         amount_minor: string | number; currency: string; invoice_source_id: string;
         invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
-                invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until
+                invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until,
+                transaction_snapshot
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
           FOR UPDATE`,
@@ -438,7 +451,8 @@ export class PostgresPaymentStore {
           Number(row.amount_minor) !== input.amountMinor || row.currency !== input.currency ||
           row.invoice_source_id !== input.invoiceSourceId ||
           row.invoice_source_version !== input.invoiceSourceVersion ||
-          new Date(row.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString()) {
+          new Date(row.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString() ||
+          stableJson(row.transaction_snapshot) !== stableJson(input.transactionSnapshot)) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
