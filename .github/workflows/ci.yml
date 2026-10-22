@@ -37,6 +37,9 @@ jobs:
         run: npm test
       - name: UAT preflight regression tests
         run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
+      - name: B01 register integrity validation
+        working-directory: .
+        run: node eper/uat/scripts/validate-b01-registers.mjs
       - name: Read-only business UAT readiness audit
         run: |
           python3 uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
