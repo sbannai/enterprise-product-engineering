@@ -28,6 +28,7 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
         "004_unique_public_payment_identifiers.sql",
         "005_immutable_receipt_records.sql",
         "006_immutable_receipt_transaction_snapshot.sql",
+        "007_immutable_order_transaction_snapshot.sql",
       ],
     );
     for (const row of result.rows) assert.match(row.sha256.trim(), /^[a-f0-9]{64}$/);
@@ -35,6 +36,55 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
     await pool.end();
   }
 });
+test("order-time transaction snapshot is persisted and immutable", { skip: !databaseUrl }, async () => {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 3 });
+  try {
+    const store = new PostgresPaymentStore(pool);
+    const tenantId = "snapshot-" + randomUUID();
+    const invoiceReference = "invoice-" + randomUUID();
+    const idempotencyKey = "snapshot-idem-" + randomUUID();
+    const providerOrderId = "order_" + randomUUID().replaceAll("-", "");
+    const transactionSnapshot = {
+      tenantId, reference: invoiceReference, kind: "ECOMMERCE",
+      description: "Immutable snapshot integration checkout", amountDueMinor: 12500,
+      currency: "INR", status: "DUE",
+      lineItems: [
+        { sourceLineId: "line-1", description: "Item one", quantity: 2, unitPriceMinor: 5000, lineTotalMinor: 10000 },
+        { sourceLineId: "line-2", description: "Item two", quantity: 1, unitPriceMinor: 3000, lineTotalMinor: 3000 },
+      ],
+      adjustments: [
+        { kind: "DISCOUNT", description: "Discount", amountMinor: -1000 },
+        { kind: "TAX", description: "Tax", amountMinor: 500 },
+      ],
+      sourceId: "integration-test-authority", sourceVersion: "snapshot-v1",
+      approvedAt: new Date().toISOString(),
+    };
+    const reserved = await store.reserveOrder({
+      tenantId, invoiceReference, idempotencyKey, amountMinor: 12500, currency: "INR",
+      invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "snapshot-v1",
+      invoiceApprovedAt: transactionSnapshot.approvedAt, transactionSnapshot,
+    });
+    assert.equal(reserved.ok, true);
+    if (!reserved.ok) return;
+    const completed = await store.completeOrderCreation(tenantId, idempotencyKey, providerOrderId);
+    assert.equal(completed.ok, true);
+    const order = await store.findOrderByProviderOrderId(providerOrderId);
+    assert.ok(order);
+    assert.deepEqual(order.transactionSnapshot, transactionSnapshot);
+    await assert.rejects(
+      pool.query(
+        "UPDATE eper_payment_orders SET transaction_snapshot = '{}'::jsonb WHERE tenant_id = $1 AND idempotency_key = $2",
+        [tenantId, idempotencyKey],
+      ),
+      /EPER_PAYMENT_ORDER_SNAPSHOT_IMMUTABLE/,
+      "the database trigger must reject edits to the order-time snapshot",
+    );
+  } finally {
+    await pool.end();
+  }
+});
+
 test("migration runner rejects checksum drift and does not record failed migrations", { skip: !databaseUrl }, async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "eper-payment-migrations-"));
   const { Pool } = await import("pg");
