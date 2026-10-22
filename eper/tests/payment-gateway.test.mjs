@@ -868,4 +868,26 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
   assert.ok(pdfText.includes("Receipt ID: receipt-public-unique-id"));
   assert.deepEqual(second, first, "same persisted receipt metadata must render byte-identical PDF bytes");
   assert.equal(createHash("sha256").update(second).digest("hex"), createHash("sha256").update(first).digest("hex"));
+
+  // A single unusually long product description must wrap across rendered
+  // lines without losing characters or overflowing a page.
+  const longDescription = "LongProductDescription-".repeat(12);
+  const longRecord = {
+    ...record,
+    transactionSnapshot: {
+      ...record.transactionSnapshot,
+      lineItems: [
+        { ...lineItems[0], description: longDescription },
+        ...lineItems.slice(1),
+      ],
+    },
+  };
+  const longPdfText = receiptPdf(longRecord).toString("ascii");
+  assert.ok(longPdfText.includes("Item: " + longDescription.slice(0, 72)));
+  for (let offset = 72; offset < longDescription.length; offset += 78) {
+    assert.ok(
+      longPdfText.includes(longDescription.slice(offset, offset + 78)),
+      `long product description lost wrapped content at offset ${offset}`,
+    );
+  }
 });
