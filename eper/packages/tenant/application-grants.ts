@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   authorizeApplicationAction,
   type ApplicationAction,
@@ -96,7 +97,7 @@ export class ApplicationPermissionAdminService {
   constructor(
     private readonly store: ApplicationGrantStore,
     private readonly audit: PermissionAuditSink,
-    private readonly makeId: () => string = () => `perm_${Date.now().toString(36)}`,
+    private readonly makeId: () => string = () => `perm_${randomUUID()}`,
     private readonly now: () => string = () => new Date().toISOString(),
   ) {}
 
