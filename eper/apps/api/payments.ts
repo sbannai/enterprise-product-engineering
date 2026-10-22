@@ -213,9 +213,13 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
       if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
       if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
-      const snapshot = await resolveTrustedTransactionSnapshot(transactionSnapshotSource, {
-        tenantId: order.tenantId, reference: order.invoiceReference,
-      });
+      // Use the immutable snapshot captured at order creation. Do not re-read a mutable
+      // invoice status here: the source may already say PAID after Razorpay captured.
+      const storedSnapshot = order.transactionSnapshot;
+      const snapshot = await resolveTrustedTransactionSnapshot(
+        storedSnapshot ? { async findTransaction() { return storedSnapshot; } } : undefined,
+        { tenantId: order.tenantId, reference: order.invoiceReference },
+      );
       if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
       if (snapshot.transaction.amountDueMinor !== payment.amount || snapshot.transaction.currency !== "INR") {
         json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
@@ -308,6 +312,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         invoiceSourceId: authority.invoice.sourceId,
         invoiceSourceVersion: authority.invoice.sourceVersion,
         invoiceApprovedAt: authority.invoice.approvedAt,
+        transactionSnapshot: snapshot.transaction,
       });
       if (!reservation.ok) {
         const status = reservation.reason === "idempotency_conflict" ? 409
