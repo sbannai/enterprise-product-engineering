@@ -8,7 +8,7 @@ Status: implementation candidate on PR #168; not merged, deployed, or business-U
 - `POST /api/payments/verify` validates the checkout signature and independently retrieves the payment from Razorpay. It requires matching order, payment ID, amount, currency, and captured status before recording payment completion.
 - `POST /api/payments/webhooks/razorpay` validates the raw-body Razorpay signature, requires the provider event ID, validates captured payment details against the persisted order, and deduplicates repeated events.
 - `GET /api/payments/receipts/:receiptId.pdf` retrieves a tenant-scoped receipt by its public receipt UUID. It only serves receipts for captured payments. Persisted PDF bytes are SHA-256 verified before serving; missing, malformed, or mismatched digests fail closed.
-- Payment transaction and receipt public IDs are distinct from internal database keys. Receipt identity, receipt numbering, issue timestamp, and persisted PDF content are protected by PostgreSQL migration 005.
+- Payment transaction and receipt public IDs are distinct from internal database keys. Receipt identity, receipt numbering, issue timestamp, and persisted PDF content are protected by PostgreSQL migrations 005–006. Migration 007 persists and protects the validated order-time transaction snapshot, so delayed/duplicate capture callbacks do not depend on the invoice's current mutable payability status.
 
 All payment routes return HTTP 503 with `payment_persistence_not_production_ready` when `NODE_ENV=production`. This guard must remain until the real-world approval and production-readiness conditions below have been satisfied.
 
@@ -22,7 +22,7 @@ npm run migrate:payments
 
 Configure `EPER_PAYMENT_DATABASE_URL` (or `DATABASE_URL`) through the approved deployment secret mechanism. The runner serializes migration attempts, records migration names and SHA-256 checksums, applies each migration and its ledger record atomically, and fails if an applied migration's checksum changes. The controlled UAT Docker image includes both the migration files and runner. Migrations are not applied automatically at API startup.
 
-The PostgreSQL integration workflow applies schema using this same runner before testing real database constraints, idempotency, and receipt immutability.
+The PostgreSQL integration workflow applies schema using this same runner before testing real database constraints, idempotency, immutable order-time snapshots, and receipt immutability.
 
 ## Configuration and approvals still outstanding
 
