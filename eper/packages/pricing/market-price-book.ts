@@ -15,94 +15,120 @@ export interface MarketPriceEntry {
 export interface MarketPriceQuoteRequest {
   productId: string;
   marketId: string;
+  /** Optional assertion only; it never triggers currency conversion. */
   currency?: string;
 }
 
 export interface MarketPriceQuote extends MarketPriceEntry {}
-
+export interface MarketSummary { marketId: string; currency: string; }
 type Clock = () => Date;
 
+const fail = (code: string): never => { throw new Error(code); };
+
+function parseInstant(value: unknown): number {
+  if (typeof value !== "string") return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+  return time;
+}
+
 /**
- * Resolves explicitly configured, approved market prices.
- * It intentionally does not convert prices using foreign-exchange rates.
- * Callers are responsible for supplying authoritative price-book entries.
+ * Resolves explicitly configured approved prices by product and market.
+ * It fails closed on missing/ambiguous prices and never performs FX conversion.
+ * The supplied entries must come from an authoritative price-book source.
  */
 export class MarketPriceBookService {
   private readonly entries: readonly MarketPriceEntry[];
   private readonly clock: Clock;
 
   constructor(entries: readonly MarketPriceEntry[], clock: Clock = () => new Date()) {
-    this.entries = entries.map((entry) => ({ ...entry }));
+    if (!Array.isArray(entries)) fail("MARKET_PRICE_CONFIGURATION_INVALID");
+    this.entries = entries.map((entry) => {
+      if (
+        !entry ||
+        typeof entry.productId !== "string" || !entry.productId.trim() ||
+        typeof entry.marketId !== "string" || !entry.marketId.trim() ||
+        typeof entry.currency !== "string" || !/^[A-Z]{3}$/.test(entry.currency) ||
+        !Number.isSafeInteger(entry.amountMinor) || entry.amountMinor <= 0 ||
+        typeof entry.priceBookId !== "string" || !entry.priceBookId.trim() ||
+        typeof entry.priceBookVersion !== "string" || !entry.priceBookVersion.trim() ||
+        !["DRAFT", "APPROVED", "RETIRED"].includes(entry.status)
+      ) {
+        fail("MARKET_PRICE_CONFIGURATION_INVALID");
+      }
+      const start = parseInstant(entry.effectiveFrom);
+      const end = entry.effectiveTo === undefined
+        ? Number.POSITIVE_INFINITY
+        : parseInstant(entry.effectiveTo);
+      if (end <= start) fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+      return { ...entry };
+    });
     this.clock = clock;
-
-    for (const entry of this.entries) {
-      if (!entry.productId || !entry.marketId || !entry.currency || !entry.priceBookId || !entry.priceBookVersion) {
-        throw new Error("MARKET_PRICE_CONFIGURATION_INVALID");
-      }
-      if (!Number.isSafeInteger(entry.amountMinor) || entry.amountMinor <= 0) {
-        throw new Error("MARKET_PRICE_AMOUNT_INVALID");
-      }
-      const start = Date.parse(entry.effectiveFrom);
-      const end = entry.effectiveTo === undefined ? Number.POSITIVE_INFINITY : Date.parse(entry.effectiveTo);
-      if (!Number.isFinite(start) || (entry.effectiveTo !== undefined && !Number.isFinite(end)) || end <= start) {
-        throw new Error("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
-      }
-    }
   }
 
   quote(request: MarketPriceQuoteRequest): MarketPriceQuote {
-    if (!request.productId || !request.marketId) {
-      throw new Error("MARKET_PRICE_REQUEST_INVALID");
+    if (
+      !request ||
+      typeof request.productId !== "string" || !request.productId.trim() ||
+      typeof request.marketId !== "string" || !request.marketId.trim()
+    ) {
+      fail("MARKET_PRICE_REQUEST_INVALID");
     }
-
-    const now = this.clock().getTime();
-    const candidates = this.entries.filter((entry) =>
+    const now = this.now();
+    const active = this.entries.filter((entry) =>
       entry.productId === request.productId &&
       entry.marketId === request.marketId &&
       entry.status === "APPROVED" &&
-      Date.parse(entry.effectiveFrom) <= now &&
-      (entry.effectiveTo === undefined || now < Date.parse(entry.effectiveTo))
+      this.isEffective(entry, now)
     );
+    if (active.length === 0) fail("APPROVED_MARKET_PRICE_NOT_FOUND");
+    if (active.length !== 1) fail("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
 
-    if (candidates.length === 0) {
-      throw new Error("APPROVED_MARKET_PRICE_NOT_FOUND");
-    }
-    if (candidates.length > 1) {
-      throw new Error("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
-    }
-
-    const entry = candidates[0];
+    const entry = active[0];
     if (request.currency !== undefined && request.currency !== entry.currency) {
-      throw new Error("MARKET_CURRENCY_MISMATCH");
+      fail("MARKET_CURRENCY_MISMATCH");
     }
     return { ...entry };
   }
 
-  listMarkets(productId: string): Array<{ marketId: string; currency: string }> {
-    const now = this.clock().getTime();
-    const byMarket = new Map<string, Set<string>>();
-
+  listMarkets(productId: string): MarketSummary[] {
+    if (typeof productId !== "string" || !productId.trim()) {
+      fail("MARKET_PRICE_REQUEST_INVALID");
+    }
+    const now = this.now();
+    const byMarket = new Map<string, string>();
     for (const entry of this.entries) {
       if (
         entry.productId !== productId ||
         entry.status !== "APPROVED" ||
-        Date.parse(entry.effectiveFrom) > now ||
-        (entry.effectiveTo !== undefined && now >= Date.parse(entry.effectiveTo))
-      ) {
-        continue;
-      }
-      const currencies = byMarket.get(entry.marketId) ?? new Set<string>();
-      currencies.add(entry.currency);
-      byMarket.set(entry.marketId, currencies);
-    }
+        !this.isEffective(entry, now)
+      ) continue;
 
-    const result: Array<{ marketId: string; currency: string }> = [];
-    for (const [marketId, currencies] of byMarket) {
-      if (currencies.size !== 1) {
-        throw new Error("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
+      // Never hide duplicate active records, even if their currencies match.
+      if (byMarket.has(entry.marketId)) {
+        fail("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
       }
-      result.push({ marketId, currency: [...currencies][0] });
+      byMarket.set(entry.marketId, entry.currency);
     }
-    return result.sort((a, b) => a.marketId.localeCompare(b.marketId));
+    return [...byMarket.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([marketId, currency]) => ({ marketId, currency }));
+  }
+
+  private now(): Date {
+    const value = this.clock();
+    if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+      fail("MARKET_PRICE_CLOCK_INVALID");
+    }
+    return value;
+  }
+
+  private isEffective(entry: MarketPriceEntry, now: Date): boolean {
+    const time = now.getTime();
+    const start = Date.parse(entry.effectiveFrom);
+    const end = entry.effectiveTo === undefined
+      ? Number.POSITIVE_INFINITY
+      : Date.parse(entry.effectiveTo);
+    return start <= time && time < end;
   }
 }
