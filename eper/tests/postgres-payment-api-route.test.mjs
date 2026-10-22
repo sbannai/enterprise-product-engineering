@@ -546,8 +546,12 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
     assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
-    assert.ok(bytes.includes(Buffer.from("Checkout item 1")), "receipt PDF must render source-authoritative checkout line items");
+    assert.ok(bytes.includes(Buffer.from("Amount: 125.00 INR")), "receipt total must match the gateway-confirmed amount");
+    for (let itemNumber = 1; itemNumber < 40; itemNumber += 1) {
+      assert.ok(bytes.includes(Buffer.from("Checkout item " + itemNumber)), "receipt must include checkout item " + itemNumber);
+    }
     assert.ok(bytes.includes(Buffer.from("Checkout final item")), "long descriptions must be preserved across wrapped PDF lines");
+    assert.ok(bytes.includes(Buffer.from("Adjustment: TAX Checkout tax 5.00")), "receipt must include the source-authoritative tax adjustment");
     assert.ok(bytes.includes(Buffer.from("/Count 3")), "40-item receipt with a long description must paginate across all content pages");
     const repeatedDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
