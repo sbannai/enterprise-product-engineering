@@ -109,3 +109,16 @@ test("impossible calendar dates and incomplete timestamps fail configuration val
     );
   }
 });
+
+test("blank quote and market-list identifiers fail closed", () => {
+  const service = new MarketPriceBookService(entries, now);
+  assert.throws(
+    () => service.quote({ productId: " ", marketId: "IN" }),
+    /PRICE_PRODUCT_REQUIRED/,
+  );
+  assert.throws(
+    () => service.quote({ productId: "uat-fee", marketId: " " }),
+    /PRICE_MARKET_REQUIRED/,
+  );
+  assert.throws(() => service.listMarkets(" "), /PRICE_PRODUCT_REQUIRED/);
+});
