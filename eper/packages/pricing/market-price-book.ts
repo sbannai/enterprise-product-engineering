@@ -27,6 +27,34 @@ const fail = (code: string): never => { throw new Error(code); };
 
 function parseInstant(value: unknown): number {
   if (typeof value !== "string") return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+
+  // Require a complete ISO-8601 timestamp and validate its calendar fields
+  // before Date.parse, which normalizes impossible dates in some runtimes.
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,3}))?(Z|[+-]\\d{2}:\\d{2})$/.exec(value);
+  if (!match) return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const daysInMonth = month >= 1 && month <= 12
+    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+    : 0;
+  if (
+    day < 1 || day > daysInMonth ||
+    hour > 23 || minute > 59 || second > 59
+  ) return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+
+  if (zone !== "Z") {
+    const offset = /[+-](\\d{2}):(\\d{2})$/.exec(zone);
+    if (!offset || Number(offset[1]) > 23 || Number(offset[2]) > 59) {
+      return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
+    }
+  }
+
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
   return time;
