@@ -7,20 +7,25 @@ const principal = {
   tenantIds: ["tenant-a"],
   platformAdmin: false,
 };
-const scope = { tenantId: "tenant-a", applicationId: "app-a" };
+const scope = { tenantId: "tenant-a", applicationId: "app-a", environment: "uat" };
 const grant = {
   tenantId: "tenant-a",
   applicationId: "app-a",
+  environment: "uat",
   principalId: "user-a",
   actions: ["application:read", "kpi:read"],
+  effect: "ALLOW",
   active: true,
 };
 
-test("application grant permits only the exact tenant, app, principal, and action", () => {
+test("application grant permits only the exact tenant, app, environment, principal, and action", () => {
   assert.deepEqual(authorizeApplicationAction(principal, scope, "kpi:read", [grant]), {
     allowed: true, reason: "APPLICATION_GRANT",
   });
   assert.deepEqual(authorizeApplicationAction(principal, scope, "kpi:export", [grant]), {
+    allowed: false, reason: "ACTION_NOT_GRANTED",
+  });
+  assert.deepEqual(authorizeApplicationAction(principal, { ...scope, environment: "production" }, "kpi:read", [grant]), {
     allowed: false, reason: "ACTION_NOT_GRANTED",
   });
 });
@@ -35,7 +40,7 @@ test("missing principal and tenant mismatch fail closed", () => {
 });
 
 test("same-tenant application membership does not imply access to another application", () => {
-  assert.deepEqual(authorizeApplicationAction(principal, { tenantId: "tenant-a", applicationId: "app-b" }, "kpi:read", [grant]), {
+  assert.deepEqual(authorizeApplicationAction(principal, { ...scope, applicationId: "app-b" }, "kpi:read", [grant]), {
     allowed: false, reason: "APPLICATION_GRANT_REQUIRED",
   });
 });
@@ -48,8 +53,21 @@ test("inactive and other-principal grants do not authorize access", () => {
   });
 });
 
+test("explicit deny overrides a matching allow grant", () => {
+  const deny = { ...grant, effect: "DENY" };
+  assert.deepEqual(authorizeApplicationAction(principal, scope, "kpi:read", [grant, deny]), {
+    allowed: false, reason: "EXPLICIT_DENY",
+  });
+});
+
 test("trusted platform administrator is explicitly distinguished from tenant grants", () => {
-  assert.deepEqual(authorizeApplicationAction({ ...principal, platformAdmin: true }, { tenantId: "tenant-b", applicationId: "app-z" }, "audit:read", []), {
+  assert.deepEqual(authorizeApplicationAction({ ...principal, platformAdmin: true }, { ...scope, tenantId: "tenant-b", applicationId: "app-z" }, "audit:read", []), {
     allowed: true, reason: "PLATFORM_ADMIN",
+  });
+});
+
+test("unknown environment fails closed", () => {
+  assert.deepEqual(authorizeApplicationAction(principal, { ...scope, environment: "preview" }, "kpi:read", [grant]), {
+    allowed: false, reason: "ENVIRONMENT_SCOPE_DENIED",
   });
 });
