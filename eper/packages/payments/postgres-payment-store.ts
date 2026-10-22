@@ -109,10 +109,10 @@ export class PostgresPaymentStore {
         id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
         provider_order_id: string; provider_payment_id: string | null;
         amount_minor: string | number; currency: string; status: StoredPaymentOrder["status"];
-        created_at: Date | string;
+        created_at: Date | string; transaction_snapshot: TrustedTransactionSnapshot | null;
       }>(
         `SELECT id, transaction_public_id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
-                amount_minor, currency, status, created_at
+                amount_minor, currency, status, created_at, transaction_snapshot
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND provider_order_id = $2`,
         [tenantId, providerOrderId],
@@ -126,7 +126,7 @@ export class PostgresPaymentStore {
         id: String(row.id), transactionPublicId: row.transaction_public_id, tenantId: row.tenant_id, invoiceReference: row.invoice_reference,
         providerOrderId: row.provider_order_id, providerPaymentId: row.provider_payment_id,
         amountMinor: Number(row.amount_minor), currency: "INR", status: row.status,
-        createdAt: new Date(row.created_at).toISOString(),
+        createdAt: new Date(row.created_at).toISOString(), transactionSnapshot: row.transaction_snapshot,
       };
     } finally {
       client.release();
