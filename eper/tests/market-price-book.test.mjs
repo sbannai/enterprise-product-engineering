@@ -51,3 +51,11 @@ test("market list contains effective approved entries only", () => {
     { marketId: "IN", currency: "INR" },
   ]);
 });
+
+test("market list rejects duplicate active entries even when currencies match", () => {
+  const service = new MarketPriceBookService([
+    ...entries,
+    { ...entries[0], amountMinor: 15000, priceBookVersion: "test-v2" },
+  ], now);
+  assert.throws(() => service.listMarkets("uat-fee"), /MARKET_PRICE_CONFIGURATION_AMBIGUOUS/);
+});
