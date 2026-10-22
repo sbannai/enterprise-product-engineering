@@ -104,3 +104,24 @@ test("permission API saves grants and appends an audit event", async () => {
     assert.equal(JSON.parse(lines[0]).targetPrincipalId, "user-b");
   });
 });
+
+test("permission API denies grant reads and writes when actor lacks permission:manage", async () => {
+  await withServer(async ({ baseUrl, token, grantsFile }) => {
+    writeFileSync(grantsFile, JSON.stringify([]));
+    const read = await fetch(`${baseUrl}/internal/permissions/user-b`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(read.status, 403);
+
+    const write = await fetch(`${baseUrl}/internal/permissions/user-b`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ grants: [{
+        tenantId: "tenant-a", applicationId: "app-a", environment: "uat",
+        principalId: "user-b", actions: ["run:read"], effect: "ALLOW", active: true,
+      }] }),
+    });
+    assert.equal(write.status, 403);
+    assert.deepEqual(JSON.parse(readFileSync(grantsFile, "utf8")), []);
+  });
+});
