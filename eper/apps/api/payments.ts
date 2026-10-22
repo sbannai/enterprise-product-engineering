@@ -213,9 +213,21 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
       if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
       if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
+      if (order.status === "captured" && order.providerPaymentId !== payment.id) {
+        json(res, 409, { error: "order_already_captured_with_different_payment" }); return true;
+      }
+      // For a captured order, reuse its issued receipt and snapshot without calling
+      // mutable authorities. Still submit the event to capturePayment so a reused
+      // provider event ID with a different payload is rejected as a conflict.
+      const existingReceipt = order.status === "captured"
+        ? await paymentStore.findReceipt(order.tenantId, order.id)
+        : null;
+      if (order.status === "captured" && !existingReceipt) {
+        json(res, 503, { error: "captured_payment_receipt_missing" }); return true;
+      }
       // Use the immutable snapshot captured at order creation. Do not re-read a mutable
       // invoice status here: the source may already say PAID after Razorpay captured.
-      const storedSnapshot = order.transactionSnapshot;
+      const storedSnapshot = existingReceipt?.transactionSnapshot ?? order.transactionSnapshot;
       const snapshot = await resolveTrustedTransactionSnapshot(
         storedSnapshot ? { async findTransaction() { return storedSnapshot; } } : undefined,
         { tenantId: order.tenantId, reference: order.invoiceReference },
@@ -224,7 +236,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (snapshot.transaction.amountDueMinor !== payment.amount || snapshot.transaction.currency !== "INR") {
         json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
       }
-      const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
+      const receiptNumber = existingReceipt?.receiptNumber ?? await safeReceiptNumber(receiptNumberSource, {
         tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id,
       });
       if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
@@ -440,15 +452,25 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
       }
       // Verification uses the order-time snapshot, not the current mutable invoice status.
+      if (order.status === "captured" && order.providerPaymentId !== paymentId) {
+        json(res, 409, { error: "order_already_captured_with_different_payment" }); return true;
+      }
+      const existingReceipt = order.status === "captured"
+        ? await paymentStore.findReceipt(tenantId, order.id)
+        : null;
+      if (order.status === "captured" && !existingReceipt) {
+        json(res, 503, { error: "captured_payment_receipt_missing" }); return true;
+      }
+      const storedSnapshot = existingReceipt?.transactionSnapshot ?? order.transactionSnapshot;
       const snapshot = await resolveTrustedTransactionSnapshot(
-        order.transactionSnapshot ? { async findTransaction() { return order.transactionSnapshot!; } } : undefined,
+        storedSnapshot ? { async findTransaction() { return storedSnapshot; } } : undefined,
         { tenantId, reference: order.invoiceReference },
       );
       if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
       if (snapshot.transaction.amountDueMinor !== gatewayPayment.amount || snapshot.transaction.currency !== gatewayPayment.currency) {
         json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
       }
-      const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
+      const receiptNumber = existingReceipt?.receiptNumber ?? await safeReceiptNumber(receiptNumberSource, {
         tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId,
       });
       if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
