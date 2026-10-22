@@ -50,7 +50,7 @@ function validSignature(expected: string, supplied: string): boolean {
 function pdfEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "?");
 }
-function receiptPdf(record: PaymentRecord): Buffer {
+export function receiptPdf(record: PaymentRecord): Buffer {
   const lines = [
     "EPER PAYMENT RECEIPT",
     "Receipt ID: " + (record.receiptId ?? ""),
