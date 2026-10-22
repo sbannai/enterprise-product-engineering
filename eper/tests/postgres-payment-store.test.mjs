@@ -37,7 +37,7 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
         };
       }
       if (sql.includes("SELECT id, tenant_id, invoice_reference, amount_minor")) {
-        return { rows: [{ id: 41, tenant_id: orderTenantId, invoice_reference: "invoice-41", amount_minor: orderAmountMinor, currency: "INR", status: orderStatus, provider_payment_id: null }], rowCount: 1 };
+        return { rows: [{ id: 41, tenant_id: orderTenantId, invoice_reference: "invoice-41", amount_minor: orderAmountMinor, currency: "INR", status: orderStatus, provider_payment_id: null, transaction_snapshot: null }], rowCount: 1 };
       }
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
       return { rows: [], rowCount: 1 };
