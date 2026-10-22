@@ -51,3 +51,8 @@ test("market list contains effective approved entries only", () => {
     { marketId: "IN", currency: "INR" },
   ]);
 });
+
+test("price book rejects unsupported currency and oversized identifiers", () => {
+  assert.throws(() => new MarketPriceBookService([{ ...entries[0], currency: "XYZ" }], now), /MARKET_PRICE_CURRENCY_UNSUPPORTED/);
+  assert.throws(() => new MarketPriceBookService([{ ...entries[0], productId: "x".repeat(129) }], now), /MARKET_PRICE_REQUIRED_FIELDS_MISSING/);
+});

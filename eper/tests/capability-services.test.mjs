@@ -84,7 +84,8 @@ test("all 228 requirements perform a real operation through the six concrete ser
         break;
       case "XX03":
         assert.equal(operationResult.operation, "validate");
-        assert.equal(operationResult.validation.valid, true);
+        assert.equal(operationResult.validation.valid, false);
+        assert.deepEqual(operationResult.validation.issues.map(issue => issue.code), ["VALIDATION_RULESET_NOT_CONFIGURED"]);
         break;
       case "XX04":
         assert.equal(operationResult.operation, "append");

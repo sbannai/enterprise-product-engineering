@@ -27,6 +27,8 @@ jobs:
           cache-dependency-path: eper/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high
       - name: Typecheck
         run: npm run typecheck
       - name: Build
@@ -39,3 +41,48 @@ jobs:
         run: |
           python3 uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
           python3 -c "import json; d=json.load(open('/tmp/b01-readiness.json')); print(json.dumps({'readiness': d['readiness'], 'counts': d['counts'], 'blockers': [{'gate': b['gate'], 'count': b['count']} for b in d['blockers']], 'integrityErrors': d['integrityErrors']}, indent=2))"
+      - name: Publish Business UAT gate status
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report_path = Path("/tmp/b01-readiness.json")
+          summary_path = Path(__import__("os").environ["GITHUB_STEP_SUMMARY"])
+          if not report_path.exists():
+              with summary_path.open("a", encoding="utf-8") as out:
+                  out.write("## EPER Business UAT readiness\n\nReadiness report was not generated; inspect the preceding audit step.\n")
+              raise SystemExit(0)
+
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          counts = report.get("counts", {})
+          blockers = report.get("blockers", [])
+          errors = report.get("integrityErrors", [])
+          with summary_path.open("a", encoding="utf-8") as out:
+              out.write("## EPER Business UAT readiness\n\n")
+              out.write(f"**Status: {report.get('readiness', 'UNKNOWN')}** — this is a read-only register audit, not Business UAT execution or acceptance.\n\n")
+              out.write(f"**Business UAT executed:** {report.get('businessUatExecuted', False)}\n\n")
+              out.write("| Control | Count |\n|---|---:|\n")
+              for key, value in counts.items():
+                  out.write(f"| {key} | {value} |\n")
+              out.write("\n### Blocking controls\n\n")
+              if blockers:
+                  out.write("| Gate | Affected items | IDs / scope | Detail |\n|---|---:|---|---|\n")
+                  for blocker in blockers:
+                      gate = str(blocker.get("gate", "Unspecified")).replace("|", "\\|")
+                      detail = str(blocker.get("detail", "")).replace("|", "\\|").replace("\n", " ")
+                      ids = blocker.get("gate_ids") or blocker.get("requirement_ids") or []
+                      scope = ", ".join(str(item) for item in ids)
+                      # Keep the complete blocker ID list visible in the job summary;
+                      # truncation makes requirement-level remediation ambiguous.
+                      scope = scope.replace("|", "\\|")
+                      out.write(f"| {gate} | {blocker.get('count', '—')} | {scope or 'See count / gate register'} | {detail} |\n")
+              else:
+                  out.write("No register blockers were reported. Business-owner confirmation may still be required.\n")
+              if errors:
+                  out.write("\n### Register integrity errors\n\n")
+                  for error in errors:
+                      out.write(f"- {error}\n")
+              out.write("\n**Control boundary:** CI success does not mean the target environment is ready, UAT was executed, or a requirement was accepted.\n")
+          PY

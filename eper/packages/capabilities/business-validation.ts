@@ -30,6 +30,19 @@ export class BusinessValidationEngine<T> {
   }
 
   validate(input: T): ValidationResult {
+    // Fail closed until an approved business-rule catalogue is registered.
+    // An empty rule set must never be interpreted as successful validation.
+    if (this.rules.length === 0) {
+      return {
+        valid: false,
+        issues: [{
+          code: "VALIDATION_RULESET_NOT_CONFIGURED",
+          message: "No approved business validation rules are configured",
+          severity: "ERROR",
+        }],
+      };
+    }
+
     const issues = this.rules
       .map((rule) => rule.evaluate(input))
       .filter((issue): issue is ValidationIssue => issue !== null);
