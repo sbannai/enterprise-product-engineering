@@ -38,6 +38,8 @@ export interface ReservePaymentOrderInput {
   invoiceSourceId: string;
   invoiceSourceVersion: string;
   invoiceApprovedAt: string;
+  /** Immutable, validated order-time transaction details; used for capture/retries. */
+  transactionSnapshot: TrustedTransactionSnapshot;
 }
 
 export interface CapturedPaymentInput {
@@ -70,6 +72,8 @@ export interface StoredPaymentOrder {
   currency: "INR";
   status: "creating" | "created" | "authorized" | "captured" | "failed" | "refunded";
   createdAt: string;
+  /** Snapshot captured when this order was authorized for checkout. */
+  transactionSnapshot?: TrustedTransactionSnapshot | null;
 }
 export interface StoredPaymentReceipt {
   /** Stable public UUID used as the downloadable receipt identifier. */
@@ -191,9 +195,10 @@ export class PostgresPaymentStore {
         id: string | number; transaction_public_id: string; tenant_id: string; invoice_reference: string;
         provider_order_id: string; provider_payment_id: string | null; amount_minor: string | number;
         currency: string; status: StoredPaymentOrder["status"]; created_at: Date | string;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
       }>(
         `SELECT id, transaction_public_id, tenant_id, invoice_reference, provider_order_id, provider_payment_id,
-                amount_minor, currency, status, created_at
+                amount_minor, currency, status, created_at, transaction_snapshot
            FROM eper_payment_orders WHERE provider_order_id = $1`,
         [providerOrderId],
       );
@@ -204,6 +209,7 @@ export class PostgresPaymentStore {
         invoiceReference: row.invoice_reference, providerOrderId: row.provider_order_id,
         providerPaymentId: row.provider_payment_id, amountMinor: Number(row.amount_minor),
         currency: "INR", status: row.status, createdAt: new Date(row.created_at).toISOString(),
+        transactionSnapshot: row.transaction_snapshot,
       };
     } finally { client.release(); }
   }
@@ -388,7 +394,11 @@ export class PostgresPaymentStore {
       !input.tenantId.trim() || !input.invoiceReference.trim() || !input.idempotencyKey.trim() ||
       !input.invoiceSourceId.trim() || !input.invoiceSourceVersion.trim() ||
       !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 ||
-      input.currency !== "INR" || !Number.isFinite(Date.parse(input.invoiceApprovedAt))
+      input.currency !== "INR" || !Number.isFinite(Date.parse(input.invoiceApprovedAt)) ||
+      input.transactionSnapshot.tenantId !== input.tenantId ||
+      input.transactionSnapshot.reference !== input.invoiceReference ||
+      input.transactionSnapshot.amountDueMinor !== input.amountMinor ||
+      input.transactionSnapshot.currency !== input.currency
     ) throw new Error("INVALID_PAYMENT_ORDER_RESERVATION_INPUT");
 
     const client = await this.pool.connect();
@@ -398,13 +408,14 @@ export class PostgresPaymentStore {
         `INSERT INTO eper_payment_orders
           (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
            amount_minor, currency, invoice_source_id, invoice_source_version,
-           invoice_approved_at, status, creation_lease_until, creation_attempts)
-         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8,
+           invoice_approved_at, transaction_snapshot, status, creation_lease_until, creation_attempts)
+         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8, $9::jsonb,
                  'creating', NOW() + INTERVAL '2 minutes', 1)
          ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
          RETURNING id, transaction_public_id`,
         [input.tenantId, input.invoiceReference, input.idempotencyKey, input.amountMinor,
-          input.currency, input.invoiceSourceId, input.invoiceSourceVersion, input.invoiceApprovedAt],
+          input.currency, input.invoiceSourceId, input.invoiceSourceVersion, input.invoiceApprovedAt,
+          JSON.stringify(input.transactionSnapshot)],
       );
       if (inserted.rows[0]) {
         await client.query("COMMIT");
