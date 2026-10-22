@@ -439,9 +439,11 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           gatewayPayment.currency !== order.currency || gatewayPayment.status !== "captured") {
         json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
       }
-      const snapshot = await resolveTrustedTransactionSnapshot(transactionSnapshotSource, {
-        tenantId, reference: order.invoiceReference,
-      });
+      // Verification uses the order-time snapshot, not the current mutable invoice status.
+      const snapshot = await resolveTrustedTransactionSnapshot(
+        order.transactionSnapshot ? { async findTransaction() { return order.transactionSnapshot!; } } : undefined,
+        { tenantId, reference: order.invoiceReference },
+      );
       if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
       if (snapshot.transaction.amountDueMinor !== gatewayPayment.amount || snapshot.transaction.currency !== gatewayPayment.currency) {
         json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
