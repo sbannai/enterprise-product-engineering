@@ -237,6 +237,21 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
       }
+      if (!result.ok && result.reason === "duplicate_event") {
+        // Idempotent webhook retries should return the already-issued receipt identity.
+        const existingReceipt = await paymentStore.findReceipt(order.tenantId, order.id);
+        if (!existingReceipt) {
+          json(res, 503, { error: "captured_payment_receipt_missing" }); return true;
+        }
+        json(res, 200, {
+          received: true,
+          receiptId: existingReceipt.receiptPublicId,
+          receiptNumber: existingReceipt.receiptNumber,
+          receiptUrl: "/api/payments/receipts/" + existingReceipt.receiptPublicId + ".pdf",
+          duplicate: true,
+        });
+        return true;
+      }
       json(res, 200, { received: true, ...(result.ok ? { receiptId: result.value.receiptPublicId, receiptNumber: result.value.receiptNumber, receiptUrl: "/api/payments/receipts/" + result.value.receiptPublicId + ".pdf" } : {}) });
       return true;
     }
