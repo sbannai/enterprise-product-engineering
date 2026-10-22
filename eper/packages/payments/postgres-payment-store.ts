@@ -647,8 +647,10 @@ export class PostgresPaymentStore {
       const orderResult = await client.query<{
         id: string | number; tenant_id: string; invoice_reference: string;
         amount_minor: string | number; currency: string; status: string; provider_payment_id: string | null;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
       }>(
-        `SELECT id, tenant_id, invoice_reference, amount_minor, currency, status, provider_payment_id
+        `SELECT id, tenant_id, invoice_reference, amount_minor, currency, status, provider_payment_id,
+                transaction_snapshot
            FROM eper_payment_orders WHERE provider_order_id = $1 FOR UPDATE`,
         [input.providerOrderId],
       );
@@ -664,6 +666,10 @@ export class PostgresPaymentStore {
             input.transactionSnapshot.reference !== order.invoice_reference ||
             input.transactionSnapshot.amountDueMinor !== input.amountMinor ||
             input.transactionSnapshot.currency !== input.currency
+          )) ||
+          (order.transaction_snapshot !== null && (
+            input.transactionSnapshot === undefined ||
+            stableJson(input.transactionSnapshot) !== stableJson(order.transaction_snapshot)
           ))) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "payment_mismatch" };
