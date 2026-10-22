@@ -4,7 +4,7 @@ import { executeIntegratedRequirement } from "../../packages/capability-router.j
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
 import { ApplicationPermissionAdminService } from "../../packages/tenant/application-grants.js";
 import { JsonFileApplicationGrantStore, JsonLinesPermissionAuditSink } from "../../packages/tenant/json-file-application-grants.js";
-import type { ApplicationEnvironment, ApplicationGrant } from "../../packages/tenant/application-access.js";
+import { authorizeApplicationAction, type ApplicationEnvironment, type ApplicationGrant } from "../../packages/tenant/application-access.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -120,6 +120,12 @@ export function createAppServer(): Server {
         const scope = { tenantId, applicationId, environment: environment as ApplicationEnvironment };
         const store = new JsonFileApplicationGrantStore(grantsFile);
         if (request.method === "GET") {
+          const actor = { principalId: actorPrincipalId, tenantIds: [tenantId], platformAdmin: false };
+          const decision = authorizeApplicationAction(actor, scope, "permission:manage", store.list());
+          if (!decision.allowed) {
+            sendJson(response, 403, { error: decision.reason });
+            return;
+          }
           const visible = store.list().filter((grant) =>
             grant.tenantId === scope.tenantId &&
             grant.applicationId === scope.applicationId &&
