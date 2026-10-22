@@ -244,7 +244,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
         providerOrderId: payment.order_id, providerPaymentId: payment.id,
-        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber, transactionSnapshot: snapshot.transaction,
+        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber, transactionSnapshot: orderTimeTransactionSnapshot,
       });
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
@@ -307,6 +307,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     }
     const amountPaise = authority.invoice.amountDuePaise;
     const currency = authority.invoice.currency;
+    let orderTimeTransactionSnapshot: TrustedTransactionSnapshot | undefined;
 
     // Durable PostgreSQL checkout requires a separately sourced transaction snapshot.
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
@@ -324,11 +325,15 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       if (snapshot.transaction.amountDueMinor !== amountPaise || snapshot.transaction.currency !== currency) {
         json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
       }
+      orderTimeTransactionSnapshot = snapshot.transaction;
     }
 
     // Explicit opt-in for controlled UAT. Production remains blocked above until
     // verification, webhook capture, and durable receipt retrieval are also wired.
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      if (!orderTimeTransactionSnapshot) {
+        json(res, 503, { error: "trusted_transaction_snapshot_unavailable" }); return true;
+      }
       const idempotencyKey = String(req.headers["idempotency-key"] ?? "").trim();
       if (!idempotencyKey || idempotencyKey.length > 200) {
         json(res, 400, { error: "valid_idempotency_key_required" }); return true;
