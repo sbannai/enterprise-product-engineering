@@ -27,6 +27,36 @@ export interface MarketPriceQuote {
  * conversion. Commercial prices must come from controlled configuration, not
  * hard-coded application defaults.
  */
+function parseEffectiveDate(value: unknown): number {
+  if (typeof value !== "string") throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
+  // Validate the calendar components before Date.parse, which can normalize
+  // impossible dates (for example, February 30) into a different instant.
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,3}))?(Z|[+-]\\d{2}:\\d{2})$/.exec(value);
+  if (!match) throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const daysInMonth = month >= 1 && month <= 12
+    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+    : 0;
+  if (day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) {
+    throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
+  }
+  if (zone !== "Z") {
+    const offset = /[+-](\\d{2}):(\\d{2})$/.exec(zone);
+    if (!offset || Number(offset[1]) > 23 || Number(offset[2]) > 59) {
+      throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
+    }
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
+  return timestamp;
+}
+
 export class MarketPriceBookService {
   constructor(
     private readonly entries: readonly MarketPriceEntry[],
@@ -122,13 +152,9 @@ export class MarketPriceBookService {
     if (!(["DRAFT", "APPROVED", "RETIRED"] as const).includes(entry.status)) {
       throw new Error("MARKET_PRICE_STATUS_INVALID");
     }
-    if (typeof entry.effectiveFrom !== "string" ||
-        (entry.effectiveTo != null && typeof entry.effectiveTo !== "string") ||
-        !Number.isFinite(Date.parse(entry.effectiveFrom)) ||
-        (entry.effectiveTo != null && !Number.isFinite(Date.parse(entry.effectiveTo)))) {
-      throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
-    }
-    if (entry.effectiveTo != null && Date.parse(entry.effectiveTo) <= Date.parse(entry.effectiveFrom)) {
+    const effectiveFrom = parseEffectiveDate(entry.effectiveFrom);
+    const effectiveTo = entry.effectiveTo == null ? null : parseEffectiveDate(entry.effectiveTo);
+    if (effectiveTo != null && effectiveTo <= effectiveFrom) {
       throw new Error("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
     }
   }
