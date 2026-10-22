@@ -244,7 +244,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
         providerOrderId: payment.order_id, providerPaymentId: payment.id,
-        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber, transactionSnapshot: orderTimeTransactionSnapshot,
+        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber, transactionSnapshot: snapshot.transaction,
       });
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
