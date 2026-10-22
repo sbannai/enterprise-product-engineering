@@ -63,7 +63,7 @@ test("permission API rejects missing and incorrect bearer tokens", async () => {
 });
 
 test("permission API reads exact-scope grants and rejects cross-scope mutation", async () => {
-  await withServer(async ({ baseUrl, token }) => {
+  await withServer(async ({ baseUrl, token, grantsFile }) => {
     const read = await fetch(`${baseUrl}/internal/permissions/user-b`, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -79,7 +79,8 @@ test("permission API reads exact-scope grants and rejects cross-scope mutation",
       }] }),
     });
     assert.equal(crossScope.status, 400);
-    assert.equal(JSON.parse(readFileSync(join(new URL(baseUrl).pathname || "/", "unused"), "utf8")), null);
+    const saved = JSON.parse(readFileSync(grantsFile, "utf8"));
+    assert.equal(saved.some((grant) => grant.applicationId === "app-other"), false);
   });
 });
 
