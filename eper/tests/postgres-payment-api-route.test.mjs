@@ -390,7 +390,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(duplicateEventId.status, 200);
     assert.equal(webhookCaptureCalls, 1, "replayed provider event must not issue a second capture");
-    assert.equal((await duplicateEventId.json()).received, true);
+    const duplicateBody = await duplicateEventId.json();
+    assert.equal(duplicateBody.received, true);
+    assert.equal(duplicateBody.duplicate, true);
+    assert.equal(duplicateBody.receiptId, receiptPublicId);
+    assert.equal(duplicateBody.receiptNumber, receiptNumber);
+    assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
+    assert.equal(transactionSourceCalls, 1, "capture and duplicate delivery must use the persisted order-time snapshot");
 
     const eventConflictPayload = JSON.stringify({
       event: "payment.captured",
