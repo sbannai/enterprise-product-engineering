@@ -4,8 +4,9 @@
   "version": "0.1.0-precode",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "codegen": "node scripts/generate-requirements.mjs",
+    "build": "npm run codegen && tsc",
+    "typecheck": "npm run codegen && tsc --noEmit",
     "start": "node dist/apps/api/main.js",
     "test": "npm run build && node --test tests/*.test.mjs"
   },
