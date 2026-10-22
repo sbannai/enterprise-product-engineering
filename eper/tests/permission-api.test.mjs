@@ -125,3 +125,32 @@ test("permission API denies grant reads and writes when actor lacks permission:m
     assert.deepEqual(JSON.parse(readFileSync(grantsFile, "utf8")), []);
   });
 });
+
+test("permission API is disabled by default and does not reveal configuration", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const previous = process.env.EPER_LOCAL_PERMISSION_API;
+    delete process.env.EPER_LOCAL_PERMISSION_API;
+    try {
+      const response = await fetch(`${baseUrl}/internal/permissions/user-b`, {
+        headers: { authorization: "Bearer local-test-token-that-is-at-least-32-characters" },
+      });
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
+    } finally {
+      if (previous !== undefined) process.env.EPER_LOCAL_PERMISSION_API = previous;
+    }
+  });
+});
+
+test("permission API rejects malformed JSON without mutating grants", async () => {
+  await withServer(async ({ baseUrl, token, grantsFile }) => {
+    const before = readFileSync(grantsFile, "utf8");
+    const response = await fetch(`${baseUrl}/internal/permissions/user-b`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: "{broken-json",
+    });
+    assert.equal(response.status, 400);
+    assert.equal(readFileSync(grantsFile, "utf8"), before);
+  });
+});
