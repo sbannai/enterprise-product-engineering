@@ -77,3 +77,19 @@ test("target principal and action set must be valid", () => {
     ok: false, status: 400, reason: "INVALID_GRANT_SET",
   });
 });
+
+
+test("default permission audit event IDs are distinct across rapid updates", () => {
+  const store = new InMemoryApplicationGrantStore([managerGrant]);
+  const audit = new InMemoryPermissionAuditSink();
+  const admin = new ApplicationPermissionAdminService(store, audit);
+  const first = admin.replaceGrants(actor, scope, "user-b", [targetGrant]);
+  const second = admin.replaceGrants(actor, scope, "user-b", [targetGrant]);
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  const events = audit.snapshot();
+  assert.equal(events.length, 2);
+  assert.ok(events[0].eventId.startsWith("perm_"));
+  assert.ok(events[1].eventId.startsWith("perm_"));
+  assert.notEqual(events[0].eventId, events[1].eventId);
+});
