@@ -40,6 +40,9 @@ jobs:
       - name: B01 register integrity validation
         working-directory: .
         run: node eper/uat/scripts/validate-b01-registers.mjs
+      - name: B01 case authorization guard
+        working-directory: .
+        run: node eper/uat/scripts/validate-b01-case-authorization.mjs
       - name: Read-only business UAT readiness audit
         run: |
           python3 uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
