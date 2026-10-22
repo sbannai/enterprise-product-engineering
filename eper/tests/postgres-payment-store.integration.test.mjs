@@ -349,6 +349,13 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "fixture-v1",
       invoiceApprovedAt: new Date().toISOString(),
     };
+    reservationInput.transactionSnapshot = {
+      tenantId, reference: reservationInput.invoiceReference, kind: "GENERAL",
+      description: "Order reservation integration fixture", amountDueMinor: reservationInput.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: reservationInput.invoiceSourceId, sourceVersion: reservationInput.invoiceSourceVersion,
+      approvedAt: reservationInput.invoiceApprovedAt,
+    };
     const reservation = await store.reserveOrder(reservationInput);
     assert.equal(reservation.ok, true);
     if (!reservation.ok) return;
@@ -425,6 +432,13 @@ test("PostgresPaymentStore requires reconciliation for an expired order-creation
       invoiceSourceVersion: "fixture-v1",
       invoiceApprovedAt: new Date().toISOString(),
     };
+    input.transactionSnapshot = {
+      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      description: "Lease reconciliation integration fixture", amountDueMinor: input.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
+      approvedAt: input.invoiceApprovedAt,
+    };
 
     const first = await store.reserveOrder(input);
     assert.equal(first.ok, true);
@@ -472,6 +486,13 @@ test("PostgresPaymentStore serializes concurrent reservations for the same idemp
       invoiceSourceId: "integration-test-authority",
       invoiceSourceVersion: "fixture-v1",
       invoiceApprovedAt: new Date().toISOString(),
+    };
+    input.transactionSnapshot = {
+      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      description: "Concurrent reservation integration fixture", amountDueMinor: input.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
+      approvedAt: input.invoiceApprovedAt,
     };
 
     const results = await Promise.all([
