@@ -344,7 +344,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         invoiceSourceId: authority.invoice.sourceId,
         invoiceSourceVersion: authority.invoice.sourceVersion,
         invoiceApprovedAt: authority.invoice.approvedAt,
-        transactionSnapshot: snapshot.transaction,
+        transactionSnapshot: orderTimeTransactionSnapshot,
       });
       if (!reservation.ok) {
         const status = reservation.reason === "idempotency_conflict" ? 409
