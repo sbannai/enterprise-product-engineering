@@ -30,7 +30,7 @@ function parseInstant(value: unknown): number {
 
   // Require a complete ISO-8601 timestamp and validate its calendar fields
   // before Date.parse, which normalizes impossible dates in some runtimes.
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
   if (!match) return fail("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
 
   const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone] = match;
