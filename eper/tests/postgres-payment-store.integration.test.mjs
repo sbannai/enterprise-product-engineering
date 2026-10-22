@@ -72,6 +72,14 @@ test("order-time transaction snapshot is persisted and immutable", { skip: !data
     const order = await store.findOrderByProviderOrderId(providerOrderId);
     assert.ok(order);
     assert.deepEqual(order.transactionSnapshot, transactionSnapshot);
+    const changedSnapshotRetry = await store.reserveOrder({
+      tenantId, invoiceReference, idempotencyKey, amountMinor: 12500, currency: "INR",
+      invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "snapshot-v1",
+      invoiceApprovedAt: transactionSnapshot.approvedAt,
+      transactionSnapshot: { ...transactionSnapshot, sourceVersion: "snapshot-v2" },
+    });
+    assert.deepEqual(changedSnapshotRetry, { ok: false, reason: "idempotency_conflict" },
+      "reusing an idempotency key with a changed snapshot version must be rejected");
     await assert.rejects(
       pool.query(
         "UPDATE eper_payment_orders SET transaction_snapshot = '{}'::jsonb WHERE tenant_id = $1 AND idempotency_key = $2",
