@@ -59,3 +59,10 @@ test("market list fails closed for duplicate active price records even with matc
   ], now);
   assert.throws(() => service.listMarkets("uat-fee"), /MARKET_PRICE_CONFIGURATION_AMBIGUOUS/);
 });
+
+test("non-ISO currency codes are rejected during configuration validation", () => {
+  assert.throws(
+    () => new MarketPriceBookService([{ ...entries[0], currency: "inr" }], now),
+    /MARKET_PRICE_CONFIGURATION_INVALID/,
+  );
+});
