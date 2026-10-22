@@ -383,11 +383,15 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(webhookBody.receiptNumber, receiptNumber);
     assert.equal(webhookBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
 
+    // A duplicate delivery must reuse the issued receipt even if the receipt-number
+    // authority is temporarily unavailable after the original capture succeeded.
+    receiptNumberSourceThrows = true;
     const duplicateEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
       body: event,
     });
+    receiptNumberSourceThrows = false;
     assert.equal(duplicateEventId.status, 200);
     assert.equal(webhookCaptureCalls, 1, "replayed provider event must not issue a second capture");
     const duplicateBody = await duplicateEventId.json();
