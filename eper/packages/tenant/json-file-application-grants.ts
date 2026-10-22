@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ApplicationGrant } from "./application-access.js";
 import type {
@@ -68,12 +68,7 @@ export class JsonLinesPermissionAuditSink implements PermissionAuditSink {
   append(event: PermissionAuditEvent): void {
     // Open-and-append avoids replacing prior audit events; production should use a
     // durable append-only store with transactional coupling to the grant update.
-    const { appendFileSync } = requireFs();
     appendFileSync(this.filePath, `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: 0o600 });
   }
 }
 
-function requireFs(): typeof import("node:fs") {
-  // Static import shape keeps this helper synchronous and compatible with NodeNext.
-  return require("node:fs") as typeof import("node:fs");
-}
