@@ -62,8 +62,7 @@ export class MarketPriceBookService {
       const start = Date.parse(entry.effectiveFrom);
       const end = entry.effectiveTo === undefined ? Number.POSITIVE_INFINITY : Date.parse(entry.effectiveTo);
       if (entry.productId === productId && entry.status === "APPROVED" && start <= now && now < end) {
-        const prior = markets.get(entry.marketId);
-        if (prior !== undefined && prior !== entry.currency) fail("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
+        if (markets.has(entry.marketId)) fail("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
         markets.set(entry.marketId, entry.currency);
       }
     }
