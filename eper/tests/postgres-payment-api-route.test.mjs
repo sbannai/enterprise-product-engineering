@@ -543,6 +543,25 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.match(download.headers.get("content-type") ?? "", /application\/pdf/);
     assert.match(download.headers.get("content-disposition") ?? "", new RegExp(receiptPublicId.replaceAll("-", "\\-") + "\\.pdf"));
     const bytes = Buffer.from(await download.arrayBuffer());
+    const pdfText = bytes.toString("ascii");
+    assert.ok(pdfText.startsWith("%PDF-1.4\n"), "PDF header must terminate with a real newline");
+    assert.ok(!pdfText.includes("\\n"), "PDF syntax must not contain literal backslash-n separators");
+    const startXrefMatch = /\nstartxref\n(\d+)\n%%EOF$/.exec(pdfText);
+    assert.ok(startXrefMatch, "PDF must end with startxref and EOF markers");
+    const xrefOffset = Number(startXrefMatch[1]);
+    assert.equal(pdfText.slice(xrefOffset, xrefOffset + 5), "xref\n", "startxref must point to the xref table");
+    const xrefLines = pdfText.slice(xrefOffset).split("\n");
+    const xrefCountMatch = /^0 (\d+)$/.exec(xrefLines[1] ?? "");
+    assert.ok(xrefCountMatch, "xref table must declare its object count");
+    const xrefObjectCount = Number(xrefCountMatch[1]);
+    assert.ok(xrefObjectCount >= 2, "PDF must include catalog and page-tree objects");
+    for (let objectNumber = 1; objectNumber < xrefObjectCount; objectNumber += 1) {
+      const entry = xrefLines[2 + objectNumber] ?? "";
+      const offsetMatch = /^(\d{10}) 00000 n $/.exec(entry);
+      assert.ok(offsetMatch, "xref entry must be a valid in-use entry for object " + objectNumber);
+      const objectOffset = Number(offsetMatch[1]);
+      assert.ok(pdfText.startsWith(objectNumber + " 0 obj\n", objectOffset), "xref offset must point to object " + objectNumber);
+    }
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
     assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
