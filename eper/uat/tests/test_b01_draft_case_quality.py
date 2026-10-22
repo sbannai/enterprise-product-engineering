@@ -71,6 +71,18 @@ class B01DraftCaseQualityTests(unittest.TestCase):
             self.assertEqual(row["execution_status"], "NOT_RUN", row["case_id"])
             self.assertEqual(row["business_review_status"], "REVIEW_REQUIRED", row["case_id"])
 
+    def test_chapter_463_source_control_blocker_is_explicit_on_all_six_cases(self):
+        chapter_cases = [row for row in self.cases if int(row["chapter"]) == 463]
+        self.assertEqual(len(chapter_cases), 6)
+        for row in chapter_cases:
+            notes = row.get("notes", "").lower()
+            owner_actions = row.get("oracle_owner_decisions_required", "").lower()
+            self.assertIn("source-control blocker", notes, row["case_id"])
+            self.assertIn("correction request is not approved", notes, row["case_id"])
+            self.assertIn("approved reissued/superseding chapter 463 procurement brd", owner_actions, row["case_id"])
+            self.assertEqual(row["case_status"], "DRAFT_TEMPLATE_NOT_APPROVED", row["case_id"])
+            self.assertEqual(row["execution_status"], "NOT_RUN", row["case_id"])
+
     def test_chapters_464_to_470_name_domain_specific_source_acquisition(self):
         domain_labels = {
             464: "Supplier Relationship Management",
