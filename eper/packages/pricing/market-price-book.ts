@@ -23,10 +23,9 @@ export interface MarketPriceQuote {
 }
 
 /**
- * Resolves an approved local-market price. It deliberately does not perform FX
- * conversion: each market/currency/product combination must have its own
- * approved price-book entry. Supply entries from a controlled configuration
- * source; do not place commercial prices in code.
+ * Resolves one approved, effective market-specific price. It never performs FX
+ * conversion. Commercial prices must come from controlled configuration, not
+ * hard-coded application defaults.
  */
 export class MarketPriceBookService {
   constructor(
@@ -45,6 +44,7 @@ export class MarketPriceBookService {
     const unique = new Map<string, { marketId: string; currency: string }>();
     for (const entry of this.entries) {
       if (entry.productId !== productId || !this.isEffective(entry, at)) continue;
+      // Do not hide duplicate active records, even when their currencies match.
       if (unique.has(entry.marketId)) {
         throw new Error("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
       }
@@ -103,13 +103,17 @@ export class MarketPriceBookService {
       throw new Error("MARKET_PRICE_REQUIRED_FIELDS_MISSING");
     }
     const identifiers = [entry.productId, entry.marketId, entry.priceBookId, entry.priceBookVersion];
-    if (identifiers.some((value) => typeof value !== "string" || !value.trim() || value.length > 128)) {
+    if (identifiers.some((value) =>
+      typeof value !== "string" || !value.trim() || value.length > 128
+    )) {
       throw new Error("MARKET_PRICE_REQUIRED_FIELDS_MISSING");
     }
     if (typeof entry.currency !== "string" || !/^[A-Z]{3}$/.test(entry.currency)) {
       throw new Error("MARKET_PRICE_CONFIGURATION_INVALID");
     }
-    if (!(["INR", "USD", "EUR", "GBP", "AED"] as const).includes(entry.currency as "INR" | "USD" | "EUR" | "GBP" | "AED")) {
+    if (!(["INR", "USD", "EUR", "GBP", "AED"] as const).includes(
+      entry.currency as "INR" | "USD" | "EUR" | "GBP" | "AED"
+    )) {
       throw new Error("MARKET_PRICE_CURRENCY_UNSUPPORTED");
     }
     if (!Number.isSafeInteger(entry.amountMinor) || entry.amountMinor <= 0) {
