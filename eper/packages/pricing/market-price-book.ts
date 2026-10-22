@@ -31,7 +31,7 @@ function parseEffectiveDate(value: unknown): number {
   if (typeof value !== "string") throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
   // Validate the calendar components before Date.parse, which can normalize
   // impossible dates (for example, February 30) into a different instant.
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,3}))?(Z|[+-]\\d{2}:\\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
   if (!match) throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
   const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone] = match;
   const year = Number(yearText);
@@ -47,7 +47,7 @@ function parseEffectiveDate(value: unknown): number {
     throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
   }
   if (zone !== "Z") {
-    const offset = /[+-](\\d{2}):(\\d{2})$/.exec(zone);
+    const offset = /[+-](\d{2}):(\d{2})$/.exec(zone);
     if (!offset || Number(offset[1]) > 23 || Number(offset[2]) > 59) {
       throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
     }
