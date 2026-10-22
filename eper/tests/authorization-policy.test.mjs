@@ -84,9 +84,12 @@ test("policy snapshots do not expose mutable internal action/resource arrays", (
     effect: "ALLOW",
   }]);
 
-  const snapshot = service.snapshot() as Array<{ actions: string[]; resources: string[] }>;
-  snapshot[0].actions.push("application.delete");
-  snapshot[0].resources.push("app-b");
+  const snapshot = service.snapshot();
+  assert.ok(Array.isArray(snapshot));
+  const first = snapshot[0];
+  assert.ok(first);
+  first.actions.push("application.delete");
+  first.resources.push("app-b");
 
   assert.equal(service.decide({ ...baseRequest, action: "application.delete" }).effect, "DENY");
   assert.equal(service.decide({ ...baseRequest, resource: "app-b" }).effect, "DENY");
