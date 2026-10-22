@@ -20,6 +20,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let receiptNumberSourceValue = receiptNumber;
   let receiptNumberSourceThrows = false;
   let captured = false;
+  let transactionSourceStatus = "DUE";
+  let transactionSourceCalls = 0;
   let webhookCaptureCalls = 0;
   let originalWebhookPayloadSha256 = null;
   let webhookGatewayAmount = 12500;
@@ -64,7 +66,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   };
 
   const paymentStore = {
-    async reserveOrder() {
+    async reserveOrder(input) {
+      // Model the immutable snapshot persisted with the order reservation.
+      order = { ...order, transactionSnapshot: structuredClone(input.transactionSnapshot) };
       return { ok: true, value: { id: "41", transactionPublicId, providerOrderId: null } };
     },
     async completeOrderCreation() {
@@ -147,10 +151,11 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     transactionSnapshotSource: {
       async findTransaction({ tenantId: requestedTenant, reference }) {
+        transactionSourceCalls += 1;
         if (requestedTenant !== tenantId || reference !== "invoice-route-test") return null;
         return {
           tenantId, reference, kind: "ECOMMERCE", description: "Route test checkout",
-          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          amountDueMinor: 12500, currency: "INR", status: transactionSourceStatus,
           lineItems: Array.from({ length: 40 }, (_, index) => ({
             sourceLineId: "line-route-" + (index + 1),
             description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
@@ -184,6 +189,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
+    assert.equal(transactionSourceCalls, 1, "order creation captures one authoritative snapshot");
+    // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
+    transactionSourceStatus = "PAID";
 
     const event = JSON.stringify({
       event: "payment.captured",
