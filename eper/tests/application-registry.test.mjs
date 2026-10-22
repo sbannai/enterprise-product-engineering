@@ -46,6 +46,6 @@ test("invalid required fields and slugs are rejected", () => {
 test("returned records cannot mutate the registry's stored record", () => {
   const registry = new ApplicationRegistryService(clockSequence());
   const app = registry.create({ tenantId: "tenant-a", name: "Portal", slug: "portal" });
-  (app as any).name = "tampered";
+  app.name = "tampered";
   assert.equal(registry.get("tenant-a", app.applicationId).name, "Portal");
 });
