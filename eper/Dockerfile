@@ -9,6 +9,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY contracts ./contracts
 COPY requirements ./requirements
+COPY scripts ./scripts
 RUN npm run build
 
 FROM node:20-bookworm-slim AS runtime
