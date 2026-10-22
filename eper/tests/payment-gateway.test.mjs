@@ -857,7 +857,7 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
   const first = receiptPdf(record);
   const second = receiptPdf(record);
   const pdfText = first.toString("ascii");
-  const pageCount = (pdfText.match(/\\/Type \\/Page\\b/g) ?? []).length;
+  const pageCount = (pdfText.match(/\/Type \/Page\b/g) ?? []).length;
   assert.ok(pageCount >= 2, `expected multiple PDF pages, got ${pageCount}`);
   for (const item of lineItems) {
     assert.ok(pdfText.includes(`Item: ${item.description}`), `missing receipt line for ${item.description}`);
