@@ -69,6 +69,23 @@ test("order-time transaction snapshot is persisted and immutable", { skip: !data
     if (!reserved.ok) return;
     const completed = await store.completeOrderCreation(tenantId, idempotencyKey, providerOrderId);
     assert.equal(completed.ok, true);
+    const captureInput = {
+      providerEventId: "evt_snapshot_" + randomUUID().replaceAll("-", ""),
+      eventType: "payment.captured",
+      payloadSha256: createHash("sha256").update("snapshot-capture-" + randomUUID()).digest("hex"),
+      providerOrderId, providerPaymentId: "pay_snapshot_" + randomUUID().replaceAll("-", ""),
+      amountMinor: 12500, currency: "INR", tenantId,
+      receiptNumber: "EPER-SNAPSHOT-" + randomUUID().replaceAll("-", "").slice(0, 16),
+      transactionSnapshot,
+    };
+    const tamperedCapture = await store.capturePayment({
+      ...captureInput,
+      transactionSnapshot: { ...transactionSnapshot, sourceVersion: "tampered-version" },
+    });
+    assert.deepEqual(tamperedCapture, { ok: false, reason: "payment_mismatch" },
+      "capture must reject a snapshot that differs from the immutable order-time record");
+    const captured = await store.capturePayment(captureInput);
+    assert.equal(captured.ok, true);
     const order = await store.findOrderByProviderOrderId(providerOrderId);
     assert.ok(order);
     assert.deepEqual(order.transactionSnapshot, transactionSnapshot);
