@@ -106,20 +106,20 @@ export function receiptPdf(record: PaymentRecord): Buffer {
       pageLines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
     objects.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 " +
       (3 + pages.length * 2) + " 0 R >> >> /Contents " + contentObject + " 0 R >>");
-    objects.push("<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\\nstream\\n" + stream + "\\nendstream");
+    objects.push("<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\nstream\n" + stream + "\nendstream");
   }
   const fontObject = 3 + pages.length * 2;
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  let pdf = "%PDF-1.4\\n";
+  let pdf = "%PDF-1.4\n";
   const offsets = [0];
   for (let i = 0; i < objects.length; i++) {
     offsets.push(Buffer.byteLength(pdf, "ascii"));
-    pdf += (i + 1) + " 0 obj\\n" + objects[i] + "\\nendobj\\n";
+    pdf += (i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
   }
   const xref = Buffer.byteLength(pdf, "ascii");
-  pdf += "xref\\n0 " + (objects.length + 1) + "\\n0000000000 65535 f \\n";
-  for (const offset of offsets.slice(1)) pdf += String(offset).padStart(10, "0") + " 00000 n \\n";
-  pdf += "trailer\\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\\nstartxref\\n" + xref + "\\n%%EOF";
+  pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
+  for (const offset of offsets.slice(1)) pdf += String(offset).padStart(10, "0") + " 00000 n \n";
+  pdf += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
   return Buffer.from(pdf, "ascii");
 }
 
