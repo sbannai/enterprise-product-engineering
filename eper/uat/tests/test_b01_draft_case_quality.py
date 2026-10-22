@@ -71,6 +71,26 @@ class B01DraftCaseQualityTests(unittest.TestCase):
             self.assertEqual(row["execution_status"], "NOT_RUN", row["case_id"])
             self.assertEqual(row["business_review_status"], "REVIEW_REQUIRED", row["case_id"])
 
+    def test_chapters_464_to_470_name_domain_specific_source_acquisition(self):
+        domain_labels = {
+            464: "Supplier Relationship Management",
+            465: "Inventory / Warehouse / Stock Management",
+            466: "Order Management",
+            467: "Logistics / Transportation",
+            468: "Manufacturing / Production",
+            469: "Quality Management",
+            470: "Maintenance / Asset Reliability",
+        }
+        for row in self.cases:
+            chapter = int(row["chapter"])
+            if chapter < 464:
+                continue
+            notes = row.get("notes", "")
+            self.assertIn("Source-acquisition action:", notes, row["case_id"])
+            self.assertIn(domain_labels[chapter], notes, row["case_id"])
+            self.assertIn("DATA/API/EVENT", notes, row["case_id"])
+            self.assertIn("do not infer N/A", notes, row["case_id"])
+
     def test_source_gaps_are_not_falsely_promoted_to_exact_design_bindings(self):
         for row in self.cases:
             notes = (row.get("notes") or "").lower()
