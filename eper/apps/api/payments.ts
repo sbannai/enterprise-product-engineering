@@ -73,23 +73,44 @@ function receiptPdf(record: PaymentRecord): Buffer {
       "Source: " + record.transactionSnapshot.sourceId + " " + record.transactionSnapshot.sourceVersion,
     ] : []),
   ];
-  const stream = "BT /F1 16 Tf 50 790 Td (" + pdfEscape(lines[0]) + ") Tj /F1 10 Tf " +
-    lines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
-  const objects = [
+
+  // Keep line layout deterministic, but paginate before content can run below the page.
+  // 27 lines at 24pt spacing fit within the A4 content area with comfortable margins.
+  const linesPerPage = 27;
+  const pages: string[][] = [];
+  for (let i = 0; i < lines.length; i += linesPerPage) {
+    pages.push(lines.slice(i, i + linesPerPage));
+  }
+  const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    "<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\nstream\n" + stream + "\nendstream",
+    "<< /Type /Pages /Kids [" + pages.map((_, i) => (3 + i * 2) + " 0 R").join(" ") + "] /Count " + pages.length + " >>",
   ];
-  let pdf = "%PDF-1.4\n"; const offsets = [0];
-  for (let i = 0; i < objects.length; i++) { offsets.push(Buffer.byteLength(pdf, "ascii")); pdf += (i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n"; }
+  for (let i = 0; i < pages.length; i++) {
+    const pageObject = 3 + i * 2;
+    const contentObject = pageObject + 1;
+    const pageLines = pages[i];
+    const firstLine = pageLines[0] ?? "";
+    const stream = "BT /F1 16 Tf 50 790 Td (" + pdfEscape(firstLine) + ") Tj /F1 10 Tf " +
+      pageLines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
+    objects.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 " +
+      (3 + pages.length * 2) + " 0 R >> >> /Contents " + contentObject + " 0 R >>");
+    objects.push("<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\\nstream\\n" + stream + "\\nendstream");
+  }
+  const fontObject = 3 + pages.length * 2;
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  let pdf = "%PDF-1.4\\n";
+  const offsets = [0];
+  for (let i = 0; i < objects.length; i++) {
+    offsets.push(Buffer.byteLength(pdf, "ascii"));
+    pdf += (i + 1) + " 0 obj\\n" + objects[i] + "\\nendobj\\n";
+  }
   const xref = Buffer.byteLength(pdf, "ascii");
-  pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
-  for (const offset of offsets.slice(1)) pdf += String(offset).padStart(10, "0") + " 00000 n \n";
-  pdf += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
+  pdf += "xref\\n0 " + (objects.length + 1) + "\\n0000000000 65535 f \\n";
+  for (const offset of offsets.slice(1)) pdf += String(offset).padStart(10, "0") + " 00000 n \\n";
+  pdf += "trailer\\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\\nstartxref\\n" + xref + "\\n%%EOF";
   return Buffer.from(pdf, "ascii");
 }
+
 async function readLedger(file: string): Promise<Ledger> {
   try {
     const value: unknown = JSON.parse(await readFile(file, "utf8"));
