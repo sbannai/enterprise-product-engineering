@@ -33,5 +33,7 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      - name: Application access policy tests
+        run: node --test tests/application-access.test.mjs
       - name: G9 reconciliation test
         run: node --test tests/g9-reconciliation-gate.test.mjs
