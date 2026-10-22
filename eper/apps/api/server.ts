@@ -80,7 +80,7 @@ export function createAppServer(): Server {
     }
 
     // Opt-in local/UAT permission editor API. Acting identity and scope come only from server config.
-    const permissionMatch = /^\\/internal\\/permissions\\/([^/]+)$/.exec(requestUrl.pathname);
+    const permissionMatch = /^\/internal\/permissions\/([^/]+)$/.exec(requestUrl.pathname);
     if ((request.method === "PUT" || request.method === "GET") && permissionMatch) {
       if (process.env.EPER_LOCAL_PERMISSION_API !== "true") {
         sendJson(response, 404, { error: "not_found" });
