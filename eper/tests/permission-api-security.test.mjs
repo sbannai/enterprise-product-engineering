@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 const servers = [];
+const tempDirs = [];
 const configKeys = [
   "EPER_LOCAL_PERMISSION_API",
   "EPER_LOCAL_PERMISSION_TOKEN",
@@ -24,6 +28,7 @@ function restoreConfig() {
 
 afterEach(async () => {
   restoreConfig();
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   await Promise.all(servers.splice(0).map((server) => new Promise((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   })));
@@ -42,6 +47,8 @@ async function startServer() {
 }
 
 function configurePermissionApi() {
+  const dir = mkdtempSync(join(tmpdir(), "eper-permission-api-"));
+  tempDirs.push(dir);
   Object.assign(process.env, {
     EPER_LOCAL_PERMISSION_API: "true",
     EPER_LOCAL_PERMISSION_TOKEN: "permission-test-token-0123456789-0123456789",
@@ -49,8 +56,8 @@ function configurePermissionApi() {
     EPER_LOCAL_PERMISSION_APPLICATION_ID: "app-test",
     EPER_LOCAL_PERMISSION_ENVIRONMENT: "test",
     EPER_LOCAL_PERMISSION_ACTOR_ID: "admin-test",
-    EPER_LOCAL_PERMISSION_GRANTS_FILE: "/tmp/eper-permission-test/grants.json",
-    EPER_LOCAL_PERMISSION_AUDIT_FILE: "/tmp/eper-permission-test/audit.jsonl",
+    EPER_LOCAL_PERMISSION_GRANTS_FILE: join(dir, "grants.json"),
+    EPER_LOCAL_PERMISSION_AUDIT_FILE: join(dir, "audit.jsonl"),
   });
 }
 
@@ -84,4 +91,33 @@ test("permission API rejects malformed bearer credentials", async () => {
   });
   assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), { error: "unauthorized" });
+});
+
+test("permission API ignores client scope claims and rejects cross-tenant grant injection", async () => {
+  configurePermissionApi();
+  const scope = { tenantId: "tenant-test", applicationId: "app-test", environment: "test" };
+  const managerGrant = {
+    ...scope, principalId: "admin-test", actions: ["permission:manage"], effect: "ALLOW", active: true,
+  };
+  writeFileSync(process.env.EPER_LOCAL_PERMISSION_GRANTS_FILE, JSON.stringify([managerGrant]));
+  const response = await fetch(`${await startServer()}/internal/permissions/user-test`, {
+    method: "PUT",
+    headers: {
+      authorization: "Bearer permission-test-token-0123456789-0123456789",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      tenantId: "tenant-attacker",
+      applicationId: "app-attacker",
+      environment: "production",
+      grants: [{
+        tenantId: "tenant-attacker", applicationId: "app-attacker", environment: "production",
+        principalId: "user-test", actions: ["receipt:download"], effect: "ALLOW", active: true,
+      }],
+    }),
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "INVALID_GRANT_SET" });
+  const persisted = JSON.parse(readFileSync(process.env.EPER_LOCAL_PERMISSION_GRANTS_FILE, "utf8"));
+  assert.deepEqual(persisted, [managerGrant]);
 });
