@@ -502,6 +502,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(verifiedCaptureCalls, 0, "fractional gateway amount must not reach verification capture persistence");
 
     gatewayAmount = 12500;
+    // The webhook above already captured this order and issued its receipt. Verification
+    // retries must return that stable receipt without consulting a now-unneeded numbering
+    // authority or attempting a second capture.
     receiptNumberSourceValue = " ".repeat(101);
     const invalidReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
@@ -510,9 +513,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: verificationSignature,
       }),
     });
-    assert.equal(invalidReceiptNumberVerification.status, 503);
-    assert.equal((await invalidReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
-    assert.equal(verifiedCaptureCalls, 0, "oversized receipt number policy output must not reach verification capture persistence");
+    assert.equal(invalidReceiptNumberVerification.status, 200);
+    assert.equal((await invalidReceiptNumberVerification.json()).payment.receiptId, receiptPublicId);
+    assert.equal(verifiedCaptureCalls, 0, "verification retry must reuse the issued receipt without a second capture");
     receiptNumberSourceThrows = true;
     const unavailableReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
@@ -521,9 +524,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: verificationSignature,
       }),
     });
-    assert.equal(unavailableReceiptNumberVerification.status, 503);
-    assert.equal((await unavailableReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
-    assert.equal(verifiedCaptureCalls, 0, "receipt numbering authority failure must not reach capture persistence");
+    assert.equal(unavailableReceiptNumberVerification.status, 200);
+    assert.equal((await unavailableReceiptNumberVerification.json()).payment.receiptId, receiptPublicId);
+    assert.equal(verifiedCaptureCalls, 0, "receipt-number authority outage must not break an already captured payment retry");
     receiptNumberSourceThrows = false;
 
     receiptNumberSourceValue = "INVALID RECEIPT";
@@ -534,9 +537,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: verificationSignature,
       }),
     });
-    assert.equal(malformedReceiptNumberVerification.status, 503);
-    assert.equal((await malformedReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
-    assert.equal(verifiedCaptureCalls, 0, "malformed receipt policy output must not reach capture persistence");
+    assert.equal(malformedReceiptNumberVerification.status, 200);
+    assert.equal((await malformedReceiptNumberVerification.json()).payment.receiptId, receiptPublicId);
+    assert.equal(verifiedCaptureCalls, 0, "malformed numbering policy output must not alter an already issued receipt");
     receiptNumberSourceValue = receiptNumber;
 
     const verified = await nativeFetch(`${base}/api/payments/verify`, {
@@ -548,7 +551,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       }),
     });
     assert.equal(verified.status, 200);
-    assert.equal(verifiedCaptureCalls, 1);
+    assert.equal(verifiedCaptureCalls, 0, "verification after webhook capture must be idempotent");
     const verifiedBody = await verified.json();
     assert.equal(verifiedBody.payment.id, transactionPublicId);
     assert.equal(verifiedBody.payment.receiptId, receiptPublicId);
