@@ -102,6 +102,26 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (typeof options.receiptNumberSource !== "function") {
         blockers.push("receipt_numbering_policy_unconfigured");
       }
+      // Verify the schema separately from simple network connectivity. Older test doubles
+      // may not expose this method; the real PostgresPaymentStore does.
+      if (options.paymentStore && typeof (options.paymentStore as PostgresPaymentStore & { checkSchema?: () => Promise<boolean> }).checkSchema === "function") {
+        try {
+          if (!(await (options.paymentStore as PostgresPaymentStore & { checkSchema: () => Promise<boolean> }).checkSchema())) {
+            blockers.push("postgres_payment_schema_unavailable");
+          }
+        } catch {
+          blockers.push("postgres_payment_schema_unavailable");
+        }
+      }
+      if (blockers.length === 0 && process.env.NODE_ENV !== "production") {
+        const gatewayConfigured = Boolean(
+          process.env.RAZORPAY_KEY_ID &&
+          process.env.RAZORPAY_KEY_SECRET &&
+          process.env.RAZORPAY_WEBHOOK_SECRET &&
+          (process.env.EPER_PAYMENT_API_TOKEN ?? "").length >= 32
+        );
+        if (!gatewayConfigured) blockers.push("payment_gateway_unconfigured");
+      }
       if (process.env.NODE_ENV === "production") {
         blockers.push("production_payment_enablement_requires_authorized_readiness_review");
       }
@@ -114,8 +134,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
-    // Payment routes are independent of the opt-in UAT capability endpoint.
-    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
+    // Catch rejected async payment operations at the HTTP boundary. A rejected
+    // async createServer listener is not automatically converted into an HTTP response.
+    try {
+      if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
+    } catch {
+      if (!response.headersSent) sendJson(response, 503, { error: "payment_operation_unavailable" });
+      else response.destroy();
+      return;
+    }
 
     // Opt-in read-only API over the canonical requirement registry.
     const registryMatch = /^\/v1\/requirements(?:\/([^/]+))?$/.exec(requestUrl.pathname);
