@@ -41,7 +41,7 @@ function htmlEscape(v: unknown): string { return cell(v).replace(/&/g,"&amp;").r
 export function generateReport(d: ReportDocument, format: ReportFormat, theme?: ReportTheme): string {
   assertDocument(d);
   if (!["json","csv","html"].includes(format)) throw new Error("REPORT_FORMAT_UNSUPPORTED");
-  if (format==="json") return JSON.stringify({tenantId:d.tenantId,reportId:d.reportId,title:d.title,generatedAt:d.generatedAt,sourceRequirementIds:[...d.sourceRequirementIds],columns:d.columns,rows:d.rows.map(r=>Object.fromEntries(d.columns.map(c=>[c.key,cell(r[c.key])])))},null,2);
+  if (format==="json") return JSON.stringify({tenantId:d.tenantId,reportId:d.reportId,title:d.title,generatedAt:d.generatedAt,sourceRequirementIds:[...d.sourceRequirementIds],columns:d.columns,rows:d.rows.map(r=>Object.fromEntries(d.columns.filter(c=>Object.prototype.hasOwnProperty.call(r,c.key)).map(c=>[c.key,r[c.key]])))},null,2);
   if (format==="csv") return [d.columns.map(c=>csvCell(c.label)).join(","),...d.rows.map(r=>d.columns.map(c=>csvCell(r[c.key])).join(","))].join("\r\n")+"\r\n";
   if (!theme) throw new Error("REPORT_THEME_REQUIRED");
   validateTheme(theme);
