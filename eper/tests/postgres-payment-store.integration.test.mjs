@@ -27,6 +27,8 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
         "003_receipt_document_bytes.sql",
         "004_unique_public_payment_identifiers.sql",
         "005_immutable_receipt_records.sql",
+        "006_immutable_receipt_transaction_snapshot.sql",
+        "007_immutable_order_transaction_snapshot.sql",
       ],
     );
     for (const row of result.rows) assert.match(row.sha256.trim(), /^[a-f0-9]{64}$/);
@@ -34,6 +36,80 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
     await pool.end();
   }
 });
+test("order-time transaction snapshot is persisted and immutable", { skip: !databaseUrl }, async () => {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 3 });
+  try {
+    const store = new PostgresPaymentStore(pool);
+    const tenantId = "snapshot-" + randomUUID();
+    const invoiceReference = "invoice-" + randomUUID();
+    const idempotencyKey = "snapshot-idem-" + randomUUID();
+    const providerOrderId = "order_" + randomUUID().replaceAll("-", "");
+    const transactionSnapshot = {
+      tenantId, reference: invoiceReference, kind: "ECOMMERCE",
+      description: "Immutable snapshot integration checkout", amountDueMinor: 12500,
+      currency: "INR", status: "DUE",
+      lineItems: [
+        { sourceLineId: "line-1", description: "Item one", quantity: 2, unitPriceMinor: 5000, lineTotalMinor: 10000 },
+        { sourceLineId: "line-2", description: "Item two", quantity: 1, unitPriceMinor: 3000, lineTotalMinor: 3000 },
+      ],
+      adjustments: [
+        { kind: "DISCOUNT", description: "Discount", amountMinor: -1000 },
+        { kind: "TAX", description: "Tax", amountMinor: 500 },
+      ],
+      sourceId: "integration-test-authority", sourceVersion: "snapshot-v1",
+      approvedAt: new Date().toISOString(),
+    };
+    const reserved = await store.reserveOrder({
+      tenantId, invoiceReference, idempotencyKey, amountMinor: 12500, currency: "INR",
+      invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "snapshot-v1",
+      invoiceApprovedAt: transactionSnapshot.approvedAt, transactionSnapshot,
+    });
+    assert.equal(reserved.ok, true);
+    if (!reserved.ok) return;
+    const completed = await store.completeOrderCreation(tenantId, idempotencyKey, providerOrderId);
+    assert.equal(completed.ok, true);
+    const captureInput = {
+      providerEventId: "evt_snapshot_" + randomUUID().replaceAll("-", ""),
+      eventType: "payment.captured",
+      payloadSha256: createHash("sha256").update("snapshot-capture-" + randomUUID()).digest("hex"),
+      providerOrderId, providerPaymentId: "pay_snapshot_" + randomUUID().replaceAll("-", ""),
+      amountMinor: 12500, currency: "INR", tenantId,
+      receiptNumber: "EPER-SNAPSHOT-" + randomUUID().replaceAll("-", "").slice(0, 16),
+      transactionSnapshot,
+    };
+    const tamperedCapture = await store.capturePayment({
+      ...captureInput,
+      transactionSnapshot: { ...transactionSnapshot, sourceVersion: "tampered-version" },
+    });
+    assert.deepEqual(tamperedCapture, { ok: false, reason: "payment_mismatch" },
+      "capture must reject a snapshot that differs from the immutable order-time record");
+    const captured = await store.capturePayment(captureInput);
+    assert.equal(captured.ok, true);
+    const order = await store.findOrderByProviderOrderId(providerOrderId);
+    assert.ok(order);
+    assert.deepEqual(order.transactionSnapshot, transactionSnapshot);
+    const changedSnapshotRetry = await store.reserveOrder({
+      tenantId, invoiceReference, idempotencyKey, amountMinor: 12500, currency: "INR",
+      invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "snapshot-v1",
+      invoiceApprovedAt: transactionSnapshot.approvedAt,
+      transactionSnapshot: { ...transactionSnapshot, sourceVersion: "snapshot-v2" },
+    });
+    assert.deepEqual(changedSnapshotRetry, { ok: false, reason: "idempotency_conflict" },
+      "reusing an idempotency key with a changed snapshot version must be rejected");
+    await assert.rejects(
+      pool.query(
+        "UPDATE eper_payment_orders SET transaction_snapshot = '{}'::jsonb WHERE tenant_id = $1 AND idempotency_key = $2",
+        [tenantId, idempotencyKey],
+      ),
+      /EPER_PAYMENT_ORDER_SNAPSHOT_IMMUTABLE/,
+      "the database trigger must reject edits to the order-time snapshot",
+    );
+  } finally {
+    await pool.end();
+  }
+});
+
 test("migration runner rejects checksum drift and does not record failed migrations", { skip: !databaseUrl }, async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "eper-payment-migrations-"));
   const { Pool } = await import("pg");
@@ -107,6 +183,26 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       providerOrderId, providerPaymentId: "pay_" + randomUUID().replaceAll("-", ""),
       amountMinor: 12500, currency: "INR", tenantId,
       receiptNumber: "EPER-INT-" + randomUUID().replaceAll("-", "").slice(0, 20),
+      transactionSnapshot: {
+        tenantId,
+        reference: invoiceReference,
+        kind: "ECOMMERCE",
+        description: "Integration test checkout",
+        amountDueMinor: 12500,
+        currency: "INR",
+        status: "DUE",
+        lineItems: [
+          { sourceLineId: "line-a", description: "Item A", quantity: 2, unitPriceMinor: 5000, lineTotalMinor: 10000 },
+          { sourceLineId: "line-b", description: "Item B", quantity: 1, unitPriceMinor: 3000, lineTotalMinor: 3000 },
+        ],
+        adjustments: [
+          { kind: "DISCOUNT", description: "Checkout discount", amountMinor: -1000 },
+          { kind: "TAX", description: "Tax", amountMinor: 500 },
+        ],
+        sourceId: "integration-test-authority",
+        sourceVersion: "fixture-v1",
+        approvedAt: new Date().toISOString(),
+      },
     };
     // Exercise concurrent delivery, not just a sequential replay: the database
     // uniqueness constraint must allow exactly one transaction to issue a receipt.
@@ -144,7 +240,8 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     }
 
     const persisted = await pool.query(
-      `SELECT o.status, o.provider_payment_id, r.receipt_number, COUNT(r.id) OVER () AS receipt_count
+      `SELECT o.status, o.provider_payment_id, r.receipt_number, r.transaction_snapshot,
+              COUNT(r.id) OVER () AS receipt_count
          FROM eper_payment_orders o
          JOIN eper_payment_receipts r ON r.payment_order_id = o.id
         WHERE o.tenant_id = $1 AND o.idempotency_key = $2`,
@@ -155,6 +252,21 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     assert.equal(persisted.rows[0].provider_payment_id, capture.providerPaymentId);
     assert.equal(persisted.rows[0].receipt_number, capture.receiptNumber);
     assert.equal(Number(persisted.rows[0].receipt_count), 1);
+    assert.deepEqual(persisted.rows[0].transaction_snapshot, capture.transactionSnapshot,
+      "the validated source snapshot must be persisted atomically with the issued receipt");
+
+    await assert.rejects(
+      pool.query(
+        `UPDATE eper_payment_receipts
+            SET transaction_snapshot = '{}'::jsonb
+          WHERE payment_order_id = (
+            SELECT id FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2
+          )`,
+        [tenantId, idempotencyKey],
+      ),
+      /EPER_PAYMENT_RECEIPT_SNAPSHOT_IMMUTABLE/,
+      "the database trigger must reject edits to an issued receipt snapshot",
+    );
 
     const storedOrder = await store.findOrder(tenantId, providerOrderId);
     assert.ok(storedOrder);
@@ -171,6 +283,7 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
     const verifiedRetry = await store.captureVerifiedPayment({
       tenantId, providerOrderId, providerPaymentId: capture.providerPaymentId,
       amountMinor: 12500, currency: "INR", receiptNumber: capture.receiptNumber,
+      transactionSnapshot: capture.transactionSnapshot,
     });
     assert.equal(verifiedRetry.ok, true);
     if (verifiedRetry.ok) {
@@ -235,6 +348,13 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       idempotencyKey: reservationKey, amountMinor: 7400, currency: "INR",
       invoiceSourceId: "integration-test-authority", invoiceSourceVersion: "fixture-v1",
       invoiceApprovedAt: new Date().toISOString(),
+    };
+    reservationInput.transactionSnapshot = {
+      tenantId, reference: reservationInput.invoiceReference, kind: "GENERAL",
+      description: "Order reservation integration fixture", amountDueMinor: reservationInput.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: reservationInput.invoiceSourceId, sourceVersion: reservationInput.invoiceSourceVersion,
+      approvedAt: reservationInput.invoiceApprovedAt,
     };
     const reservation = await store.reserveOrder(reservationInput);
     assert.equal(reservation.ok, true);
@@ -312,6 +432,13 @@ test("PostgresPaymentStore requires reconciliation for an expired order-creation
       invoiceSourceVersion: "fixture-v1",
       invoiceApprovedAt: new Date().toISOString(),
     };
+    input.transactionSnapshot = {
+      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      description: "Lease reconciliation integration fixture", amountDueMinor: input.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
+      approvedAt: input.invoiceApprovedAt,
+    };
 
     const first = await store.reserveOrder(input);
     assert.equal(first.ok, true);
@@ -359,6 +486,13 @@ test("PostgresPaymentStore serializes concurrent reservations for the same idemp
       invoiceSourceId: "integration-test-authority",
       invoiceSourceVersion: "fixture-v1",
       invoiceApprovedAt: new Date().toISOString(),
+    };
+    input.transactionSnapshot = {
+      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      description: "Concurrent reservation integration fixture", amountDueMinor: input.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
+      approvedAt: input.invoiceApprovedAt,
     };
 
     const results = await Promise.all([

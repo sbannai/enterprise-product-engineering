@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
+import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshot, type TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 
 type PaymentStatus = "CREATED" | "PAID";
 export type TrustedReceiptNumberSource = (input: { tenantId: string; transactionPublicId: string; providerPaymentId: string }) => Promise<string>;
@@ -23,6 +24,7 @@ interface PaymentRecord {
   receiptId?: string;
   createdAt: string;
   paidAt?: string;
+  transactionSnapshot?: TrustedTransactionSnapshot;
 }
 interface Ledger { records: PaymentRecord[]; }
 
@@ -48,7 +50,7 @@ function validSignature(expected: string, supplied: string): boolean {
 function pdfEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "?");
 }
-function receiptPdf(record: PaymentRecord): Buffer {
+export function receiptPdf(record: PaymentRecord): Buffer {
   const lines = [
     "EPER PAYMENT RECEIPT",
     "Receipt ID: " + (record.receiptId ?? ""),
@@ -60,24 +62,94 @@ function receiptPdf(record: PaymentRecord): Buffer {
     "Tenant: " + record.tenantId,
     "Paid at: " + (record.paidAt ?? ""),
     "Status: PAID",
+    ...(record.transactionSnapshot ? [
+      "Transaction type: " + record.transactionSnapshot.kind,
+      "Transaction description: " + record.transactionSnapshot.description,
+      ...record.transactionSnapshot.lineItems.map((item) =>
+        "Item: " + item.description + " | Qty " + item.quantity + " | Unit " +
+        (item.unitPriceMinor / 100).toFixed(2) + " | Total " + (item.lineTotalMinor / 100).toFixed(2)),
+      ...record.transactionSnapshot.adjustments.map((item) =>
+        "Adjustment: " + item.kind + " " + item.description + " " + (item.amountMinor / 100).toFixed(2)),
+      "Source: " + record.transactionSnapshot.sourceId + " " + record.transactionSnapshot.sourceVersion,
+    ] : []),
   ];
-  const stream = "BT /F1 16 Tf 50 790 Td (" + pdfEscape(lines[0]) + ") Tj /F1 10 Tf " +
-    lines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
-  const objects = [
+
+  // Helvetica AFM widths in 1/1000 em for printable ASCII (space through tilde).
+  // Measure after pdfEscape's non-ASCII substitution so the layout matches the
+  // actual bytes sent to the built-in PDF font.
+  const helveticaWidths = [
+    278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,
+    556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,
+    1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,
+    667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,
+    222,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,
+    556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,
+  ];
+  const renderedWidth = (value: string, fontSize: number): number => {
+    const printable = value.replace(/[^\x20-\x7E]/g, "?");
+    let units = 0;
+    for (const character of printable) {
+      units += helveticaWidths[character.charCodeAt(0) - 32] ?? 1000;
+    }
+    return units * fontSize / 1000;
+  };
+  const maxTextWidth = 495; // A4 page width minus 50pt margins on both sides.
+  const wrapLine = (line: string, fontSize: number): string[] => {
+    const printable = line.replace(/[^\x20-\x7E]/g, "?");
+    const chunks: string[] = [];
+    let chunk = "";
+    for (const character of printable) {
+      if (chunk && renderedWidth(chunk + character, fontSize) > maxTextWidth) {
+        chunks.push(chunk);
+        chunk = character;
+      } else {
+        chunk += character;
+      }
+    }
+    if (chunk || chunks.length === 0) chunks.push(chunk);
+    return chunks;
+  };
+  // Only the document title uses 16pt. All receipt data, including the first
+  // line on subsequent pages, uses 10pt; wrap against the font size actually drawn.
+  const wrappedLines = lines.flatMap((line, index) => wrapLine(line, index === 0 ? 16 : 10));
+
+  // 27 rendered lines at 24pt spacing fit within the A4 content area.
+  const linesPerPage = 27;
+  const pages: string[][] = [];
+  for (let i = 0; i < wrappedLines.length; i += linesPerPage) {
+    pages.push(wrappedLines.slice(i, i + linesPerPage));
+  }
+  const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    "<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\nstream\n" + stream + "\nendstream",
+    "<< /Type /Pages /Kids [" + pages.map((_, i) => (3 + i * 2) + " 0 R").join(" ") + "] /Count " + pages.length + " >>",
   ];
-  let pdf = "%PDF-1.4\n"; const offsets = [0];
-  for (let i = 0; i < objects.length; i++) { offsets.push(Buffer.byteLength(pdf, "ascii")); pdf += (i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n"; }
+  for (let i = 0; i < pages.length; i++) {
+    const pageObject = 3 + i * 2;
+    const contentObject = pageObject + 1;
+    const pageLines = pages[i];
+    const firstLine = pageLines[0] ?? "";
+    const titleOnFirstPage = i === 0;
+    const stream = "BT /F1 " + (titleOnFirstPage ? "16" : "10") + " Tf 50 790 Td (" + pdfEscape(firstLine) + ") Tj /F1 10 Tf " +
+      pageLines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
+    objects.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 " +
+      (3 + pages.length * 2) + " 0 R >> >> /Contents " + contentObject + " 0 R >>");
+    objects.push("<< /Length " + Buffer.byteLength(stream, "ascii") + " >>\nstream\n" + stream + "\nendstream");
+  }
+  const fontObject = 3 + pages.length * 2;
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let i = 0; i < objects.length; i++) {
+    offsets.push(Buffer.byteLength(pdf, "ascii"));
+    pdf += (i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
+  }
   const xref = Buffer.byteLength(pdf, "ascii");
   pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
   for (const offset of offsets.slice(1)) pdf += String(offset).padStart(10, "0") + " 00000 n \n";
   pdf += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
   return Buffer.from(pdf, "ascii");
 }
+
 async function readLedger(file: string): Promise<Ledger> {
   try {
     const value: unknown = JSON.parse(await readFile(file, "utf8"));
@@ -132,7 +204,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource, transactionSnapshotSource?: TrustedTransactionSnapshotSource): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
   // payment mutation or receipt issuance in production until a transactional store is wired.
@@ -168,7 +240,30 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       const order = await paymentStore.findOrderByProviderOrderId(payment.order_id);
       if (!order) { json(res, 503, { error: "payment_order_not_persisted_retry_webhook" }); return true; }
       if (payment.amount !== order.amountMinor) { json(res, 409, { error: "gateway_payment_details_mismatch" }); return true; }
-      const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
+      if (order.status === "captured" && order.providerPaymentId !== payment.id) {
+        json(res, 409, { error: "order_already_captured_with_different_payment" }); return true;
+      }
+      // For a captured order, reuse its issued receipt and snapshot without calling
+      // mutable authorities. Still submit the event to capturePayment so a reused
+      // provider event ID with a different payload is rejected as a conflict.
+      const existingReceipt = order.status === "captured"
+        ? await paymentStore.findReceipt(order.tenantId, order.id)
+        : null;
+      if (order.status === "captured" && !existingReceipt) {
+        json(res, 503, { error: "captured_payment_receipt_missing" }); return true;
+      }
+      // Use the immutable snapshot captured at order creation. Do not re-read a mutable
+      // invoice status here: the source may already say PAID after Razorpay captured.
+      const storedSnapshot = existingReceipt?.transactionSnapshot ?? order.transactionSnapshot;
+      const snapshot = await resolveTrustedTransactionSnapshot(
+        storedSnapshot ? { async findTransaction() { return storedSnapshot; } } : undefined,
+        { tenantId: order.tenantId, reference: order.invoiceReference },
+      );
+      if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
+      if (snapshot.transaction.amountDueMinor !== payment.amount || snapshot.transaction.currency !== "INR") {
+        json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
+      }
+      const receiptNumber = existingReceipt?.receiptNumber ?? await safeReceiptNumber(receiptNumberSource, {
         tenantId: order.tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: payment.id,
       });
       if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
@@ -176,10 +271,25 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         providerEventId, eventType: "payment.captured",
         payloadSha256: createHash("sha256").update(raw).digest("hex"),
         providerOrderId: payment.order_id, providerPaymentId: payment.id,
-        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber,
+        amountMinor: payment.amount, currency: "INR", tenantId: order.tenantId, receiptNumber, transactionSnapshot: snapshot.transaction,
       });
       if (!result.ok && result.reason !== "duplicate_event") {
         json(res, result.reason === "event_conflict" ? 409 : result.reason === "payment_mismatch" ? 409 : 503, { error: result.reason }); return true;
+      }
+      if (!result.ok && result.reason === "duplicate_event") {
+        // Idempotent webhook retries should return the already-issued receipt identity.
+        const existingReceipt = await paymentStore.findReceipt(order.tenantId, order.id);
+        if (!existingReceipt) {
+          json(res, 503, { error: "captured_payment_receipt_missing" }); return true;
+        }
+        json(res, 200, {
+          received: true,
+          receiptId: existingReceipt.receiptPublicId,
+          receiptNumber: existingReceipt.receiptNumber,
+          receiptUrl: "/api/payments/receipts/" + existingReceipt.receiptPublicId + ".pdf",
+          duplicate: true,
+        });
+        return true;
       }
       json(res, 200, { received: true, ...(result.ok ? { receiptId: result.value.receiptPublicId, receiptNumber: result.value.receiptNumber, receiptUrl: "/api/payments/receipts/" + result.value.receiptPublicId + ".pdf" } : {}) });
       return true;
@@ -224,10 +334,33 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     }
     const amountPaise = authority.invoice.amountDuePaise;
     const currency = authority.invoice.currency;
+    let orderTimeTransactionSnapshot: TrustedTransactionSnapshot | undefined;
+
+    // Durable PostgreSQL checkout requires a separately sourced transaction snapshot.
+    if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      const snapshot = await resolveTrustedTransactionSnapshot(transactionSnapshotSource, { tenantId, reference });
+      if (!snapshot.ok) {
+        const status = snapshot.error === "transaction_not_found" ? 404
+          : snapshot.error === "transaction_tenant_mismatch" ? 403
+          : snapshot.error === "transaction_not_payable" ? 409
+          : snapshot.error === "transaction_amount_invalid" || snapshot.error === "transaction_currency_unsupported" ||
+            snapshot.error === "transaction_reference_mismatch" || snapshot.error === "transaction_total_mismatch" ||
+            snapshot.error === "transaction_line_items_invalid" || snapshot.error === "transaction_adjustments_invalid" ? 422
+          : 503;
+        json(res, status, { error: snapshot.error }); return true;
+      }
+      if (snapshot.transaction.amountDueMinor !== amountPaise || snapshot.transaction.currency !== currency) {
+        json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
+      }
+      orderTimeTransactionSnapshot = snapshot.transaction;
+    }
 
     // Explicit opt-in for controlled UAT. Production remains blocked above until
     // verification, webhook capture, and durable receipt retrieval are also wired.
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+      if (!orderTimeTransactionSnapshot) {
+        json(res, 503, { error: "trusted_transaction_snapshot_unavailable" }); return true;
+      }
       const idempotencyKey = String(req.headers["idempotency-key"] ?? "").trim();
       if (!idempotencyKey || idempotencyKey.length > 200) {
         json(res, 400, { error: "valid_idempotency_key_required" }); return true;
@@ -238,6 +371,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         invoiceSourceId: authority.invoice.sourceId,
         invoiceSourceVersion: authority.invoice.sourceVersion,
         invoiceApprovedAt: authority.invoice.approvedAt,
+        transactionSnapshot: orderTimeTransactionSnapshot,
       });
       if (!reservation.ok) {
         const status = reservation.reason === "idempotency_conflict" ? 409
@@ -349,13 +483,32 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           gatewayPayment.currency !== order.currency || gatewayPayment.status !== "captured") {
         json(res, 400, { error: "gateway_payment_details_mismatch" }); return true;
       }
-      const receiptNumber = await safeReceiptNumber(receiptNumberSource, {
+      // Verification uses the order-time snapshot, not the current mutable invoice status.
+      if (order.status === "captured" && order.providerPaymentId !== paymentId) {
+        json(res, 409, { error: "order_already_captured_with_different_payment" }); return true;
+      }
+      const existingReceipt = order.status === "captured"
+        ? await paymentStore.findReceipt(tenantId, order.id)
+        : null;
+      if (order.status === "captured" && !existingReceipt) {
+        json(res, 503, { error: "captured_payment_receipt_missing" }); return true;
+      }
+      const storedSnapshot = existingReceipt?.transactionSnapshot ?? order.transactionSnapshot;
+      const snapshot = await resolveTrustedTransactionSnapshot(
+        storedSnapshot ? { async findTransaction() { return storedSnapshot; } } : undefined,
+        { tenantId, reference: order.invoiceReference },
+      );
+      if (!snapshot.ok) { json(res, 503, { error: "trusted_transaction_snapshot_unavailable", reason: snapshot.error }); return true; }
+      if (snapshot.transaction.amountDueMinor !== gatewayPayment.amount || snapshot.transaction.currency !== gatewayPayment.currency) {
+        json(res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
+      }
+      const receiptNumber = existingReceipt?.receiptNumber ?? await safeReceiptNumber(receiptNumberSource, {
         tenantId, transactionPublicId: order.transactionPublicId, providerPaymentId: paymentId,
       });
       if (!receiptNumber) { json(res, 503, { error: "receipt_number_policy_unconfigured" }); return true; }
       const captured = await paymentStore.captureVerifiedPayment({
         tenantId, providerOrderId: orderId, providerPaymentId: paymentId,
-        amountMinor: order.amountMinor, currency: "INR", receiptNumber,
+        amountMinor: order.amountMinor, currency: "INR", receiptNumber, transactionSnapshot: snapshot.transaction,
       });
       if (!captured.ok) { json(res, captured.reason === "payment_mismatch" ? 409 : 404, { error: captured.reason }); return true; }
       json(res, 200, {
@@ -397,6 +550,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (!order || order.status !== "captured" || !order.providerPaymentId) { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     let pdf = receipt.documentPdf;
     if (!pdf) {
+      // Never mint a canonical historical receipt without its persisted immutable
+      // transaction snapshot. Mutable invoice/cart sources are not recovery evidence.
+      if (!receipt.transactionSnapshot) {
+        json(res, 503, { error: "trusted_transaction_snapshot_unavailable" });
+        return true;
+      }
       pdf = receiptPdf({
         id: order.transactionPublicId, tenantId, reference: order.invoiceReference,
         invoiceSourceId: "", invoiceSourceVersion: "", invoiceApprovedAt: "",
@@ -404,6 +563,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         razorpayOrderId: order.providerOrderId, razorpayPaymentId: order.providerPaymentId,
         receiptNumber: receipt.receiptNumber, receiptId: receipt.receiptPublicId,
         createdAt: order.createdAt, paidAt: receipt.issuedAt,
+        transactionSnapshot: receipt.transactionSnapshot ?? undefined,
       });
       const persisted = await paymentStore.persistReceiptDocument(tenantId, order.id, pdf);
       if (!persisted.ok) { json(res, 503, { error: "receipt_document_persistence_failed" }); return true; }

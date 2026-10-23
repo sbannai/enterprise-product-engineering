@@ -6,6 +6,7 @@ import { handlePaymentRoute } from "./payments.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import type { TrustedReceiptNumberSource } from "./payments.js";
+import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -35,7 +36,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
 
 function bearerMatches(request: IncomingMessage, expected: string): boolean {
   const header = request.headers.authorization ?? "";
-  const match = /^Bearer (.+)$/i.exec(header);
+  const match = /^Bearer (.+)$/.exec(header);
   if (!match) return false;
   const provided = Buffer.from(match[1], "utf8");
   const secret = Buffer.from(expected, "utf8");
@@ -62,7 +63,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -102,6 +103,9 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (typeof options.receiptNumberSource !== "function") {
         blockers.push("receipt_numbering_policy_unconfigured");
       }
+      if (!options.transactionSnapshotSource || typeof options.transactionSnapshotSource.findTransaction !== "function") {
+        blockers.push("trusted_transaction_authority_unavailable");
+      }
       if (process.env.NODE_ENV === "production") {
         blockers.push("production_payment_enablement_requires_authorized_readiness_review");
       }
@@ -115,86 +119,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
     // Payment routes are independent of the opt-in UAT capability endpoint.
-    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
-
-    // Opt-in read-only API over the canonical requirement registry.
-    const registryMatch = /^\/v1\/requirements(?:\/([^/]+))?$/.exec(requestUrl.pathname);
-    if (request.method === "GET" && registryMatch) {
-      if (process.env.EPER_REQUIREMENTS_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
-        return;
-      }
-      const registryToken = process.env.EPER_REQUIREMENTS_API_TOKEN ?? "";
-      if (registryToken.length < 32) {
-        sendJson(response, 503, { error: "requirements_api_unconfigured" });
-        return;
-      }
-      if (!bearerMatches(request, registryToken)) {
-        sendJson(response, 401, { error: "unauthorized" });
-        return;
-      }
-      if (registryMatch[1] !== undefined) {
-        let requirementId: string;
-        try {
-          requirementId = decodeURIComponent(registryMatch[1]);
-        } catch {
-          sendJson(response, 400, { error: "invalid_requirement_id_encoding" });
-          return;
-        }
-        const requirement = requirementBindings.find((binding) => binding.id === requirementId);
-        if (!requirement) {
-          sendJson(response, 404, { error: "requirement_not_found" });
-          return;
-        }
-        sendJson(response, 200, { apiVersion: "1.0.0", source: "requirement-registry", requirement });
-        return;
-      }
-      const query = requestUrl.searchParams;
-      const q = query.get("q") ?? "";
-      const rawLimit = query.get("limit");
-      const rawOffset = query.get("offset");
-      const rawChapter = query.get("chapter");
-      const limit = rawLimit === null ? 25 : Number(rawLimit);
-      const offset = rawOffset === null ? 0 : Number(rawOffset);
-      const chapter = rawChapter === null ? null : Number(rawChapter);
-      if (
-        q.length > 200 ||
-        !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
-        !Number.isSafeInteger(offset) || offset < 0 ||
-        (chapter !== null && (!Number.isSafeInteger(chapter) || chapter < 1))
-      ) {
-        sendJson(response, 400, { error: "invalid_query_parameters" });
-        return;
-      }
-      const capability = query.get("capability");
-      const pattern = query.get("pattern");
-      const srs = query.get("srs");
-      const supportedPatterns = new Set(["XX01", "XX02", "XX03", "XX04", "XX05", "XX06"]);
-      if (pattern !== null && !supportedPatterns.has(pattern)) {
-        sendJson(response, 400, { error: "invalid_pattern", supportedPatterns: [...supportedPatterns] });
-        return;
-      }
-      const needle = q.trim().toLowerCase();
-      const requirements = [...requirementBindings]
-        .sort((left, right) => left.chapter - right.chapter || left.sequence - right.sequence)
-        .filter((binding) => chapter === null || binding.chapter === chapter)
-        .filter((binding) => capability === null || binding.capability === capability)
-        .filter((binding) => pattern === null || binding.pattern === pattern)
-        .filter((binding) => srs === null || binding.srs === srs)
-        .filter((binding) => !needle || [
-          binding.id, binding.brd, binding.srs, binding.capability, binding.service,
-          binding.pattern, binding.dataContract, binding.apiContract, binding.eventContract,
-        ].some((value) => value.toLowerCase().includes(needle)));
-      sendJson(response, 200, {
-        apiVersion: "1.0.0",
-        source: "requirement-registry",
-        total: requirements.length,
-        limit,
-        offset,
-        requirements: requirements.slice(offset, offset + limit),
-      });
-      return;
-    }
+    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource, options.transactionSnapshotSource)) return;
 
     // Publicly reachable, controlled UAT route. It is separate from the local-only route below.
     const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
