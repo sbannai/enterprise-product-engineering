@@ -6,11 +6,12 @@ import { createAppServer } from "../dist/apps/api/server.js";
 test("PostgreSQL route exposes stable transaction UUID and downloads persisted receipt by its own UUID", async () => {
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
-  const token = "route-test-token-".padEnd(40, "x");
+  const token = "route-test-tenant-a-token-".padEnd(40, "x");
+  const tenantBToken = "route-test-tenant-b-token-".padEnd(40, "y");
   const transactionPublicId = "7d4f9b22-a34e-4d12-8c63-30f6a2e4f12a";
   const receiptPublicId = "9e3b1a60-2f44-4b4e-8a18-7f8e61a5d932";
   const tenantId = "tenant-route-test";
@@ -43,7 +44,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "route-secret",
     RAZORPAY_WEBHOOK_SECRET: "route-webhook-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-route-test": token, "tenant-route-other": tenantBToken }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-payment-ledger.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
@@ -189,6 +191,40 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const headers = {
       authorization: `Bearer ${token}`, "x-tenant-id": tenantId, "content-type": "application/json",
     };
+
+    // A tenant-A credential cannot select tenant B for order creation. Reject before
+    // either trusted authority or the payment store is consulted.
+    const crossTenantOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "cross-tenant-order-001" },
+      body: JSON.stringify({ tenantId: "tenant-route-other", reference: "invoice-route-test" }),
+    });
+    assert.equal(crossTenantOrder.status, 403);
+    assert.equal((await crossTenantOrder.json()).error, "tenant_scope_mismatch");
+    assert.equal(transactionSourceCalls, 0, "cross-tenant order must be rejected before authority lookups");
+
+    // A caller cannot use x-tenant-id to switch the principal for verification or receipt access.
+    const crossTenantVerify = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-route-other", "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(crossTenantVerify.status, 403);
+    assert.equal((await crossTenantVerify.json()).error, "tenant_scope_mismatch");
+    assert.equal(gatewayVerificationCalls, 0, "cross-tenant verification must be rejected before gateway lookup");
+
+    const crossTenantReceiptBeforeLookup = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-route-other" },
+    });
+    assert.equal(crossTenantReceiptBeforeLookup.status, 403);
+    assert.equal((await crossTenantReceiptBeforeLookup.json()).error, "tenant_scope_mismatch");
+
+    // The global/shared token must not authenticate a tenant-scoped PostgreSQL request.
+    const sharedTokenRequest = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${process.env.EPER_PAYMENT_API_TOKEN}`, "x-tenant-id": tenantId, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(sharedTokenRequest.status, 401);
 
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
@@ -657,7 +693,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const crossTenant = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
     });
-    assert.equal(crossTenant.status, 404);
+    assert.equal(crossTenant.status, 403);
+    assert.equal((await crossTenant.json()).error, "tenant_scope_mismatch");
 
     // PostgreSQL mode must never fall back to the legacy JSON-ledger receipt route.
     const legacyReceipt = await nativeFetch(`${base}/api/payments/${transactionPublicId}/receipt.pdf`, {
