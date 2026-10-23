@@ -110,12 +110,14 @@ export async function resolveTrustedTransactionSnapshot(
 
   let lineTotal = 0;
   for (const item of transaction.lineItems) {
+    const product = item?.quantity * item?.unitPriceMinor;
     if (
       !isText(item?.sourceLineId) || !isText(item?.description) ||
       (item.sku !== undefined && typeof item.sku !== "string") ||
       !Number.isSafeInteger(item.quantity) || item.quantity <= 0 ||
       !isMinor(item.unitPriceMinor) || !isMinor(item.lineTotalMinor) ||
-      item.lineTotalMinor !== item.quantity * item.unitPriceMinor ||
+      !Number.isSafeInteger(product) ||
+      item.lineTotalMinor !== product ||
       !Number.isSafeInteger(lineTotal + item.lineTotalMinor)
     ) return { ok: false, error: "transaction_line_items_invalid" };
     lineTotal += item.lineTotalMinor;
