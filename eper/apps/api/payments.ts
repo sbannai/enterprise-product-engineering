@@ -114,6 +114,13 @@ function bearer(req: IncomingMessage, token: string): boolean {
  */
 export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
+  // This base implementation uses single-process JSON persistence. Keep every payment
+  // mutation and receipt endpoint closed in production until a durable transactional
+  // store and the complete readiness review are wired by the persistence layer.
+  if (process.env.NODE_ENV === "production") {
+    json(res, 503, { error: "payment_persistence_not_production_ready" });
+    return true;
+  }
   const cfg = config();
   if (!cfg) { json(res, 503, { error: "payment_gateway_unconfigured" }); return true; }
 
