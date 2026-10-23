@@ -130,6 +130,7 @@ export async function resolveTrustedTransactionSnapshot(
       !["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"].includes(adjustment?.kind) ||
       !isText(adjustment.description) ||
       !Number.isSafeInteger(adjustment.amountMinor) ||
+      (adjustment.kind === "DISCOUNT" && adjustment.amountMinor >= 0) ||
       !Number.isSafeInteger(adjustmentsTotal + adjustment.amountMinor)
     ) return { ok: false, error: "transaction_adjustments_invalid" };
     adjustmentsTotal += adjustment.amountMinor;
