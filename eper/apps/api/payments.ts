@@ -197,7 +197,8 @@ function configuredTenantTokens(): Record<string, string> | null {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const entries = Object.entries(parsed as Record<string, unknown>);
     if (entries.length === 0 || entries.some(([tenant, token]) =>
-      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenant) || typeof token !== "string" || token.length < 32)) return null;
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenant) || typeof token !== "string" || token.length < 32) ||
+      new Set(entries.map(([, token]) => token)).size !== entries.length) return null;
     return Object.fromEntries(entries) as Record<string, string>;
   } catch { return null; }
 }
