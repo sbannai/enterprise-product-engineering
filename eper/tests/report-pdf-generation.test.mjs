@@ -95,3 +95,10 @@ test("applies configured background and selected standard font resources",()=>{
   assert.ok(pdf.includes("/BaseFont /Courier "));
   assert.ok(pdf.includes("/BaseFont /Courier-Bold "));
 });
+
+test("does not embed or fetch remote logo URLs in the PDF renderer",()=>{
+  const pdf=pdfText(generatePdfReport(base,theme));
+  assert.ok(pdf.startsWith("%PDF-1.4"));
+  assert.ok(!pdf.includes(theme.logoUrl),"remote logo URL must not be emitted into the PDF");
+  assert.ok(!pdf.includes("https://"),"PDF generation must not serialize remote asset URLs");
+});
