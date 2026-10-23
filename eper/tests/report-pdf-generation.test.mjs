@@ -111,3 +111,11 @@ test("does not embed or fetch remote logo URLs in the PDF renderer",()=>{
   assert.ok(!pdf.includes(theme.logoUrl),"remote logo URL must not be emitted into the PDF");
   assert.ok(!pdf.includes("https://"),"PDF generation must not serialize remote asset URLs");
 });
+
+test("treats inherited row properties as empty PDF cells",()=>{
+  const inherited={...base,columns:[{key:"constructor",label:"Constructor"},{key:"toString",label:"To String"},{key:"reference",label:"Reference"}],rows:[{}]};
+  const pdf=pdfText(generatePdfReport(inherited,theme));
+  assert.ok(!pdf.includes(hexAscii("function Object")),"inherited functions must not leak into report cells");
+  assert.ok(pdf.includes(hexAscii("Constructor")));
+  assert.ok(pdf.includes(hexAscii("To String")));
+});
