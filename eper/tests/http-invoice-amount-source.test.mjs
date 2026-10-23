@@ -240,7 +240,7 @@ test("API rejects a paid invoice returned by the configured authority before res
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "gateway-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
     EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-paid-invoice-test.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
