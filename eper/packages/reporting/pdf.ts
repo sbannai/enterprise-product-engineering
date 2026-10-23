@@ -171,7 +171,7 @@ function splitLongRows(d:ReportDocument,maxChars:number,maxLinesPerSegment=24):R
     const wrapped=d.columns.map(col=>wrap(text(Object.prototype.hasOwnProperty.call(row,col.key)?row[col.key]:undefined),maxChars));
     const segments=Math.max(1,...wrapped.map(lines=>Math.ceil(lines.length/maxLinesPerSegment)));
     for(let segment=0;segment<segments;segment++){
-      const part:Record<string,unknown>={};
+      const part:Record<string,unknown>=Object.create(null) as Record<string,unknown>;
       for(let i=0;i<d.columns.length;i++) part[d.columns[i].key]=wrapped[i].slice(segment*maxLinesPerSegment,(segment+1)*maxLinesPerSegment).join("\n");
       expanded.push(part);
     }
