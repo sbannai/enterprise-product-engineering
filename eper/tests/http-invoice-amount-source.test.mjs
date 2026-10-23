@@ -104,7 +104,7 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
   const { createAppServer } = await import("../dist/apps/api/server.js");
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -117,6 +117,7 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
     RAZORPAY_KEY_SECRET: "gateway-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
     EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-e2e": token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-invoice-authority-test.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
@@ -240,6 +241,7 @@ test("API rejects a paid invoice returned by the configured authority before res
     RAZORPAY_KEY_SECRET: "gateway-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
     EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-paid-invoice-test.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
