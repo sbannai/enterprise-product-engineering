@@ -1,6 +1,10 @@
 name: EPER PostgreSQL payment-store integration
 
 on:
+  # Ensure the stacked payment branch executes this integration gate on every
+  # branch update, even when the target branch does not yet contain this workflow.
+  push:
+    branches: ["fix/payment-production-persistence-guard"]
   pull_request:
     paths:
       - "eper/packages/payments/**"
