@@ -113,3 +113,35 @@ test("rejects missing audit provenance", async () => {
     ok: false, error: "transaction_provenance_missing",
   });
 });
+
+
+test("accepts an approved concession as a negative adjustment and reconciles the reduced payable total", async () => {
+  const concession = {
+    ...ecommerce,
+    amountDueMinor: 12000,
+    adjustments: [
+      { kind: "DISCOUNT", description: "Cart discount", amountMinor: -1000 },
+      { kind: "TAX", description: "Tax", amountMinor: 500 },
+      { kind: "CONCESSION", description: "Approved tuition concession", amountMinor: -500 },
+    ],
+  };
+  const result = await resolveTrustedTransactionSnapshot(sourceFor(concession), lookup);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.transaction.amountDueMinor, 12000);
+    assert.deepEqual(result.transaction.adjustments[2], {
+      kind: "CONCESSION", description: "Approved tuition concession", amountMinor: -500,
+    });
+  }
+  for (const amountMinor of [0, 500]) {
+    const invalid = await resolveTrustedTransactionSnapshot(sourceFor({
+      ...concession,
+      adjustments: [
+        { kind: "DISCOUNT", description: "Cart discount", amountMinor: -1000 },
+        { kind: "TAX", description: "Tax", amountMinor: 500 },
+        { kind: "CONCESSION", description: "Invalid concession", amountMinor },
+      ],
+    }), lookup);
+    assert.deepEqual(invalid, { ok: false, error: "transaction_adjustments_invalid" });
+  }
+});
