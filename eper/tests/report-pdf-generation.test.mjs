@@ -80,3 +80,18 @@ test("falls back safely for font names that collide with inherited object proper
     assert.doesNotMatch(pdf,/\/BaseFont \/undefined\b/);
   }
 });
+
+test("preserves all provenance IDs when the audit trail wraps beyond two lines",()=>{
+  const ids=Array.from({length:40},(_,i)=>"REQ-AUDIT-"+String(i).padStart(3,"0"));
+  const document={...base,sourceRequirementIds:ids};
+  const pdf=pdfText(generatePdfReport(document,theme));
+  for(const id of ids) assert.ok(pdf.includes(hexAscii(id)),"missing provenance ID "+id);
+});
+
+test("applies configured background and selected standard font resources",()=>{
+  const custom={...theme,backgroundColor:"#112233",fontFamily:"Courier"};
+  const pdf=pdfText(generatePdfReport(base,custom));
+  assert.ok(pdf.includes("0.067 0.133 0.200 rg"),"configured background fill should be painted");
+  assert.ok(pdf.includes("/BaseFont /Courier "));
+  assert.ok(pdf.includes("/BaseFont /Courier-Bold "));
+});
