@@ -246,7 +246,17 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 503, { error: "payment_persistence_not_production_ready" });
     return true;
   }
-  if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres" && !paymentStore) {
+  const persistenceMode = process.env.EPER_PAYMENT_PERSISTENCE;
+  // The JSON ledger is an explicit unit/integration-test fixture only. Never
+  // route a deployed or developer-run API through it when persistence is unset
+  // or configured as json-file; this includes order, verify, webhook and receipt
+  // routes because the guard is deliberately before all route-specific handling.
+  if (persistenceMode !== "postgres" &&
+      !(process.env.NODE_ENV === "test" && persistenceMode === "json-file")) {
+    json(res, 503, { error: "payment_persistence_mode_not_allowed" });
+    return true;
+  }
+  if (persistenceMode === "postgres" && !paymentStore) {
     json(res, 503, { error: "payment_persistence_store_unavailable" });
     return true;
   }
