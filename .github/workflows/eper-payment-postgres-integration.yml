@@ -1,6 +1,8 @@
 name: EPER PostgreSQL payment-store integration
 
 on:
+  push:
+    branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract"]
   pull_request:
     paths:
       - "eper/packages/payments/**"
