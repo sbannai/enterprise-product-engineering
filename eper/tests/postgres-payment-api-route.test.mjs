@@ -609,6 +609,19 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(repeatedDownload.status, 200);
     assert.deepEqual(Buffer.from(await repeatedDownload.arrayBuffer()), bytes);
 
+    // Legacy captured receipt with neither immutable snapshot nor stored PDF must fail closed.
+    const trustedReceiptSnapshot = receipt.transactionSnapshot;
+    persistedPdf = null;
+    receipt = { ...receipt, transactionSnapshot: null, documentPdf: null, documentSha256: null };
+    const legacyMissingSnapshotDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
+    });
+    assert.equal(legacyMissingSnapshotDownload.status, 503);
+    assert.equal((await legacyMissingSnapshotDownload.json()).error, "trusted_transaction_snapshot_unavailable");
+    assert.equal(persistedPdf, null, "must not persist a summary-only historical receipt without its trusted snapshot");
+    receipt = { ...receipt, transactionSnapshot: trustedReceiptSnapshot, documentPdf: Buffer.from(bytes), documentSha256: createHash("sha256").update(bytes).digest("hex") };
+    persistedPdf = Buffer.from(bytes);
+
     // Reject malformed UUID-shaped receipt paths before any receipt lookup.
     const malformedReceiptId = await nativeFetch(`${base}/api/payments/receipts/aaaaaaaa-aaaa-aaaa-aaaaa-aaaaaaaaaaa.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
