@@ -157,6 +157,20 @@ function buildPdf(pages:Page[],landscape:boolean):Uint8Array {
   return Uint8Array.from(pdf, c=>c.charCodeAt(0)&255);
 }
 
+function splitLongRows(d:ReportDocument,maxChars:number,maxLinesPerSegment=24):Record<string,unknown>[] {
+  const expanded:Record<string,unknown>[]=[];
+  for(const row of d.rows){
+    const wrapped=d.columns.map(col=>wrap(text(row[col.key]),maxChars));
+    const segments=Math.max(1,...wrapped.map(lines=>Math.ceil(lines.length/maxLinesPerSegment)));
+    for(let segment=0;segment<segments;segment++){
+      const part:Record<string,unknown>={};
+      for(let i=0;i<d.columns.length;i++) part[d.columns[i].key]=wrapped[i].slice(segment*maxLinesPerSegment,(segment+1)*maxLinesPerSegment).join("\\n");
+      expanded.push(part);
+    }
+  }
+  return expanded;
+}
+
 /** Build a deterministic, tenant-themed PDF without network access or remote asset fetching. */
 export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   validate(d,t);
