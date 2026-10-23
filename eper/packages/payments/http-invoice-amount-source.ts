@@ -101,7 +101,22 @@ export class HttpInvoiceAmountSource implements TrustedInvoiceAmountSource {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_INVALID");
     }
-    return value as TrustedInvoiceAmount;
+    const invoice = value as Record<string, unknown>;
+    const validStatuses = new Set(["DUE", "PARTIALLY_PAID", "PAID", "VOID", "CANCELLED"]);
+    if (
+      typeof invoice.tenantId !== "string" || !invoice.tenantId.trim() ||
+      typeof invoice.reference !== "string" || !invoice.reference.trim() ||
+      !Number.isSafeInteger(invoice.amountDuePaise) || (invoice.amountDuePaise as number) <= 0 ||
+      typeof invoice.currency !== "string" || !invoice.currency.trim() ||
+      typeof invoice.status !== "string" || !validStatuses.has(invoice.status) ||
+      typeof invoice.sourceId !== "string" || !invoice.sourceId.trim() ||
+      typeof invoice.sourceVersion !== "string" || !invoice.sourceVersion.trim() ||
+      typeof invoice.approvedAt !== "string" || !invoice.approvedAt.trim() ||
+      !Number.isFinite(Date.parse(invoice.approvedAt))
+    ) {
+      throw new Error("EPER_INVOICE_AUTHORITY_RESPONSE_INVALID");
+    }
+    return invoice as unknown as TrustedInvoiceAmount;
   }
 }
 
