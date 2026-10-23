@@ -87,7 +87,7 @@ test("registry endpoint requires bearer authentication and validates query param
   const lowercaseScheme = await fetch(`${baseUrl}/v1/requirements?limit=1`, {
     headers: { authorization: `bearer ${token}` },
   });
-  assert.equal(lowercaseScheme.status, 200);
+  assert.equal(lowercaseScheme.status, 401, "Bearer scheme is case-sensitive");
 
   for (const path of [
     "/v1/requirements?limit=101",
