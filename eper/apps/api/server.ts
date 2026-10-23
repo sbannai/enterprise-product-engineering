@@ -2,6 +2,10 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
+import { handlePaymentRoute } from "./payments.js";
+import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
+import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
+import type { TrustedReceiptNumberSource } from "./payments.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -58,7 +62,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -75,6 +79,43 @@ export function createAppServer(): Server {
       });
       return;
     }
+
+    if (request.method === "GET" && requestUrl.pathname === "/readyz/payments") {
+      // Dedicated subsystem readiness is intentionally separate from /health:
+      // capability API health must not imply payment readiness, and payment
+      // blockers must not expose configuration values or secret material.
+      const blockers: string[] = [];
+      if (process.env.EPER_PAYMENT_PERSISTENCE !== "postgres" || !options.paymentStore) {
+        blockers.push("durable_postgres_payment_store_unavailable");
+      } else {
+        try {
+          if (typeof options.paymentStore.checkConnectivity !== "function" || !(await options.paymentStore.checkConnectivity())) {
+            blockers.push("postgres_payment_database_unreachable");
+          }
+        } catch {
+          blockers.push("postgres_payment_database_unreachable");
+        }
+      }
+      if (!options.invoiceAmountSource || typeof options.invoiceAmountSource.findInvoice !== "function") {
+        blockers.push("trusted_invoice_authority_unavailable");
+      }
+      if (typeof options.receiptNumberSource !== "function") {
+        blockers.push("receipt_numbering_policy_unconfigured");
+      }
+      if (process.env.NODE_ENV === "production") {
+        blockers.push("production_payment_enablement_requires_authorized_readiness_review");
+      }
+      const ready = blockers.length === 0;
+      sendJson(response, ready ? 200 : 503, {
+        status: ready ? "ready" : "blocked",
+        subsystem: "payments",
+        blockers,
+      });
+      return;
+    }
+
+    // Payment routes are independent of the opt-in UAT capability endpoint.
+    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
 
     // Opt-in read-only API over the canonical requirement registry.
     const registryMatch = /^\/v1\/requirements(?:\/([^/]+))?$/.exec(requestUrl.pathname);

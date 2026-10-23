@@ -1,0 +1,83 @@
+name: EPER PostgreSQL payment-store integration
+
+on:
+  # Ensure the stacked payment branch executes this integration gate on every
+  # branch update, even when the target branch does not yet contain this workflow.
+  push:
+    branches: ["fix/payment-production-persistence-guard"]
+  pull_request:
+    paths:
+      - "eper/packages/payments/**"
+      - "eper/apps/api/main.ts"
+      - "eper/apps/api/server.ts"
+      - "eper/apps/api/payments.ts"
+      - "eper/Dockerfile"
+      - "eper/scripts/migrate-payments.mjs"
+      - "eper/tests/postgres-payment-store.integration.test.mjs"
+      - "eper/tests/postgres-payment-store.test.mjs"
+      - "eper/tests/postgres-payment-api-route.test.mjs"
+      - "eper/tests/postgres-payment-runtime.test.mjs"
+      - "eper/tests/payment-production-guard.test.mjs"
+      - "eper/tests/payment-gateway.test.mjs"
+      - "eper/tests/payment-readiness.test.mjs"
+      - "eper/tests/invoice-amount-authority.test.mjs"
+      - "eper/tests/http-invoice-amount-source.test.mjs"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/tsconfig.json"
+      - ".github/workflows/eper-payment-postgres-integration.yml"
+  workflow_dispatch:
+
+jobs:
+  postgres-payment-store:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_test_password
+          POSTGRES_DB: eper_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://eper:eper_test_password@localhost:5432/eper_test
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Test PostgreSQL runtime pool configuration
+        run: node --test tests/postgres-payment-runtime.test.mjs
+      - name: Test PostgreSQL-backed payment and receipt API flow
+        run: node --test tests/postgres-payment-api-route.test.mjs
+      - name: Test payment-store validation and transaction rollback cases
+        run: node --test tests/postgres-payment-store.test.mjs
+      - name: Test production payment routes remain fail-closed
+        run: node --test tests/payment-production-guard.test.mjs
+      - name: Test payment readiness blockers and production review gate
+        run: node --test tests/payment-readiness.test.mjs
+      - name: Test gateway signature and receipt safety regressions
+        run: node --test tests/payment-gateway.test.mjs
+      - name: Test trusted invoice amount authority contract
+        run: node --test tests/invoice-amount-authority.test.mjs
+      - name: Test HTTP invoice authority response validation
+        run: node --test tests/http-invoice-amount-source.test.mjs
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Apply all payment migrations through the deployment runner
+        run: npm run migrate:payments
+      - name: Exercise real PostgreSQL transactions and constraints
+        run: node --test tests/postgres-payment-store.integration.test.mjs
