@@ -190,10 +190,16 @@ export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   // Reserve enough space for every wrapped provenance line and footer before allocating rows.
   const provenanceLines=wrap("Source requirements: "+d.sourceRequirementIds.join(", "),Math.max(40,Math.floor(usable/4.2))).length;
   const reservedBottom=58+provenanceLines*8;
-  const firstPageCapacity=height-42-42-15-headerHeight-(reservedBottom+16);
-  // Split unusually tall rows into continuation rows so the renderer cannot silently drop them.
+  // Refuse a provenance block that leaves no room for even a minimum-height table row.
+  // Otherwise makePage's bottom guard could silently omit data on every page.
+  const availableRowHeight=height-42-42-15-headerHeight-reservedBottom;
+  if (availableRowHeight<18) throw new Error("REPORT_PROVENANCE_EXCEEDS_PAGE_CAPACITY");
+  const firstPageCapacity=availableRowHeight-16;
+  // Split unusually tall rows into continuation rows sized to the actual space available
+  // after the repeated header and complete provenance block.
   const minColumnChars=Math.max(5,Math.min(...d.columns.map(c=>Math.max(5,Math.floor((colW-10)/4.2)))));
-  const renderRows=splitLongRows(d,minColumnChars,24);
+  const maxLinesPerSegment=Math.max(1,Math.floor((availableRowHeight-8)/9));
+  const renderRows=splitLongRows(d,minColumnChars,maxLinesPerSegment);
   const rowPages:Record<string,unknown>[][]=[[]];
   let used=0;
   for(const row of renderRows){
