@@ -252,7 +252,8 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
   // or configured as json-file; this includes order, verify, webhook and receipt
   // routes because the guard is deliberately before all route-specific handling.
   if (persistenceMode !== "postgres" &&
-      !(process.env.NODE_ENV === "test" && persistenceMode === "json-file")) {
+      !(process.env.NODE_ENV === "test" &&
+        (persistenceMode === undefined || persistenceMode === "json-file"))) {
     json(res, 503, { error: "payment_persistence_mode_not_allowed" });
     return true;
   }
