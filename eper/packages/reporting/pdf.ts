@@ -203,7 +203,7 @@ export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   const rowPages:Record<string,unknown>[][]=[[]];
   let used=0;
   for(const row of renderRows){
-    const maxLines=Math.max(1,...d.columns.map(c=>wrap(text(row[c.key]),Math.max(5,Math.floor((colW-10)/4.2))).length));
+    const maxLines=Math.max(1,...d.columns.map(c=>wrap(text(Object.prototype.hasOwnProperty.call(row,c.key)?row[c.key]:undefined),Math.max(5,Math.floor((colW-10)/4.2))).length));
     const rh=Math.max(18,maxLines*9+8);
     if(used+rh>firstPageCapacity && rowPages[rowPages.length-1].length){rowPages.push([]);used=0;}
     rowPages[rowPages.length-1].push(row);used+=rh;
