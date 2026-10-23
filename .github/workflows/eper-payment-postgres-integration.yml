@@ -16,6 +16,7 @@ on:
       - "eper/tests/postgres-payment-store.integration.test.mjs"
       - "eper/tests/postgres-payment-store.test.mjs"
       - "eper/tests/postgres-payment-api-route.test.mjs"
+      - "eper/tests/postgres-legacy-order-snapshot-gate.test.mjs"
       - "eper/tests/postgres-payment-runtime.test.mjs"
       - "eper/tests/payment-production-guard.test.mjs"
       - "eper/tests/payment-gateway.test.mjs"
@@ -64,6 +65,8 @@ jobs:
         run: node --test tests/postgres-payment-runtime.test.mjs
       - name: Test PostgreSQL-backed payment and receipt API flow
         run: node --test tests/postgres-payment-api-route.test.mjs
+      - name: Test legacy orders without immutable transaction snapshots fail closed
+        run: node --test tests/postgres-legacy-order-snapshot-gate.test.mjs
       - name: Test payment-store validation and transaction rollback cases
         run: node --test tests/postgres-payment-store.test.mjs
       - name: Test production payment routes remain fail-closed
