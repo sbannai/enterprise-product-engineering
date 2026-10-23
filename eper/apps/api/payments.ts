@@ -69,7 +69,9 @@ export function receiptPdf(record: PaymentRecord): Buffer {
         "Item: " + item.description + " | Qty " + item.quantity + " | Unit " +
         (item.unitPriceMinor / 100).toFixed(2) + " | Total " + (item.lineTotalMinor / 100).toFixed(2)),
       ...record.transactionSnapshot.adjustments.map((item) =>
-        "Adjustment: " + item.kind + " " + item.description + " " + (item.amountMinor / 100).toFixed(2)),
+        item.kind === "CONCESSION"
+          ? "Concession: " + item.description + " -" + (Math.abs(item.amountMinor) / 100).toFixed(2)
+          : "Adjustment: " + item.kind + " " + item.description + " " + (item.amountMinor / 100).toFixed(2)),
       "Source: " + record.transactionSnapshot.sourceId + " " + record.transactionSnapshot.sourceVersion,
     ] : []),
   ];
