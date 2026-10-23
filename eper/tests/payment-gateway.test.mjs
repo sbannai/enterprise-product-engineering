@@ -730,6 +730,12 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const token = "receipt-stability-test-token".padEnd(40, "x");
   const receiptPublicId = "f6e51a2e-80de-45e6-ae93-f10a46f3b6e9";
+  const transactionSnapshot = {
+    tenantId: "tenant-a", reference: "INV-41", kind: "GENERAL",
+    description: "Receipt stability test", amountDueMinor: 12500, currency: "INR",
+    status: "DUE", lineItems: [], adjustments: [], sourceId: "test-authority",
+    sourceVersion: "v1", approvedAt: "2026-10-21T06:00:00.000Z",
+  };
   let persistedPdf = null;
   let persistedDigest = null;
   let persistCalls = 0;
@@ -746,7 +752,7 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
       if (tenantId !== "tenant-a" || requestedId !== receiptPublicId) return null;
       return {
         receiptPublicId, orderId: "41", receiptNumber: "APPROVED-RECEIPT-00041",
-        documentSha256: persistedDigest, documentPdf: persistedPdf,
+        transactionSnapshot, documentSha256: persistedDigest, documentPdf: persistedPdf,
         issuedAt: "2026-10-21T07:00:00.000Z",
       };
     },
