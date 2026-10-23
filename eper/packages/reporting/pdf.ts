@@ -130,7 +130,7 @@ function makePage(d:ReportDocument,t:ReportTheme,pageNo:number,pageTotal:number,
   commands.push(drawText(width-margin-60,20,"Page "+pageNo+" of "+pageTotal,7,color(t.textColor)));
   return {content:commands.join("")};
 }
-function buildPdf(pages:Page[],landscape:boolean):Uint8Array {
+function buildPdf(pages:Page[],landscape:boolean,fontFamily:string):Uint8Array {
   const objects:string[]=[];
   const add=(value:string)=>{objects.push(value);return objects.length;};
   const catalogId=add("");
@@ -190,5 +190,5 @@ export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   }
   const total=rowPages.length;
   const pages=rowPages.map((rows,i)=>makePage({...d,__pageRows:rows},t,i+1,total,landscape));
-  return buildPdf(pages,landscape);
+  return buildPdf(pages,landscape,t.fontFamily);
 }
