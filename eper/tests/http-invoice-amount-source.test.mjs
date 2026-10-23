@@ -116,7 +116,7 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "gateway-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
     EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-e2e": token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-invoice-authority-test.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
