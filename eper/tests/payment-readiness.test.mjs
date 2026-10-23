@@ -272,3 +272,35 @@ for (const persistence of [undefined, "json-file"]) {
     }
   });
 }
+
+
+for (const persistence of [undefined, "json-file"]) {
+  test(`NODE_ENV=test alone cannot enable legacy payment persistence when the Node test-runner context is absent (${persistence ?? "unset"})`, async () => {
+    const keys = ["NODE_ENV", "NODE_TEST_CONTEXT", "EPER_PAYMENT_PERSISTENCE"];
+    const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    process.env.NODE_ENV = "test";
+    delete process.env.NODE_TEST_CONTEXT;
+    if (persistence === undefined) delete process.env.EPER_PAYMENT_PERSISTENCE;
+    else process.env.EPER_PAYMENT_PERSISTENCE = persistence;
+    try {
+      await withServer(createAppServer(), async (base) => {
+        const requests = [
+          fetch(`${base}/api/payments/orders`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
+          fetch(`${base}/api/payments/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
+          fetch(`${base}/api/payments/webhooks/razorpay`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
+          fetch(`${base}/api/payments/receipts/00000000-0000-4000-8000-000000000000.pdf`),
+          fetch(`${base}/api/payments/00000000-0000-4000-8000-000000000000/receipt.pdf`),
+        ];
+        for (const response of await Promise.all(requests)) {
+          assert.equal(response.status, 503);
+          assert.deepEqual(await response.json(), { error: "payment_persistence_mode_not_allowed" });
+        }
+      });
+    } finally {
+      for (const key of keys) {
+        if (prior[key] === undefined) delete process.env[key];
+        else process.env[key] = prior[key];
+      }
+    }
+  });
+}
