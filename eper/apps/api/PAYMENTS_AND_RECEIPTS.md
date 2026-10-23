@@ -1,34 +1,41 @@
 # Razorpay payment and receipt integration — deployment notes
 
-Status: implementation candidate on a feature branch; not merged, deployed, or UAT-approved.
+Status: implementation candidate on PR #168; not merged, deployed, or business-UAT approved.
 
-## Routes
-- `POST /api/payments/orders` — creates a Razorpay INR order. Requires `Authorization: Bearer <EPER_PAYMENT_API_TOKEN>` and `x-tenant-id` matching the JSON `tenantId`.
-- `POST /api/payments/verify` — validates the checkout HMAC and independently fetches the payment from Razorpay; it only marks the record paid if the gateway reports the matching order, amount, currency, and `captured` status. Requires the same bearer and tenant header.
-- `POST /api/payments/webhooks/razorpay` — validates `X-Razorpay-Signature` against the raw request body and handles `payment.captured`.
-- `GET /api/payments/:id/receipt.pdf` — returns a PDF attachment only for a captured/paid payment and matching tenant. Requires the same bearer and tenant header.
+## Implemented API behavior
 
-## Required environment
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `RAZORPAY_WEBHOOK_SECRET` (configure the `payment.captured` webhook in Razorpay)
-- `EPER_PAYMENT_API_TOKEN` (minimum 32 characters; keep server-side only)
-- Optional `EPER_PAYMENT_LEDGER_FILE` (defaults to `./data/payments.json`; ensure persistent, private storage)
+- `POST /api/payments/orders` reserves and persists an idempotent tenant-scoped payment order before contacting Razorpay. The payable amount must come from an approved server-side invoice/fee authority; client-supplied amounts are not permitted in production.
+- `POST /api/payments/verify` validates the checkout signature and independently retrieves the payment from Razorpay. It requires matching order, payment ID, amount, currency, and captured status before recording payment completion.
+- `POST /api/payments/webhooks/razorpay` validates the raw-body Razorpay signature, requires the provider event ID, validates captured payment details against the persisted order, and deduplicates repeated events.
+- `GET /api/payments/receipts/:receiptId.pdf` retrieves a tenant-scoped receipt by its public receipt UUID. It only serves receipts for captured payments. Persisted PDF bytes are SHA-256 verified before serving; missing, malformed, or mismatched digests fail closed.
+- Payment transaction and receipt public IDs are distinct from internal database keys. Receipt identity, receipt numbering, issue timestamp, and persisted PDF content are protected by PostgreSQL migration 005.
 
-If any required secret is absent, the payment routes fail closed with HTTP 503. Never expose the key secret, webhook secret, or API token to browser code. The key ID may be returned for checkout initialization.
+All payment routes return HTTP 503 with `payment_persistence_not_production_ready` when `NODE_ENV=production`. This guard must remain until the real-world approval and production-readiness conditions below have been satisfied.
 
-## Important limitations before production
-- This first implementation uses a JSON-file ledger and is single-process only. Replace it with transactional database storage and uniqueness constraints before horizontal scaling or production payment volume.
-- Order creation needs a durable idempotency/locking strategy to prevent concurrent duplicate orders.
-- Validate refund/chargeback, reconciliation, webhook replay, data retention and operational alerting before production.
-- Use Razorpay test mode and approved synthetic data first. Do not configure live credentials or deploy without explicit owner authorization.
-- Receipts are currently generic EPER receipts, not tax invoices. Business/legal owners must approve required fields, numbering policy and branding.
-- A successful CI build is not proof of a live gateway transaction. End-to-end verification requires authorized Razorpay test credentials and webhook delivery evidence.
+## PostgreSQL schema deployment
 
+The ordered SQL migrations live in `eper/packages/payments/migrations/`. The supported runner is:
 
-## Additional security gates added during review
-- HMAC values must be exactly 64 hexadecimal characters before constant-time comparison; malformed hex suffixes are rejected.
-- Order creation fails closed with `503 server_side_amount_authority_required` unless `EPER_PAYMENT_ALLOW_CLIENT_AMOUNT=true`. This flag is a temporary explicit development escape hatch only; production must replace it with server-side invoice/fee lookup and must not enable client-supplied amounts.
+```sh
+npm run migrate:payments
+```
 
-- The development escape hatch is blocked whenever `NODE_ENV=production`, regardless of `EPER_PAYMENT_ALLOW_CLIENT_AMOUNT`; production must use server-side invoice/fee lookup.
-- Reusing a tenant/reference with a different amount or currency returns HTTP 409 (`payment_reference_amount_currency_conflict`). This protects against inconsistent retries but does not replace a durable idempotency key and database uniqueness constraints.
+Configure `EPER_PAYMENT_DATABASE_URL` (or `DATABASE_URL`) through the approved deployment secret mechanism. The runner serializes migration attempts, records migration names and SHA-256 checksums, applies each migration and its ledger record atomically, and fails if an applied migration's checksum changes. The controlled UAT Docker image includes both the migration files and runner. Migrations are not applied automatically at API startup.
+
+The PostgreSQL integration workflow applies schema using this same runner before testing real database constraints, idempotency, and receipt immutability.
+
+## Configuration and approvals still outstanding
+
+- Configure `EPER_PAYMENT_RECEIPT_NUMBER_PREFIX` only after the owner/business authority approves the receipt-numbering policy. No default policy is invented; capture fails closed if numbering policy is unconfigured.
+- Approve and wire the authoritative invoice/fee source, including source identity/version and approval evidence. Until this is available, production readiness is blocked.
+- Provide approved Razorpay test-mode credentials and run end-to-end evidence for order creation, capture/webhook or verification, idempotent retry, and receipt download in the approved non-production environment.
+- Confirm receipt legal fields, branding, retention, refund/chargeback handling, reconciliation, webhook replay controls, alerting, and operational ownership.
+
+Never commit or expose Razorpay secrets or the payment API token. Do not use live credentials or enable production routes without explicit owner authorization. Automated CI is technical evidence only; it does not constitute business approval or close any G1–G13 gate.
+
+## Current safety boundary
+
+- PR #168 remains a draft and must not be merged by this workflow.
+- Production payment routes remain fail-closed.
+- No chargeable AWS resources are to be provisioned.
+- Preserve the 228 requirement IDs, all 38 chapters, and Option A unchanged.

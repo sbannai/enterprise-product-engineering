@@ -65,3 +65,17 @@ test("maps authoritative-source exceptions to a fail-closed result", async () =>
   const result = await resolveTrustedInvoiceAmount({ findInvoice: async () => { throw new Error("database unavailable"); } }, lookup);
   assert.deepEqual(result, { ok: false, error: "invoice_source_unavailable" });
 });
+
+
+test("rejects malformed authority status and non-date approval provenance", async () => {
+  const cases = [
+    { invoice: { ...invoice, status: "DUE_NOW" }, error: "invoice_not_payable" },
+    { invoice: { ...invoice, approvedAt: "yesterday" }, error: "invoice_provenance_missing" },
+    { invoice: { ...invoice, approvedAt: "" }, error: "invoice_provenance_missing" },
+    { invoice: { ...invoice, sourceId: "   " }, error: "invoice_provenance_missing" },
+    { invoice: { ...invoice, sourceVersion: null }, error: "invoice_provenance_missing" },
+  ];
+  for (const { invoice: malformed, error } of cases) {
+    assert.deepEqual(await resolveTrustedInvoiceAmount(sourceFor(malformed), lookup), { ok: false, error });
+  }
+});
