@@ -2,7 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
-import { handlePaymentRoute } from "./payments.js";
+import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import type { TrustedReceiptNumberSource } from "./payments.js";
@@ -113,6 +113,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         } catch {
           blockers.push("postgres_payment_schema_unavailable");
         }
+      }
+      if (process.env.NODE_ENV !== "production" &&
+          process.env.EPER_PAYMENT_PERSISTENCE === "postgres" &&
+          !paymentTenantIdentityConfigured()) {
+        blockers.push("tenant_identity_unconfigured");
       }
       if (blockers.length === 0 && process.env.NODE_ENV !== "production") {
         const gatewayConfigured = Boolean(
