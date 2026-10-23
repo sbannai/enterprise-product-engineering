@@ -97,6 +97,12 @@ test("rejects invalid prices, invalid adjustments, and total mismatches", async 
     ...ecommerce,
     adjustments: [{ kind: "DISCOUNT", description: "Discount", amountMinor: -1000.5 }],
   }), lookup), { ok: false, error: "transaction_adjustments_invalid" });
+  for (const amountMinor of [0, 1000]) {
+    assert.deepEqual(await resolveTrustedTransactionSnapshot(sourceFor({
+      ...ecommerce,
+      adjustments: [{ kind: "DISCOUNT", description: "Discount", amountMinor }],
+    }), lookup), { ok: false, error: "transaction_adjustments_invalid" });
+  }
   assert.deepEqual(await resolveTrustedTransactionSnapshot(sourceFor({ ...ecommerce, amountDueMinor: 12499 }), lookup), {
     ok: false, error: "transaction_total_mismatch",
   });
