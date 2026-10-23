@@ -218,6 +218,13 @@ function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean {
   const requested = req.headers["x-tenant-id"];
   return requested === undefined || requested === tenantId;
 }
+function bearer(req: IncomingMessage, token: string): boolean {
+  const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
+  if (!match) return false;
+  const supplied = Buffer.from(match[1]);
+  const expected = Buffer.from(token);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
 
 /**
  * Razorpay integration. Disabled unless all secrets are configured.
