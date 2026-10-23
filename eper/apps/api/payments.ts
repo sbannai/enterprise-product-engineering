@@ -189,12 +189,33 @@ function config(): { keyId: string; keySecret: string; webhookSecret: string; to
   if (!keyId || !keySecret || !webhookSecret || token.length < 32) return null;
   return { keyId, keySecret, webhookSecret, token, ledgerFile: resolve(process.env.EPER_PAYMENT_LEDGER_FILE ?? "./data/payments.json") };
 }
-function tenantMatches(req: IncomingMessage, tenantId: string): boolean { return req.headers["x-tenant-id"] === tenantId; }
-function bearer(req: IncomingMessage, token: string): boolean {
+function configuredTenantTokens(): Record<string, string> | null {
+  const raw = process.env.EPER_PAYMENT_TENANT_TOKENS ?? "";
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const entries = Object.entries(parsed as Record<string, unknown>);
+    if (entries.length === 0 || entries.some(([tenant, token]) =>
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenant) || typeof token !== "string" || token.length < 32)) return null;
+    return Object.fromEntries(entries) as Record<string, string>;
+  } catch { return null; }
+}
+function authenticatedTenant(req: IncomingMessage, tokens: Record<string, string>): string | null {
   const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
-  if (!match) return false;
-  const a = Buffer.from(match[1]); const b = Buffer.from(token);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (!match) return null;
+  const supplied = Buffer.from(match[1]);
+  let matched: string | null = null;
+  // Compare against every configured tenant token; never fall back to the shared API token.
+  for (const [tenantId, token] of Object.entries(tokens)) {
+    const expected = Buffer.from(token);
+    if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) matched = tenantId;
+  }
+  return matched;
+}
+function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean {
+  const requested = req.headers["x-tenant-id"];
+  return requested === undefined || requested === tenantId;
 }
 
 /**
@@ -311,14 +332,19 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 200, { received: true }); return true;
   }
 
-  if (!bearer(req, cfg.token)) { json(res, 401, { error: "unauthorized" }); return true; }
+  const tenantTokens = configuredTenantTokens();
+  if (!tenantTokens) { json(res, 503, { error: "tenant_identity_unconfigured" }); return true; }
+  const principalTenantId = authenticatedTenant(req, tenantTokens);
+  if (!principalTenantId) { json(res, 401, { error: "unauthorized" }); return true; }
+  // x-tenant-id is only an optional consistency assertion, never the identity source.
+  if (!tenantHeaderMatches(req, principalTenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
 
   if (req.method === "POST" && pathname === "/api/payments/orders") {
     let input: any;
     try { input = JSON.parse((await body(req)).toString("utf8")); } catch { json(res, 400, { error: "invalid_json" }); return true; }
     const tenantId = typeof input?.tenantId === "string" ? input.tenantId.trim() : "";
     const reference = typeof input?.reference === "string" ? input.reference.trim() : "";
-    if (!tenantId || !tenantMatches(req, tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (!tenantId || tenantId !== principalTenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (!tenantId || !reference) {
       json(res, 400, { error: "tenant_and_invoice_reference_required" }); return true;
     }
@@ -468,8 +494,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       json(res, 400, { error: "payment_signature_invalid" }); return true;
     }
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
-      const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
-      if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
+      const tenantId = principalTenantId;
       const order = await paymentStore.findOrder(tenantId, orderId);
       if (!order) { json(res, 404, { error: "order_not_found" }); return true; }
       const gatewayResponse = await fetch("https://api.razorpay.com/v1/payments/" + encodeURIComponent(paymentId), {
@@ -522,7 +547,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.razorpayOrderId === orderId);
     if (!record) { json(res, 404, { error: "order_not_found" }); return true; }
-    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (principalTenantId !== record.tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     const gatewayResponse = await fetch("https://api.razorpay.com/v1/payments/" + encodeURIComponent(paymentId), {
       headers: { authorization: "Basic " + Buffer.from(cfg.keyId + ":" + cfg.keySecret).toString("base64") },
     });
@@ -542,8 +567,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
 
   const publicReceiptMatch = /^\/api\/payments\/receipts\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf$/i.exec(pathname);
   if (req.method === "GET" && publicReceiptMatch && paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
-    const tenantId = String(req.headers["x-tenant-id"] ?? "").trim();
-    if (!tenantId) { json(res, 400, { error: "tenant_scope_required" }); return true; }
+    const tenantId = principalTenantId;
     let receipt = await paymentStore.findReceiptByPublicId(tenantId, publicReceiptMatch[1]);
     if (!receipt) { json(res, 404, { error: "receipt_not_found" }); return true; }
     const order = await paymentStore.findOrderByInternalId(tenantId, receipt.orderId);
@@ -587,7 +611,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.receiptId === publicReceiptMatch[1]);
     if (!record) { json(res, 404, { error: "receipt_not_found" }); return true; }
-    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (principalTenantId !== record.tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     const pdf = receiptPdf(record);
     res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
@@ -603,7 +627,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.id === decodeURIComponent(receiptMatch[1]));
     if (!record) { json(res, 404, { error: "payment_not_found" }); return true; }
-    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (principalTenantId !== record.tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     if (!record.receiptId) { record.receiptId = randomUUID(); await saveLedger(cfg.ledgerFile, ledger); }
     const pdf = receiptPdf(record);
