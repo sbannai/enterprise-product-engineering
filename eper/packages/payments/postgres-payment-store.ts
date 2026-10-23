@@ -81,6 +81,34 @@ export interface StoredPaymentReceipt {
 export class PostgresPaymentStore {
   constructor(private readonly pool: SqlPool) {}
 
+  /** Verify all payment tables and the immutable snapshot columns required by this release. */
+  async checkSchema(): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const tables = await client.query<{
+        orders: string | null; events: string | null; receipts: string | null;
+      }>(`SELECT to_regclass('public.eper_payment_orders') AS orders,
+                 to_regclass('public.eper_payment_webhook_events') AS events,
+                 to_regclass('public.eper_payment_receipts') AS receipts`);
+      if (!tables.rows[0]?.orders || !tables.rows[0]?.events || !tables.rows[0]?.receipts) return false;
+      const columns = await client.query<{ table_name: string; column_name: string }>(
+        `SELECT table_name, column_name FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND ((table_name = 'eper_payment_orders' AND column_name IN ('transaction_snapshot', 'transaction_public_id'))
+              OR (table_name = 'eper_payment_receipts' AND column_name IN ('transaction_snapshot', 'document_pdf')))`
+      );
+      const found = new Set(columns.rows.map((row) => row.table_name + "." + row.column_name));
+      return [
+        "eper_payment_orders.transaction_snapshot",
+        "eper_payment_orders.transaction_public_id",
+        "eper_payment_receipts.transaction_snapshot",
+        "eper_payment_receipts.document_pdf",
+      ].every((name) => found.has(name));
+    } finally {
+      client.release();
+    }
+  }
+
   /** Minimal live connectivity probe for readiness; does not read or mutate payment data. */
   async checkConnectivity(): Promise<boolean> {
     const client = await this.pool.connect();
