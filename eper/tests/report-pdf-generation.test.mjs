@@ -45,6 +45,7 @@ test("paginates large reports, repeats headers and retains long cell content",()
   assert.ok(pdf.includes(hexAscii("LONG-CELL-START")));
   assert.ok(pdf.includes(hexAscii("LONG-CELL-END")));
   assert.ok(pdf.includes(hexAscii("TXN-089")),"last row must not be clipped or dropped");
+  for(let i=0;i<90;i++) assert.ok(pdf.includes(hexAscii("TXN-"+String(i).padStart(3,"0"))),"missing transaction row "+i);
   assertPdfXref(pdf);
 });
 
