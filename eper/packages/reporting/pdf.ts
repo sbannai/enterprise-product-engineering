@@ -109,7 +109,7 @@ function makePage(d:ReportDocument & {__pageRows?: readonly Record<string,unknow
     // The caller supplies rows for this page; each page repeats the same table header.
     const rows=(d as ReportDocument & {__pageRows?: readonly Record<string,unknown>[]}).__pageRows ?? d.rows;
     for(const row of rows){
-      const wrapped=d.columns.map(c=>wrap(text(row[c.key]),Math.max(5,Math.floor((colW-10)/4.2))));
+      const wrapped=d.columns.map(c=>wrap(text(Object.prototype.hasOwnProperty.call(row,c.key)?row[c.key]:undefined),Math.max(5,Math.floor((colW-10)/4.2))));
       const maxLines=Math.max(1,...wrapped.map(a=>a.length));
       const rh=Math.max(18,maxLines*9+8);
       if(y-rh<bottom) break;
@@ -168,7 +168,7 @@ function buildPdf(pages:Page[],landscape:boolean,fontFamily:string):Uint8Array {
 function splitLongRows(d:ReportDocument,maxChars:number,maxLinesPerSegment=24):Record<string,unknown>[] {
   const expanded:Record<string,unknown>[]=[];
   for(const row of d.rows){
-    const wrapped=d.columns.map(col=>wrap(text(row[col.key]),maxChars));
+    const wrapped=d.columns.map(col=>wrap(text(Object.prototype.hasOwnProperty.call(row,col.key)?row[col.key]:undefined),maxChars));
     const segments=Math.max(1,...wrapped.map(lines=>Math.ceil(lines.length/maxLinesPerSegment)));
     for(let segment=0;segment<segments;segment++){
       const part:Record<string,unknown>={};
