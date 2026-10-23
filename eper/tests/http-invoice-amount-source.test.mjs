@@ -300,3 +300,28 @@ test("HTTP invoice authority bounds upstream response bodies before JSON parsing
     /EPER_INVOICE_AUTHORITY_RESPONSE_TOO_LARGE/,
   );
 });
+
+
+test("HTTP invoice authority rejects malformed or untrusted invoice payloads", async () => {
+  const malformed = [
+    { ...invoice, amountDuePaise: 1.5 },
+    { ...invoice, amountDuePaise: Number.MAX_SAFE_INTEGER + 1 },
+    { ...invoice, status: "DUE_NOW" },
+    { ...invoice, sourceId: " " },
+    { ...invoice, approvedAt: "yesterday" },
+    { ...invoice, tenantId: null },
+  ];
+  for (const payload of malformed) {
+    const source = new HttpInvoiceAmountSource({
+      endpoint: "https://fees.example.test/invoices",
+      bearerToken: "approved-test-token-that-is-long-enough",
+      fetchImpl: async () => new Response(JSON.stringify(payload), {
+        status: 200, headers: { "content-type": "application/json" },
+      }),
+    });
+    await assert.rejects(
+      source.findInvoice({ tenantId: "tenant-a", reference: "INV 2026/001" }),
+      /EPER_INVOICE_AUTHORITY_RESPONSE_INVALID/,
+    );
+  }
+});
