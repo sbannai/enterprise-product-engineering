@@ -10,3 +10,5 @@ test("preserves native JSON types and deterministic selected-column ordering",()
 test("rejects blank and whitespace-only requirement provenance",()=>{assert.throws(()=>generateReport({...report,sourceRequirementIds:[""]},"json"),/REPORT_PROVENANCE_REQUIRED/);assert.throws(()=>generateReport({...report,sourceRequirementIds:["   "]},"csv"),/REPORT_PROVENANCE_REQUIRED/);});
 
 test("preserves negative numeric CSV values while guarding negative-looking strings",()=>{const negative={...report,rows:[{reference:"TXN-NEG",amount:-42,note:"-cmd"}]};const csv=generateReport(negative,"csv");assert.match(csv,/"-42"/);assert.match(csv,/"'-cmd"/);});
+
+test("treats inherited object properties as empty cells in CSV and HTML",()=>{const inherited={...report,columns:[{key:"constructor",label:"Constructor"},{key:"toString",label:"To String"},{key:"reference",label:"Reference"}],rows:[{}]};const csv=generateReport(inherited,"csv");assert.equal(csv,'"\"Constructor\",\"To String\",\"Reference\"\\r\\n\"\",\"\",\"\"\\r\\n"');const html=generateReport(inherited,"html",theme);assert.match(html,/<td><\\/td><td><\\/td><td><\\/td>/);assert.doesNotMatch(html,/function Object/);});
