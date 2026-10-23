@@ -883,11 +883,28 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
     },
   };
   const longPdfText = receiptPdf(longRecord).toString("ascii");
-  assert.ok(longPdfText.includes("Item: " + longDescription.slice(0, 72)));
-  for (let offset = 72; offset < longDescription.length; offset += 78) {
+  const extractTextOperands = (pdfText) => [...pdfText.matchAll(/\\(((?:\\\\.|[^\\\\)])*)\\) Tj/g)]
+    .map((match) => match[1].replace(/\\\\([\\\\()])/g, "$1"));
+  const renderedText = extractTextOperands(longPdfText).join("");
+  assert.ok(renderedText.includes(longDescription), "long product description must survive wrapping");
+
+  // Wide glyphs must wrap by measured Helvetica width, not a fixed character count.
+  const wideDescription = "W".repeat(180);
+  const wideRecord = {
+    ...record,
+    transactionSnapshot: {
+      ...record.transactionSnapshot,
+      lineItems: [{ ...lineItems[0], description: wideDescription }],
+    },
+  };
+  const widePdf = receiptPdf(wideRecord).toString("ascii");
+  const wideOperands = extractTextOperands(widePdf);
+  assert.ok(wideOperands.join("").includes(wideDescription), "wide-glyph content must not be lost");
+  for (const operand of wideOperands) {
     assert.ok(
-      longPdfText.includes(longDescription.slice(offset, offset + 78)),
-      `long product description lost wrapped content at offset ${offset}`,
+      (operand.match(/W/g) ?? []).length <= 52,
+      "no 10pt receipt text operand may contain more than 52 Helvetica W glyphs",
     );
   }
+  assert.deepEqual(receiptPdf(wideRecord), receiptPdf(wideRecord), "wide-glyph PDF output must be deterministic");
 });
