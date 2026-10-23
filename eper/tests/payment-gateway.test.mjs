@@ -164,7 +164,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     // Keep the isolated missing-invoice-source check independent of the production persistence guard.
     process.env.NODE_ENV = "test";
     // Without a wired trusted source, order creation must fail closed.
-    const unconfiguredServer = createAppServer();
+    const unconfiguredServer = createAppServer({ allowLegacyPaymentLedgerForTests: true });
     try {
       await new Promise((resolve, reject) => {
         unconfiguredServer.once("error", reject);
