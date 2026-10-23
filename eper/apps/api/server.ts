@@ -114,7 +114,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           blockers.push("postgres_payment_schema_unavailable");
         }
       }
-      if (process.env.NODE_ENV !== "production" &&
+      if (blockers.length === 0 && process.env.NODE_ENV !== "production" &&
           process.env.EPER_PAYMENT_PERSISTENCE === "postgres" &&
           !paymentTenantIdentityConfigured()) {
         blockers.push("tenant_identity_unconfigured");
