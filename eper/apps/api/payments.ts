@@ -345,6 +345,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (!bearer(req, cfg.token)) { json(res, 401, { error: "unauthorized" }); return true; }
     principalTenantId = typeof req.headers["x-tenant-id"] === "string" ? req.headers["x-tenant-id"] : null;
   }
+  if (!principalTenantId) { json(res, 403, { error: "tenant_scope_required" }); return true; }
 
   if (req.method === "POST" && pathname === "/api/payments/orders") {
     let input: any;
