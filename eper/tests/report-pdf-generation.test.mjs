@@ -1,0 +1,130 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {generatePdfReport} from "../dist/packages/reporting/pdf.js";
+
+const base={tenantId:"tenant-a",reportId:"payments-summary",title:"Payment Summary",generatedAt:"2026-10-23T00:00:00.000Z",sourceRequirementIds:["REQ-46306","REQ-46307"],columns:[{key:"reference",label:"Reference"},{key:"amount",label:"Amount"},{key:"note",label:"Description"}],rows:[{reference:"TXN-001",amount:-42,note:"Refund processed"}]};
+const theme={organizationName:"Café Example",logoUrl:"https://assets.example.test/logo.svg",primaryColor:"#123456",accentColor:"#eef3f8",textColor:"#172033",backgroundColor:"#ffffff",fontFamily:"Arial",footerText:"Confidential — €"};
+
+function pdfText(bytes){return new TextDecoder("latin1").decode(bytes);}
+const winAnsiSpecial={"€":0x80,"‚":0x82,"ƒ":0x83,"„":0x84,"…":0x85,"†":0x86,"‡":0x87,"ˆ":0x88,"‰":0x89,"Š":0x8a,"‹":0x8b,"Œ":0x8c,"Ž":0x8e,"‘":0x91,"’":0x92,"“":0x93,"”":0x94,"•":0x95,"–":0x96,"—":0x97,"˜":0x98,"™":0x99,"š":0x9a,"›":0x9b,"œ":0x9c,"ž":0x9e,"Ÿ":0x9f};
+function hexAscii(s){return Array.from(s).map(c=>(winAnsiSpecial[c]??c.charCodeAt(0)).toString(16).padStart(2,"0")).join("").toUpperCase();}
+function assertPdfXref(pdf){
+  const start=Number(pdf.match(/startxref\n(\d+)\n%%EOF/)?.[1]);
+  assert.ok(Number.isFinite(start)&&pdf.slice(start,start+5)==="xref\n","xref offset must point to xref table");
+  const xref=pdf.slice(start).split("\n");
+  const count=Number(xref[1].split(" ")[1]);
+  for(let i=1;i<count;i++){
+    const offset=Number(xref[i+2].slice(0,10));
+    assert.ok(pdf.slice(offset).startsWith(i+" 0 obj\n"),"xref entry must point to its object");
+  }
+}
+
+test("creates a valid deterministic PDF with tenant theme, provenance and supported Unicode",()=>{
+  const a=generatePdfReport(base,theme), b=generatePdfReport(base,theme);
+  assert.deepEqual(a,b);
+  const pdf=pdfText(a);
+  assert.ok(pdf.startsWith("%PDF-1.4"));
+  assert.match(pdf,/startxref\n\d+\n%%EOF/);
+  assert.match(pdf,/\/Type \/Catalog/);
+  assert.match(pdf,/\/Type \/Page\b/);
+  assert.ok(pdf.includes(hexAscii("Café Example")));
+  assert.ok(pdf.includes(hexAscii("Confidential — €")));
+  assert.ok(pdf.includes(hexAscii("REQ-46306")));
+  assert.ok(pdf.includes(hexAscii("TXN-001")));
+  assert.ok(pdf.includes("0.071 0.204 0.337"));
+  assertPdfXref(pdf);
+});
+
+test("paginates large reports, repeats headers and retains long cell content",()=>{
+  const long="LONG-CELL-START "+("résumé ".repeat(120))+" LONG-CELL-END";
+  const large={...base,rows:Array.from({length:90},(_,i)=>({reference:"TXN-"+String(i).padStart(3,"0"),amount:i,note:i===42?long:"Regular row "+i}))};
+  const pdf=pdfText(generatePdfReport(large,theme));
+  const pages=(pdf.match(/\/Type \/Page\b/g)||[]).length;
+  assert.ok(pages>1,"expected multi-page output");
+  assert.ok((pdf.match(new RegExp(hexAscii("Reference"),"g"))||[]).length>=pages,"header must repeat on each page");
+  assert.ok(pdf.includes(hexAscii("LONG-CELL-START")));
+  assert.ok(pdf.includes(hexAscii("LONG-CELL-END")));
+  assert.ok(pdf.includes(hexAscii("TXN-089")),"last row must not be clipped or dropped");
+  for(let i=0;i<90;i++) assert.ok(pdf.includes(hexAscii("TXN-"+String(i).padStart(3,"0"))),"missing transaction row "+i);
+  assertPdfXref(pdf);
+});
+
+test("supports empty reports and landscape layout for wide tables",()=>{
+  const empty={...base,rows:[]};
+  const pdf=pdfText(generatePdfReport(empty,theme));
+  assert.ok(pdf.includes(hexAscii("No records match the selected report filters.")));
+  const wide={...base,columns:Array.from({length:8},(_,i)=>({key:"c"+i,label:"Column "+i})),rows:[Object.fromEntries(Array.from({length:8},(_,i)=>["c"+i,"value "+i]))]};
+  const landscape=pdfText(generatePdfReport(wide,theme));
+  assert.match(landscape,/\/MediaBox \[0 0 842 595\]/);
+});
+
+test("rejects unsafe theme and unsupported glyphs without fetching remote assets",()=>{
+  assert.throws(()=>generatePdfReport(base,{...theme,primaryColor:"red"}),/REPORT_THEME_COLOR_INVALID/);
+  assert.throws(()=>generatePdfReport(base,{...theme,logoUrl:"javascript:alert(1)"}),/REPORT_THEME_LOGO_URL_INVALID/);
+  assert.throws(()=>generatePdfReport({...base,title:"Payment 😀 Summary"},theme),/REPORT_PDF_UNSUPPORTED_CHARACTER/);
+});
+
+test("splits oversized rows without dropping their first or final content",()=>{
+  const longValue="OVERSIZE-START "+("segment ".repeat(1800))+" OVERSIZE-END";
+  const oversized={...base,rows:[{reference:"TXN-OVERSIZED",amount:123,note:longValue}]};
+  const pdf=pdfText(generatePdfReport(oversized,theme));
+  assert.ok(pdf.includes(hexAscii("OVERSIZE-START")));
+  assert.ok(pdf.includes(hexAscii("OVERSIZE-END")));
+  assert.ok(pdf.includes(hexAscii("TXN-OVERSIZED")));
+  assertPdfXref(pdf);
+});
+
+test("falls back safely for font names that collide with inherited object properties",()=>{
+  for(const fontFamily of ["constructor","toString"]){
+    const pdf=pdfText(generatePdfReport(base,{...theme,fontFamily}));
+    assert.match(pdf,/\/BaseFont \/Helvetica\b/);
+    assert.doesNotMatch(pdf,/\/BaseFont \/undefined\b/);
+  }
+});
+
+test("preserves all provenance IDs when the audit trail wraps beyond two lines",()=>{
+  const ids=Array.from({length:40},(_,i)=>"REQ-AUDIT-"+String(i).padStart(3,"0"));
+  const document={...base,sourceRequirementIds:ids};
+  const pdf=pdfText(generatePdfReport(document,theme));
+  for(const id of ids) assert.ok(pdf.includes(hexAscii(id)),"missing provenance ID "+id);
+});
+
+test("fails explicitly when provenance leaves no room for the report table",()=>{
+  const ids=Array.from({length:2400},(_,i)=>"REQ-PROVENANCE-"+String(i).padStart(4,"0"));
+  assert.throws(
+    ()=>generatePdfReport({...base,sourceRequirementIds:ids},theme),
+    /REPORT_PROVENANCE_EXCEEDS_PAGE_CAPACITY/
+  );
+});
+
+test("applies configured background and selected standard font resources",()=>{
+  const custom={...theme,backgroundColor:"#112233",fontFamily:"Courier"};
+  const pdf=pdfText(generatePdfReport(base,custom));
+  assert.ok(pdf.includes("0.067 0.133 0.200 rg"),"configured background fill should be painted");
+  assert.ok(pdf.includes("/BaseFont /Courier "));
+  assert.ok(pdf.includes("/BaseFont /Courier-Bold "));
+});
+
+test("does not embed or fetch remote logo URLs in the PDF renderer",()=>{
+  const pdf=pdfText(generatePdfReport(base,theme));
+  assert.ok(pdf.startsWith("%PDF-1.4"));
+  assert.ok(!pdf.includes(theme.logoUrl),"remote logo URL must not be emitted into the PDF");
+  assert.ok(!pdf.includes("https://"),"PDF generation must not serialize remote asset URLs");
+});
+
+test("treats inherited row properties as empty PDF cells",()=>{
+  const inherited={...base,columns:[{key:"constructor",label:"Constructor"},{key:"toString",label:"To String"},{key:"reference",label:"Reference"}],rows:[{}]};
+  const pdf=pdfText(generatePdfReport(inherited,theme));
+  assert.ok(!pdf.includes(hexAscii("function Object")),"inherited functions must not leak into report cells");
+  assert.ok(pdf.includes(hexAscii("Constructor")));
+  assert.ok(pdf.includes(hexAscii("To String")));
+});
+
+test("preserves an own __proto__ cell through PDF row pagination",()=>{
+  const row=Object.create(null);
+  Object.defineProperty(row,"__proto__",{value:"PROTO-CELL-VALUE",enumerable:true,writable:true,configurable:true});
+  const document={...base,columns:[{key:"__proto__",label:"Prototype Cell"}],rows:[row]};
+  const pdf=pdfText(generatePdfReport(document,theme));
+  assert.ok(pdf.includes(hexAscii("PROTO-CELL-VALUE")),"own __proto__ cell must survive pagination and rendering");
+  assert.ok(pdf.includes(hexAscii("Prototype Cell")));
+});
