@@ -1,0 +1,41 @@
+name: EPER payment gateway contract tests
+
+on:
+  pull_request:
+    paths:
+      - "eper/apps/api/payments.ts"
+      - "eper/apps/api/server.ts"
+      - "eper/packages/payments/invoice-amount-authority.ts"
+      - "eper/packages/pricing/market-price-book.ts"
+      - "eper/tests/payment-gateway.test.mjs"
+      - "eper/tests/invoice-amount-authority.test.mjs"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/tsconfig.json"
+      - ".github/workflows/eper-payment-gateway-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payment-gateway-contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build EPER
+        run: npm run build
+      - name: Test payment gateway verification, tenant isolation, and receipt access
+        run: node --test tests/payment-gateway.test.mjs
+      - name: Test trusted invoice amount authority
+        run: node --test tests/invoice-amount-authority.test.mjs
