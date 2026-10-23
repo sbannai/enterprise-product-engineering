@@ -84,12 +84,17 @@ test("detail endpoint returns the exact registry binding and 404 for an unknown 
 test("registry endpoint requires bearer authentication and validates query parameters", async () => {
   assert.equal((await fetch(`${baseUrl}/v1/requirements`)).status, 401);
   assert.equal((await fetch(`${baseUrl}/v1/requirements`, { headers: headers("wrong") })).status, 401);
+  const lowercaseScheme = await fetch(`${baseUrl}/v1/requirements?limit=1`, {
+    headers: { authorization: `bearer ${token}` },
+  });
+  assert.equal(lowercaseScheme.status, 200);
 
   for (const path of [
     "/v1/requirements?limit=101",
     "/v1/requirements?limit=0",
     "/v1/requirements?offset=-1",
     "/v1/requirements?chapter=0",
+    "/v1/requirements?pattern=XX99",
     `/v1/requirements?q=${"x".repeat(201)}`,
   ]) {
     assert.equal((await fetch(baseUrl + path, { headers: headers() })).status, 400, path);
