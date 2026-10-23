@@ -163,29 +163,7 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
       return { ok: true, value: { id: "101", transactionPublicId: "txn-invoice-e2e", providerOrderId } };
     },
   };
-  const server = createAppServer({
-    invoiceAmountSource: sourceWithTestTransport,
-    paymentStore,
-    transactionSnapshotSource: {
-      async findTransaction({ tenantId, reference }) {
-        if (tenantId !== "tenant-e2e" || reference !== "INV-E2E-001") return null;
-        return {
-          tenantId,
-          reference,
-          kind: "GENERAL",
-          description: "Approved fee transaction",
-          amountDueMinor: 12500,
-          currency: "INR",
-          status: "DUE",
-          lineItems: [],
-          adjustments: [],
-          sourceId: invoice.sourceId,
-          sourceVersion: invoice.sourceVersion,
-          approvedAt: invoice.approvedAt,
-        };
-      },
-    },
-  });
+  const server = createAppServer({ invoiceAmountSource: sourceWithTestTransport, paymentStore });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -321,4 +299,29 @@ test("HTTP invoice authority bounds upstream response bodies before JSON parsing
     streamedTooLarge.findInvoice({ tenantId: "tenant-a", reference: "INV-1" }),
     /EPER_INVOICE_AUTHORITY_RESPONSE_TOO_LARGE/,
   );
+});
+
+
+test("HTTP invoice authority rejects malformed or untrusted invoice payloads", async () => {
+  const malformed = [
+    { ...invoice, amountDuePaise: 1.5 },
+    { ...invoice, amountDuePaise: Number.MAX_SAFE_INTEGER + 1 },
+    { ...invoice, status: "DUE_NOW" },
+    { ...invoice, sourceId: " " },
+    { ...invoice, approvedAt: "yesterday" },
+    { ...invoice, tenantId: null },
+  ];
+  for (const payload of malformed) {
+    const source = new HttpInvoiceAmountSource({
+      endpoint: "https://fees.example.test/invoices",
+      bearerToken: "approved-test-token-that-is-long-enough",
+      fetchImpl: async () => new Response(JSON.stringify(payload), {
+        status: 200, headers: { "content-type": "application/json" },
+      }),
+    });
+    await assert.rejects(
+      source.findInvoice({ tenantId: "tenant-a", reference: "INV 2026/001" }),
+      /EPER_INVOICE_AUTHORITY_RESPONSE_INVALID/,
+    );
+  }
 });
