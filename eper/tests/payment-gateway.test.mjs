@@ -709,8 +709,8 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     const crossTenant = await fetch(base, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-b" },
     });
-    assert.equal(crossTenant.status, 404);
-    assert.deepEqual(await crossTenant.json(), { error: "receipt_not_found" });
+    assert.equal(crossTenant.status, 403);
+    assert.deepEqual(await crossTenant.json(), { error: "tenant_scope_mismatch" });
     assert.equal(orderLookups, 0, "cross-tenant receipt requests must not reach order lookup");
 
     const response = await fetch(base, {
