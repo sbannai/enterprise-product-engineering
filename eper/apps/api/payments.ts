@@ -550,6 +550,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (!order || order.status !== "captured" || !order.providerPaymentId) { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     let pdf = receipt.documentPdf;
     if (!pdf) {
+      // Never mint a canonical historical receipt without its persisted immutable
+      // transaction snapshot. Mutable invoice/cart sources are not recovery evidence.
+      if (!receipt.transactionSnapshot) {
+        json(res, 503, { error: "trusted_transaction_snapshot_unavailable" });
+        return true;
+      }
       pdf = receiptPdf({
         id: order.transactionPublicId, tenantId, reference: order.invoiceReference,
         invoiceSourceId: "", invoiceSourceVersion: "", invoiceApprovedAt: "",
