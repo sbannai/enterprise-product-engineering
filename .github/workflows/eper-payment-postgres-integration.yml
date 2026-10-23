@@ -1,10 +1,10 @@
+# Re-run this gate on the reconciled payment/receipt branch before integration sign-off.
 name: EPER PostgreSQL payment-store integration
 
+# Keep this gate enabled on both payment persistence and generic receipt-contract branches.
 on:
-  # Ensure the stacked payment branch executes this integration gate on every
-  # branch update, even when the target branch does not yet contain this workflow.
   push:
-    branches: ["fix/payment-production-persistence-guard"]
+    branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract"]
   pull_request:
     paths:
       - "eper/packages/payments/**"
@@ -22,6 +22,7 @@ on:
       - "eper/tests/payment-readiness.test.mjs"
       - "eper/tests/invoice-amount-authority.test.mjs"
       - "eper/tests/http-invoice-amount-source.test.mjs"
+      - "eper/tests/transaction-receipt-contract.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -75,6 +76,8 @@ jobs:
         run: node --test tests/invoice-amount-authority.test.mjs
       - name: Test HTTP invoice authority response validation
         run: node --test tests/http-invoice-amount-source.test.mjs
+      - name: Test generic transaction and receipt contract
+        run: node --test tests/transaction-receipt-contract.test.mjs
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply all payment migrations through the deployment runner

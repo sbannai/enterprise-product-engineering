@@ -20,6 +20,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let receiptNumberSourceValue = receiptNumber;
   let receiptNumberSourceThrows = false;
   let captured = false;
+  let transactionSourceStatus = "DUE";
+  let transactionSourceCalls = 0;
   let webhookCaptureCalls = 0;
   let originalWebhookPayloadSha256 = null;
   let webhookGatewayAmount = 12500;
@@ -35,7 +37,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   };
   let receipt = {
     receiptPublicId, orderId: "41", receiptNumber, documentSha256: null,
-    documentPdf: null, issuedAt: "2026-10-21T00:00:01.000Z",
+    documentPdf: null, issuedAt: "2026-10-21T00:00:01.000Z", transactionSnapshot: null,
   };
   Object.assign(process.env, {
     RAZORPAY_KEY_ID: "rzp_test_key",
@@ -64,7 +66,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   };
 
   const paymentStore = {
-    async reserveOrder() {
+    async reserveOrder(input) {
+      // Model the immutable snapshot persisted with the order reservation.
+      order = { ...order, transactionSnapshot: structuredClone(input.transactionSnapshot) };
       return { ok: true, value: { id: "41", transactionPublicId, providerOrderId: null } };
     },
     async completeOrderCreation() {
@@ -81,7 +85,19 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.equal(input.amountMinor, webhookGatewayAmount);
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.receiptNumber, receiptNumber);
+      assert.deepEqual(input.transactionSnapshot, {
+        tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
+        description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
+        lineItems: Array.from({ length: 40 }, (_, index) => ({
+          sourceLineId: "line-route-" + (index + 1),
+          description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
+          sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
+        })),
+        adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
+        sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+      });
       captured = true;
+      receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       order = { ...order, status: "captured", providerPaymentId };
       return { ok: true, value: { receiptPublicId, receiptNumber } };
     },
@@ -89,11 +105,24 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       return requestTenant === tenantId && id === providerOrderId ? { ...order } : null;
     },
     async captureVerifiedPayment(input) {
-      verifiedCaptureCalls += 1;
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.providerOrderId, providerOrderId);
       assert.equal(input.providerPaymentId, providerPaymentId);
+      // The webhook already captured this exact payment and issued the receipt.
+      // Model the store's idempotent retry path: return the existing receipt and
+      // do not count it as a new capture or mutate the original snapshot.
+      if (captured) {
+        assert.equal(order.providerPaymentId, input.providerPaymentId);
+        assert.equal(input.receiptNumber, receiptNumber);
+        return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
+      }
+      verifiedCaptureCalls += 1;
       assert.equal(input.receiptNumber, receiptNumber);
+      assert.equal(input.transactionSnapshot.reference, "invoice-route-test");
+      assert.equal(input.transactionSnapshot.lineItems[0].description, "Checkout item 1");
+      captured = true;
+      order = { ...order, status: "captured", providerPaymentId: input.providerPaymentId };
+      receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       return { ok: true, value: { receiptPublicId, receiptNumber, transactionPublicId } };
     },
     async findReceiptByPublicId(requestTenant, id) {
@@ -130,6 +159,23 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       if (receiptNumberSourceThrows) throw new Error("approved receipt policy temporarily unavailable");
       return receiptNumberSourceValue;
     },
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId: requestedTenant, reference }) {
+        transactionSourceCalls += 1;
+        if (requestedTenant !== tenantId || reference !== "invoice-route-test") return null;
+        return {
+          tenantId, reference, kind: "ECOMMERCE", description: "Route test checkout",
+          amountDueMinor: 12500, currency: "INR", status: transactionSourceStatus,
+          lineItems: Array.from({ length: 40 }, (_, index) => ({
+            sourceLineId: "line-route-" + (index + 1),
+            description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
+            sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
+          })),
+          adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
+          sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
   });
 
   try {
@@ -153,6 +199,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
+    assert.equal(transactionSourceCalls, 1, "order creation captures one authoritative snapshot");
+    // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
+    transactionSourceStatus = "PAID";
 
     const event = JSON.stringify({
       event: "payment.captured",
@@ -344,14 +393,24 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(webhookBody.receiptNumber, receiptNumber);
     assert.equal(webhookBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
 
+    // A duplicate delivery must reuse the issued receipt even if the receipt-number
+    // authority is temporarily unavailable after the original capture succeeded.
+    receiptNumberSourceThrows = true;
     const duplicateEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
       body: event,
     });
+    receiptNumberSourceThrows = false;
     assert.equal(duplicateEventId.status, 200);
     assert.equal(webhookCaptureCalls, 1, "replayed provider event must not issue a second capture");
-    assert.equal((await duplicateEventId.json()).received, true);
+    const duplicateBody = await duplicateEventId.json();
+    assert.equal(duplicateBody.received, true);
+    assert.equal(duplicateBody.duplicate, true);
+    assert.equal(duplicateBody.receiptId, receiptPublicId);
+    assert.equal(duplicateBody.receiptNumber, receiptNumber);
+    assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
+    assert.equal(transactionSourceCalls, 1, "capture and duplicate delivery must use the persisted order-time snapshot");
 
     const eventConflictPayload = JSON.stringify({
       event: "payment.captured",
@@ -453,6 +512,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(verifiedCaptureCalls, 0, "fractional gateway amount must not reach verification capture persistence");
 
     gatewayAmount = 12500;
+    // The webhook above already captured this order and issued its receipt. Verification
+    // retries must return that stable receipt without consulting a now-unneeded numbering
+    // authority or attempting a second capture.
     receiptNumberSourceValue = " ".repeat(101);
     const invalidReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
@@ -461,9 +523,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: verificationSignature,
       }),
     });
-    assert.equal(invalidReceiptNumberVerification.status, 503);
-    assert.equal((await invalidReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
-    assert.equal(verifiedCaptureCalls, 0, "oversized receipt number policy output must not reach verification capture persistence");
+    assert.equal(invalidReceiptNumberVerification.status, 200);
+    assert.equal((await invalidReceiptNumberVerification.json()).payment.receiptId, receiptPublicId);
+    assert.equal(verifiedCaptureCalls, 0, "verification retry must reuse the issued receipt without a second capture");
     receiptNumberSourceThrows = true;
     const unavailableReceiptNumberVerification = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
@@ -472,9 +534,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: verificationSignature,
       }),
     });
-    assert.equal(unavailableReceiptNumberVerification.status, 503);
-    assert.equal((await unavailableReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
-    assert.equal(verifiedCaptureCalls, 0, "receipt numbering authority failure must not reach capture persistence");
+    assert.equal(unavailableReceiptNumberVerification.status, 200);
+    assert.equal((await unavailableReceiptNumberVerification.json()).payment.receiptId, receiptPublicId);
+    assert.equal(verifiedCaptureCalls, 0, "receipt-number authority outage must not break an already captured payment retry");
     receiptNumberSourceThrows = false;
 
     receiptNumberSourceValue = "INVALID RECEIPT";
@@ -485,9 +547,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         razorpay_signature: verificationSignature,
       }),
     });
-    assert.equal(malformedReceiptNumberVerification.status, 503);
-    assert.equal((await malformedReceiptNumberVerification.json()).error, "receipt_number_policy_unconfigured");
-    assert.equal(verifiedCaptureCalls, 0, "malformed receipt policy output must not reach capture persistence");
+    assert.equal(malformedReceiptNumberVerification.status, 200);
+    assert.equal((await malformedReceiptNumberVerification.json()).payment.receiptId, receiptPublicId);
+    assert.equal(verifiedCaptureCalls, 0, "malformed numbering policy output must not alter an already issued receipt");
     receiptNumberSourceValue = receiptNumber;
 
     const verified = await nativeFetch(`${base}/api/payments/verify`, {
@@ -499,7 +561,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       }),
     });
     assert.equal(verified.status, 200);
-    assert.equal(verifiedCaptureCalls, 1);
+    assert.equal(verifiedCaptureCalls, 0, "verification after webhook capture must be idempotent");
     const verifiedBody = await verified.json();
     assert.equal(verifiedBody.payment.id, transactionPublicId);
     assert.equal(verifiedBody.payment.receiptId, receiptPublicId);
@@ -512,9 +574,35 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.match(download.headers.get("content-type") ?? "", /application\/pdf/);
     assert.match(download.headers.get("content-disposition") ?? "", new RegExp(receiptPublicId.replaceAll("-", "\\-") + "\\.pdf"));
     const bytes = Buffer.from(await download.arrayBuffer());
+    const pdfText = bytes.toString("ascii");
+    assert.ok(pdfText.startsWith("%PDF-1.4\n"), "PDF header must terminate with a real newline");
+    assert.ok(!pdfText.includes("\\n"), "PDF syntax must not contain literal backslash-n separators");
+    const startXrefMatch = /\nstartxref\n(\d+)\n%%EOF$/.exec(pdfText);
+    assert.ok(startXrefMatch, "PDF must end with startxref and EOF markers");
+    const xrefOffset = Number(startXrefMatch[1]);
+    assert.equal(pdfText.slice(xrefOffset, xrefOffset + 5), "xref\n", "startxref must point to the xref table");
+    const xrefLines = pdfText.slice(xrefOffset).split("\n");
+    const xrefCountMatch = /^0 (\d+)$/.exec(xrefLines[1] ?? "");
+    assert.ok(xrefCountMatch, "xref table must declare its object count");
+    const xrefObjectCount = Number(xrefCountMatch[1]);
+    assert.ok(xrefObjectCount >= 2, "PDF must include catalog and page-tree objects");
+    for (let objectNumber = 1; objectNumber < xrefObjectCount; objectNumber += 1) {
+      const entry = xrefLines[2 + objectNumber] ?? "";
+      const offsetMatch = /^(\d{10}) 00000 n $/.exec(entry);
+      assert.ok(offsetMatch, "xref entry must be a valid in-use entry for object " + objectNumber);
+      const objectOffset = Number(offsetMatch[1]);
+      assert.ok(pdfText.startsWith(objectNumber + " 0 obj\n", objectOffset), "xref offset must point to object " + objectNumber);
+    }
     assert.ok(bytes.subarray(0, 5).toString("ascii") === "%PDF-");
     assert.ok(bytes.includes(Buffer.from(receiptPublicId)));
     assert.ok(bytes.includes(Buffer.from(transactionPublicId))); // Transaction and receipt IDs are both explicit and distinct in the document.
+    assert.ok(bytes.includes(Buffer.from("Amount: 125.00 INR")), "receipt total must match the gateway-confirmed amount");
+    for (let itemNumber = 1; itemNumber < 40; itemNumber += 1) {
+      assert.ok(bytes.includes(Buffer.from("Checkout item " + itemNumber)), "receipt must include checkout item " + itemNumber);
+    }
+    assert.ok(bytes.includes(Buffer.from("Checkout final item")), "long descriptions must be preserved across wrapped PDF lines");
+    assert.ok(bytes.includes(Buffer.from("Adjustment: TAX Checkout tax 5.00")), "receipt must include the source-authoritative tax adjustment");
+    assert.ok(bytes.includes(Buffer.from("/Count 3")), "40-item receipt with a long description must paginate across all content pages");
     const repeatedDownload = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId },
     });
