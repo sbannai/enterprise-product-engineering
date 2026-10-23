@@ -19,7 +19,7 @@ export interface TrustedTransactionLineItem {
 }
 
 export interface TrustedTransactionAdjustment {
-  kind: "DISCOUNT" | "TAX" | "SHIPPING" | "FEE" | "OTHER";
+  kind: "CONCESSION" | "DISCOUNT" | "TAX" | "SHIPPING" | "FEE" | "OTHER";
   description: string;
   /** Signed integer minor units; discounts are negative. */
   amountMinor: number;
@@ -127,10 +127,10 @@ export async function resolveTrustedTransactionSnapshot(
   let adjustmentsTotal = 0;
   for (const adjustment of transaction.adjustments) {
     if (
-      !["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"].includes(adjustment?.kind) ||
+      !["CONCESSION", "DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"].includes(adjustment?.kind) ||
       !isText(adjustment.description) ||
       !Number.isSafeInteger(adjustment.amountMinor) ||
-      (adjustment.kind === "DISCOUNT" && adjustment.amountMinor >= 0) ||
+      ((adjustment.kind === "DISCOUNT" || adjustment.kind === "CONCESSION") && adjustment.amountMinor >= 0) ||
       !Number.isSafeInteger(adjustmentsTotal + adjustment.amountMinor)
     ) return { ok: false, error: "transaction_adjustments_invalid" };
     adjustmentsTotal += adjustment.amountMinor;
