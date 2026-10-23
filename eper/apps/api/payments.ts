@@ -251,8 +251,13 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
   // route a deployed or developer-run API through it when persistence is unset
   // or configured as json-file; this includes order, verify, webhook and receipt
   // routes because the guard is deliberately before all route-specific handling.
+  // NODE_ENV is deployment configuration, not proof that Node's test runner
+  // is executing. Require the runner-provided context as well so a deployed
+  // service accidentally configured with NODE_ENV=test cannot enable JSON-ledger
+  // payment routes by configuration alone.
   if (persistenceMode !== "postgres" &&
       !(process.env.NODE_ENV === "test" &&
+        process.env.NODE_TEST_CONTEXT !== undefined &&
         (persistenceMode === undefined || persistenceMode === "json-file"))) {
     json(res, 503, { error: "payment_persistence_mode_not_allowed" });
     return true;
