@@ -74,18 +74,44 @@ export function receiptPdf(record: PaymentRecord): Buffer {
     ] : []),
   ];
 
-  // Wrap every logical line before pagination so long product descriptions and
-  // references cannot run past the page edge. Fixed-width chunks preserve every
-  // character deterministically, including unusually long unbroken identifiers.
-  const maxLineChars = 78;
-  const wrappedLines = lines.flatMap((line) => {
-    if (line.length <= maxLineChars) return [line];
-    const chunks: string[] = [];
-    for (let offset = 0; offset < line.length; offset += maxLineChars) {
-      chunks.push(line.slice(offset, offset + maxLineChars));
+  // Helvetica AFM widths in 1/1000 em for printable ASCII (space through tilde).
+  // Measure after pdfEscape's non-ASCII substitution so the layout matches the
+  // actual bytes sent to the built-in PDF font.
+  const helveticaWidths = [
+    278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,
+    556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,
+    1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,
+    667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,
+    222,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,
+    556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,
+  ];
+  const renderedWidth = (value: string, fontSize: number): number => {
+    const printable = value.replace(/[^\\x20-\\x7E]/g, "?");
+    let units = 0;
+    for (const character of printable) {
+      units += helveticaWidths[character.charCodeAt(0) - 32] ?? 1000;
     }
+    return units * fontSize / 1000;
+  };
+  const maxTextWidth = 495; // A4 page width minus 50pt margins on both sides.
+  const wrapLine = (line: string, fontSize: number): string[] => {
+    const printable = line.replace(/[^\\x20-\\x7E]/g, "?");
+    const chunks: string[] = [];
+    let chunk = "";
+    for (const character of printable) {
+      if (chunk && renderedWidth(chunk + character, fontSize) > maxTextWidth) {
+        chunks.push(chunk);
+        chunk = character;
+      } else {
+        chunk += character;
+      }
+    }
+    if (chunk || chunks.length === 0) chunks.push(chunk);
     return chunks;
-  });
+  };
+  // Only the document title uses 16pt. All receipt data, including the first
+  // line on subsequent pages, uses 10pt; wrap against the font size actually drawn.
+  const wrappedLines = lines.flatMap((line, index) => wrapLine(line, index === 0 ? 16 : 10));
 
   // 27 rendered lines at 24pt spacing fit within the A4 content area.
   const linesPerPage = 27;
@@ -102,7 +128,8 @@ export function receiptPdf(record: PaymentRecord): Buffer {
     const contentObject = pageObject + 1;
     const pageLines = pages[i];
     const firstLine = pageLines[0] ?? "";
-    const stream = "BT /F1 16 Tf 50 790 Td (" + pdfEscape(firstLine) + ") Tj /F1 10 Tf " +
+    const titleOnFirstPage = i === 0;
+    const stream = "BT /F1 " + (titleOnFirstPage ? "16" : "10") + " Tf 50 790 Td (" + pdfEscape(firstLine) + ") Tj /F1 10 Tf " +
       pageLines.slice(1).map(line => "0 -24 Td (" + pdfEscape(line) + ") Tj").join(" ") + " ET";
     objects.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 " +
       (3 + pages.length * 2) + " 0 R >> >> /Contents " + contentObject + " 0 R >>");
