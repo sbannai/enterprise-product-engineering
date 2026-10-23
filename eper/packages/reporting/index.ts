@@ -32,7 +32,8 @@ function assertDocument(d: ReportDocument): void {
 function cell(v: unknown): string { if(v===null||v===undefined)return ""; if(typeof v==="object")return JSON.stringify(v); return String(v); }
 function csvCell(v: unknown): string {
   let s=cell(v);
-  if (/^[\s\u0000-\u001f]*[=+@-]/.test(s)) s="'"+s;
+  // Preserve real numeric negatives as numbers in spreadsheet imports; guard string cells that could be formulas.
+  if (typeof v !== "number" && /^[\s\u0000-\u001f]*[=+@-]/.test(s)) s="'"+s;
   return '"'+s.replace(/"/g,'""')+'"';
 }
 function htmlEscape(v: unknown): string { return cell(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
