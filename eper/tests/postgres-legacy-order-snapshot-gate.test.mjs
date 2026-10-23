@@ -24,7 +24,7 @@ test("PostgreSQL legacy order without an immutable snapshot fails closed on webh
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: keySecret,
     RAZORPAY_WEBHOOK_SECRET: webhookSecret,
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
     EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ [tenantId]: token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-legacy-order-ledger.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
