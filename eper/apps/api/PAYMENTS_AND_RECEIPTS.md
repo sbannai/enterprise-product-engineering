@@ -24,6 +24,22 @@ Configure `EPER_PAYMENT_DATABASE_URL` (or `DATABASE_URL`) through the approved d
 
 The PostgreSQL integration workflow applies schema using this same runner before testing real database constraints, idempotency, immutable order-time snapshots, and receipt immutability.
 
+## Pre-rollout legacy-order gate
+
+Migration 007 adds the immutable order-time snapshot for newly created orders, but existing rows can retain a null snapshot. **Before enabling any capture/verification flow that requires this snapshot, inspect and drain or cancel every still-payable legacy order with no snapshot.** Do not attempt a blind backfill from the current invoice state: it may have changed after checkout or capture.
+
+Run this read-only check after migration 007 and before any non-production or production payment enablement:
+
+```sql
+SELECT id, tenant_id, invoice_reference, provider_order_id, status, created_at
+FROM eper_payment_orders
+WHERE status IN ('created', 'authorized')
+  AND transaction_snapshot IS NULL
+ORDER BY created_at, id;
+```
+
+The result must be empty before the flow is enabled. For any returned order, reconcile it with the authoritative invoice/fee source and gateway state; cancel/drain only after reconciliation, and do not delete payment history. If a gateway charge may already have occurred, use a controlled reconciliation path rather than cancelling blindly. The application intentionally fails closed when the trusted snapshot is missing; this is safer than issuing a receipt from unverified mutable data, but it requires this rollout gate to avoid stranding a charged customer.
+
 ## Configuration and approvals still outstanding
 
 - Configure `EPER_PAYMENT_RECEIPT_NUMBER_PREFIX` only after the owner/business authority approves the receipt-numbering policy. No default policy is invented; capture fails closed if numbering policy is unconfigured.
