@@ -61,3 +61,18 @@ test("rejects unsafe theme and unsupported glyphs without fetching remote assets
   assert.throws(()=>generatePdfReport(base,{...theme,logoUrl:"javascript:alert(1)"}),/REPORT_THEME_LOGO_URL_INVALID/);
   assert.throws(()=>generatePdfReport({...base,title:"Payment 😀 Summary"},theme),/REPORT_PDF_UNSUPPORTED_CHARACTER/);
 });
+
+test("splits oversized rows without dropping their first or final content",()=>{
+  const longValue="OVERSIZE-START "+("segment ".repeat(1800))+" OVERSIZE-END";
+  const oversized={...base,rows:[{reference:"TXN-OVERSIZED",amount:123,note:longValue}]};
+  const pdf=pdfText(generatePdfReport(oversized,theme));
+  assert.ok(pdf.includes(hexAscii("OVERSIZE-START")));
+  assert.ok(pdf.includes(hexAscii("OVERSIZE-END")));
+  assert.ok(pdf.includes(hexAscii("TXN-OVERSIZED")));
+  assertPdfXref(pdf);
+});
+
+test("rejects inherited font-map property names instead of generating invalid font resources",()=>{
+  assert.throws(()=>generatePdfReport(base,{...theme,fontFamily:"constructor"}),/REPORT_THEME_FONT_INVALID/);
+  assert.throws(()=>generatePdfReport(base,{...theme,fontFamily:"toString"}),/REPORT_THEME_FONT_INVALID/);
+});
