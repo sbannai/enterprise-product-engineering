@@ -108,6 +108,24 @@ test("rejects invalid prices, invalid adjustments, and total mismatches", async 
   });
 });
 
+test("rejects line-item multiplication outside the safe-integer range", async () => {
+  const result = await resolveTrustedTransactionSnapshot(sourceFor({
+    ...ecommerce,
+    lineItems: [
+      {
+        sourceLineId: "line-overflow",
+        description: "Overflow probe",
+        quantity: Number.MAX_SAFE_INTEGER,
+        unitPriceMinor: 2,
+        lineTotalMinor: Number.MAX_SAFE_INTEGER,
+      },
+    ],
+    adjustments: [],
+    amountDueMinor: Number.MAX_SAFE_INTEGER,
+  }), lookup);
+  assert.deepEqual(result, { ok: false, error: "transaction_line_items_invalid" });
+});
+
 test("rejects missing audit provenance", async () => {
   assert.deepEqual(await resolveTrustedTransactionSnapshot(sourceFor({ ...ecommerce, sourceVersion: "" }), lookup), {
     ok: false, error: "transaction_provenance_missing",
