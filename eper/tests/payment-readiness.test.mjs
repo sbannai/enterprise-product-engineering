@@ -1,3 +1,4 @@
+// Exact-head regression rerun after payment/receipt branch ancestry reconciliation.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
