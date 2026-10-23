@@ -1,3 +1,4 @@
+# Re-run this gate on the reconciled payment/receipt branch before integration sign-off.
 name: EPER PostgreSQL payment-store integration
 
 # Keep this gate enabled on both payment persistence and generic receipt-contract branches.

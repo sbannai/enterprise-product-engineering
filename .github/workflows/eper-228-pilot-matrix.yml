@@ -1,3 +1,4 @@
+# Re-run the 228-requirement pilot matrix after payment/receipt branch reconciliation.
 name: EPER 228 Requirement Pilot Test Matrix
 
 on:
