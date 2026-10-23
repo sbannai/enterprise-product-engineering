@@ -4,7 +4,7 @@ name: EPER PostgreSQL payment-store integration
 # Keep this gate enabled on both payment persistence and generic receipt-contract branches.
 on:
   push:
-    branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract"]
+    branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract", "reconcile/payment-153-168-integration", "reconcile/payment-stack-with-receipt-contract"]
   pull_request:
     paths:
       - "eper/packages/payments/**"
