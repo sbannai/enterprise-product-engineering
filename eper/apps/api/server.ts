@@ -31,7 +31,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
 
 function bearerMatches(request: IncomingMessage, expected: string): boolean {
   const header = request.headers.authorization ?? "";
-  const match = /^Bearer (.+)$/.exec(header);
+  const match = /^Bearer (.+)$/i.exec(header);
   if (!match) return false;
   const provided = Buffer.from(match[1], "utf8");
   const secret = Buffer.from(expected, "utf8");
@@ -128,6 +128,11 @@ export function createAppServer(): Server {
       const capability = query.get("capability");
       const pattern = query.get("pattern");
       const srs = query.get("srs");
+      const supportedPatterns = new Set(["XX01", "XX02", "XX03", "XX04", "XX05", "XX06"]);
+      if (pattern !== null && !supportedPatterns.has(pattern)) {
+        sendJson(response, 400, { error: "invalid_pattern", supportedPatterns: [...supportedPatterns] });
+        return;
+      }
       const needle = q.trim().toLowerCase();
       const requirements = [...requirementBindings]
         .sort((left, right) => left.chapter - right.chapter || left.sequence - right.sequence)
