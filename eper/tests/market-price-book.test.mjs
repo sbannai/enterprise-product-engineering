@@ -62,3 +62,25 @@ test("invalid clock fails closed", () => {
   assert.throws(() => service.quote({ productId: "uat-fee", marketId: "IN" }), /MARKET_PRICE_CLOCK_INVALID/);
   assert.throws(() => service.listMarkets("uat-fee"), /MARKET_PRICE_CLOCK_INVALID/);
 });
+
+test("effective timestamps require a valid calendar date and explicit timezone", () => {
+  for (const invalid of [
+    "2026-02-30T00:00:00Z",
+    "2026-02-30T00:00:00.000Z",
+    "2026-01-01",
+    "2026-01-01T00:00:00",
+    "2026-13-01T00:00:00Z",
+    "2026-01-01T25:00:00Z",
+  ]) {
+    assert.throws(
+      () => new MarketPriceBookService([{ ...entries[0], effectiveFrom: invalid }], now),
+      /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
+      `expected invalid effectiveFrom to be rejected: ${invalid}`,
+    );
+    assert.throws(
+      () => new MarketPriceBookService([{ ...entries[0], effectiveFrom: "2026-01-01T00:00:00Z", effectiveTo: invalid }], now),
+      /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
+      `expected invalid effectiveTo to be rejected: ${invalid}`,
+    );
+  }
+});
