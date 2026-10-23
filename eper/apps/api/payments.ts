@@ -86,7 +86,7 @@ export function receiptPdf(record: PaymentRecord): Buffer {
     556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,
   ];
   const renderedWidth = (value: string, fontSize: number): number => {
-    const printable = value.replace(/[^\\x20-\\x7E]/g, "?");
+    const printable = value.replace(/[^\x20-\x7E]/g, "?");
     let units = 0;
     for (const character of printable) {
       units += helveticaWidths[character.charCodeAt(0) - 32] ?? 1000;
@@ -95,7 +95,7 @@ export function receiptPdf(record: PaymentRecord): Buffer {
   };
   const maxTextWidth = 495; // A4 page width minus 50pt margins on both sides.
   const wrapLine = (line: string, fontSize: number): string[] => {
-    const printable = line.replace(/[^\\x20-\\x7E]/g, "?");
+    const printable = line.replace(/[^\x20-\x7E]/g, "?");
     const chunks: string[] = [];
     let chunk = "";
     for (const character of printable) {
