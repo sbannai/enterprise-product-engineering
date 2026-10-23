@@ -142,7 +142,7 @@ function buildPdf(pages:Page[],landscape:boolean,fontFamily:string):Uint8Array {
     "Times":["Times-Roman","Times-Bold"],"Georgia":["Times-Roman","Times-Bold"],
     "Verdana":["Helvetica","Helvetica-Bold"]
   };
-  const selected=fontMap[fontFamily] ?? ["Helvetica","Helvetica-Bold"];
+  const selected=Object.prototype.hasOwnProperty.call(fontMap,fontFamily) ? fontMap[fontFamily] : ["Helvetica","Helvetica-Bold"];
   const fontId=add("<< /Type /Font /Subtype /Type1 /BaseFont /"+selected[0]+" /Encoding /WinAnsiEncoding >>");
   const boldId=add("<< /Type /Font /Subtype /Type1 /BaseFont /"+selected[1]+" /Encoding /WinAnsiEncoding >>");
   const pageIds:number[]=[];
@@ -172,7 +172,7 @@ function splitLongRows(d:ReportDocument,maxChars:number,maxLinesPerSegment=24):R
     const segments=Math.max(1,...wrapped.map(lines=>Math.ceil(lines.length/maxLinesPerSegment)));
     for(let segment=0;segment<segments;segment++){
       const part:Record<string,unknown>={};
-      for(let i=0;i<d.columns.length;i++) part[d.columns[i].key]=wrapped[i].slice(segment*maxLinesPerSegment,(segment+1)*maxLinesPerSegment).join("\\n");
+      for(let i=0;i<d.columns.length;i++) part[d.columns[i].key]=wrapped[i].slice(segment*maxLinesPerSegment,(segment+1)*maxLinesPerSegment).join("\n");
       expanded.push(part);
     }
   }
@@ -191,9 +191,12 @@ export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   const provenanceLines=wrap("Source requirements: "+d.sourceRequirementIds.join(", "),Math.max(40,Math.floor(usable/4.2))).length;
   const reservedBottom=58+provenanceLines*8;
   const firstPageCapacity=height-42-42-15-headerHeight-(reservedBottom+16);
+  // Split unusually tall rows into continuation rows so the renderer cannot silently drop them.
+  const minColumnChars=Math.max(5,Math.min(...d.columns.map(c=>Math.max(5,Math.floor((colW-10)/4.2)))));
+  const renderRows=splitLongRows(d,minColumnChars,24);
   const rowPages:Record<string,unknown>[][]=[[]];
   let used=0;
-  for(const row of d.rows){
+  for(const row of renderRows){
     const maxLines=Math.max(1,...d.columns.map(c=>wrap(text(row[c.key]),Math.max(5,Math.floor((colW-10)/4.2))).length));
     const rh=Math.max(18,maxLines*9+8);
     if(used+rh>firstPageCapacity && rowPages[rowPages.length-1].length){rowPages.push([]);used=0;}
