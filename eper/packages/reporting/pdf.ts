@@ -73,7 +73,7 @@ function drawText(x:number,y:number,value:string,size:number,fill:string,bold=fa
   return fill+" rg BT /"+(bold?"F2":"F1")+" "+size+" Tf 1 0 0 1 "+x.toFixed(2)+" "+y.toFixed(2)+" Tm "+pdfHex(value)+" Tj ET\n";
 }
 interface Page { content: string; }
-function makePage(d:ReportDocument,t:ReportTheme,pageNo:number,pageTotal:number,landscape:boolean):Page {
+function makePage(d:ReportDocument & {__pageRows?: readonly Record<string,unknown>[]},t:ReportTheme,pageNo:number,pageTotal:number,landscape:boolean):Page {
   const width=landscape?842:595, height=landscape?595:842, margin=34, usable=width-margin*2;
   const colW=usable/d.columns.length;
   const commands:string[]=[];
