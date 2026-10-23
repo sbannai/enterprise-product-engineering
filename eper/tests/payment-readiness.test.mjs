@@ -275,11 +275,11 @@ for (const persistence of [undefined, "json-file"]) {
 
 
 for (const persistence of [undefined, "json-file"]) {
-  test(`NODE_ENV=test alone cannot enable legacy payment persistence when the Node test-runner context is absent (${persistence ?? "unset"})`, async () => {
+  test(`environment variables alone cannot enable legacy payment persistence (${persistence ?? "unset"})`, async () => {
     const keys = ["NODE_ENV", "NODE_TEST_CONTEXT", "EPER_PAYMENT_PERSISTENCE"];
     const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     process.env.NODE_ENV = "test";
-    delete process.env.NODE_TEST_CONTEXT;
+    process.env.NODE_TEST_CONTEXT = "spoofed-test-context";
     if (persistence === undefined) delete process.env.EPER_PAYMENT_PERSISTENCE;
     else process.env.EPER_PAYMENT_PERSISTENCE = persistence;
     try {
