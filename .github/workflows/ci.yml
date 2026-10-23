@@ -7,7 +7,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feat/theme-customization-report-generation"]
 
 jobs:
   build-and-test:
