@@ -11,7 +11,7 @@ const CP1252_SPECIAL: Record<string, number> = {
 function validate(d: ReportDocument, t: ReportTheme): void {
   if (!d.tenantId.trim() || !d.reportId.trim() || !d.title.trim()) throw new Error("REPORT_DOCUMENT_CONTEXT_REQUIRED");
   // PDF text strings are encoded as single-line WinAnsi hex strings; reject control bytes explicitly.
-  if (/[\\x00-\\x1F\\x7F]/.test(d.title)) throw new Error("REPORT_TITLE_CONTROL_CHARACTER_INVALID");
+  if (/[\x00-\x1F\x7F]/.test(d.title)) throw new Error("REPORT_TITLE_CONTROL_CHARACTER_INVALID");
   if (!Number.isFinite(Date.parse(d.generatedAt))) throw new Error("REPORT_GENERATED_AT_INVALID");
   if (!d.sourceRequirementIds.length || d.sourceRequirementIds.some(x => typeof x !== "string" || !x.trim())) throw new Error("REPORT_PROVENANCE_REQUIRED");
   if (!d.columns.length) throw new Error("REPORT_COLUMNS_REQUIRED");
