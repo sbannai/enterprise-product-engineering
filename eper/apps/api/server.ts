@@ -82,9 +82,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
     if (request.method === "GET" && requestUrl.pathname === "/readyz/payments") {
-      // Dedicated subsystem readiness is intentionally separate from /health:
-      // capability API health must not imply payment readiness, and payment
-      // blockers must not expose configuration values or secret material.
+      // Payment readiness is independent of general API health and never exposes secrets.
       const blockers: string[] = [];
       if (process.env.EPER_PAYMENT_PERSISTENCE !== "postgres" || !options.paymentStore) {
         blockers.push("durable_postgres_payment_store_unavailable");
@@ -106,6 +104,25 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.transactionSnapshotSource || typeof options.transactionSnapshotSource.findTransaction !== "function") {
         blockers.push("trusted_transaction_authority_unavailable");
       }
+      // Schema readiness is distinct from SELECT 1 connectivity. The real store checks
+      // the immutable snapshot columns required by the payment/receipt contract.
+      const schemaStore = options.paymentStore as (PostgresPaymentStore & { checkSchema?: () => Promise<boolean> }) | undefined;
+      if (schemaStore && typeof schemaStore.checkSchema === "function") {
+        try {
+          if (!(await schemaStore.checkSchema())) blockers.push("postgres_payment_schema_unavailable");
+        } catch {
+          blockers.push("postgres_payment_schema_unavailable");
+        }
+      }
+      if (blockers.length === 0 && process.env.NODE_ENV !== "production") {
+        const gatewayConfigured = Boolean(
+          process.env.RAZORPAY_KEY_ID &&
+          process.env.RAZORPAY_KEY_SECRET &&
+          process.env.RAZORPAY_WEBHOOK_SECRET &&
+          (process.env.EPER_PAYMENT_API_TOKEN ?? "").length >= 32
+        );
+        if (!gatewayConfigured) blockers.push("payment_gateway_unconfigured");
+      }
       if (process.env.NODE_ENV === "production") {
         blockers.push("production_payment_enablement_requires_authorized_readiness_review");
       }
@@ -118,8 +135,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
-    // Payment routes are independent of the opt-in UAT capability endpoint.
-    if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource, options.transactionSnapshotSource)) return;
+    // Catch async payment failures at the HTTP request boundary so a rejected
+    // createServer listener cannot terminate the process or leak internals.
+    try {
+      if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource, options.transactionSnapshotSource)) return;
+    } catch {
+      if (!response.headersSent) sendJson(response, 503, { error: "payment_operation_unavailable" });
+      else response.destroy();
+      return;
+    }
 
     // Opt-in read-only API over the canonical requirement registry.
     const registryMatch = /^\/v1\/requirements(?:\/([^/]+))?$/.exec(requestUrl.pathname);
