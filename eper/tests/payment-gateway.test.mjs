@@ -68,7 +68,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
       };
     },
   };
-  const server = createAppServer({ invoiceAmountSource });
+  const server = createAppServer({ invoiceAmountSource, allowLegacyPaymentLedgerForTests: true });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
