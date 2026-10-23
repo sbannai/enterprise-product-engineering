@@ -6,7 +6,17 @@ const base={tenantId:"tenant-a",reportId:"payments-summary",title:"Payment Summa
 const theme={organizationName:"Café Example",logoUrl:"https://assets.example.test/logo.svg",primaryColor:"#123456",accentColor:"#eef3f8",textColor:"#172033",backgroundColor:"#ffffff",fontFamily:"Arial",footerText:"Confidential — €"};
 
 function pdfText(bytes){return new TextDecoder("latin1").decode(bytes);}
-function hexAscii(s){return Array.from(s).map(c=>c.charCodeAt(0).toString(16).padStart(2,"0")).join("").toUpperCase();}\nfunction assertPdfXref(pdf){\n  const start=Number(pdf.match(/startxref\\n(\\d+)\\n%%EOF/)?.[1]);\n  assert.ok(Number.isFinite(start)&&pdf.slice(start,start+5)==="xref\\n","xref offset must point to xref table");\n  const xref=pdf.slice(start).split("\\n");\n  const count=Number(xref[1].split(" ")[1]);\n  for(let i=1;i<count;i++){const offset=Number(xref[i+2].slice(0,10));assert.ok(pdf.slice(offset).startsWith(i+" 0 obj\\n"),"xref entry must point to its object");}\n}
+function hexAscii(s){return Array.from(s).map(c=>c.charCodeAt(0).toString(16).padStart(2,"0")).join("").toUpperCase();}
+function assertPdfXref(pdf){
+  const start=Number(pdf.match(/startxref\n(\d+)\n%%EOF/)?.[1]);
+  assert.ok(Number.isFinite(start)&&pdf.slice(start,start+5)==="xref\n","xref offset must point to xref table");
+  const xref=pdf.slice(start).split("\n");
+  const count=Number(xref[1].split(" ")[1]);
+  for(let i=1;i<count;i++){
+    const offset=Number(xref[i+2].slice(0,10));
+    assert.ok(pdf.slice(offset).startsWith(i+" 0 obj\n"),"xref entry must point to its object");
+  }
+}
 
 test("creates a valid deterministic PDF with tenant theme, provenance and supported Unicode",()=>{
   const a=generatePdfReport(base,theme), b=generatePdfReport(base,theme);
@@ -21,6 +31,7 @@ test("creates a valid deterministic PDF with tenant theme, provenance and suppor
   assert.ok(pdf.includes(hexAscii("REQ-46306")));
   assert.ok(pdf.includes(hexAscii("TXN-001")));
   assert.ok(pdf.includes("0.071 0.204 0.337"));
+  assertPdfXref(pdf);
 });
 
 test("paginates large reports, repeats headers and retains long cell content",()=>{
@@ -29,10 +40,11 @@ test("paginates large reports, repeats headers and retains long cell content",()
   const pdf=pdfText(generatePdfReport(large,theme));
   const pages=(pdf.match(/\/Type \/Page\b/g)||[]).length;
   assert.ok(pages>1,"expected multi-page output");
-  assert.ok(pdf.includes(hexAscii("Reference")),"table header should be repeated in page streams");
+  assert.ok((pdf.match(new RegExp(hexAscii("Reference"),"g"))||[]).length>=pages,"header must repeat on each page");
   assert.ok(pdf.includes(hexAscii("LONG-CELL-START")));
   assert.ok(pdf.includes(hexAscii("LONG-CELL-END")));
-  assert.ok(pdf.includes(hexAscii("TXN-089")));\n  assert.ok((pdf.match(new RegExp(hexAscii("Reference"),"g"))||[]).length>=pages,"header must repeat on each page");\n  assert.ok((pdf.match(/Page [0-9]+ of [0-9]+/g)||[]).length===0,"page labels are encoded as PDF text hex");\n  assertPdfXref(pdf);
+  assert.ok(pdf.includes(hexAscii("TXN-089")),"last row must not be clipped or dropped");
+  assertPdfXref(pdf);
 });
 
 test("supports empty reports and landscape layout for wide tables",()=>{
