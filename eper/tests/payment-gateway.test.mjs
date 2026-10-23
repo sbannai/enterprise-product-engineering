@@ -883,8 +883,8 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
     },
   };
   const longPdfText = receiptPdf(longRecord).toString("ascii");
-  const extractTextOperands = (pdfText) => [...pdfText.matchAll(/\\(((?:\\\\.|[^\\\\)])*)\\) Tj/g)]
-    .map((match) => match[1].replace(/\\\\([\\\\()])/g, "$1"));
+  const extractTextOperands = (pdfText) => [...pdfText.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)]
+    .map((match) => match[1].replace(/\\([\\()])/g, "$1"));
   const renderedText = extractTextOperands(longPdfText).join("");
   assert.ok(renderedText.includes(longDescription), "long product description must survive wrapping");
 
