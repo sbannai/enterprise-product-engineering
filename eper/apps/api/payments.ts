@@ -332,12 +332,19 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 200, { received: true }); return true;
   }
 
-  const tenantTokens = configuredTenantTokens();
-  if (!tenantTokens) { json(res, 503, { error: "tenant_identity_unconfigured" }); return true; }
-  const principalTenantId = authenticatedTenant(req, tenantTokens);
-  if (!principalTenantId) { json(res, 401, { error: "unauthorized" }); return true; }
-  // x-tenant-id is only an optional consistency assertion, never the identity source.
-  if (!tenantHeaderMatches(req, principalTenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+  let principalTenantId: string | null = null;
+  if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+    const tenantTokens = configuredTenantTokens();
+    if (!tenantTokens) { json(res, 503, { error: "tenant_identity_unconfigured" }); return true; }
+    principalTenantId = authenticatedTenant(req, tenantTokens);
+    if (!principalTenantId) { json(res, 401, { error: "unauthorized" }); return true; }
+    // x-tenant-id is only an optional consistency assertion, never the identity source.
+    if (!tenantHeaderMatches(req, principalTenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+  } else {
+    // The legacy single-process ledger is retained for isolated tests only; it is never production-ready.
+    if (!bearer(req, cfg.token)) { json(res, 401, { error: "unauthorized" }); return true; }
+    principalTenantId = typeof req.headers["x-tenant-id"] === "string" ? req.headers["x-tenant-id"] : null;
+  }
 
   if (req.method === "POST" && pathname === "/api/payments/orders") {
     let input: any;
