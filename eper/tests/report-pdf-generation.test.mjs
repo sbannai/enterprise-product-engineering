@@ -89,6 +89,14 @@ test("preserves all provenance IDs when the audit trail wraps beyond two lines",
   for(const id of ids) assert.ok(pdf.includes(hexAscii(id)),"missing provenance ID "+id);
 });
 
+test("fails explicitly when provenance leaves no room for the report table",()=>{
+  const ids=Array.from({length:2400},(_,i)=>"REQ-PROVENANCE-"+String(i).padStart(4,"0"));
+  assert.throws(
+    ()=>generatePdfReport({...base,sourceRequirementIds:ids},theme),
+    /REPORT_PROVENANCE_EXCEEDS_PAGE_CAPACITY/
+  );
+});
+
 test("applies configured background and selected standard font resources",()=>{
   const custom={...theme,backgroundColor:"#112233",fontFamily:"Courier"};
   const pdf=pdfText(generatePdfReport(base,custom));
