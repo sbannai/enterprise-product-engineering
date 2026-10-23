@@ -77,7 +77,10 @@ function makePage(d:ReportDocument,t:ReportTheme,pageNo:number,pageTotal:number,
   const width=landscape?842:595, height=landscape?595:842, margin=34, usable=width-margin*2;
   const colW=usable/d.columns.length;
   const commands:string[]=[];
+  const provenance=wrap("Source requirements: "+d.sourceRequirementIds.join(", "),Math.max(40,Math.floor(usable/4.2)));
+  const bottom=58+provenance.length*8;
   let y=height-42;
+  commands.push(rect(0,0,width,height,color(t.backgroundColor)));
   commands.push(rect(0,height-8,width,8,color(t.primaryColor)));
   const initials=t.organizationName.trim().split(/\s+/).slice(0,2).map(x=>x[0]||"").join("").toUpperCase();
   commands.push(rect(margin,y-2,30,30,color(t.primaryColor)));
@@ -97,7 +100,6 @@ function makePage(d:ReportDocument,t:ReportTheme,pageNo:number,pageTotal:number,
     x+=colW;
   }
   y-=hh;
-  const bottom=58;
   let rowIndex=0;
   const firstRow=pageNo===1?0:0;
   if(d.rows.length===0){
@@ -122,9 +124,8 @@ function makePage(d:ReportDocument,t:ReportTheme,pageNo:number,pageTotal:number,
     }
   }
   // Provenance is printed on every page so extracted pages remain auditable.
-  const provenance=wrap("Source requirements: "+d.sourceRequirementIds.join(", "),Math.max(40,Math.floor(usable/4.2)));
-  let py=42;
-  for(const line of provenance.slice(0,2)){commands.push(drawText(margin,py,line,6,color(t.textColor)));py-=8;}
+  let py=bottom-8;
+  for(const line of provenance){commands.push(drawText(margin,py,line,6,color(t.textColor)));py-=8;}
   commands.push("0.75 0.77 0.80 RG 0.5 w "+margin+" 34 m "+(width-margin)+" 34 l S\n");
   commands.push(drawText(margin,20,t.footerText??"Confidential",7,color(t.textColor)));
   commands.push(drawText(width-margin-60,20,"Page "+pageNo+" of "+pageTotal,7,color(t.textColor)));
@@ -135,8 +136,15 @@ function buildPdf(pages:Page[],landscape:boolean,fontFamily:string):Uint8Array {
   const add=(value:string)=>{objects.push(value);return objects.length;};
   const catalogId=add("");
   const pagesId=add("");
-  const fontId=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-  const boldId=add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+  const fontMap:Record<string,[string,string]> = {
+    "Arial":["Helvetica","Helvetica-Bold"],"Helvetica":["Helvetica","Helvetica-Bold"],
+    "Courier":["Courier","Courier-Bold"],"Times New Roman":["Times-Roman","Times-Bold"],
+    "Times":["Times-Roman","Times-Bold"],"Georgia":["Times-Roman","Times-Bold"],
+    "Verdana":["Helvetica","Helvetica-Bold"]
+  };
+  const selected=fontMap[fontFamily] ?? ["Helvetica","Helvetica-Bold"];
+  const fontId=add("<< /Type /Font /Subtype /Type1 /BaseFont /"+selected[0]+" /Encoding /WinAnsiEncoding >>");
+  const boldId=add("<< /Type /Font /Subtype /Type1 /BaseFont /"+selected[1]+" /Encoding /WinAnsiEncoding >>");
   const pageIds:number[]=[];
   const w=landscape?842:595,h=landscape?595:842;
   for(const page of pages){
@@ -179,7 +187,10 @@ export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   const bottom=58;
   const headerLines=Math.max(1,...d.columns.map(c=>wrap(c.label,Math.max(5,Math.floor((colW-10)/4.3))).length));
   const headerHeight=Math.max(22,headerLines*10+8);
-  // Match makePage's exact vertical offsets so no row is assigned to a page where it will be clipped.\n  const firstPageCapacity=height-42-42-15-headerHeight-(bottom+16);
+  // Reserve enough space for every wrapped provenance line and footer before allocating rows.
+  const provenanceLines=wrap("Source requirements: "+d.sourceRequirementIds.join(", "),Math.max(40,Math.floor(usable/4.2))).length;
+  const reservedBottom=58+provenanceLines*8;
+  const firstPageCapacity=height-42-42-15-headerHeight-(reservedBottom+16);
   const rowPages:Record<string,unknown>[][]=[[]];
   let used=0;
   for(const row of d.rows){
