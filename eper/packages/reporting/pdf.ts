@@ -179,7 +179,7 @@ export function generatePdfReport(d:ReportDocument,t:ReportTheme):Uint8Array {
   const bottom=58;
   const headerLines=Math.max(1,...d.columns.map(c=>wrap(c.label,Math.max(5,Math.floor((colW-10)/4.3))).length));
   const headerHeight=Math.max(22,headerLines*10+8);
-  const firstPageCapacity=height-42-42-15-headerHeight-bottom;
+  // Match makePage's exact vertical offsets so no row is assigned to a page where it will be clipped.\n  const firstPageCapacity=height-42-42-15-headerHeight-(bottom+16);
   const rowPages:Record<string,unknown>[][]=[[]];
   let used=0;
   for(const row of d.rows){
