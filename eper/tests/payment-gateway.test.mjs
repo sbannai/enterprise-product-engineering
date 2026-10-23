@@ -846,6 +846,7 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
       lineItems,
       adjustments: [
         { kind: "DISCOUNT", description: "Cart promotion", amountMinor: -200 },
+        { kind: "CONCESSION", description: "Approved tuition concession", amountMinor: -300 },
         { kind: "TAX", description: "Tax", amountMinor: 100 },
       ],
       sourceId: "checkout-service",
@@ -863,6 +864,7 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
     assert.ok(pdfText.includes(`Item: ${item.description}`), `missing receipt line for ${item.description}`);
   }
   assert.ok(pdfText.includes("Adjustment: DISCOUNT Cart promotion -2.00"));
+  assert.ok(pdfText.includes("Concession: Approved tuition concession -3.00"), "approved concession must be labelled clearly on the receipt");
   assert.ok(pdfText.includes("Adjustment: TAX Tax 1.00"));
   assert.ok(pdfText.includes("Transaction ID: transaction-public-unique-id"));
   assert.ok(pdfText.includes("Receipt ID: receipt-public-unique-id"));
