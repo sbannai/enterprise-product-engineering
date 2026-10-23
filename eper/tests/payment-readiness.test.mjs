@@ -177,10 +177,14 @@ test("payment readiness rejects present-but-invalid invoice and receipt adapters
   }
 });
 
-test("payment readiness reports configured when PostgreSQL is reachable outside production", async () => {
-  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV"];
+test("payment readiness reports configured when PostgreSQL and gateway are ready outside production", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "EPER_PAYMENT_API_TOKEN"];
   const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-  Object.assign(process.env, { EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test" });
+  Object.assign(process.env, {
+    EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test",
+    RAZORPAY_KEY_ID: "rzp_test_id", RAZORPAY_KEY_SECRET: "test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-secret", EPER_PAYMENT_API_TOKEN: "x".repeat(40),
+  });
   try {
     await withServer(createAppServer({
       paymentStore: { async checkConnectivity() { return true; } },
