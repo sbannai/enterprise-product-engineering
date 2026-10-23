@@ -1,4 +1,5 @@
 name: EPER payment gateway contract tests
+# PR synchronization deliberately reruns this focused suite when its workflow definition changes.
 
 on:
   pull_request:
