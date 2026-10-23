@@ -98,6 +98,25 @@ export class MarketPriceBookService {
       (entry.effectiveTo == null || Date.parse(entry.effectiveTo) > at);
   }
 
+  private isStrictTimestamp(value: string): boolean {
+    // Require a full RFC3339-style timestamp with an explicit timezone. Date.parse
+    // alone accepts date-only strings and normalizes impossible calendar dates.
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+    if (!match || !Number.isFinite(Date.parse(value))) return false;
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText, zone, offsetHourText, offsetMinuteText] = match;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+    const second = Number(secondText);
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth ||
+        hour > 23 || minute > 59 || second > 59) return false;
+    if (zone !== "Z" && (Number(offsetHourText) > 23 || Number(offsetMinuteText) > 59)) return false;
+    return true;
+  }
+
   private validateEntry(entry: MarketPriceEntry): void {
     if (!entry || typeof entry !== "object") {
       throw new Error("MARKET_PRICE_REQUIRED_FIELDS_MISSING");
@@ -120,8 +139,8 @@ export class MarketPriceBookService {
     }
     if (typeof entry.effectiveFrom !== "string" ||
         (entry.effectiveTo != null && typeof entry.effectiveTo !== "string") ||
-        !Number.isFinite(Date.parse(entry.effectiveFrom)) ||
-        (entry.effectiveTo != null && !Number.isFinite(Date.parse(entry.effectiveTo)))) {
+        !this.isStrictTimestamp(entry.effectiveFrom) ||
+        (entry.effectiveTo != null && !this.isStrictTimestamp(entry.effectiveTo))) {
       throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
     }
     if (entry.effectiveTo != null && Date.parse(entry.effectiveTo) <= Date.parse(entry.effectiveFrom)) {
