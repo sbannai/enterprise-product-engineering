@@ -196,11 +196,16 @@ function configuredTenantTokens(): Record<string, string> | null {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const entries = Object.entries(parsed as Record<string, unknown>);
+    const sharedToken = process.env.EPER_PAYMENT_API_TOKEN ?? "";
     if (entries.length === 0 || entries.some(([tenant, token]) =>
-      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenant) || typeof token !== "string" || token.length < 32) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenant) || typeof token !== "string" || token.length < 32 ||
+      token === sharedToken) ||
       new Set(entries.map(([, token]) => token)).size !== entries.length) return null;
     return Object.fromEntries(entries) as Record<string, string>;
   } catch { return null; }
+}
+export function paymentTenantIdentityConfigured(): boolean {
+  return configuredTenantTokens() !== null;
 }
 function authenticatedTenant(req: IncomingMessage, tokens: Record<string, string>): string | null {
   const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
