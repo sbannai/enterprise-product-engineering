@@ -603,7 +603,7 @@ test("PostgreSQL order creation fails closed without an authoritative invoice so
     RAZORPAY_KEY_SECRET: "test-secret",
     RAZORPAY_WEBHOOK_SECRET: "test-webhook-secret",
     EPER_PAYMENT_API_TOKEN: token,
-    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-no-invoice-source": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
