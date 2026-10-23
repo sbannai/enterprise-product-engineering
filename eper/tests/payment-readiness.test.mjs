@@ -178,12 +178,13 @@ test("payment readiness rejects present-but-invalid invoice and receipt adapters
 });
 
 test("payment readiness reports configured when PostgreSQL and gateway are ready outside production", async () => {
-  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "EPER_PAYMENT_API_TOKEN"];
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS"];
   const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test",
     RAZORPAY_KEY_ID: "rzp_test_id", RAZORPAY_KEY_SECRET: "test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-secret", EPER_PAYMENT_API_TOKEN: "x".repeat(40),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": "tenant-specific-secret".padEnd(40, "y") }),
   });
   try {
     await withServer(createAppServer({
@@ -198,6 +199,41 @@ test("payment readiness reports configured when PostgreSQL and gateway are ready
       assert.equal(body.status, "ready");
       assert.deepEqual(body.blockers, []);
     });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
+
+
+test("payment readiness blocks missing or shared tenant credentials even when other prerequisites pass", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_PAYMENT_PERSISTENCE: "postgres", NODE_ENV: "test",
+    RAZORPAY_KEY_ID: "rzp_test_id", RAZORPAY_KEY_SECRET: "test-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-secret", EPER_PAYMENT_API_TOKEN: "shared-api-token".padEnd(40, "z"),
+  });
+  const serverOptions = {
+    paymentStore: { async checkConnectivity() { return true; } },
+    invoiceAmountSource: { async findInvoice() { return null; } },
+    receiptNumberSource: async () => "TEST-RECEIPT",
+    transactionSnapshotSource: { async findTransaction() { return null; } },
+  };
+  try {
+    for (const mapping of [undefined, JSON.stringify({ "tenant-a": process.env.EPER_PAYMENT_API_TOKEN })]) {
+      if (mapping === undefined) delete process.env.EPER_PAYMENT_TENANT_TOKENS;
+      else process.env.EPER_PAYMENT_TENANT_TOKENS = mapping;
+      await withServer(createAppServer(serverOptions), async (base) => {
+        const response = await fetch(`${base}/readyz/payments`);
+        assert.equal(response.status, 503);
+        const body = await response.json();
+        assert.equal(body.status, "blocked");
+        assert.deepEqual(body.blockers, ["tenant_identity_unconfigured"]);
+      });
+    }
   } finally {
     for (const key of keys) {
       if (prior[key] === undefined) delete process.env[key];
