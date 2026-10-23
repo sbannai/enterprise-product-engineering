@@ -40,6 +40,13 @@ ORDER BY created_at, id;
 
 The result must be empty before the flow is enabled. For any returned order, reconcile it with the authoritative invoice/fee source and gateway state; cancel/drain only after reconciliation, and do not delete payment history. If a gateway charge may already have occurred, use a controlled reconciliation path rather than cancelling blindly. The application intentionally fails closed when the trusted snapshot is missing; this is safer than issuing a receipt from unverified mutable data, but it requires this rollout gate to avoid stranding a charged customer.
 
+## Concession presentation and amount controls
+
+- The trusted transaction snapshot supports a distinct `CONCESSION` adjustment. The authoritative fee/invoice source must supply the approved concession description and signed amount; the browser cannot set or change it.
+- Concessions are represented as negative integer minor units, included in the reconciled payable total, and preserved in the immutable order-time snapshot.
+- Receipt PDFs render this adjustment as `Concession: <description> -<amount>`, distinct from generic promotional discounts. The displayed concession is informational evidence of the source-approved adjustment; this layer does not itself grant or approve concessions.
+- The source must enforce concession eligibility, authorization, approver identity, effective period, and audit history. Until that authority is wired, do not treat a receipt label as proof of business approval.
+
 ## Configuration and approvals still outstanding
 
 - Configure `EPER_PAYMENT_RECEIPT_NUMBER_PREFIX` only after the owner/business authority approves the receipt-numbering policy. No default policy is invented; capture fails closed if numbering policy is unconfigured.
