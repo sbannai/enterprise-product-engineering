@@ -31,6 +31,27 @@
 | PAY-UAT-11 | Receipt immutability and download integrity | Repeated download returns same bytes/digest; public receipt ID differs from transaction public ID | Transaction ID, receipt ID, SHA-256 digest for each download, equality result | NOT RUN |
 | PAY-UAT-12 | Legacy pre-migration order with NULL transaction snapshot / migration-007 gate | Before enabling payment flow, read-only eligible-row query returns zero rows, or each row is reconciled safely; never synthesize/backfill from mutable data or cancel a possibly charged order blindly | Sanitized row count and reviewer, reconciliation references for any rows, approved disposition; never include customer details | NOT RUN |
 
+
+## Automated coverage crosswalk (CI evidence only)
+
+The following repository tests provide pre-UAT technical coverage. **They do not change the live execution status above** and do not replace execution against the authorized non-production deployment.
+
+| Case | Existing automated coverage | Coverage interpretation |
+|---|---|---|
+| PAY-UAT-01 General invoice | `payment-gateway.test.mjs`; `invoice-amount-authority.test.mjs`; `postgres-payment-api-route.test.mjs` | Partial — synthetic authority and gateway integration; live authority configuration remains unverified |
+| PAY-UAT-02 Multi-item checkout | `transaction-receipt-contract.test.mjs`; `payment-gateway.test.mjs` (“receipt PDF paginates long checkout snapshots…”) | Partial — line-item/adjustment validation and PDF rendering; real checkout integration remains unverified |
+| PAY-UAT-03 Captured webhook | `payment-gateway.test.mjs`; `postgres-payment-store.integration.test.mjs` | Covered in automated tests; live Razorpay webhook delivery/signature configuration remains unverified |
+| PAY-UAT-04 `/verify` | `payment-gateway.test.mjs` | Covered in synthetic gateway tests; live gateway credentials and deployment remain unverified |
+| PAY-UAT-05 Amount/currency mismatch | `payment-gateway.test.mjs`; `transaction-receipt-contract.test.mjs` | Covered in automated negative tests; live response/evidence remains outstanding |
+| PAY-UAT-06 Wrong tenant | `payment-gateway.test.mjs`; `invoice-amount-authority.test.mjs`; `transaction-receipt-contract.test.mjs` | Covered in automated tenant-scope tests; live tenant configuration remains unverified |
+| PAY-UAT-07 Non-payable/missing source | `invoice-amount-authority.test.mjs`; `transaction-receipt-contract.test.mjs` | Covered in automated fail-closed tests; live authority behavior remains unverified |
+| PAY-UAT-08 Authority outage/malformed response | `http-transaction-snapshot-source.test.mjs`; `invoice-amount-authority.test.mjs` | Covered in adapter/unit tests; live endpoint availability and credentials remain unverified |
+| PAY-UAT-09 Invalid webhook signature | `payment-gateway.test.mjs` | Covered in synthetic signature test; deployed webhook secret remains unverified |
+| PAY-UAT-10 Duplicate/conflicting replay | `payment-gateway.test.mjs`; `postgres-payment-store.test.mjs` | Covered in idempotency and event-conflict tests; live provider replay remains unverified |
+| PAY-UAT-11 Receipt immutability/digest | `payment-gateway.test.mjs`; `postgres-payment-store.integration.test.mjs` | Covered in persisted-byte/digest tests; live download evidence remains outstanding |
+| PAY-UAT-12 Legacy NULL-snapshot gate | `postgres-payment-store.integration.test.mjs` covers migrations and snapshot immutability | **Not covered end-to-end** — still requires the read-only query on the authorized target database and sanitized evidence |
+
+
 ## Release gate
 
 Do not enable payment flow in the target environment until all of the following are true:
