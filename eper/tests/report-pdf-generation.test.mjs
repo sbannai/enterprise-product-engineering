@@ -72,7 +72,10 @@ test("splits oversized rows without dropping their first or final content",()=>{
   assertPdfXref(pdf);
 });
 
-test("rejects inherited font-map property names instead of generating invalid font resources",()=>{
-  assert.throws(()=>generatePdfReport(base,{...theme,fontFamily:"constructor"}),/REPORT_THEME_FONT_INVALID/);
-  assert.throws(()=>generatePdfReport(base,{...theme,fontFamily:"toString"}),/REPORT_THEME_FONT_INVALID/);
+test("falls back safely for font names that collide with inherited object properties",()=>{
+  for(const fontFamily of ["constructor","toString"]){
+    const pdf=pdfText(generatePdfReport(base,{...theme,fontFamily}));
+    assert.match(pdf,/\/BaseFont \/Helvetica\b/);
+    assert.doesNotMatch(pdf,/\/BaseFont \/undefined\b/);
+  }
 });
