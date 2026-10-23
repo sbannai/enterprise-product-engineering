@@ -119,3 +119,12 @@ test("treats inherited row properties as empty PDF cells",()=>{
   assert.ok(pdf.includes(hexAscii("Constructor")));
   assert.ok(pdf.includes(hexAscii("To String")));
 });
+
+test("preserves an own __proto__ cell through PDF row pagination",()=>{
+  const row=Object.create(null);
+  Object.defineProperty(row,"__proto__",{value:"PROTO-CELL-VALUE",enumerable:true,writable:true,configurable:true});
+  const document={...base,columns:[{key:"__proto__",label:"Prototype Cell"}],rows:[row]};
+  const pdf=pdfText(generatePdfReport(document,theme));
+  assert.ok(pdf.includes(hexAscii("PROTO-CELL-VALUE")),"own __proto__ cell must survive pagination and rendering");
+  assert.ok(pdf.includes(hexAscii("Prototype Cell")));
+});
