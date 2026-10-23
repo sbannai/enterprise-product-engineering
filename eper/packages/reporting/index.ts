@@ -23,7 +23,7 @@ function validateTheme(theme: ReportTheme): void {
 function assertDocument(d: ReportDocument): void {
   if (!d.tenantId.trim() || !d.reportId.trim() || !d.title.trim()) throw new Error("REPORT_DOCUMENT_CONTEXT_REQUIRED");
   if (!Number.isFinite(Date.parse(d.generatedAt))) throw new Error("REPORT_GENERATED_AT_INVALID");
-  if (!d.sourceRequirementIds.length) throw new Error("REPORT_PROVENANCE_REQUIRED");
+  if (!d.sourceRequirementIds.length || d.sourceRequirementIds.some(id => typeof id !== "string" || !id.trim())) throw new Error("REPORT_PROVENANCE_REQUIRED");
   if (!d.columns.length) throw new Error("REPORT_COLUMNS_REQUIRED");
   const keys=new Set<string>();
   for (const c of d.columns) { if (!c.key.trim() || !c.label.trim() || keys.has(c.key)) throw new Error("REPORT_COLUMNS_INVALID"); keys.add(c.key); }
