@@ -6,7 +6,8 @@ const base={tenantId:"tenant-a",reportId:"payments-summary",title:"Payment Summa
 const theme={organizationName:"Café Example",logoUrl:"https://assets.example.test/logo.svg",primaryColor:"#123456",accentColor:"#eef3f8",textColor:"#172033",backgroundColor:"#ffffff",fontFamily:"Arial",footerText:"Confidential — €"};
 
 function pdfText(bytes){return new TextDecoder("latin1").decode(bytes);}
-function hexAscii(s){return Array.from(s).map(c=>c.charCodeAt(0).toString(16).padStart(2,"0")).join("").toUpperCase();}
+const winAnsiSpecial={"€":0x80,"‚":0x82,"ƒ":0x83,"„":0x84,"…":0x85,"†":0x86,"‡":0x87,"ˆ":0x88,"‰":0x89,"Š":0x8a,"‹":0x8b,"Œ":0x8c,"Ž":0x8e,"‘":0x91,"’":0x92,"“":0x93,"”":0x94,"•":0x95,"–":0x96,"—":0x97,"˜":0x98,"™":0x99,"š":0x9a,"›":0x9b,"œ":0x9c,"ž":0x9e,"Ÿ":0x9f};
+function hexAscii(s){return Array.from(s).map(c=>(winAnsiSpecial[c]??c.charCodeAt(0)).toString(16).padStart(2,"0")).join("").toUpperCase();}
 function assertPdfXref(pdf){
   const start=Number(pdf.match(/startxref\n(\d+)\n%%EOF/)?.[1]);
   assert.ok(Number.isFinite(start)&&pdf.slice(start,start+5)==="xref\n","xref offset must point to xref table");
