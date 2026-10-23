@@ -141,7 +141,9 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     assert.equal(duplicateCapture.status, 200);
     assert.equal((await duplicateCapture.json()).received, true);
 
-    // Production ignores a tampered client amount and uses the trusted invoice amount.
+    // The JSON-backed base implementation must fail closed in production,
+    // even when trusted invoice authority is configured. PR #168 adds the durable store
+    // but retains the separate production readiness guard until authorized review.
     process.env.NODE_ENV = "production";
     const productionOrder = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers,
@@ -150,13 +152,11 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
         amountPaise: 1, currency: "INR",
       }),
     });
-    assert.equal(productionOrder.status, 201);
-    const productionOrderBody = await productionOrder.json();
-    assert.equal(productionOrderBody.payment.amountPaise, 5000);
-    assert.equal(productionOrderBody.payment.currency, "INR");
-    assert.equal(productionOrderBody.payment.razorpayOrderId, "order_test_002");
+    assert.equal(productionOrder.status, 503);
+    assert.equal((await productionOrder.json()).error, "payment_persistence_not_production_ready");
 
-    // Without a wired trusted source, production order creation must fail closed.
+    // Independently verify that missing invoice authority fails closed outside production.
+    process.env.NODE_ENV = "test";
     const unconfiguredServer = createAppServer();
     try {
       await new Promise((resolve, reject) => {
@@ -174,7 +174,6 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     } finally {
       await new Promise((resolve) => unconfiguredServer.close(resolve));
     }
-    process.env.NODE_ENV = "test";
 
     const badSignature = await nativeFetch(`${base}/api/payments/verify`, {
       method: "POST", headers,
