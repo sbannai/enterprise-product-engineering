@@ -1,3 +1,4 @@
+import { isValidIsoTimestamp } from "./transaction-receipt-contract.js";
 import type {
   TransactionSnapshotLookup,
   TrustedTransactionSnapshot,
@@ -9,6 +10,67 @@ export interface HttpTransactionAuthorityConfig {
   bearerToken: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+const isNonEmptyText = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+const isSafeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value);
+const transactionKinds = new Set(["ECOMMERCE", "GENERAL"]);
+const transactionStatuses = new Set(["DUE", "PARTIALLY_PAID", "PAID", "VOID", "CANCELLED"]);
+const adjustmentKinds = new Set(["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"]);
+
+/** Validate untrusted HTTP JSON before exposing it as a trusted snapshot. */
+function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransactionSnapshot {
+  if (!isRecord(value)) return false;
+  if (
+    !isNonEmptyText(value.tenantId) || !isNonEmptyText(value.reference) ||
+    (typeof value.kind !== "string" || !transactionKinds.has(value.kind)) || !isNonEmptyText(value.description) ||
+    !isSafeInteger(value.amountDueMinor) || value.amountDueMinor <= 0 ||
+    value.currency !== "INR" || (typeof value.status !== "string" || !transactionStatuses.has(value.status)) ||
+    !isNonEmptyText(value.sourceId) || !isNonEmptyText(value.sourceVersion) ||
+    !isValidIsoTimestamp(value.approvedAt) ||
+    !Array.isArray(value.lineItems) || !Array.isArray(value.adjustments)
+  ) return false;
+
+  for (const item of value.lineItems) {
+    if (!isRecord(item) ||
+      !isNonEmptyText(item.sourceLineId) || !isNonEmptyText(item.description) ||
+      (item.sku !== undefined && typeof item.sku !== "string") ||
+      !isSafeInteger(item.quantity) || item.quantity <= 0 ||
+      !isSafeInteger(item.unitPriceMinor) || item.unitPriceMinor < 0 ||
+      !isSafeInteger(item.lineTotalMinor) || item.lineTotalMinor < 0 ||
+      !Number.isSafeInteger(item.quantity * item.unitPriceMinor) ||
+      item.lineTotalMinor !== item.quantity * item.unitPriceMinor
+    ) return false;
+  }
+  for (const adjustment of value.adjustments) {
+    if (!isRecord(adjustment) ||
+      (typeof adjustment.kind !== "string" || !adjustmentKinds.has(adjustment.kind)) ||
+      !isNonEmptyText(adjustment.description) ||
+      !isSafeInteger(adjustment.amountMinor) ||
+      (adjustment.kind === "DISCOUNT" && adjustment.amountMinor >= 0)
+    ) return false;
+  }
+  if (value.kind === "ECOMMERCE" && value.lineItems.length === 0) return false;
+
+  // Match the shared transaction contract at the boundary: any supplied line and
+  // adjustment detail must reconcile to the authoritative amount without overflow.
+  const summaryOnlyGeneral =
+    value.kind === "GENERAL" &&
+    value.lineItems.length === 0 &&
+    value.adjustments.length === 0;
+  if (!summaryOnlyGeneral) {
+    const lineTotal = value.lineItems.reduce((sum, item) => sum + (item as Record<string, unknown>).lineTotalMinor as number, 0);
+    const adjustmentsTotal = value.adjustments.reduce((sum, item) => sum + (item as Record<string, unknown>).amountMinor as number, 0);
+    const computedTotal = lineTotal + adjustmentsTotal;
+    if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(adjustmentsTotal) ||
+        !Number.isSafeInteger(computedTotal) || computedTotal <= 0 ||
+        computedTotal !== value.amountDueMinor) return false;
+  }
+  return true;
 }
 
 /**
@@ -98,10 +160,12 @@ export class HttpTransactionSnapshotSource implements TrustedTransactionSnapshot
     } catch {
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID");
     }
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
+    if (!isTrustedTransactionSnapshot(value) ||
+        value.tenantId !== input.tenantId ||
+        value.reference !== input.reference) {
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID");
     }
-    return value as TrustedTransactionSnapshot;
+    return value;
   }
 }
 
