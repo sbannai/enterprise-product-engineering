@@ -12,6 +12,16 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
       if (sql.includes("WHERE tenant_id = $1 AND invoice_reference = $2") && sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")) {
         return { rows: activeInvoiceOrder ? [activeInvoiceOrder] : [], rowCount: activeInvoiceOrder ? 1 : 0 };
       }
+      if (sql.includes("SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency") &&
+          sql.includes("WHERE tenant_id = $1 AND idempotency_key = $2")) {
+        return { rows: orderInsertConflict ? [{
+          id: 41, transaction_public_id: "txn-public-41", provider_order_id: null,
+          invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
+          invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
+          invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "failed",
+          creation_lease_until: null, last_creation_error: "gateway_rejected",
+        }] : [], rowCount: orderInsertConflict ? 1 : 0 };
+      }
       if (sql.includes("UPDATE eper_payment_orders") && sql.includes("status = 'failed'")) {
         return { rows: [{ id: 41 }], rowCount: 1 };
       }
@@ -451,5 +461,21 @@ test("releaseOrderCreationAfterRejection releases only an uncompleted reservatio
   assert.match(update.sql, /status = 'creating'/);
   assert.match(update.sql, /provider_order_id IS NULL/);
   assert.deepEqual(update.values, ["tenant-a", "idem-rejected-41"]);
+  assert.equal(fake.calls.at(-1).sql, "COMMIT");
+});
+
+
+test("reserveOrder safely re-arms the same idempotency key after a definitive gateway rejection", async () => {
+  const fake = makePool({ orderInsertConflict: true });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.reserveOrder({
+    tenantId: "tenant-a", invoiceReference: "invoice-41",
+    idempotencyKey: "idem-rejected-41", amountMinor: 12500, currency: "INR",
+    invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
+    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
+  });
+  assert.deepEqual(result, { ok: true, value: { id: "41", transactionPublicId: "txn-public-41", providerOrderId: null } });
+  const restart = fake.calls.find(({ sql }) => sql.includes("SET status = 'creating'") && sql.includes("last_creation_error = 'gateway_rejected'"));
+  assert.ok(restart, "only a recorded definitive rejection may re-arm the reservation");
   assert.equal(fake.calls.at(-1).sql, "COMMIT");
 });
