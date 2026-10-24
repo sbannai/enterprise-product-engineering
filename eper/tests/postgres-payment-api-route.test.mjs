@@ -29,6 +29,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let gatewayVerificationCalls = 0;
   let gatewayOrderStatus = 200;
   let gatewayOrderNetworkFailure = false;
+  let gatewayOrderMalformedResponse = false;
   let rejectedReservationReleaseCalls = 0;
   let persistedPdf = null;
   let order = {
@@ -54,6 +55,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
       if (gatewayOrderNetworkFailure) throw new Error("simulated connection reset");
+      if (gatewayOrderMalformedResponse) return new Response("{not-json", {
+        status: 200, headers: { "content-type": "application/json" },
+      });
       return new Response(JSON.stringify(gatewayOrderStatus >= 200 && gatewayOrderStatus < 300
         ? { id: providerOrderId }
         : { error: { code: "BAD_REQUEST_ERROR", description: "definitive rejection" } }), {
@@ -175,6 +179,26 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(rejectedReservationReleaseCalls, 1, "ambiguous network outcome must not release the reservation");
 
     gatewayOrderNetworkFailure = false;
+    gatewayOrderStatus = 503;
+    const serverErrorOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-idem-server-error" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(serverErrorOrder.status, 503);
+    assert.equal((await serverErrorOrder.json()).error, "gateway_order_creation_outcome_unknown");
+    assert.equal(rejectedReservationReleaseCalls, 1, "provider 5xx must retain reservation for reconciliation");
+
+    gatewayOrderStatus = 200;
+    gatewayOrderMalformedResponse = true;
+    const malformedOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-idem-malformed" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(malformedOrder.status, 502);
+    assert.equal((await malformedOrder.json()).error, "gateway_order_response_invalid");
+    assert.equal(rejectedReservationReleaseCalls, 1, "malformed response must retain reservation for reconciliation");
+
+    gatewayOrderMalformedResponse = false;
     gatewayOrderStatus = 200;
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
