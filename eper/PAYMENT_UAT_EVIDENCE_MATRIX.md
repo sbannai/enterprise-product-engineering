@@ -17,7 +17,7 @@
 ## 12-case execution matrix
 
 | Case | Scenario | Expected result | Evidence to capture (sanitized) | Primary execution owner | Support role | Status |
-|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | PAY-UAT-01 | General invoice: valid payable invoice, correct tenant and amount | Gateway order created from trusted invoice amount; immutable transaction snapshot persisted | Build SHA, test invoice reference alias, amount/currency, transaction public ID, provider order ID suffix, snapshot persistence assertion | Developer | Tester captures evidence | NOT RUN |
 | PAY-UAT-02 | E-commerce checkout with multiple cart items | Order and receipt retain itemized line descriptions, quantities, unit amounts, adjustments, and correct total | Synthetic cart ID, line count, computed total, transaction ID, receipt ID | Developer | Tester validates itemized receipt | NOT RUN |
 | PAY-UAT-03 | Valid captured payment through signed webhook | Exactly one captured transaction and receipt; tenant scope and order snapshot preserved | Event ID hash, transaction ID, receipt ID/number, PDF digest | Tester | Support confirms webhook delivery/logs | NOT RUN |
