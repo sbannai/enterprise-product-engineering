@@ -25,6 +25,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let gatewayOrderStatus = 200;
   let gatewayOrderError = "definitive_rejection";
   let releasedRejectedReservations = 0;
+  let reservationFailureReason = null;
   let transactionSourceCalls = 0;
   const reservationKeys = [];
   let webhookCaptureCalls = 0;
@@ -78,6 +79,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
 
   const paymentStore = {
     async reserveOrder(input) {
+      if (reservationFailureReason) return { ok: false, reason: reservationFailureReason };
       reservationKeys.push(input.idempotencyKey);
       // Model the immutable snapshot persisted with the order reservation.
       order = { ...order, transactionSnapshot: structuredClone(input.transactionSnapshot) };
@@ -287,6 +289,19 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(releasedRejectedReservations, 2);
     gatewayOrderStatus = 200;
 
+    // Invoice-level conflicts are expected client conflicts, not server errors.
+    for (const reason of ["invoice_payment_conflict", "invoice_already_paid"]) {
+      reservationFailureReason = reason;
+      const conflict = await nativeFetch(`${base}/api/payments/orders`, {
+        method: "POST", headers: { ...headers, "idempotency-key": `route-conflict-${reason}` },
+        body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+      });
+      assert.equal(conflict.status, 409, `${reason} must map to HTTP 409`);
+      assert.deepEqual(await conflict.json(), { error: reason });
+    }
+    reservationFailureReason = null;
+    // The conflict probes consult trusted authorities but do not reserve an order.
+
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-rejected-001" },
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
@@ -298,7 +313,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
-    assert.equal(transactionSourceCalls, 4, "each order attempt captures one authoritative snapshot");
+    assert.equal(transactionSourceCalls, 6, "all six order attempts use an authoritative snapshot, including invoice conflict probes");
     // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
     transactionSourceStatus = "PAID";
 
@@ -468,7 +483,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(duplicateBody.receiptId, receiptPublicId);
     assert.equal(duplicateBody.receiptNumber, receiptNumber);
     assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
-    assert.equal(transactionSourceCalls, 4, "four attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
+    assert.equal(transactionSourceCalls, 6, "six attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
 
     // Changing the unsigned event-id header must not bypass replay deduplication.
     const changedHeaderReplay = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {

@@ -36,7 +36,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
 
 function bearerMatches(request: IncomingMessage, expected: string): boolean {
   const header = request.headers.authorization ?? "";
-  const match = /^Bearer (.+)$/.exec(header);
+  const match = /^Bearer (.+)$/i.exec(header);
   if (!match) return false;
   const provided = Buffer.from(match[1], "utf8");
   const secret = Buffer.from(expected, "utf8");
