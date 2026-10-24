@@ -5,12 +5,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../dist/apps/api/server.js";
+import { receiptPdf } from "../dist/apps/api/payments.js";
 
 test("Razorpay payment routes fail closed on bad signatures and scope receipts by tenant", async () => {
   const dir = await mkdtemp(join(tmpdir(), "eper-payment-test-"));
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE",
     "EPER_PAYMENT_ALLOW_CLIENT_AMOUNT", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
@@ -32,6 +33,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     RAZORPAY_KEY_SECRET: secret,
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
     EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "payments.json"),
     EPER_PAYMENT_ALLOW_CLIENT_AMOUNT: "true",
     NODE_ENV: "test",
@@ -66,7 +68,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
       };
     },
   };
-  const server = createAppServer({ invoiceAmountSource });
+  const server = createAppServer({ invoiceAmountSource, allowLegacyPaymentLedgerForTests: true });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -162,7 +164,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     // Keep the isolated missing-invoice-source check independent of the production persistence guard.
     process.env.NODE_ENV = "test";
     // Without a wired trusted source, order creation must fail closed.
-    const unconfiguredServer = createAppServer();
+    const unconfiguredServer = createAppServer({ allowLegacyPaymentLedgerForTests: true });
     try {
       await new Promise((resolve, reject) => {
         unconfiguredServer.once("error", reject);
@@ -255,7 +257,7 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
   const dir = await mkdtemp(join(tmpdir(), "eper-payment-pg-route-"));
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -269,7 +271,8 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "razorpay-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
@@ -314,7 +317,22 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
       } : null;
     },
   };
-  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
+        return {
+          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [], adjustments: [],
+          sourceId: "test-fee-ledger", sourceVersion: "v1",
+          approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -357,7 +375,7 @@ test("PostgreSQL-backed order route does not create a second gateway order after
   const dir = await mkdtemp(join(tmpdir(), "eper-payment-pg-timeout-"));
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -369,7 +387,8 @@ test("PostgreSQL-backed order route does not create a second gateway order after
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "razorpay-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
@@ -402,7 +421,22 @@ test("PostgreSQL-backed order route does not create a second gateway order after
       } : null;
     },
   };
-  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
+        return {
+          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [], adjustments: [],
+          sourceId: "test-fee-ledger", sourceVersion: "v1",
+          approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -445,7 +479,7 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
   const dir = await mkdtemp(join(tmpdir(), "eper-payment-pg-persist-failure-"));
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -458,7 +492,8 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "razorpay-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
@@ -496,7 +531,22 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
       } : null;
     },
   };
-  const server = createAppServer({ invoiceAmountSource, paymentStore });
+  const server = createAppServer({
+    invoiceAmountSource,
+    paymentStore,
+    transactionSnapshotSource: {
+      async findTransaction({ tenantId, reference }) {
+        if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
+        return {
+          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          amountDueMinor: 12500, currency: "INR", status: "DUE",
+          lineItems: [], adjustments: [],
+          sourceId: "test-fee-ledger", sourceVersion: "v1",
+          approvedAt: "2026-10-20T12:00:00.000Z",
+        };
+      },
+    },
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -540,7 +590,7 @@ test("PostgreSQL order creation fails closed without an authoritative invoice so
   const dir = await mkdtemp(join(tmpdir(), "eper-payment-no-invoice-source-"));
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -552,7 +602,8 @@ test("PostgreSQL order creation fails closed without an authoritative invoice so
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "test-secret",
     RAZORPAY_WEBHOOK_SECRET: "test-webhook-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-no-invoice-source": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "unused-ledger.json"),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
@@ -608,7 +659,7 @@ test("PostgreSQL order creation fails closed without an authoritative invoice so
 test("PostgreSQL receipt download fails closed when persisted PDF digest does not match", async () => {
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const token = "receipt-integrity-test-token".padEnd(40, "x");
@@ -618,7 +669,8 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "gateway-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
   });
@@ -657,8 +709,8 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     const crossTenant = await fetch(base, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-b" },
     });
-    assert.equal(crossTenant.status, 404);
-    assert.deepEqual(await crossTenant.json(), { error: "receipt_not_found" });
+    assert.equal(crossTenant.status, 403);
+    assert.deepEqual(await crossTenant.json(), { error: "tenant_scope_mismatch" });
     assert.equal(orderLookups, 0, "cross-tenant receipt requests must not reach order lookup");
 
     const response = await fetch(base, {
@@ -679,11 +731,17 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
 test("PostgreSQL receipt download persists PDF once and serves identical bytes on retries", async () => {
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const token = "receipt-stability-test-token".padEnd(40, "x");
   const receiptPublicId = "f6e51a2e-80de-45e6-ae93-f10a46f3b6e9";
+  const transactionSnapshot = {
+    tenantId: "tenant-a", reference: "INV-41", kind: "GENERAL",
+    description: "Receipt stability test", amountDueMinor: 12500, currency: "INR",
+    status: "DUE", lineItems: [], adjustments: [], sourceId: "test-authority",
+    sourceVersion: "v1", approvedAt: "2026-10-21T06:00:00.000Z",
+  };
   let persistedPdf = null;
   let persistedDigest = null;
   let persistCalls = 0;
@@ -691,7 +749,8 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "gateway-test-secret",
     RAZORPAY_WEBHOOK_SECRET: "webhook-test-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
   });
@@ -700,7 +759,7 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
       if (tenantId !== "tenant-a" || requestedId !== receiptPublicId) return null;
       return {
         receiptPublicId, orderId: "41", receiptNumber: "APPROVED-RECEIPT-00041",
-        documentSha256: persistedDigest, documentPdf: persistedPdf,
+        transactionSnapshot, documentSha256: persistedDigest, documentPdf: persistedPdf,
         issuedAt: "2026-10-21T07:00:00.000Z",
       };
     },
@@ -761,4 +820,106 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+
+
+test("receipt PDF paginates long checkout snapshots without dropping items or adjustments", () => {
+  const lineItems = Array.from({ length: 40 }, (_, index) => ({
+    sourceLineId: `line-${index + 1}`,
+    description: `Product ${String(index + 1).padStart(2, "0")}`,
+    sku: `SKU-${index + 1}`,
+    quantity: 1,
+    unitPriceMinor: 100,
+    lineTotalMinor: 100,
+  }));
+  const record = {
+    id: "transaction-public-unique-id",
+    tenantId: "tenant-a",
+    reference: "CART-LONG-001",
+    invoiceSourceId: "invoice-authority",
+    invoiceSourceVersion: "v12",
+    invoiceApprovedAt: "2026-10-21T10:00:00.000Z",
+    amountPaise: 3900,
+    currency: "INR",
+    status: "PAID",
+    razorpayOrderId: "order-long-001",
+    razorpayPaymentId: "pay-long-001",
+    receiptNumber: "TEST-RECEIPT-0001",
+    receiptId: "receipt-public-unique-id",
+    createdAt: "2026-10-21T10:00:00.000Z",
+    paidAt: "2026-10-21T10:01:00.000Z",
+    transactionSnapshot: {
+      tenantId: "tenant-a",
+      reference: "CART-LONG-001",
+      kind: "ECOMMERCE",
+      description: "Long multi-item checkout",
+      amountDueMinor: 3900,
+      currency: "INR",
+      status: "DUE",
+      lineItems,
+      adjustments: [
+        { kind: "DISCOUNT", description: "Cart promotion", amountMinor: -200 },
+        { kind: "CONCESSION", description: "Approved tuition concession", amountMinor: -300 },
+        { kind: "TAX", description: "Tax", amountMinor: 100 },
+      ],
+      sourceId: "checkout-service",
+      sourceVersion: "cart-v12",
+      approvedAt: "2026-10-21T10:00:00.000Z",
+    },
+  };
+
+  const first = receiptPdf(record);
+  const second = receiptPdf(record);
+  const pdfText = first.toString("ascii");
+  const pageCount = (pdfText.match(/\/Type \/Page\b/g) ?? []).length;
+  assert.ok(pageCount >= 2, `expected multiple PDF pages, got ${pageCount}`);
+  for (const item of lineItems) {
+    assert.ok(pdfText.includes(`Item: ${item.description}`), `missing receipt line for ${item.description}`);
+  }
+  assert.ok(pdfText.includes("Adjustment: DISCOUNT Cart promotion -2.00"));
+  assert.ok(pdfText.includes("Concession: Approved tuition concession -3.00"), "approved concession must be labelled clearly on the receipt");
+  assert.ok(pdfText.includes("Adjustment: TAX Tax 1.00"));
+  assert.ok(pdfText.includes("Transaction ID: transaction-public-unique-id"));
+  assert.ok(pdfText.includes("Receipt ID: receipt-public-unique-id"));
+  assert.deepEqual(second, first, "same persisted receipt metadata must render byte-identical PDF bytes");
+  assert.equal(createHash("sha256").update(second).digest("hex"), createHash("sha256").update(first).digest("hex"));
+
+  // A single unusually long product description must wrap across rendered
+  // lines without losing characters or overflowing a page.
+  const longDescription = "LongProductDescription-".repeat(12);
+  const longRecord = {
+    ...record,
+    transactionSnapshot: {
+      ...record.transactionSnapshot,
+      lineItems: [
+        { ...lineItems[0], description: longDescription },
+        ...lineItems.slice(1),
+      ],
+    },
+  };
+  const longPdfText = receiptPdf(longRecord).toString("ascii");
+  const extractTextOperands = (pdfText) => [...pdfText.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)]
+    .map((match) => match[1].replace(/\\([\\()])/g, "$1"));
+  const renderedText = extractTextOperands(longPdfText).join("");
+  assert.ok(renderedText.includes(longDescription), "long product description must survive wrapping");
+
+  // Wide glyphs must wrap by measured Helvetica width, not a fixed character count.
+  const wideDescription = "W".repeat(180);
+  const wideRecord = {
+    ...record,
+    transactionSnapshot: {
+      ...record.transactionSnapshot,
+      lineItems: [{ ...lineItems[0], description: wideDescription }],
+    },
+  };
+  const widePdf = receiptPdf(wideRecord).toString("ascii");
+  const wideOperands = extractTextOperands(widePdf);
+  assert.ok(wideOperands.join("").includes(wideDescription), "wide-glyph content must not be lost");
+  for (const operand of wideOperands) {
+    assert.ok(
+      (operand.match(/W/g) ?? []).length <= 52,
+      "no 10pt receipt text operand may contain more than 52 Helvetica W glyphs",
+    );
+  }
+  assert.deepEqual(receiptPdf(wideRecord), receiptPdf(wideRecord), "wide-glyph PDF output must be deterministic");
 });

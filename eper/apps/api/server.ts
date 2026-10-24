@@ -2,10 +2,11 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
-import { handlePaymentRoute } from "./payments.js";
+import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import type { TrustedReceiptNumberSource } from "./payments.js";
+import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -62,7 +63,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -81,9 +82,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
     if (request.method === "GET" && requestUrl.pathname === "/readyz/payments") {
-      // Dedicated subsystem readiness is intentionally separate from /health:
-      // capability API health must not imply payment readiness, and payment
-      // blockers must not expose configuration values or secret material.
+      // Payment readiness is independent of general API health and never exposes secrets.
       const blockers: string[] = [];
       if (process.env.EPER_PAYMENT_PERSISTENCE !== "postgres" || !options.paymentStore) {
         blockers.push("durable_postgres_payment_store_unavailable");
@@ -102,16 +101,23 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (typeof options.receiptNumberSource !== "function") {
         blockers.push("receipt_numbering_policy_unconfigured");
       }
-      // Verify the schema separately from simple network connectivity. Older test doubles
-      // may not expose this method; the real PostgresPaymentStore does.
-      if (options.paymentStore && typeof (options.paymentStore as PostgresPaymentStore & { checkSchema?: () => Promise<boolean> }).checkSchema === "function") {
+      if (!options.transactionSnapshotSource || typeof options.transactionSnapshotSource.findTransaction !== "function") {
+        blockers.push("trusted_transaction_authority_unavailable");
+      }
+      // Schema readiness is distinct from SELECT 1 connectivity. The real store checks
+      // the immutable snapshot columns required by the payment/receipt contract.
+      const schemaStore = options.paymentStore as (PostgresPaymentStore & { checkSchema?: () => Promise<boolean> }) | undefined;
+      if (schemaStore && typeof schemaStore.checkSchema === "function") {
         try {
-          if (!(await (options.paymentStore as PostgresPaymentStore & { checkSchema: () => Promise<boolean> }).checkSchema())) {
-            blockers.push("postgres_payment_schema_unavailable");
-          }
+          if (!(await schemaStore.checkSchema())) blockers.push("postgres_payment_schema_unavailable");
         } catch {
           blockers.push("postgres_payment_schema_unavailable");
         }
+      }
+      if (blockers.length === 0 && process.env.NODE_ENV !== "production" &&
+          process.env.EPER_PAYMENT_PERSISTENCE === "postgres" &&
+          !paymentTenantIdentityConfigured()) {
+        blockers.push("tenant_identity_unconfigured");
       }
       if (blockers.length === 0 && process.env.NODE_ENV !== "production") {
         const gatewayConfigured = Boolean(
@@ -134,10 +140,10 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
-    // Catch rejected async payment operations at the HTTP boundary. A rejected
-    // async createServer listener is not automatically converted into an HTTP response.
+    // Catch async payment failures at the HTTP request boundary so a rejected
+    // createServer listener cannot terminate the process or leak internals.
     try {
-      if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
+      if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource, options.transactionSnapshotSource, options.allowLegacyPaymentLedgerForTests === true)) return;
     } catch {
       if (!response.headersSent) sendJson(response, 503, { error: "payment_operation_unavailable" });
       else response.destroy();

@@ -7,7 +7,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main", "feat/theme-customization-report-generation"]
+    branches: ["main", "reconcile/payment-153-168-integration"]
 
 jobs:
   build-and-test:
@@ -39,6 +39,8 @@ jobs:
         run: node --test tests/invoice-amount-authority.test.mjs
       - name: PostgreSQL payment-store integration tests
         run: node --test tests/postgres-payment-store.test.mjs tests/postgres-payment-runtime.test.mjs tests/postgres-payment-api-route.test.mjs tests/postgres-payment-store.integration.test.mjs
+      - name: Generic transaction and receipt contract tests
+        run: node --test tests/transaction-receipt-contract.test.mjs
       - name: UAT preflight regression tests
         run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
       - name: Read-only business UAT readiness audit

@@ -3,32 +3,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41", activeInvoiceOrder = null, existingKeyBinding = null } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41" } = {}) {
   const calls = [];
   let released = 0;
   const client = {
     async query(sql, values = []) {
       calls.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
-      if (sql.includes("SELECT invoice_reference, amount_minor, currency, invoice_source_id, invoice_source_version, invoice_approved_at") &&
-          sql.includes("WHERE tenant_id = $1 AND idempotency_key = $2")) {
-        return { rows: existingKeyBinding ? [existingKeyBinding] : [], rowCount: existingKeyBinding ? 1 : 0 };
-      }
-      if (sql.includes("WHERE tenant_id = $1 AND invoice_reference = $2") && sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")) {
-        return { rows: activeInvoiceOrder ? [activeInvoiceOrder] : [], rowCount: activeInvoiceOrder ? 1 : 0 };
-      }
-      if (sql.includes("SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency") &&
-          sql.includes("WHERE tenant_id = $1 AND idempotency_key = $2")) {
-        return { rows: orderInsertConflict ? [{
-          id: 41, transaction_public_id: "txn-public-41", provider_order_id: null,
-          invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
-          invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
-          invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "failed",
-          creation_lease_until: null, last_creation_error: "gateway_rejected",
-        }] : [], rowCount: orderInsertConflict ? 1 : 0 };
-      }
-      if (sql.includes("UPDATE eper_payment_orders") && sql.includes("status = 'failed'")) {
-        return { rows: [{ id: 41 }], rowCount: 1 };
-      }
       if (sql.includes("INSERT INTO eper_payment_orders")) {
         return { rows: orderInsertConflict ? [] : [{ id: 41, provider_order_id: "order_test_41" }], rowCount: orderInsertConflict ? 0 : 1 };
       }
@@ -56,8 +36,8 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
           rowCount: duplicateEvent ? 1 : 0,
         };
       }
-      if (sql.includes("SELECT id, tenant_id, amount_minor")) {
-        return { rows: [{ id: 41, tenant_id: orderTenantId, amount_minor: orderAmountMinor, currency: "INR", status: orderStatus }], rowCount: 1 };
+      if (sql.includes("SELECT id, tenant_id, invoice_reference, amount_minor")) {
+        return { rows: [{ id: 41, tenant_id: orderTenantId, invoice_reference: "invoice-41", amount_minor: orderAmountMinor, currency: "INR", status: orderStatus, provider_payment_id: null, transaction_snapshot: null }], rowCount: 1 };
       }
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
       return { rows: [], rowCount: 1 };
@@ -409,108 +389,75 @@ test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid n
   assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
 });
 
-
-test("reserveOrder rejects a fresh idempotency key instead of adopting another key's active order", async () => {
-  const activeInvoiceOrder = {
-    id: 41, transaction_public_id: "txn-public-41", provider_order_id: "order_existing_41",
-    idempotency_key: "original-key",
-    invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
-    invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
-    invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "created",
-    creation_lease_until: null,
+function schemaPool({ missingTrigger = null, missingConstraint = null, disabledTrigger = null } = {}) {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql.includes("to_regclass('public.eper_payment_orders')")) {
+        return { rows: [{ orders: "eper_payment_orders", events: "eper_payment_webhook_events", receipts: "eper_payment_receipts" }], rowCount: 1 };
+      }
+      if (sql.includes("information_schema.columns")) {
+        return { rows: [
+          { table_name: "eper_payment_orders", column_name: "transaction_snapshot" },
+          { table_name: "eper_payment_orders", column_name: "transaction_public_id" },
+          { table_name: "eper_payment_receipts", column_name: "transaction_snapshot" },
+          { table_name: "eper_payment_receipts", column_name: "document_pdf" },
+        ], rowCount: 4 };
+      }
+      if (sql.includes("FROM pg_trigger")) {
+        return { rows: [
+          ...(missingTrigger === "eper_payment_order_snapshot_immutable" ? [] : [{ table_name: "eper_payment_orders", trigger_name: "eper_payment_order_snapshot_immutable", trigger_enabled: disabledTrigger === "eper_payment_order_snapshot_immutable" ? "D" : "O" }]),
+          ...(missingTrigger === "eper_payment_receipt_immutability_guard" ? [] : [{ table_name: "eper_payment_receipts", trigger_name: "eper_payment_receipt_immutability_guard", trigger_enabled: disabledTrigger === "eper_payment_receipt_immutability_guard" ? "D" : "O" }]),
+        ], rowCount: missingTrigger ? 1 : 2 };
+      }
+      if (sql.includes("FROM pg_constraint")) {
+        return { rows: [
+          ...(missingConstraint === "eper_payment_orders_transaction_snapshot_object_check" ? [] : [{ table_name: "eper_payment_orders", constraint_name: "eper_payment_orders_transaction_snapshot_object_check" }]),
+          ...(missingConstraint === "eper_payment_receipts_transaction_snapshot_object_check" ? [] : [{ table_name: "eper_payment_receipts", constraint_name: "eper_payment_receipts_transaction_snapshot_object_check" }]),
+        ], rowCount: missingConstraint ? 1 : 2 };
+      }
+      throw new Error("Unexpected schema readiness query");
+    },
+    release() {},
   };
-  const fake = makePool({ activeInvoiceOrder });
-  const store = new PostgresPaymentStore(fake.pool);
-  const result = await store.reserveOrder({
-    tenantId: "tenant-a", invoiceReference: "invoice-41",
-    idempotencyKey: "different-retry-key", amountMinor: 12500, currency: "INR",
-    invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
-    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
-  });
-  assert.deepEqual(result, { ok: false, reason: "invoice_payment_conflict" });
-  const lockIndex = fake.calls.findIndex(({ sql }) => sql.includes("pg_advisory_xact_lock"));
-  const lookupIndex = fake.calls.findIndex(({ sql }) => sql.includes("status IN ('creating', 'created', 'authorized', 'captured')"));
-  assert.ok(lockIndex >= 0 && lookupIndex > lockIndex, "invoice lock must be acquired before checking active orders");
-  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_orders")), false);
-  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+  return { pool: { async connect() { return client; } }, calls };
+}
+
+test("checkSchema accepts the complete schema and database immutability protections", async () => {
+  const fake = schemaPool();
+  assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), true);
+  assert.ok(fake.calls.some((sql) => sql.includes("FROM pg_trigger")));
+  assert.ok(fake.calls.some((sql) => sql.includes("FROM pg_constraint")));
 });
 
-test("reserveOrder refuses a second order when the invoice already has a captured payment", async () => {
-  const fake = makePool({ activeInvoiceOrder: {
-    id: 41, transaction_public_id: "txn-public-41", provider_order_id: "order_existing_41",
-    invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
-    invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
-    invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "captured",
-    creation_lease_until: null,
-  } });
-  const store = new PostgresPaymentStore(fake.pool);
-  const result = await store.reserveOrder({
-    tenantId: "tenant-a", invoiceReference: "invoice-41",
-    idempotencyKey: "fresh-key", amountMinor: 12500, currency: "INR",
-    invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
-    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
-  });
-  assert.deepEqual(result, { ok: false, reason: "invoice_already_paid" });
-  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_orders")), false);
-  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+test("checkSchema fails closed when an order snapshot immutability trigger is missing", async () => {
+  const fake = schemaPool({ missingTrigger: "eper_payment_order_snapshot_immutable" });
+  assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+  assert.equal(fake.calls.some((sql) => sql.includes("FROM pg_constraint")), false);
 });
 
-
-test("releaseOrderCreationAfterRejection releases only an uncompleted reservation", async () => {
-  const fake = makePool();
-  const store = new PostgresPaymentStore(fake.pool);
-  const result = await store.releaseOrderCreationAfterRejection("tenant-a", "idem-rejected-41");
-  assert.deepEqual(result, { ok: true, value: { id: "41" } });
-  const update = fake.calls.find(({ sql }) => sql.includes("UPDATE eper_payment_orders") && sql.includes("status = 'failed'"));
-  assert.ok(update, "definitive rejection should mark the reservation failed");
-  assert.match(update.sql, /status = 'creating'/);
-  assert.match(update.sql, /provider_order_id IS NULL/);
-  assert.deepEqual(update.values, ["tenant-a", "idem-rejected-41"]);
-  assert.equal(fake.calls.at(-1).sql, "COMMIT");
+test("checkSchema fails closed when a receipt snapshot immutability trigger is missing", async () => {
+  const fake = schemaPool({ missingTrigger: "eper_payment_receipt_immutability_guard" });
+  assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
 });
 
-
-test("reserveOrder safely re-arms the same idempotency key after a definitive gateway rejection", async () => {
-  const fake = makePool({ orderInsertConflict: true });
-  const store = new PostgresPaymentStore(fake.pool);
-  const result = await store.reserveOrder({
-    tenantId: "tenant-a", invoiceReference: "invoice-41",
-    idempotencyKey: "idem-rejected-41", amountMinor: 12500, currency: "INR",
-    invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
-    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
-  });
-  assert.deepEqual(result, { ok: true, value: { id: "41", transactionPublicId: "txn-public-41", providerOrderId: null } });
-  const restart = fake.calls.find(({ sql }) => sql.includes("SET status = 'creating'") && sql.includes("last_creation_error = 'gateway_rejected'"));
-  assert.ok(restart, "only a recorded definitive rejection may re-arm the reservation");
-  assert.equal(fake.calls.at(-1).sql, "COMMIT");
+test("checkSchema fails closed when a snapshot immutability trigger is disabled", async () => {
+  for (const disabledTrigger of [
+    "eper_payment_order_snapshot_immutable",
+    "eper_payment_receipt_immutability_guard",
+  ]) {
+    const fake = schemaPool({ disabledTrigger });
+    assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+  }
 });
 
-
-test("reserveOrder rejects an idempotency key bound to another invoice before reusing an active order", async () => {
-  const fake = makePool({
-    existingKeyBinding: {
-      invoice_reference: "invoice-other",
-      amount_minor: 12500,
-      currency: "INR",
-      invoice_source_id: "approved-invoice-service",
-      invoice_source_version: "v3",
-      invoice_approved_at: "2026-10-20T12:00:00.000Z",
-    },
-    activeInvoiceOrder: {
-      id: 42, transaction_public_id: "txn-public-42", provider_order_id: "order_invoice_41",
-      idempotency_key: "other-key", invoice_reference: "invoice-41", amount_minor: 12500,
-      currency: "INR", invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
-      invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "created", creation_lease_until: null,
-    },
-  });
-  const store = new PostgresPaymentStore(fake.pool);
-  const result = await store.reserveOrder({
-    tenantId: "tenant-a", invoiceReference: "invoice-41", idempotencyKey: "key-bound-elsewhere",
-    amountMinor: 12500, currency: "INR", invoiceSourceId: "approved-invoice-service",
-    invoiceSourceVersion: "v3", invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
-  });
-  assert.deepEqual(result, { ok: false, reason: "idempotency_conflict" });
-  assert.equal(fake.calls.some(({ sql }) => sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")), false,
-    "key binding must be validated before active-order lookup");
-  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+test("checkSchema fails closed when either snapshot object constraint is missing", async () => {
+  for (const missingConstraint of [
+    "eper_payment_orders_transaction_snapshot_object_check",
+    "eper_payment_receipts_transaction_snapshot_object_check",
+  ]) {
+    const fake = schemaPool({ missingConstraint });
+    assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+  }
 });

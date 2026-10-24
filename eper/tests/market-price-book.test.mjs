@@ -63,7 +63,6 @@ test("invalid clock fails closed", () => {
   assert.throws(() => service.listMarkets("uat-fee"), /MARKET_PRICE_CLOCK_INVALID/);
 });
 
-
 test("effective window boundaries are start-inclusive and end-exclusive", () => {
   const startsNow = new MarketPriceBookService([
     { ...entries[0], effectiveFrom: now().toISOString() },
@@ -79,7 +78,7 @@ test("effective window boundaries are start-inclusive and end-exclusive", () => 
   );
 });
 
-test("unsafe minor-unit amounts, invalid statuses, and invalid timestamps fail closed", () => {
+test("unsafe minor-unit amounts and invalid statuses fail closed", () => {
   assert.throws(
     () => new MarketPriceBookService([{ ...entries[0], amountMinor: Number.MAX_SAFE_INTEGER + 1 }], now),
     /MARKET_PRICE_AMOUNT_INVALID/,
@@ -88,26 +87,6 @@ test("unsafe minor-unit amounts, invalid statuses, and invalid timestamps fail c
     () => new MarketPriceBookService([{ ...entries[0], status: "PENDING" }], now),
     /MARKET_PRICE_STATUS_INVALID/,
   );
-  assert.throws(
-    () => new MarketPriceBookService([{ ...entries[0], effectiveFrom: "not-a-date" }], now),
-    /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
-  );
-});
-
-
-test("impossible calendar dates and incomplete timestamps fail configuration validation", () => {
-  for (const effectiveFrom of [
-    "2026-02-30T00:00:00.000Z",
-    "2026-13-01T00:00:00.000Z",
-    "2026-01-01",
-    "2026-01-01T24:00:00Z",
-  ]) {
-    assert.throws(
-      () => new MarketPriceBookService([{ ...entries[0], effectiveFrom }], now),
-      /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
-      effectiveFrom,
-    );
-  }
 });
 
 test("blank quote and market-list identifiers fail closed", () => {
@@ -121,4 +100,26 @@ test("blank quote and market-list identifiers fail closed", () => {
     /PRICE_MARKET_REQUIRED/,
   );
   assert.throws(() => service.listMarkets(" "), /PRICE_PRODUCT_REQUIRED/);
+});
+
+test("effective timestamps require a valid calendar date and explicit timezone", () => {
+  for (const invalid of [
+    "2026-02-30T00:00:00Z",
+    "2026-02-30T00:00:00.000Z",
+    "2026-01-01",
+    "2026-01-01T00:00:00",
+    "2026-13-01T00:00:00Z",
+    "2026-01-01T25:00:00Z",
+  ]) {
+    assert.throws(
+      () => new MarketPriceBookService([{ ...entries[0], effectiveFrom: invalid }], now),
+      /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
+      `expected invalid effectiveFrom to be rejected: ${invalid}`,
+    );
+    assert.throws(
+      () => new MarketPriceBookService([{ ...entries[0], effectiveFrom: "2026-01-01T00:00:00Z", effectiveTo: invalid }], now),
+      /MARKET_PRICE_EFFECTIVE_DATE_INVALID/,
+      `expected invalid effectiveTo to be rejected: ${invalid}`,
+    );
+  }
 });

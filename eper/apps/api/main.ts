@@ -3,6 +3,7 @@ import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
+import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -21,7 +22,8 @@ const receiptNumberSource = receiptPrefix && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,19}$
   ? async () => `${receiptPrefix}-${new Date().getUTCFullYear()}-${randomUUID().toUpperCase()}`
   : undefined;
 const invoiceAmountSource = createConfiguredHttpInvoiceAmountSource();
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource });
+const transactionSnapshotSource = createConfiguredHttpTransactionSnapshotSource();
+const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
