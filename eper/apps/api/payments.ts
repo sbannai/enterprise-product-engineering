@@ -224,7 +224,6 @@ function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean {
   return requested === undefined || requested === tenantId;
 }
 function tenantMatches(req: IncomingMessage, tenantId: string): boolean { return req.headers["x-tenant-id"] === tenantId; }
-function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean { const requested = req.headers["x-tenant-id"]; return requested === undefined || requested === tenantId; }
 function bearer(req: IncomingMessage, token: string): boolean {
   const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
   if (!match) return false;
