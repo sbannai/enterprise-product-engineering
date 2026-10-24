@@ -2,6 +2,10 @@
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
 on:
+  pull_request:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-qa.yml"
   push:
     paths:
       - "eper/**"

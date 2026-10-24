@@ -2,6 +2,8 @@ name: EPER payment gateway contract tests
 # PR synchronization deliberately reruns this focused suite when its workflow definition changes.
 
 on:
+  push:
+    branches: ["reconcile/payment-stack-with-receipt-contract"]
   pull_request:
     paths:
       - "eper/apps/api/payments.ts"

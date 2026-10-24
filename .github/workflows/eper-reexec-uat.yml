@@ -2,6 +2,10 @@
 name: EPER REEXEC-002 Controlled UAT Technical Simulation
 
 on:
+  pull_request:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-uat.yml"
   workflow_dispatch:
   push:
     paths:
