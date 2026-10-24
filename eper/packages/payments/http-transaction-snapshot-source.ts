@@ -1,3 +1,4 @@
+import { isValidIsoTimestamp } from "./transaction-receipt-contract.js";
 import type {
   TransactionSnapshotLookup,
   TrustedTransactionSnapshot,
@@ -30,7 +31,7 @@ function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransacti
     !isSafeInteger(value.amountDueMinor) || value.amountDueMinor <= 0 ||
     value.currency !== "INR" || !transactionStatuses.has(String(value.status)) ||
     !isNonEmptyText(value.sourceId) || !isNonEmptyText(value.sourceVersion) ||
-    !isNonEmptyText(value.approvedAt) || !Number.isFinite(Date.parse(value.approvedAt)) ||
+    !isValidIsoTimestamp(value.approvedAt) ||
     !Array.isArray(value.lineItems) || !Array.isArray(value.adjustments)
   ) return false;
 
