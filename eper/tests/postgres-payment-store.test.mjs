@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41" } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41", orderTransactionSnapshot = null } = {}) {
   const calls = [];
   let released = 0;
   const client = {
@@ -37,7 +37,7 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
         };
       }
       if (sql.includes("SELECT id, tenant_id, invoice_reference, amount_minor")) {
-        return { rows: [{ id: 41, tenant_id: orderTenantId, invoice_reference: "invoice-41", amount_minor: orderAmountMinor, currency: "INR", status: orderStatus, provider_payment_id: null, transaction_snapshot: null }], rowCount: 1 };
+        return { rows: [{ id: 41, tenant_id: orderTenantId, invoice_reference: "invoice-41", amount_minor: orderAmountMinor, currency: "INR", status: orderStatus, provider_payment_id: null, transaction_snapshot: orderTransactionSnapshot }], rowCount: 1 };
       }
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
       return { rows: [], rowCount: 1 };
@@ -69,7 +69,13 @@ test("PostgresPaymentStore inserts orders inside a transaction and releases its 
 });
 
 test("PostgresPaymentStore atomically records a capture and receipt", async () => {
-  const fake = makePool();
+  const transactionSnapshot = {
+    tenantId: "tenant-a", reference: "invoice-41", kind: "ECOMMERCE",
+    description: "Store test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
+    lineItems: [{ sourceLineId: "line-1", description: "Test item", sku: "SKU-1", quantity: 1, unitPriceMinor: 12500, lineTotalMinor: 12500 }],
+    adjustments: [], sourceId: "approved-test-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+  };
+  const fake = makePool({ orderTransactionSnapshot: transactionSnapshot });
   const store = new PostgresPaymentStore(fake.pool);
   const result = await store.capturePayment({
     providerEventId: "evt_41",
@@ -81,6 +87,7 @@ test("PostgresPaymentStore atomically records a capture and receipt", async () =
     currency: "INR",
     tenantId: "tenant-a",
     receiptNumber: "APPROVED-RECEIPT-00041",
+    transactionSnapshot,
   });
   assert.equal(result.ok, true);
   assert.equal(result.value.receiptNumber, "APPROVED-RECEIPT-00041");
