@@ -12,7 +12,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
     "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE",
-    "EPER_PAYMENT_ALLOW_CLIENT_AMOUNT", "NODE_ENV",
+    "EPER_PAYMENT_ALLOW_CLIENT_AMOUNT", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -36,6 +36,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-a": token }),
     EPER_PAYMENT_LEDGER_FILE: join(dir, "payments.json"),
     EPER_PAYMENT_ALLOW_CLIENT_AMOUNT: "true",
+    EPER_PAYMENT_PERSISTENCE: "json-file",
     NODE_ENV: "test",
   });
 
@@ -164,7 +165,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     // Keep the isolated missing-invoice-source check independent of the production persistence guard.
     process.env.NODE_ENV = "test";
     // Without a wired trusted source, order creation must fail closed.
-    const unconfiguredServer = createAppServer();
+    const unconfiguredServer = createAppServer({ allowLegacyPaymentLedgerForTests: true });
     try {
       await new Promise((resolve, reject) => {
         unconfiguredServer.once("error", reject);
@@ -709,8 +710,8 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
     const crossTenant = await fetch(base, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "tenant-b" },
     });
-    assert.equal(crossTenant.status, 404);
-    assert.deepEqual(await crossTenant.json(), { error: "receipt_not_found" });
+    assert.equal(crossTenant.status, 403);
+    assert.deepEqual(await crossTenant.json(), { error: "tenant_scope_mismatch" });
     assert.equal(orderLookups, 0, "cross-tenant receipt requests must not reach order lookup");
 
     const response = await fetch(base, {
