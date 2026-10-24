@@ -437,7 +437,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
       body: event,
     });
-    assert.equal(webhook.status, 200);
+    const webhookResultBody = await webhook.clone().json();
+    assert.equal(webhook.status, 200, "initial signed webhook failed: " + JSON.stringify(webhookResultBody));
     assert.equal(captured, true);
     assert.equal(webhookCaptureCalls, 1);
     const webhookBody = await webhook.json();
