@@ -16,20 +16,20 @@
 
 ## 12-case execution matrix
 
-| Case | Scenario | Expected result | Evidence to capture (sanitized) | Status |
-|---|---|---|---|---|
-| PAY-UAT-01 | General invoice: valid payable invoice, correct tenant and amount | Gateway order created from trusted invoice amount; immutable transaction snapshot persisted | Build SHA, test invoice reference alias, amount/currency, transaction public ID, provider order ID suffix, snapshot persistence assertion | NOT RUN |
-| PAY-UAT-02 | E-commerce checkout with multiple cart items | Order and receipt retain itemized line descriptions, quantities, unit amounts, adjustments, and correct total | Synthetic cart ID, line count, computed total, transaction ID, receipt ID | NOT RUN |
-| PAY-UAT-03 | Valid captured payment through signed webhook | Exactly one captured transaction and receipt; tenant scope and order snapshot preserved | Event ID hash, transaction ID, receipt ID/number, PDF digest | NOT RUN |
-| PAY-UAT-04 | Valid captured payment through /verify | Verified gateway payment reconciles to the persisted order and creates/reuses one receipt | Order/payment ID aliases, response code, receipt ID, PDF digest | NOT RUN |
-| PAY-UAT-05 | Gateway amount or currency mismatch | Reject; no capture persistence or receipt issuance | Expected/actual amount and currency only, response code, defect ID if any | NOT RUN |
-| PAY-UAT-06 | Wrong tenant attempts order, verification, or receipt access | Deny cross-tenant access without disclosing another tenant's data | Synthetic tenant aliases, endpoint, response code | NOT RUN |
-| PAY-UAT-07 | Invoice is not payable or source is missing | Reject according to authority result; do not create a chargeable order | Synthetic invoice alias, authority result category, response code | NOT RUN |
-| PAY-UAT-08 | Trusted invoice or transaction authority unavailable / malformed response | Fail closed; no untrusted client amount or mutable fallback is used | Authority category (no URL/token), response code, no-secret log excerpt | NOT RUN |
-| PAY-UAT-09 | Invalid webhook signature | Reject with authentication failure; no state change | Event alias, signature-valid boolean, response code | NOT RUN |
-| PAY-UAT-10 | Duplicate webhook and conflicting event replay | Duplicate is idempotent; same event ID with different payload is rejected as conflict | Event ID hash, payload digest, receipt ID consistency, response codes | NOT RUN |
-| PAY-UAT-11 | Receipt immutability and download integrity | Repeated download returns same bytes/digest; public receipt ID differs from transaction public ID | Transaction ID, receipt ID, SHA-256 digest for each download, equality result | NOT RUN |
-| PAY-UAT-12 | Legacy pre-migration order with NULL transaction snapshot / migration-007 gate | Before enabling payment flow, read-only eligible-row query returns zero rows, or each row is reconciled safely; never synthesize/backfill from mutable data or cancel a possibly charged order blindly | Sanitized row count and reviewer, reconciliation references for any rows, approved disposition; never include customer details | NOT RUN |
+| Case | Scenario | Expected result | Evidence to capture (sanitized) | Primary execution owner | Support role | Status |
+|---|---|---|---|---|---|---|
+| PAY-UAT-01 | General invoice: valid payable invoice, correct tenant and amount | Gateway order created from trusted invoice amount; immutable transaction snapshot persisted | Build SHA, test invoice reference alias, amount/currency, transaction public ID, provider order ID suffix, snapshot persistence assertion | Tester | Developer prepares/verifies trusted source and supports diagnosis | NOT RUN |
+| PAY-UAT-02 | E-commerce checkout with multiple cart items | Order and receipt retain itemized line descriptions, quantities, unit amounts, adjustments, and correct total | Synthetic cart ID; compare order-time snapshot with receipt field-by-field for item descriptions, quantities, unit amounts, line totals, approved adjustments, and final INR-minor-unit total; reconcile against trusted checkout total; transaction ID and receipt ID | Tester | Developer supports fixture setup and defect diagnosis | NOT RUN |
+| PAY-UAT-03 | Valid captured payment through signed webhook | Exactly one captured transaction and receipt; tenant scope and order snapshot preserved | Event ID hash, transaction ID, receipt ID/number, PDF digest | Tester | Support confirms webhook delivery/logs | NOT RUN |
+| PAY-UAT-04 | Valid captured payment through /verify | Verified gateway payment reconciles to the persisted order and creates/reuses one receipt | Order/payment ID aliases, response code, receipt ID, PDF digest | Tester | Support assists gateway diagnostics | NOT RUN |
+| PAY-UAT-05 | Gateway amount or currency mismatch | Reject; no capture persistence or receipt issuance | Expected/actual amount and currency only, response code, defect ID if any | Tester | Developer verifies fail-closed behavior | NOT RUN |
+| PAY-UAT-06 | Wrong tenant attempts order, verification, or receipt access | Deny cross-tenant access without disclosing another tenant's data | Synthetic tenant aliases and separate response/effect evidence for order creation (no cross-tenant order created), payment verification (no cross-tenant disclosure or mutation), and receipt access (no cross-tenant receipt disclosure) | Tester | Developer verifies tenant enforcement | NOT RUN |
+| PAY-UAT-07 | Invoice is not payable or source is missing | Reject according to authority result; do not create a chargeable order | Synthetic invoice alias, authority result category, response code | Tester | Developer supports authority fixture and fail-closed diagnosis | NOT RUN |
+| PAY-UAT-08 | Trusted invoice or transaction authority unavailable / malformed response | Fail closed; no untrusted client amount or mutable fallback is used | Authority category (no URL/token), response code, no-secret log excerpt | Tester | Developer supports controlled fault setup and diagnosis | NOT RUN |
+| PAY-UAT-09 | Invalid webhook signature | Reject with authentication failure; no state change | Event alias, signature-valid boolean, response code | Tester | Support checks sanitized webhook logs | NOT RUN |
+| PAY-UAT-10 | Duplicate webhook and conflicting event replay | Duplicate is idempotent; same event ID with different payload is rejected as conflict | Event ID hash, payload digest, receipt ID consistency, response codes | Tester | Support checks replay/event logs | NOT RUN |
+| PAY-UAT-11 | Receipt immutability and download integrity | Repeated download returns same bytes/digest; public receipt ID differs from transaction public ID | Transaction ID, receipt ID, SHA-256 digest for each download, equality result | Tester | Support archives sanitized digests | NOT RUN |
+| PAY-UAT-12 | Legacy pre-migration order with NULL transaction snapshot / migration-007 gate | Before enabling payment flow, read-only eligible-row query returns zero rows, or each row is reconciled safely; never synthesize/backfill from mutable data or cancel a possibly charged order blindly | Sanitized row count and reviewer, reconciliation references for any rows, approved disposition; never include customer details | Tester | Developer and authorized DB operator execute/verify the approved read-only procedure; Support coordinates evidence | NOT RUN |
 
 
 ## Automated coverage crosswalk (CI evidence only)
@@ -51,6 +51,29 @@ The following repository tests provide pre-UAT technical coverage. **They do not
 | PAY-UAT-11 Receipt immutability/digest | `payment-gateway.test.mjs`; `postgres-payment-store.integration.test.mjs` | Covered in persisted-byte/digest tests; live download evidence remains outstanding |
 | PAY-UAT-12 Legacy NULL-snapshot gate | `postgres-payment-store.integration.test.mjs` covers migrations and snapshot immutability | **Not covered end-to-end** — still requires the read-only query on the authorized target database and sanitized evidence |
 
+
+
+## Role split and execution controls
+
+The role labels below are functional assignments for the three-resource team; they do not imply that a named person has executed a case or that access has been granted.
+
+- **Developer:** prepare/fix the non-production build and approved configuration, support the Tester with controlled fixtures and technical diagnosis, verify fail-closed behavior, and coordinate migrations only after the target database is explicitly authorized. Developer support does not substitute for Tester execution.
+- **Tester:** is the primary execution owner for all 12 cases; personally execute each scenario against the approved deployed build, record expected versus actual outcomes, attach sanitized evidence, and raise defects. The tester must leave a case NOT RUN until actual execution. The Primary execution owner column must remain Tester for every row.
+- **Support engineer:** coordinate provider/webhook diagnostics, sanitized logs, evidence retention, access prerequisites, and the read-only legacy-order query with the authorized database operator. Never collect or paste secret values into tickets.
+- **Independent security reviewer:** review tenant isolation, authority boundaries, secret handling, webhook replay/signature controls, and receipt immutability before the merge/release decision. This is a separate review gate, not a substitute for any of the three execution roles.
+
+### Parallel readiness checklist
+
+- [ ] Developer: exact candidate commit and dependency PR sequence recorded; no production route enabled.
+- [ ] Developer + support: owner-approved transaction and invoice authority URLs/tokens configured through the approved secret store.
+- [ ] Support: previously exposed Razorpay test secret rotated; new value stored only in the approved secret store.
+- [ ] Business owner: receipt-numbering policy and prefix approved.
+- [ ] Developer + authorized DB operator: migrations 006–007 applied only to the approved non-production database; migration-007 query evidence captured.
+- [ ] Tester: approved test identity, synthetic tenant/data, and restricted evidence location confirmed.
+- [ ] Independent reviewer: security review recorded against the exact commit before merge.
+- [ ] Business owner: execution authorization and final acceptance decision recorded.
+
+All checkboxes remain unchecked until independently verified. This checklist does not change any case status or authorize infrastructure spending.
 
 ## Release gate
 

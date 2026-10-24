@@ -1,6 +1,6 @@
 # Razorpay payment and receipt integration — deployment notes
 
-Status: implementation candidate on PR #168; not merged, deployed, or business-UAT approved.
+Status: payment implementation candidate is under review in the stacked PR chain #193 → #194 → #198 → #200. All four PRs remain open and unmerged. The code is not deployed, and business UAT has not been executed or signed off.
 
 ## Implemented API behavior
 
@@ -10,7 +10,7 @@ Status: implementation candidate on PR #168; not merged, deployed, or business-U
 - `GET /api/payments/receipts/:receiptId.pdf` retrieves a tenant-scoped receipt by its public receipt UUID. It only serves receipts for captured payments. Persisted PDF bytes are SHA-256 verified before serving; missing, malformed, or mismatched digests fail closed.
 - Payment transaction and receipt public IDs are distinct from internal database keys. Receipt identity, receipt numbering, issue timestamp, and persisted PDF content are protected by PostgreSQL migrations 005–006. Migration 007 persists and protects the validated order-time transaction snapshot, so delayed/duplicate capture callbacks do not depend on the invoice's current mutable payability status.
 
-All payment routes return HTTP 503 with `payment_persistence_not_production_ready` when `NODE_ENV=production`. This guard must remain until the real-world approval and production-readiness conditions below have been satisfied.
+All payment routes return HTTP 503 with `payment_persistence_not_production_ready` when `NODE_ENV=production`. The newer persistence guard also rejects unset or `json-file` persistence outside the explicit test-only fixture path. These guards must remain until the real-world approval and production-readiness conditions below have been satisfied.
 
 ## PostgreSQL schema deployment
 
@@ -43,15 +43,18 @@ The result must be empty before the flow is enabled. For any returned order, rec
 ## Configuration and approvals still outstanding
 
 - Configure `EPER_PAYMENT_RECEIPT_NUMBER_PREFIX` only after the owner/business authority approves the receipt-numbering policy. No default policy is invented; capture fails closed if numbering policy is unconfigured.
-- Approve and wire the authoritative invoice/fee source, including source identity/version and approval evidence. Until this is available, production readiness is blocked.
-- Provide approved Razorpay test-mode credentials and run end-to-end evidence for order creation, capture/webhook or verification, idempotent retry, and receipt download in the approved non-production environment.
+- Approve and wire the authoritative transaction authority and invoice/fee source, including source identity/version and approval evidence. Until these are available, production readiness and business UAT are blocked.
+- **Rotate the previously exposed Razorpay test secret before configuring or using any test credentials.** Store replacement credentials only in the approved secret mechanism; never reuse the exposed value.
+- Provide approved Razorpay test-mode credentials and an authorized isolated non-production endpoint; run end-to-end evidence for order creation, capture/webhook or verification, idempotent retry, and receipt download.
 - Confirm receipt legal fields, branding, retention, refund/chargeback handling, reconciliation, webhook replay controls, alerting, and operational ownership.
+- Complete all 12 defined business UAT cases, attach sanitized evidence, and obtain explicit business sign-off. Automated CI and the 228-requirement pilot are technical evidence only; they do not constitute business approval or close any G1–G13 gate.
 
-Never commit or expose Razorpay secrets or the payment API token. Do not use live credentials or enable production routes without explicit owner authorization. Automated CI is technical evidence only; it does not constitute business approval or close any G1–G13 gate.
+Never commit or expose Razorpay secrets or the payment API token. Do not use live credentials or enable production routes without explicit owner authorization.
 
 ## Current safety boundary
 
-- PR #168 remains a draft and must not be merged by this workflow.
+- The current payment implementation review chain is #193 → #194 → #198 → #200; PR #168 is a historical reference, not the current candidate chain.
+- The PR chain remains unmerged; this documentation does not authorize a merge, deployment, migration, or production payment enablement.
 - Production payment routes remain fail-closed.
-- No chargeable AWS resources are to be provisioned.
+- No chargeable AWS resources are to be provisioned without separate authorization.
 - Preserve the 228 requirement IDs, all 38 chapters, and Option A unchanged.
