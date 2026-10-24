@@ -274,8 +274,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
       if (event?.event !== "payment.captured") { json(res, 200, { received: true, ignored: true }); return true; }
       const payment = event?.payload?.payment?.entity;
-      const providerEventId = req.headers["x-razorpay-event-id"];
-      if (typeof providerEventId !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(providerEventId) ||
+      // The event-id header is not covered by Razorpay's body HMAC. Derive the
+      // replay key from the exact raw bytes whose signature was verified instead.
+      // Replaying the same signed payload with a different unsigned header therefore
+      // cannot create a fresh idempotency key.
+      const providerEventId = createHash("sha256").update(raw).digest("hex");
+      if (
           typeof payment?.order_id !== "string" || !payment.order_id.trim() || payment.order_id !== payment.order_id.trim() ||
           typeof payment?.id !== "string" || !payment.id.trim() || payment.id !== payment.id.trim() ||
           payment.status !== "captured" || typeof payment.amount !== "number" || !Number.isSafeInteger(payment.amount) || payment.amount <= 0 || payment.currency !== "INR") {
