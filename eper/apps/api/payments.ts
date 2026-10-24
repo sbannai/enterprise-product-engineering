@@ -283,7 +283,25 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
       }
       if (!orderResponse.ok) {
-        json(res, 502, { error: "gateway_order_creation_failed" }); return true;
+        // A provider 4xx is a definitive rejection: the remote order was not created,
+        // so release only this still-uncompleted reservation. 5xx responses remain
+        // ambiguous and are deliberately reconciled rather than retried automatically.
+        if (orderResponse.status >= 400 && orderResponse.status < 500) {
+          try {
+            const released = await paymentStore.releaseOrderCreationAfterRejection(tenantId, idempotencyKey);
+            if (!released.ok) {
+              json(res, 503, { error: "payment_order_rejection_reconciliation_required" }); return true;
+            }
+          } catch {
+            json(res, 503, { error: "payment_order_rejection_reconciliation_required" }); return true;
+          }
+        }
+        json(res, orderResponse.status >= 400 && orderResponse.status < 500 ? 502 : 503, {
+          error: orderResponse.status >= 400 && orderResponse.status < 500
+            ? "gateway_order_creation_rejected"
+            : "gateway_order_creation_outcome_unknown",
+        });
+        return true;
       }
       let order: any;
       try { order = await orderResponse.json(); } catch {
