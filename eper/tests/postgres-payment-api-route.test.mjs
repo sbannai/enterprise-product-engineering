@@ -102,21 +102,26 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         return { ok: true, value: { receiptPublicId, receiptNumber } };
       }
       webhookCaptureCalls += 1;
-      assert.equal(input.providerEventId, createHash("sha256").update(event).digest("hex"));
-      assert.equal(input.amountMinor, webhookGatewayAmount);
-      assert.equal(input.tenantId, tenantId);
-      assert.equal(input.receiptNumber, receiptNumber);
-      assert.deepEqual(input.transactionSnapshot, {
-        tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
-        description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
-        lineItems: Array.from({ length: 40 }, (_, index) => ({
-          sourceLineId: "line-route-" + (index + 1),
-          description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
-          sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
-        })),
-        adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
-        sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
-      });
+      try {
+  assert.equal(input.providerEventId, createHash("sha256").update(event).digest("hex"));
+  assert.equal(input.amountMinor, webhookGatewayAmount);
+  assert.equal(input.tenantId, tenantId);
+  assert.equal(input.receiptNumber, receiptNumber);
+  assert.deepEqual(input.transactionSnapshot, {
+    tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
+    description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
+    lineItems: Array.from({ length: 40 }, (_, index) => ({
+      sourceLineId: "line-route-" + (index + 1),
+      description: index === 39 ? "Checkout final item with a deliberately long description to verify wrapping does not overflow the page boundary" : "Checkout item " + (index + 1),
+      sku: "SKU-" + (index + 1), quantity: 1, unitPriceMinor: 300, lineTotalMinor: 300,
+    })),
+    adjustments: [{ sourceAdjustmentId: "tax-route-1", kind: "TAX", description: "Checkout tax", amountMinor: 500 }],
+    sourceId: "approved-cart-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
+  });
+  
+      } catch (error) {
+        return { ok: false, reason: "test_mock_capture_assertion_failed: " + (error instanceof Error ? error.message : String(error)) };
+      }
       captured = true;
       receipt = { ...receipt, transactionSnapshot: input.transactionSnapshot };
       order = { ...order, status: "captured", providerPaymentId };
