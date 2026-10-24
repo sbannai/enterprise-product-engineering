@@ -44,7 +44,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: "route-secret",
     RAZORPAY_WEBHOOK_SECRET: "route-webhook-secret",
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
     EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-route-test": token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-payment-ledger.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
