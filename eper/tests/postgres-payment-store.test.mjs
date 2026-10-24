@@ -389,7 +389,7 @@ test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid n
   assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
 });
 
-function schemaPool({ missingTrigger = null, missingConstraint = null } = {}) {
+function schemaPool({ missingTrigger = null, missingConstraint = null, disabledTrigger = null } = {}) {
   const calls = [];
   const client = {
     async query(sql) {
@@ -407,8 +407,8 @@ function schemaPool({ missingTrigger = null, missingConstraint = null } = {}) {
       }
       if (sql.includes("FROM pg_trigger")) {
         return { rows: [
-          ...(missingTrigger === "eper_payment_order_snapshot_immutable" ? [] : [{ table_name: "eper_payment_orders", trigger_name: "eper_payment_order_snapshot_immutable" }]),
-          ...(missingTrigger === "eper_payment_receipt_immutability_guard" ? [] : [{ table_name: "eper_payment_receipts", trigger_name: "eper_payment_receipt_immutability_guard" }]),
+          ...(missingTrigger === "eper_payment_order_snapshot_immutable" ? [] : [{ table_name: "eper_payment_orders", trigger_name: "eper_payment_order_snapshot_immutable", trigger_enabled: disabledTrigger === "eper_payment_order_snapshot_immutable" ? "D" : "O" }]),
+          ...(missingTrigger === "eper_payment_receipt_immutability_guard" ? [] : [{ table_name: "eper_payment_receipts", trigger_name: "eper_payment_receipt_immutability_guard", trigger_enabled: disabledTrigger === "eper_payment_receipt_immutability_guard" ? "D" : "O" }]),
         ], rowCount: missingTrigger ? 1 : 2 };
       }
       if (sql.includes("FROM pg_constraint")) {
@@ -440,6 +440,16 @@ test("checkSchema fails closed when an order snapshot immutability trigger is mi
 test("checkSchema fails closed when a receipt snapshot immutability trigger is missing", async () => {
   const fake = schemaPool({ missingTrigger: "eper_payment_receipt_immutability_guard" });
   assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+});
+
+test("checkSchema fails closed when a snapshot immutability trigger is disabled", async () => {
+  for (const disabledTrigger of [
+    "eper_payment_order_snapshot_immutable",
+    "eper_payment_receipt_immutability_guard",
+  ]) {
+    const fake = schemaPool({ disabledTrigger });
+    assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+  }
 });
 
 test("checkSchema fails closed when either snapshot object constraint is missing", async () => {
