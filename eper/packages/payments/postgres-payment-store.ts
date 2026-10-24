@@ -117,12 +117,47 @@ export class PostgresPaymentStore {
               OR (table_name = 'eper_payment_receipts' AND column_name IN ('transaction_snapshot', 'document_pdf')))`
       );
       const found = new Set(columns.rows.map((row) => row.table_name + "." + row.column_name));
-      return [
+      const requiredColumnsPresent = [
         "eper_payment_orders.transaction_snapshot",
         "eper_payment_orders.transaction_public_id",
         "eper_payment_receipts.transaction_snapshot",
         "eper_payment_receipts.document_pdf",
       ].every((name) => found.has(name));
+      if (!requiredColumnsPresent) return false;
+
+      // Readiness must verify database-enforced immutability, not merely columns.
+      // A manually assembled or partially migrated schema must fail closed.
+      const triggers = await client.query<{ table_name: string; trigger_name: string }>(
+        `SELECT c.relname AS table_name, t.tgname AS trigger_name
+           FROM pg_trigger t
+           JOIN pg_class c ON c.oid = t.tgrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND NOT t.tgisinternal
+            AND ((c.relname = 'eper_payment_orders' AND t.tgname = 'eper_payment_order_snapshot_immutable')
+              OR (c.relname = 'eper_payment_receipts' AND t.tgname = 'eper_payment_receipt_immutability_guard'))`
+      );
+      const foundTriggers = new Set(triggers.rows.map((row) => row.table_name + "." + row.trigger_name));
+      const requiredTriggersPresent = [
+        "eper_payment_orders.eper_payment_order_snapshot_immutable",
+        "eper_payment_receipts.eper_payment_receipt_immutability_guard",
+      ].every((name) => foundTriggers.has(name));
+      if (!requiredTriggersPresent) return false;
+
+      const constraints = await client.query<{ table_name: string; constraint_name: string }>(
+        `SELECT c.relname AS table_name, con.conname AS constraint_name
+           FROM pg_constraint con
+           JOIN pg_class c ON c.oid = con.conrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND ((c.relname = 'eper_payment_orders' AND con.conname = 'eper_payment_orders_transaction_snapshot_object_check')
+              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_transaction_snapshot_object_check'))`
+      );
+      const foundConstraints = new Set(constraints.rows.map((row) => row.table_name + "." + row.constraint_name));
+      return [
+        "eper_payment_orders.eper_payment_orders_transaction_snapshot_object_check",
+        "eper_payment_receipts.eper_payment_receipts_transaction_snapshot_object_check",
+      ].every((name) => foundConstraints.has(name));
     } finally {
       client.release();
     }
