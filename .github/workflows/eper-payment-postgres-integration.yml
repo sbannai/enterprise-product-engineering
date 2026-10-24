@@ -23,6 +23,7 @@ on:
       - "eper/tests/payment-readiness.test.mjs"
       - "eper/tests/invoice-amount-authority.test.mjs"
       - "eper/tests/http-invoice-amount-source.test.mjs"
+      - "eper/tests/http-transaction-snapshot-source.test.mjs"
       - "eper/tests/transaction-receipt-contract.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
@@ -81,6 +82,8 @@ jobs:
         run: node --test tests/http-invoice-amount-source.test.mjs
       - name: Test generic transaction and receipt contract
         run: node --test tests/transaction-receipt-contract.test.mjs
+      - name: Test HTTP transaction authority response validation
+        run: node --test tests/http-transaction-snapshot-source.test.mjs
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply all payment migrations through the deployment runner
