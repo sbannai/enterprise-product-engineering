@@ -19,7 +19,7 @@ const isSafeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value);
 const transactionKinds = new Set(["ECOMMERCE", "GENERAL"]);
 const transactionStatuses = new Set(["DUE", "PARTIALLY_PAID", "PAID", "VOID", "CANCELLED"]);
-const adjustmentKinds = new Set(["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"];
+const adjustmentKinds = new Set(["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"]);
 
 /** Validate untrusted HTTP JSON before exposing it as a trusted snapshot. */
 function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransactionSnapshot {
