@@ -477,7 +477,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           // definitive rejection that cannot refer to an existing order.
           let rejectionDetails = "";
           try { rejectionDetails = (await orderResponse.clone().text()).toLowerCase(); } catch { /* fail closed below */ }
-          if (/duplicate|already\\s+(?:exists|created|been\\s+used)|receipt.{0,40}(?:exists|duplicate)/i.test(rejectionDetails)) {
+          const duplicateOrExistingOrder = /duplicate|already.{0,20}(?:exists|created|been.{0,5}used)|receipt.{0,40}(?:exists|duplicate)/i.test(rejectionDetails);
+          const definitiveValidationRejection = orderResponse.status === 422 ||
+            /input_validation_failed|invalid.{0,12}(?:amount|currency|receipt|request|parameter)|authentication.{0,12}failed|unauthorized|invalid.{0,8}api.{0,8}key/i.test(rejectionDetails);
+          if (duplicateOrExistingOrder || !definitiveValidationRejection) {
+            // Unknown 4xx responses are not proof that no provider order exists.
+            // Retain the reservation and require reconciliation rather than risk a duplicate charge.
             json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
           }
           try {
