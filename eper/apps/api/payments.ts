@@ -353,8 +353,6 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 200, { received: true }); return true;
   }
 
-  if (!bearer(req, cfg.token)) { json(res, 401, { error: "unauthorized" }); return true; }
-
   let principalTenantId: string | null = null;
   if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
     const tenantTokens = configuredTenantTokens();
