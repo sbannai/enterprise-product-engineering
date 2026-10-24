@@ -1,10 +1,20 @@
 # Re-run this gate on the reconciled payment/receipt branch before integration sign-off.
 name: EPER PostgreSQL payment-store integration
 
-# Keep this gate enabled on both payment persistence and generic receipt-contract branches.
+# Keep this gate enabled on all active payment-stack branches so every stacked
+# change receives PostgreSQL integration coverage when pushed, not only the
+# original persistence and receipt-contract branches.
 on:
   push:
-    branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract", "reconcile/payment-153-168-integration", "reconcile/payment-stack-with-receipt-contract"]
+    branches:
+      - "fix/payment-production-persistence-guard"
+      - "feat/generic-transaction-receipt-contract"
+      - "reconcile/payment-153-168-integration"
+      - "reconcile/payment-stack-with-receipt-contract"
+      - "fix/payment-tenant-principal-binding-validated"
+      - "fix/payment-json-ledger-test-only"
+      - "fix/payment-uat-review-findings-20261024"
+      - "fix/transaction-authority-runtime-schema-validation"
   pull_request:
     paths:
       - "eper/packages/payments/**"
