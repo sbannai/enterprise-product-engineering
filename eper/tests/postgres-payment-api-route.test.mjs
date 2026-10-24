@@ -203,6 +203,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       assert.deepEqual(await conflict.json(), { error: reason });
     }
     reservationFailureReason = null;
+    // Conflict probes still consult the authorities; isolate the successful creation assertion below.
+    transactionSourceCalls = 0;
 
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
