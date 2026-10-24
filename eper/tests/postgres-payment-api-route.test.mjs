@@ -27,6 +27,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let gatewayAmount = 12500;
   let gatewayReportedPaymentId = providerPaymentId;
   let gatewayVerificationCalls = 0;
+  let gatewayOrderStatus = 200;
+  let gatewayOrderNetworkFailure = false;
+  let rejectedReservationReleaseCalls = 0;
   let persistedPdf = null;
   let order = {
     id: "41", transactionPublicId, tenantId, invoiceReference: "invoice-route-test",
@@ -50,8 +53,11 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
-      return new Response(JSON.stringify({ id: providerOrderId }), {
-        status: 200, headers: { "content-type": "application/json" },
+      if (gatewayOrderNetworkFailure) throw new Error("simulated connection reset");
+      return new Response(JSON.stringify(gatewayOrderStatus >= 200 && gatewayOrderStatus < 300
+        ? { id: providerOrderId }
+        : { error: { code: "BAD_REQUEST_ERROR", description: "definitive rejection" } }), {
+        status: gatewayOrderStatus, headers: { "content-type": "application/json" },
       });
     }
     if (url === "https://api.razorpay.com/v1/payments/" + providerPaymentId) {
@@ -69,6 +75,10 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     async completeOrderCreation() {
       return { ok: true, value: { id: "41", transactionPublicId, providerOrderId } };
+    },
+    async releaseOrderCreationAfterRejection() {
+      rejectedReservationReleaseCalls += 1;
+      return { ok: true, value: { id: "41" } };
     },
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
@@ -144,6 +154,28 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       authorization: `Bearer ${token}`, "x-tenant-id": tenantId, "content-type": "application/json",
     };
 
+    // A definite 4xx rejection must release the reservation, but a network
+    // failure is ambiguous and must retain it for reconciliation.
+    gatewayOrderStatus = 400;
+    const rejectedOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-idem-rejected" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(rejectedOrder.status, 502);
+    assert.equal((await rejectedOrder.json()).error, "gateway_order_creation_rejected");
+    assert.equal(rejectedReservationReleaseCalls, 1);
+
+    gatewayOrderNetworkFailure = true;
+    const unknownOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-idem-unknown" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(unknownOrder.status, 503);
+    assert.equal((await unknownOrder.json()).error, "gateway_order_creation_outcome_unknown");
+    assert.equal(rejectedReservationReleaseCalls, 1, "ambiguous network outcome must not release the reservation");
+
+    gatewayOrderNetworkFailure = false;
+    gatewayOrderStatus = 200;
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
