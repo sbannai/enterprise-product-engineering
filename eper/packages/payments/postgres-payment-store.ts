@@ -69,7 +69,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
+  | { ok: false; reason: "idempotency_conflict" | "invoice_payment_conflict" | "invoice_already_paid" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
 
 export interface StoredPaymentOrder {
   /** Internal database key; use transactionPublicId in external APIs. */
