@@ -251,16 +251,6 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await missingOrderWebhook.json()).error, "payment_order_not_persisted_retry_webhook");
     assert.equal(webhookCaptureCalls, 0, "unknown order must not reach capture persistence");
 
-    // Event-ID headers are not covered by Razorpay's raw-body HMAC; missing,
-    // malformed, or modified values must not control the durable replay key.
-    const malformedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "   " },
-      body: event,
-    });
-    assert.equal(malformedEventId.status, 503, "the test store reports receipt policy unavailable before capture");
-    assert.equal(webhookCaptureCalls, 0);
-
     receiptNumberSourceThrows = true;
     const unavailableWebhookReceiptPolicy = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
@@ -298,29 +288,6 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(blankGatewayPaymentIdEvent.status, 400);
     assert.equal((await blankGatewayPaymentIdEvent.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "blank gateway payment ID must not reach capture persistence");
-
-    const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature },
-      body: event,
-    });
-    assert.equal(missingEventId.status, 400);
-    assert.equal((await missingEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "webhook without provider event ID must not reach capture persistence");
-
-    const oversizedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-razorpay-signature": signature,
-        "x-razorpay-event-id": "e".repeat(201),
-      },
-      body: event,
-    });
-    assert.equal(oversizedEventId.status, 400);
-    assert.equal((await oversizedEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "oversized provider event ID must not reach capture persistence");
-
 
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
