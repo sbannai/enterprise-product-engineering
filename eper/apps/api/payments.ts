@@ -432,6 +432,8 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
       });
       if (!reservation.ok) {
         const status = reservation.reason === "idempotency_conflict" ? 409
+          : reservation.reason === "invoice_payment_conflict" ? 409
+          : reservation.reason === "invoice_already_paid" ? 409
           : reservation.reason === "order_creation_in_progress" ? 409
           : reservation.reason === "order_creation_reconciliation_required" ? 503
           : 500;
