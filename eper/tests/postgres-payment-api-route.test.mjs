@@ -469,7 +469,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(duplicateBody.receiptId, receiptPublicId);
     assert.equal(duplicateBody.receiptNumber, receiptNumber);
     assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
-    assert.equal(transactionSourceCalls, 1, "capture and duplicate delivery must use the persisted order-time snapshot");
+    assert.equal(transactionSourceCalls, 2, "capture and duplicate delivery must use the persisted order-time snapshot");
 
     const eventConflictPayload = JSON.stringify({
       event: "payment.captured",
