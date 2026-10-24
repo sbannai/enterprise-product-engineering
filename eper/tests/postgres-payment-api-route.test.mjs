@@ -252,6 +252,18 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.deepEqual(await duplicateOrder.json(), { error: "gateway_order_creation_outcome_unknown" });
     assert.equal(releasedRejectedReservations, 0, "duplicate response must retain reservation for reconciliation");
 
+    // Razorpay's receipt-encoding validation response is a definitive rejection;
+    // release the reservation so the invoice is not blocked indefinitely.
+    gatewayOrderStatus = 400;
+    gatewayOrderError = "BAD_REQUEST_ENCODING_VALIDATION_FAILED";
+    const encodingRejectedOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-encoding-rejected-001" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(encodingRejectedOrder.status, 502);
+    assert.deepEqual(await encodingRejectedOrder.json(), { error: "gateway_order_creation_rejected" });
+    assert.equal(releasedRejectedReservations, 1, "receipt encoding rejection must release its reservation");
+
     // A definitive provider rejection can release the in-flight reservation; the
     // original idempotency key can then be retried safely.
     gatewayOrderStatus = 422;
@@ -262,7 +274,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(rejectedOrder.status, 502);
     assert.deepEqual(await rejectedOrder.json(), { error: "gateway_order_creation_rejected" });
-    assert.equal(releasedRejectedReservations, 1);
+    assert.equal(releasedRejectedReservations, 2);
     gatewayOrderStatus = 200;
 
     const created = await nativeFetch(`${base}/api/payments/orders`, {
@@ -270,13 +282,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
     });
     assert.equal(created.status, 201);
-    assert.deepEqual(reservationKeys, ["route-duplicate-001", "route-rejected-001", "route-rejected-001"],
+    assert.deepEqual(reservationKeys, ["route-duplicate-001", "route-encoding-rejected-001", "route-rejected-001", "route-rejected-001"],
       "duplicate response stays reserved and retry after definitive rejection reuses its original key");
     const createdBody = await created.json();
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
-    assert.equal(transactionSourceCalls, 3, "each order attempt captures one authoritative snapshot");
+    assert.equal(transactionSourceCalls, 4, "each order attempt captures one authoritative snapshot");
     // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
     transactionSourceStatus = "PAID";
 
@@ -487,7 +499,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(duplicateBody.receiptId, receiptPublicId);
     assert.equal(duplicateBody.receiptNumber, receiptNumber);
     assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
-    assert.equal(transactionSourceCalls, 3, "three attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
+    assert.equal(transactionSourceCalls, 4, "four attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
 
     const eventConflictPayload = JSON.stringify({
       event: "payment.captured",
