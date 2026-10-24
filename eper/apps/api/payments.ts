@@ -238,7 +238,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource, transactionSnapshotSource?: TrustedTransactionSnapshotSource): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource, transactionSnapshotSource?: TrustedTransactionSnapshotSource, allowLegacyPaymentLedgerForTests = false): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
   // payment mutation or receipt issuance in production until a transactional store is wired.
@@ -246,7 +246,17 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 503, { error: "payment_persistence_not_production_ready" });
     return true;
   }
-  if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres" && !paymentStore) {
+  const persistenceMode = process.env.EPER_PAYMENT_PERSISTENCE;
+  // The legacy JSON ledger is permitted only when a test explicitly injects this
+  // fixture capability. Deployment environment variables must never grant access.
+  if (persistenceMode !== "postgres" &&
+      !(allowLegacyPaymentLedgerForTests === true &&
+        process.env.NODE_ENV === "test" &&
+        (persistenceMode === undefined || persistenceMode === "json-file"))) {
+    json(res, 503, { error: "payment_persistence_mode_not_allowed" });
+    return true;
+  }
+  if (persistenceMode === "postgres" && !paymentStore) {
     json(res, 503, { error: "payment_persistence_store_unavailable" });
     return true;
   }
