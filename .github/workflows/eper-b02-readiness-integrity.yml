@@ -1,0 +1,36 @@
+name: EPER B02 Readiness Register Integrity
+
+on:
+  pull_request:
+    paths:
+      - 'eper/uat/B02_*.csv'
+      - 'eper/uat/B02_*.md'
+      - 'eper/uat/scripts/b02_readiness_audit.py'
+      - 'eper/uat/tests/test_b02_readiness_audit.py'
+      - '.github/workflows/eper-b02-readiness-integrity.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'eper/uat/B02_*.csv'
+      - 'eper/uat/B02_*.md'
+      - 'eper/uat/scripts/b02_readiness_audit.py'
+      - 'eper/uat/tests/test_b02_readiness_audit.py'
+      - '.github/workflows/eper-b02-readiness-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  b02-register-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit-test fail-closed controls
+        run: python -m unittest eper.uat.tests.test_b02_readiness_audit -v
+      - name: Audit B02 readiness registers
+        run: python eper/uat/scripts/b02_readiness_audit.py
