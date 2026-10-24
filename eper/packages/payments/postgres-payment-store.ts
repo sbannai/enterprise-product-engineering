@@ -814,6 +814,7 @@ export class PostgresPaymentStore {
             input.transactionSnapshot.amountDueMinor !== input.amountMinor ||
             input.transactionSnapshot.currency !== input.currency
           )) ||
+          (order.transaction_snapshot === null && input.transactionSnapshot === undefined) ||
           (order.transaction_snapshot !== null && (
             input.transactionSnapshot === undefined ||
             stableJson(input.transactionSnapshot) !== stableJson(order.transaction_snapshot)
