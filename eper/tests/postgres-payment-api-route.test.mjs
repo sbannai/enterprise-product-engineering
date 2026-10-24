@@ -73,11 +73,11 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
       // Model durable idempotency and payload-conflict behavior for provider event IDs.
-      if (captured && input.providerEventId === "evt_route_test_001") {
-        return { ok: false, reason: input.payloadSha256 === originalWebhookPayloadSha256 ? "duplicate_event" : "event_conflict" };
+      if (captured) {
+        return { ok: false, reason: input.payloadSha256 === originalWebhookPayloadSha256 ? "duplicate_event" : "payment_mismatch" };
       }
       webhookCaptureCalls += 1;
-      assert.equal(input.providerEventId, "evt_route_test_001");
+      assert.equal(input.providerEventId, "sha256-" + input.payloadSha256);
       assert.equal(input.amountMinor, webhookGatewayAmount);
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.receiptNumber, receiptNumber);
@@ -251,24 +251,15 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await missingOrderWebhook.json()).error, "payment_order_not_persisted_retry_webhook");
     assert.equal(webhookCaptureCalls, 0, "unknown order must not reach capture persistence");
 
+    // Event-ID headers are not covered by Razorpay's raw-body HMAC; missing,
+    // malformed, or modified values must not control the durable replay key.
     const malformedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "   " },
       body: event,
     });
-    assert.equal(malformedEventId.status, 400);
-    assert.equal((await malformedEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "blank provider event ID must not reach capture persistence");
-
-
-    const paddedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test padded" },
-      body: event,
-    });
-    assert.equal(paddedEventId.status, 400);
-    assert.equal((await paddedEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "padded provider event ID must not reach capture persistence");
+    assert.equal(malformedEventId.status, 503, "the test store reports receipt policy unavailable before capture");
+    assert.equal(webhookCaptureCalls, 0);
 
     receiptNumberSourceThrows = true;
     const unavailableWebhookReceiptPolicy = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
@@ -346,7 +337,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
 
     const duplicateEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
+      // The header is intentionally changed: the verified raw body determines the replay key.
+      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "attacker-controlled-new-id" },
       body: event,
     });
     assert.equal(duplicateEventId.status, 200);
@@ -367,8 +359,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       body: eventConflictPayload,
     });
     assert.equal(eventConflict.status, 409);
-    assert.equal((await eventConflict.json()).error, "event_conflict");
-    assert.equal(webhookCaptureCalls, 1, "same event ID with a different payload must not capture again");
+    assert.equal((await eventConflict.json()).error, "payment_mismatch");
+    assert.equal(webhookCaptureCalls, 1, "a differently signed payload for an already captured order must be rejected without a second capture");
 
 
 
