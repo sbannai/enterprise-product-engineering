@@ -469,7 +469,22 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
       }
       if (!orderResponse.ok) {
-        json(res, 502, { error: "gateway_order_creation_failed" }); return true;
+        // A 4xx definitively rejects provider order creation; release only the
+        // still-uncompleted reservation. 5xx remains ambiguous and must be reconciled.
+        if (orderResponse.status >= 400 && orderResponse.status < 500) {
+          try {
+            const released = await paymentStore.releaseOrderCreationAfterRejection(tenantId, idempotencyKey);
+            if (!released.ok) {
+              json(res, 503, { error: "payment_order_rejection_reconciliation_required" }); return true;
+            }
+          } catch {
+            json(res, 503, { error: "payment_order_rejection_reconciliation_required" }); return true;
+          }
+          json(res, 502, { error: "gateway_order_creation_rejected" }); return true;
+        }
+        // A provider 5xx may be ambiguous; retain the reservation to prevent a
+        // retry from creating a second provider order without reconciliation.
+        json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
       }
       let order: any;
       try { order = await orderResponse.json(); } catch {
