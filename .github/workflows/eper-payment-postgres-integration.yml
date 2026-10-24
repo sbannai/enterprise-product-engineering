@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - "eper/packages/payments/**"
+      - "eper/packages/pricing/**"
       - "eper/apps/api/main.ts"
       - "eper/apps/api/server.ts"
       - "eper/apps/api/payments.ts"
@@ -63,6 +64,8 @@ jobs:
           cache-dependency-path: eper/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Test market price-book contract
+        run: node --test tests/market-price-book.test.mjs
       - name: Test PostgreSQL runtime pool configuration
         run: node --test tests/postgres-payment-runtime.test.mjs
       - name: Test PostgreSQL-backed payment and receipt API flow
