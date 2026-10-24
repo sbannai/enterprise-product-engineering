@@ -27,9 +27,9 @@ function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransacti
   if (!isRecord(value)) return false;
   if (
     !isNonEmptyText(value.tenantId) || !isNonEmptyText(value.reference) ||
-    !transactionKinds.has(String(value.kind)) || !isNonEmptyText(value.description) ||
+    (typeof value.kind !== "string" || !transactionKinds.has(value.kind)) || !isNonEmptyText(value.description) ||
     !isSafeInteger(value.amountDueMinor) || value.amountDueMinor <= 0 ||
-    value.currency !== "INR" || !transactionStatuses.has(String(value.status)) ||
+    value.currency !== "INR" || (typeof value.status !== "string" || !transactionStatuses.has(value.status)) ||
     !isNonEmptyText(value.sourceId) || !isNonEmptyText(value.sourceVersion) ||
     !isValidIsoTimestamp(value.approvedAt) ||
     !Array.isArray(value.lineItems) || !Array.isArray(value.adjustments)
@@ -48,7 +48,7 @@ function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransacti
   }
   for (const adjustment of value.adjustments) {
     if (!isRecord(adjustment) ||
-      !adjustmentKinds.has(String(adjustment.kind)) ||
+      (typeof adjustment.kind !== "string" || !adjustmentKinds.has(adjustment.kind)) ||
       !isNonEmptyText(adjustment.description) ||
       !isSafeInteger(adjustment.amountMinor) ||
       (adjustment.kind === "DISCOUNT" && adjustment.amountMinor >= 0)
