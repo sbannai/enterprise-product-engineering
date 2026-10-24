@@ -410,9 +410,10 @@ test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid n
 });
 
 
-test("reserveOrder serializes by tenant/invoice and reuses an existing payable order across idempotency keys", async () => {
+test("reserveOrder rejects a fresh idempotency key instead of adopting another key's active order", async () => {
   const activeInvoiceOrder = {
     id: 41, transaction_public_id: "txn-public-41", provider_order_id: "order_existing_41",
+    idempotency_key: "original-key",
     invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
     invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
     invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "created",
@@ -426,12 +427,12 @@ test("reserveOrder serializes by tenant/invoice and reuses an existing payable o
     invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
     invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
   });
-  assert.deepEqual(result, { ok: true, value: { id: "41", transactionPublicId: "txn-public-41", providerOrderId: "order_existing_41" } });
+  assert.deepEqual(result, { ok: false, reason: "invoice_payment_conflict" });
   const lockIndex = fake.calls.findIndex(({ sql }) => sql.includes("pg_advisory_xact_lock"));
   const lookupIndex = fake.calls.findIndex(({ sql }) => sql.includes("status IN ('creating', 'created', 'authorized', 'captured')"));
   assert.ok(lockIndex >= 0 && lookupIndex > lockIndex, "invoice lock must be acquired before checking active orders");
   assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_orders")), false);
-  assert.equal(fake.calls.at(-1).sql, "COMMIT");
+  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
 });
 
 test("reserveOrder refuses a second order when the invoice already has a captured payment", async () => {
