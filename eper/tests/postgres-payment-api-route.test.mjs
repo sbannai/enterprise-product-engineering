@@ -674,7 +674,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const crossTenant = await nativeFetch(`${base}/api/payments/receipts/${receiptPublicId}.pdf`, {
       headers: { authorization: `Bearer ${token}`, "x-tenant-id": "another-tenant" },
     });
-    assert.equal(crossTenant.status, 404);
+    assert.equal(crossTenant.status, 403);
+    assert.deepEqual(await crossTenant.json(), { error: "tenant_scope_mismatch" });
 
     // PostgreSQL mode must never fall back to the legacy JSON-ledger receipt route.
     const legacyReceipt = await nativeFetch(`${base}/api/payments/${transactionPublicId}/receipt.pdf`, {
