@@ -11,6 +11,48 @@ export interface HttpTransactionAuthorityConfig {
   fetchImpl?: typeof fetch;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+const isNonEmptyText = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+const isSafeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value);
+const transactionKinds = new Set(["ECOMMERCE", "GENERAL"]);
+const transactionStatuses = new Set(["DUE", "PARTIALLY_PAID", "PAID", "VOID", "CANCELLED"]);
+const adjustmentKinds = new Set(["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"];
+
+/** Validate untrusted HTTP JSON before exposing it as a trusted snapshot. */
+function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransactionSnapshot {
+  if (!isRecord(value)) return false;
+  if (
+    !isNonEmptyText(value.tenantId) || !isNonEmptyText(value.reference) ||
+    !transactionKinds.has(String(value.kind)) || !isNonEmptyText(value.description) ||
+    !isSafeInteger(value.amountDueMinor) || value.amountDueMinor <= 0 ||
+    value.currency !== "INR" || !transactionStatuses.has(String(value.status)) ||
+    !isNonEmptyText(value.sourceId) || !isNonEmptyText(value.sourceVersion) ||
+    !isNonEmptyText(value.approvedAt) || !Number.isFinite(Date.parse(value.approvedAt)) ||
+    !Array.isArray(value.lineItems) || !Array.isArray(value.adjustments)
+  ) return false;
+
+  for (const item of value.lineItems) {
+    if (!isRecord(item) ||
+      !isNonEmptyText(item.sourceLineId) || !isNonEmptyText(item.description) ||
+      (item.sku !== undefined && typeof item.sku !== "string") ||
+      !isSafeInteger(item.quantity) || item.quantity <= 0 ||
+      !isSafeInteger(item.unitPriceMinor) || item.unitPriceMinor < 0 ||
+      !isSafeInteger(item.lineTotalMinor) || item.lineTotalMinor < 0
+    ) return false;
+  }
+  for (const adjustment of value.adjustments) {
+    if (!isRecord(adjustment) ||
+      !adjustmentKinds.has(String(adjustment.kind)) ||
+      !isNonEmptyText(adjustment.description) ||
+      !isSafeInteger(adjustment.amountMinor)
+    ) return false;
+  }
+  return value.kind !== "ECOMMERCE" || value.lineItems.length > 0;
+}
+
 /**
  * Read-only adapter for an owner-approved transaction authority API.
  *
@@ -70,7 +112,7 @@ export class HttpTransactionSnapshotSource implements TrustedTransactionSnapshot
     // transaction-authority outage or compromised endpoint from exhausting API memory.
     const maxResponseBytes = 64 * 1024;
     const declaredLength = response.headers.get("content-length");
-    if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxResponseBytes) {
+    if (declaredLength && /^\\d+$/.test(declaredLength) && Number(declaredLength) > maxResponseBytes) {
       await response.body?.cancel();
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_TOO_LARGE");
     }
@@ -98,10 +140,10 @@ export class HttpTransactionSnapshotSource implements TrustedTransactionSnapshot
     } catch {
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID");
     }
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
+    if (!isTrustedTransactionSnapshot(value)) {
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID");
     }
-    return value as TrustedTransactionSnapshot;
+    return value;
   }
 }
 
