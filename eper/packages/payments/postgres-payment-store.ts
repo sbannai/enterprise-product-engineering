@@ -484,10 +484,11 @@ export class PostgresPaymentStore {
       const existing = await client.query<{
         id: string | number; transaction_public_id: string; provider_order_id: string | null; invoice_reference: string;
         amount_minor: string | number; currency: string; invoice_source_id: string;
-        invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
+        invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"];
+        creation_lease_until: Date | string | null; last_creation_error: string | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
-                invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until
+                invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until, last_creation_error
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
           FOR UPDATE`,
@@ -501,6 +502,25 @@ export class PostgresPaymentStore {
           new Date(row.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString()) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
+      }
+      if (row.status === "failed" && row.provider_order_id === null && row.last_creation_error === "gateway_rejected") {
+        // A previous definitive 4xx rejection is known not to have created a remote
+        // order. Re-arm this same idempotency key safely; all other failed rows stay closed.
+        const restarted = await client.query<{ id: string | number }>(
+          `UPDATE eper_payment_orders
+              SET status = 'creating', creation_lease_until = NOW() + INTERVAL '2 minutes',
+                  creation_attempts = creation_attempts + 1, last_creation_error = NULL, updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2 AND status = 'failed'
+              AND provider_order_id IS NULL AND last_creation_error = 'gateway_rejected'
+            RETURNING id`,
+          [row.id, input.tenantId],
+        );
+        if (!restarted.rows[0]) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "idempotency_conflict" };
+        }
+        await client.query("COMMIT");
+        return { ok: true, value: { id: String(row.id), transactionPublicId: row.transaction_public_id, providerOrderId: null } };
       }
       if (row.status === "creating") {
         // An expired lease is not permission to call Razorpay again: the previous
@@ -540,7 +560,7 @@ export class PostgresPaymentStore {
       await client.query("BEGIN");
       const result = await client.query<{ id: string | number }>(
         `UPDATE eper_payment_orders
-            SET status = 'failed', creation_lease_until = NULL, updated_at = NOW()
+            SET status = 'failed', creation_lease_until = NULL, last_creation_error = 'gateway_rejected', updated_at = NOW()
           WHERE tenant_id = $1 AND idempotency_key = $2
             AND status = 'creating' AND provider_order_id IS NULL
           RETURNING id`,
