@@ -224,6 +224,15 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       authorization: `Bearer ${token}`, "x-tenant-id": tenantId, "content-type": "application/json",
     };
 
+    // HTTP authentication schemes are case-insensitive; a lowercase bearer scheme
+    // must authenticate the same tenant principal rather than failing at the parser.
+    const lowercaseBearer = await nativeFetch(`${base}/api/payments/verify`, {
+      method: "POST",
+      headers: { ...headers, authorization: `bearer ${token}` },
+      body: JSON.stringify({}),
+    });
+    assert.notEqual(lowercaseBearer.status, 401, "Bearer scheme matching must be case-insensitive");
+
     // A tenant-A credential cannot select tenant B for order creation. Reject before
     // either trusted authority or the payment store is consulted.
     const crossTenantOrder = await nativeFetch(`${base}/api/payments/orders`, {

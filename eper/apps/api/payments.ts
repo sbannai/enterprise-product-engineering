@@ -210,7 +210,7 @@ export function paymentTenantIdentityConfigured(): boolean {
   return configuredTenantTokens() !== null;
 }
 function authenticatedTenant(req: IncomingMessage, tokens: Record<string, string>): string | null {
-  const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
+  const match = /^Bearer (.+)$/i.exec(req.headers.authorization ?? "");
   if (!match) return null;
   const supplied = Buffer.from(match[1]);
   let matched: string | null = null;
@@ -226,7 +226,7 @@ function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean {
   return requested === undefined || requested === tenantId;
 }
 function bearer(req: IncomingMessage, token: string): boolean {
-  const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
+  const match = /^Bearer (.+)$/i.exec(req.headers.authorization ?? "");
   if (!match) return false;
   const supplied = Buffer.from(match[1]);
   const expected = Buffer.from(token);
