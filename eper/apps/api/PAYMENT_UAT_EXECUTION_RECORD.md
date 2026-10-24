@@ -19,7 +19,7 @@
 
 ## Test execution matrix
 
-For every case, record the actual run timestamp, tester, build ID, evidence link or artifact ID, observed result, and linked defect. Do not mark PASS without evidence. Use only test-mode transactions and synthetic or approved test data. A case is complete only after every explicitly listed assertion/access path in that row has been checked.
+For every case, the **Tester is the primary execution owner** and must personally execute the scenario against the approved non-production build, record the actual run timestamp, build ID, evidence link or artifact ID, observed result, and linked defect. The Developer supports setup, diagnosis, and defect fixes; Support assists with provider/log/evidence coordination. Support from either role does not transfer execution ownership away from the Tester. Do not mark PASS without evidence. Use only test-mode transactions and synthetic or approved test data. A case is complete only after every explicitly listed assertion/access path in that row has been checked.
 
 | Case | Scenario | Expected result | Status | Evidence / defect |
 |---|---|---|---|---|
@@ -32,7 +32,7 @@ For every case, record the actual run timestamp, tester, build ID, evidence link
 | PAY-UAT-07 | Non-payable invoice/source or missing source | Order is not created for an ineligible or missing payable source | NOT RUN | |
 | PAY-UAT-08 | Trusted invoice/transaction authority unavailable or malformed | Flow fails closed; no client-supplied amount or fabricated transaction snapshot is accepted as authority | NOT RUN | |
 | PAY-UAT-09 | Invalid webhook signature | Webhook is rejected; financial state and receipt issuance remain unchanged | NOT RUN | |
-| PAY-UAT-10 | Duplicate webhook or conflicting event replay | Duplicate delivery is idempotent; conflicting event is rejected or safely quarantined; no duplicate financial effect, receipt, or unsafe state regression | NOT RUN | |
+| PAY-UAT-10 | Duplicate webhook or conflicting event replay | Duplicate delivery is idempotent; a reused event ID with a different payload is explicitly rejected as a conflict; no duplicate financial effect, receipt, or unsafe state regression. Quarantine alone is not a PASS unless the conflicting request is rejected and the canonical conflict outcome is evidenced. | NOT RUN | |
 | PAY-UAT-11 | Receipt immutability and download integrity | Public receipt ID remains distinct from transaction ID; repeated downloads retain the same bytes and SHA-256 digest | NOT RUN | |
 | PAY-UAT-12 | Legacy pre-migration order with NULL transaction snapshot / migration-007 gate | Read-only eligible-row query returns zero rows before enabling the flow, or every row is safely reconciled; never synthesize a snapshot from mutable data or cancel a possibly charged order blindly | NOT RUN | |
 
@@ -58,6 +58,8 @@ Copy this block for each executed case.
 - [ ] All 12 canonical cases have evidence-backed results.
 - [ ] For PAY-UAT-02, both order-time persisted data and receipt itemization/totals are verified.
 - [ ] For PAY-UAT-06, order creation, verification, and receipt access are each tested for tenant isolation.
+- [ ] For PAY-UAT-10, a same-event-ID/different-payload replay is rejected as a conflict; quarantine without rejection is not accepted as PASS.
+- [ ] The Tester personally executed and recorded each case; Developer and Support contributions are supporting roles, not substitute execution.
 - [ ] All failures and blockers are resolved or explicitly accepted by the authorized business owner.
 - [ ] Sanitized logs and receipt artifacts are attached.
 - [ ] Independent security review is recorded.
