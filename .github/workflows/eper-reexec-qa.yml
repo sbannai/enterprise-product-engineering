@@ -1,8 +1,19 @@
-# Re-run controlled QA after payment/receipt branch reconciliation.
+# Re-run controlled QA on active payment-stack changes; this is technical evidence, not business UAT.
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
 on:
   push:
+    branches:
+      - "reconcile/payment-153-168-integration"
+      - "reconcile/payment-stack-with-receipt-contract"
+      - "fix/payment-tenant-principal-binding-validated"
+      - "fix/payment-json-ledger-test-only"
+      - "fix/payment-uat-review-findings-20261024"
+      - "fix/transaction-authority-runtime-schema-validation"
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-qa.yml"
+  pull_request:
     paths:
       - "eper/**"
       - ".github/workflows/eper-reexec-qa.yml"
