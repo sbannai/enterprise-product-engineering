@@ -31,6 +31,12 @@ jobs:
       - name: Execute 38 chapter pilot test suites and build 228-row matrix
         run: node eper/scripts/run-chapter-pilot-matrix.mjs
 
+      - name: Install EPER dependencies and build API
+        working-directory: eper
+        run: |
+          npm ci
+          npm run build
+
       - name: Payment gateway contract regression tests
         working-directory: eper
         run: node --test tests/payment-gateway.test.mjs
