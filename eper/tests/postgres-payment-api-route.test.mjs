@@ -21,6 +21,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let receiptNumberSourceThrows = false;
   let captured = false;
   let transactionSourceStatus = "DUE";
+  let reservationFailureReason = null;
   let transactionSourceCalls = 0;
   let webhookCaptureCalls = 0;
   let originalWebhookPayloadSha256 = null;
@@ -67,6 +68,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
 
   const paymentStore = {
     async reserveOrder(input) {
+      if (reservationFailureReason) return { ok: false, reason: reservationFailureReason };
       // Model the immutable snapshot persisted with the order reservation.
       order = { ...order, transactionSnapshot: structuredClone(input.transactionSnapshot) };
       return { ok: true, value: { id: "41", transactionPublicId, providerOrderId: null } };
@@ -189,6 +191,18 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const headers = {
       authorization: `Bearer ${token}`, "x-tenant-id": tenantId, "content-type": "application/json",
     };
+
+    // Invoice reservation conflicts are expected client conflicts, not server errors.
+    for (const reason of ["invoice_payment_conflict", "invoice_already_paid"]) {
+      reservationFailureReason = reason;
+      const conflict = await nativeFetch(`${base}/api/payments/orders`, {
+        method: "POST", headers: { ...headers, "idempotency-key": `route-conflict-${reason}` },
+        body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+      });
+      assert.equal(conflict.status, 409, `${reason} must map to HTTP 409`);
+      assert.deepEqual(await conflict.json(), { error: reason });
+    }
+    reservationFailureReason = null;
 
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
