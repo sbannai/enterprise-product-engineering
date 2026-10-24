@@ -63,11 +63,20 @@ function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransacti
     value.lineItems.length === 0 &&
     value.adjustments.length === 0;
   if (!summaryOnlyGeneral) {
-    const lineTotal = value.lineItems.reduce((sum, item) => sum + (item as Record<string, unknown>).lineTotalMinor as number, 0);
-    const adjustmentsTotal = value.adjustments.reduce((sum, item) => sum + (item as Record<string, unknown>).amountMinor as number, 0);
+    let lineTotal = 0;
+    for (const item of value.lineItems) {
+      lineTotal += (item as Record<string, unknown>).lineTotalMinor as number;
+      if (!Number.isSafeInteger(lineTotal)) return false;
+    }
+    let adjustmentsTotal = 0;
+    for (const adjustment of value.adjustments) {
+      adjustmentsTotal += (adjustment as Record<string, unknown>).amountMinor as number;
+      // Adjustments are signed; check each intermediate sum so overflow cannot
+      // be hidden by a later adjustment that brings the final value back in range.
+      if (!Number.isSafeInteger(adjustmentsTotal)) return false;
+    }
     const computedTotal = lineTotal + adjustmentsTotal;
-    if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(adjustmentsTotal) ||
-        !Number.isSafeInteger(computedTotal) || computedTotal <= 0 ||
+    if (!Number.isSafeInteger(computedTotal) || computedTotal <= 0 ||
         computedTotal !== value.amountDueMinor) return false;
   }
   return true;
