@@ -24,6 +24,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let transactionSourceStatus = "DUE";
   let gatewayOrderStatus = 200;
   let gatewayOrderError = "definitive_rejection";
+  let gatewayOrderNetworkFailure = false;
+  let gatewayOrderMalformedResponse = false;
   let releasedRejectedReservations = 0;
   let reservationFailureReason = null;
   let transactionSourceCalls = 0;
@@ -59,6 +61,10 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
+      if (gatewayOrderNetworkFailure) throw new Error("simulated connection reset");
+      if (gatewayOrderMalformedResponse) return new Response("{not-json", {
+        status: 200, headers: { "content-type": "application/json" },
+      });
       if (gatewayOrderStatus >= 400) {
         return new Response(JSON.stringify({ error: gatewayOrderError }), {
           status: gatewayOrderStatus, headers: { "content-type": "application/json" },
@@ -314,6 +320,38 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
     assert.equal(transactionSourceCalls, 6, "all six order attempts use an authoritative snapshot, including invoice conflict probes");
+
+    // Ambiguous provider outcomes retain the reservation and must never trigger a retryable release.
+    gatewayOrderNetworkFailure = true;
+    const unknownNetworkOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-network-unknown-001" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(unknownNetworkOrder.status, 503);
+    assert.deepEqual(await unknownNetworkOrder.json(), { error: "gateway_order_creation_outcome_unknown" });
+    assert.equal(releasedRejectedReservations, 2, "network failure must retain the reservation");
+    gatewayOrderNetworkFailure = false;
+
+    gatewayOrderStatus = 503;
+    const serverErrorOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-server-error-001" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(serverErrorOrder.status, 503);
+    assert.deepEqual(await serverErrorOrder.json(), { error: "gateway_order_creation_outcome_unknown" });
+    assert.equal(releasedRejectedReservations, 2, "provider 5xx must retain the reservation");
+    gatewayOrderStatus = 200;
+
+    gatewayOrderMalformedResponse = true;
+    const malformedOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-malformed-001" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(malformedOrder.status, 502);
+    assert.deepEqual(await malformedOrder.json(), { error: "gateway_order_response_invalid" });
+    assert.equal(releasedRejectedReservations, 2, "malformed provider response must retain the reservation");
+    gatewayOrderMalformedResponse = false;
+
     // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
     transactionSourceStatus = "PAID";
 
@@ -483,7 +521,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(duplicateBody.receiptId, receiptPublicId);
     assert.equal(duplicateBody.receiptNumber, receiptNumber);
     assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
-    assert.equal(transactionSourceCalls, 6, "six attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
+    assert.equal(transactionSourceCalls, 9, "nine attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
 
     // Changing the unsigned event-id header must not bypass replay deduplication.
     const changedHeaderReplay = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
