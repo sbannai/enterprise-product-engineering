@@ -102,3 +102,33 @@ test("rejects invalid lookups without calling the authority", async () => {
   assert.equal(await source.findTransaction({ tenantId: "tenant-a", reference: " " }), null);
   assert.equal(calls, 0);
 });
+
+test("rejects malformed trusted-snapshot fields before returning upstream JSON", async () => {
+  const invalidSnapshots = [
+    { ...validSnapshot, tenantId: 42 },
+    { ...validSnapshot, reference: "" },
+    { ...validSnapshot, kind: "UNKNOWN" },
+    { ...validSnapshot, amountDueMinor: "12500" },
+    { ...validSnapshot, currency: "USD" },
+    { ...validSnapshot, status: "CAPTURED_WITHOUT_CONTRACT" },
+    { ...validSnapshot, sourceVersion: "" },
+    { ...validSnapshot, approvedAt: "not-a-date" },
+    { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], quantity: 0 }] },
+    { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], lineTotalMinor: "12500" }] },
+    { ...validSnapshot, adjustments: [{ kind: "UNKNOWN", description: "Bad", amountMinor: 0 }] },
+    { ...validSnapshot, adjustments: [{ kind: "FEE", description: "Bad", amountMinor: "0" }] },
+    { ...validSnapshot, lineItems: [] },
+  ];
+  for (const invalidSnapshot of invalidSnapshots) {
+    const source = new HttpTransactionSnapshotSource({
+      endpoint: "https://authority.example/api/transaction",
+      bearerToken: "authority-test-token-1234567890",
+      fetchImpl: async () => response(JSON.stringify(invalidSnapshot)),
+    });
+    await assert.rejects(
+      source.findTransaction({ tenantId: "tenant-a", reference: "checkout-001" }),
+      /RESPONSE_INVALID/,
+      JSON.stringify(invalidSnapshot),
+    );
+  }
+});
