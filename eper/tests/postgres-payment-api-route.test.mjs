@@ -103,7 +103,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       }
       webhookCaptureCalls += 1;
       try {
-  assert.equal(input.providerEventId, createHash("sha256").update(event).digest("hex"));
+  assert.equal(input.providerEventId, originalWebhookPayloadSha256);
   assert.equal(input.amountMinor, webhookGatewayAmount);
   assert.equal(input.tenantId, tenantId);
   assert.equal(input.receiptNumber, receiptNumber);
