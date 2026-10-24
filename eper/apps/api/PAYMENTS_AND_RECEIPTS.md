@@ -44,7 +44,7 @@ The result must be empty before the flow is enabled. For any returned order, rec
 
 - Configure `EPER_PAYMENT_RECEIPT_NUMBER_PREFIX` only after the owner/business authority approves the receipt-numbering policy. No default policy is invented; capture fails closed if numbering policy is unconfigured.
 - Approve and wire the authoritative transaction authority and invoice/fee source, including source identity/version and approval evidence. Until these are available, production readiness and business UAT are blocked.
-- Rotate the Razorpay test secret if it was exposed; store replacement credentials only in the approved secret mechanism.
+- **Rotate the previously exposed Razorpay test secret before configuring or using any test credentials.** Store replacement credentials only in the approved secret mechanism; never reuse the exposed value.
 - Provide approved Razorpay test-mode credentials and an authorized isolated non-production endpoint; run end-to-end evidence for order creation, capture/webhook or verification, idempotent retry, and receipt download.
 - Confirm receipt legal fields, branding, retention, refund/chargeback handling, reconciliation, webhook replay controls, alerting, and operational ownership.
 - Complete all 12 defined business UAT cases, attach sanitized evidence, and obtain explicit business sign-off. Automated CI and the 228-requirement pilot are technical evidence only; they do not constitute business approval or close any G1–G13 gate.
