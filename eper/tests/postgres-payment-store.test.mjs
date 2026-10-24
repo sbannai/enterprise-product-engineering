@@ -395,3 +395,67 @@ test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid n
   assert.ok(calls.some(({ sql }) => sql === "COMMIT"));
   assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
 });
+
+
+function schemaPool({ missingTrigger = null, missingConstraint = null } = {}) {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql.includes("to_regclass('public.eper_payment_orders')")) {
+        return { rows: [{ orders: "eper_payment_orders", events: "eper_payment_webhook_events", receipts: "eper_payment_receipts" }], rowCount: 1 };
+      }
+      if (sql.includes("information_schema.columns")) {
+        return { rows: [
+          { table_name: "eper_payment_orders", column_name: "transaction_snapshot" },
+          { table_name: "eper_payment_orders", column_name: "transaction_public_id" },
+          { table_name: "eper_payment_receipts", column_name: "transaction_snapshot" },
+          { table_name: "eper_payment_receipts", column_name: "document_pdf" },
+        ], rowCount: 4 };
+      }
+      if (sql.includes("FROM pg_trigger")) {
+        return { rows: [
+          ...(missingTrigger === "eper_payment_order_snapshot_immutable" ? [] : [{ table_name: "eper_payment_orders", trigger_name: "eper_payment_order_snapshot_immutable" }]),
+          ...(missingTrigger === "eper_payment_receipt_immutability_guard" ? [] : [{ table_name: "eper_payment_receipts", trigger_name: "eper_payment_receipt_immutability_guard" }]),
+        ], rowCount: missingTrigger ? 1 : 2 };
+      }
+      if (sql.includes("FROM pg_constraint")) {
+        return { rows: [
+          ...(missingConstraint === "eper_payment_orders_transaction_snapshot_object_check" ? [] : [{ table_name: "eper_payment_orders", constraint_name: "eper_payment_orders_transaction_snapshot_object_check" }]),
+          ...(missingConstraint === "eper_payment_receipts_transaction_snapshot_object_check" ? [] : [{ table_name: "eper_payment_receipts", constraint_name: "eper_payment_receipts_transaction_snapshot_object_check" }]),
+        ], rowCount: missingConstraint ? 1 : 2 };
+      }
+      throw new Error("Unexpected schema readiness query");
+    },
+    release() {},
+  };
+  return { pool: { async connect() { return client; } }, calls };
+}
+
+test("checkSchema accepts the complete schema and database immutability protections", async () => {
+  const fake = schemaPool();
+  assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), true);
+  assert.ok(fake.calls.some((sql) => sql.includes("FROM pg_trigger")));
+  assert.ok(fake.calls.some((sql) => sql.includes("FROM pg_constraint")));
+});
+
+test("checkSchema fails closed when an order snapshot immutability trigger is missing", async () => {
+  const fake = schemaPool({ missingTrigger: "eper_payment_order_snapshot_immutable" });
+  assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+  assert.equal(fake.calls.some((sql) => sql.includes("FROM pg_constraint")), false);
+});
+
+test("checkSchema fails closed when a receipt snapshot immutability trigger is missing", async () => {
+  const fake = schemaPool({ missingTrigger: "eper_payment_receipt_immutability_guard" });
+  assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+});
+
+test("checkSchema fails closed when either snapshot object constraint is missing", async () => {
+  for (const missingConstraint of [
+    "eper_payment_orders_transaction_snapshot_object_check",
+    "eper_payment_receipts_transaction_snapshot_object_check",
+  ]) {
+    const fake = schemaPool({ missingConstraint });
+    assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+  }
+});
