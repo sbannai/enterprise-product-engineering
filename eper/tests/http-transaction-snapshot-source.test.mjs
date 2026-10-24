@@ -105,6 +105,17 @@ test("rejects invalid lookups without calling the authority", async () => {
 
 test("rejects malformed trusted-snapshot fields before returning upstream JSON", async () => {
   const invalidSnapshots = [
+    // Signed adjustments must never overflow at an intermediate step, even if
+    // later adjustments bring the final floating-point sum back into range.
+    {
+      ...validSnapshot,
+      adjustments: [
+        { kind: "FEE", description: "Overflow", amountMinor: Number.MAX_SAFE_INTEGER },
+        { kind: "TAX", description: "Overflow", amountMinor: 1 },
+        { kind: "OTHER", description: "Balance", amountMinor: -Number.MAX_SAFE_INTEGER },
+        { kind: "SHIPPING", description: "Balance", amountMinor: -1 },
+      ],
+    },
     { ...validSnapshot, tenantId: 42 },
     { ...validSnapshot, reference: "" },
     { ...validSnapshot, kind: "UNKNOWN" },
