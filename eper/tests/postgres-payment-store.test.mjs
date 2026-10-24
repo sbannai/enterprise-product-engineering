@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41" } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41", activeInvoiceOrder = null } = {}) {
   const calls = [];
   let released = 0;
   const client = {
     async query(sql, values = []) {
       calls.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
+      if (sql.includes("WHERE tenant_id = $1 AND invoice_reference = $2") && sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")) {
+        return { rows: activeInvoiceOrder ? [activeInvoiceOrder] : [], rowCount: activeInvoiceOrder ? 1 : 0 };
+      }
       if (sql.includes("INSERT INTO eper_payment_orders")) {
         return { rows: orderInsertConflict ? [] : [{ id: 41, provider_order_id: "order_test_41" }], rowCount: orderInsertConflict ? 0 : 1 };
       }
@@ -387,4 +390,49 @@ test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid n
   assert.equal(calls.filter(({ sql }) => sql.startsWith("UPDATE eper_payment_receipts")).length, 1);
   assert.ok(calls.some(({ sql }) => sql === "COMMIT"));
   assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
+});
+
+
+test("reserveOrder serializes by tenant/invoice and reuses an existing payable order across idempotency keys", async () => {
+  const activeInvoiceOrder = {
+    id: 41, transaction_public_id: "txn-public-41", provider_order_id: "order_existing_41",
+    invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
+    invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
+    invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "created",
+    creation_lease_until: null,
+  };
+  const fake = makePool({ activeInvoiceOrder });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.reserveOrder({
+    tenantId: "tenant-a", invoiceReference: "invoice-41",
+    idempotencyKey: "different-retry-key", amountMinor: 12500, currency: "INR",
+    invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
+    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
+  });
+  assert.deepEqual(result, { ok: true, value: { id: "41", transactionPublicId: "txn-public-41", providerOrderId: "order_existing_41" } });
+  const lockIndex = fake.calls.findIndex(({ sql }) => sql.includes("pg_advisory_xact_lock"));
+  const lookupIndex = fake.calls.findIndex(({ sql }) => sql.includes("status IN ('creating', 'created', 'authorized', 'captured')"));
+  assert.ok(lockIndex >= 0 && lookupIndex > lockIndex, "invoice lock must be acquired before checking active orders");
+  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_orders")), false);
+  assert.equal(fake.calls.at(-1).sql, "COMMIT");
+});
+
+test("reserveOrder refuses a second order when the invoice already has a captured payment", async () => {
+  const fake = makePool({ activeInvoiceOrder: {
+    id: 41, transaction_public_id: "txn-public-41", provider_order_id: "order_existing_41",
+    invoice_reference: "invoice-41", amount_minor: 12500, currency: "INR",
+    invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
+    invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "captured",
+    creation_lease_until: null,
+  } });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.reserveOrder({
+    tenantId: "tenant-a", invoiceReference: "invoice-41",
+    idempotencyKey: "fresh-key", amountMinor: 12500, currency: "INR",
+    invoiceSourceId: "approved-invoice-service", invoiceSourceVersion: "v3",
+    invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
+  });
+  assert.deepEqual(result, { ok: false, reason: "invoice_already_paid" });
+  assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_orders")), false);
+  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
 });
