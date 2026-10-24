@@ -102,3 +102,68 @@ test("rejects invalid lookups without calling the authority", async () => {
   assert.equal(await source.findTransaction({ tenantId: "tenant-a", reference: " " }), null);
   assert.equal(calls, 0);
 });
+
+test("rejects malformed trusted-snapshot fields before returning upstream JSON", async () => {
+  const invalidSnapshots = [
+    { ...validSnapshot, tenantId: 42 },
+    { ...validSnapshot, reference: "" },
+    { ...validSnapshot, kind: "UNKNOWN" },
+    { ...validSnapshot, kind: ["ECOMMERCE"] },
+    { ...validSnapshot, status: ["DUE"] },
+    { ...validSnapshot, amountDueMinor: "12500" },
+    { ...validSnapshot, currency: "USD" },
+    { ...validSnapshot, status: "CAPTURED_WITHOUT_CONTRACT" },
+    { ...validSnapshot, sourceVersion: "" },
+    { ...validSnapshot, approvedAt: "not-a-date" },
+    { ...validSnapshot, approvedAt: "2026-02-30T10:00:00Z" },
+    { ...validSnapshot, approvedAt: "2026-10-21T10:00:00" },
+    { ...validSnapshot, approvedAt: "2026-10-21" },
+    { ...validSnapshot, approvedAt: "2026-10-21T10:00:00+14:01" },
+    { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], quantity: 0 }] },
+    { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], lineTotalMinor: "12500" }] },
+    { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], lineTotalMinor: 12499 }] },
+    { ...validSnapshot, amountDueMinor: 12501 },
+    { ...validSnapshot, adjustments: [{ kind: "UNKNOWN", description: "Bad", amountMinor: 0 }] },
+    { ...validSnapshot, adjustments: [{ kind: ["DISCOUNT"], description: "Bad", amountMinor: 100 }] },
+    { ...validSnapshot, adjustments: [{ kind: "FEE", description: "Bad", amountMinor: "0" }] },
+    { ...validSnapshot, adjustments: [{ kind: "DISCOUNT", description: "Bad", amountMinor: 100 }] },
+    { ...validSnapshot, lineItems: [] },
+  ];
+  for (const invalidSnapshot of invalidSnapshots) {
+    const source = new HttpTransactionSnapshotSource({
+      endpoint: "https://authority.example/api/transaction",
+      bearerToken: "authority-test-token-1234567890",
+      fetchImpl: async () => response(JSON.stringify(invalidSnapshot)),
+    });
+    await assert.rejects(
+      source.findTransaction({ tenantId: "tenant-a", reference: "checkout-001" }),
+      /RESPONSE_INVALID/,
+      JSON.stringify(invalidSnapshot),
+    );
+  }
+});
+
+
+test("rejects a schema-valid authority snapshot for a different tenant", async () => {
+  const source = new HttpTransactionSnapshotSource({
+    endpoint: "https://authority.example/api/transaction",
+    bearerToken: "authority-test-token-1234567890",
+    fetchImpl: async () => response(JSON.stringify({ ...validSnapshot, tenantId: "tenant-b" })),
+  });
+  await assert.rejects(
+    source.findTransaction({ tenantId: "tenant-a", reference: "checkout-001" }),
+    /EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID/,
+  );
+});
+
+test("rejects a schema-valid authority snapshot for a different transaction reference", async () => {
+  const source = new HttpTransactionSnapshotSource({
+    endpoint: "https://authority.example/api/transaction",
+    bearerToken: "authority-test-token-1234567890",
+    fetchImpl: async () => response(JSON.stringify({ ...validSnapshot, reference: "checkout-other" })),
+  });
+  await assert.rejects(
+    source.findTransaction({ tenantId: "tenant-a", reference: "checkout-001" }),
+    /EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID/,
+  );
+});
