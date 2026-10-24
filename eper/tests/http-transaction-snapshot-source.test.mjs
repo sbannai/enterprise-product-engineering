@@ -115,8 +115,11 @@ test("rejects malformed trusted-snapshot fields before returning upstream JSON",
     { ...validSnapshot, approvedAt: "not-a-date" },
     { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], quantity: 0 }] },
     { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], lineTotalMinor: "12500" }] },
+    { ...validSnapshot, lineItems: [{ ...validSnapshot.lineItems[0], lineTotalMinor: 12499 }] },
+    { ...validSnapshot, amountDueMinor: 12501 },
     { ...validSnapshot, adjustments: [{ kind: "UNKNOWN", description: "Bad", amountMinor: 0 }] },
     { ...validSnapshot, adjustments: [{ kind: "FEE", description: "Bad", amountMinor: "0" }] },
+    { ...validSnapshot, adjustments: [{ kind: "DISCOUNT", description: "Bad", amountMinor: 100 }] },
     { ...validSnapshot, lineItems: [] },
   ];
   for (const invalidSnapshot of invalidSnapshots) {
