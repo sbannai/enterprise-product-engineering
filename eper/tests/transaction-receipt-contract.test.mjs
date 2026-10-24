@@ -131,3 +131,18 @@ test("rejects missing audit provenance", async () => {
     ok: false, error: "transaction_provenance_missing",
   });
 });
+
+test("rejects impossible, timezone-free, and non-ISO approval timestamps", async () => {
+  for (const approvedAt of [
+    "2026-02-30T10:00:00Z",
+    "2026-10-21T10:00:00",
+    "2026-10-21",
+    "2026-10-21T10:00:00+14:01",
+  ]) {
+    assert.deepEqual(
+      await resolveTrustedTransactionSnapshot(sourceFor({ ...ecommerce, approvedAt }), lookup),
+      { ok: false, error: "transaction_provenance_missing" },
+      approvedAt,
+    );
+  }
+});
