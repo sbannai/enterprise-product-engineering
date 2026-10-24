@@ -158,9 +158,12 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (paymentStore && process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
       if (event?.event !== "payment.captured") { json(res, 200, { received: true, ignored: true }); return true; }
       const payment = event?.payload?.payment?.entity;
-      const providerEventId = req.headers["x-razorpay-event-id"];
-      if (typeof providerEventId !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(providerEventId) ||
-          typeof payment?.order_id !== "string" || !payment.order_id.trim() || payment.order_id !== payment.order_id.trim() ||
+      // Razorpay's event-ID header is not covered by the webhook HMAC. Do not
+      // use caller-modifiable header data as the replay key: derive a stable key
+      // from the exact raw body whose signature was verified above. A byte-identical
+      // replay remains deduplicated even if an intermediary changes the header.
+      const providerEventId = "sha256-" + createHash("sha256").update(raw).digest("hex");
+      if (typeof payment?.order_id !== "string" || !payment.order_id.trim() || payment.order_id !== payment.order_id.trim() ||
           typeof payment?.id !== "string" || !payment.id.trim() || payment.id !== payment.id.trim() ||
           payment.status !== "captured" || typeof payment.amount !== "number" || !Number.isSafeInteger(payment.amount) || payment.amount <= 0 || payment.currency !== "INR") {
         json(res, 400, { error: "captured_payment_event_invalid" }); return true;
@@ -240,8 +243,10 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         invoiceApprovedAt: authority.invoice.approvedAt,
       });
       if (!reservation.ok) {
-        const status = reservation.reason === "idempotency_conflict" ? 409
-          : reservation.reason === "order_creation_in_progress" ? 409
+        const status = reservation.reason === "idempotency_conflict" ||
+          reservation.reason === "invoice_payment_conflict" ||
+          reservation.reason === "invoice_already_paid" ||
+          reservation.reason === "order_creation_in_progress" ? 409
           : reservation.reason === "order_creation_reconciliation_required" ? 503
           : 500;
         json(res, status, { error: reservation.reason }); return true;
