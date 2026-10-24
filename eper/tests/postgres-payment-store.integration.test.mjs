@@ -520,3 +520,60 @@ test("PostgresPaymentStore serializes concurrent reservations for the same idemp
     await pool.end();
   }
 });
+
+test("definitive gateway rejection permits retry with the same idempotency key", { skip: !databaseUrl }, async () => {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 3 });
+  try {
+    const store = new PostgresPaymentStore(pool);
+    const input = {
+      tenantId: "rejected-retry-" + randomUUID(),
+      invoiceReference: "invoice-" + randomUUID(),
+      idempotencyKey: "idem-" + randomUUID(),
+      amountMinor: 12500,
+      currency: "INR",
+      invoiceSourceId: "integration-test-authority",
+      invoiceSourceVersion: "retry-v1",
+      invoiceApprovedAt: new Date().toISOString(),
+    };
+    input.transactionSnapshot = {
+      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      description: "Definitive gateway rejection retry fixture", amountDueMinor: input.amountMinor,
+      currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+      sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
+      approvedAt: input.invoiceApprovedAt,
+    };
+
+    const first = await store.reserveOrder(input);
+    assert.equal(first.ok, true);
+    if (!first.ok) return;
+
+    const released = await store.releaseOrderCreationAfterRejection(input.tenantId, input.idempotencyKey);
+    assert.equal(released.ok, true);
+
+    const retried = await store.reserveOrder(input);
+    assert.equal(retried.ok, true, "the same key and immutable snapshot should be retryable after a definitive rejection");
+    if (!retried.ok) return;
+    assert.equal(retried.value.id, first.value.id, "retry must reuse the original reservation row");
+    assert.equal(retried.value.transactionPublicId, first.value.transactionPublicId);
+    assert.equal(retried.value.providerOrderId, null);
+
+    const persisted = await pool.query(
+      `SELECT status, provider_order_id, creation_attempts, last_creation_error
+         FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [input.tenantId, input.idempotencyKey],
+    );
+    assert.equal(persisted.rows.length, 1);
+    assert.equal(persisted.rows[0].status, "creating");
+    assert.equal(persisted.rows[0].provider_order_id, null);
+    assert.equal(persisted.rows[0].creation_attempts, 2);
+    assert.equal(persisted.rows[0].last_creation_error, null);
+
+    const providerOrderId = "order_" + randomUUID().replaceAll("-", "");
+    const completed = await store.completeOrderCreation(input.tenantId, input.idempotencyKey, providerOrderId);
+    assert.equal(completed.ok, true);
+    if (completed.ok) assert.equal(completed.value.providerOrderId, providerOrderId);
+  } finally {
+    await pool.end();
+  }
+});
