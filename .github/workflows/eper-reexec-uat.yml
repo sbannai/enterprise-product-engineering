@@ -1,12 +1,23 @@
-# Re-run technical UAT simulation after payment/receipt branch reconciliation.
+# Re-run technical UAT simulation on active payment-stack changes; never label this as business UAT.
 name: EPER REEXEC-002 Controlled UAT Technical Simulation
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "reconcile/payment-153-168-integration"
+      - "reconcile/payment-stack-with-receipt-contract"
+      - "fix/payment-tenant-principal-binding-validated"
+      - "fix/payment-json-ledger-test-only"
+      - "fix/payment-uat-review-findings-20261024"
+      - "fix/transaction-authority-runtime-schema-validation"
     paths:
-      - 'eper/**'
-      - '.github/workflows/eper-reexec-uat.yml'
+      - "eper/**"
+      - ".github/workflows/eper-reexec-uat.yml"
+  pull_request:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-uat.yml"
 
 jobs:
   controlled-uat-simulation:
@@ -25,7 +36,7 @@ jobs:
       - name: Initialize diagnostic evidence
         run: |
           mkdir -p eper/reexec-evidence
-          printf "program=EPER-REEXEC-002\nclassification=NEW CONTROLLED UAT TECHNICAL SIMULATION — NOT BUSINESS UAT / NOT HISTORICAL EVIDENCE\ncommit=%s\nrun_id=%s\nrun_number=%s\nworkflow=%s\nrepository=%s\nrunner_os=%s\nnode=%s\nnpm=%s\ntimestamp=%s\nbusiness_acceptance=NOT_EXECUTED\nformal_uat_signoff=NOT_EXECUTED\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_WORKFLOW" "$GITHUB_REPOSITORY" "$RUNNER_OS" "$(node --version)" "$(npm --version)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > eper/reexec-evidence/uat-execution-metadata.txt
+          printf "program=EPER-REEXEC-002\\nclassification=NEW CONTROLLED UAT TECHNICAL SIMULATION — NOT BUSINESS UAT / NOT HISTORICAL EVIDENCE\\ncommit=%s\\nrun_id=%s\\nrun_number=%s\\nworkflow=%s\\nrepository=%s\\nrunner_os=%s\\nnode=%s\\nnpm=%s\\ntimestamp=%s\\nbusiness_acceptance=NOT_EXECUTED\\nformal_uat_signoff=NOT_EXECUTED\\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_NUMBER" "$GITHUB_WORKFLOW" "$GITHUB_REPOSITORY" "$RUNNER_OS" "$(node --version)" "$(npm --version)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > eper/reexec-evidence/uat-execution-metadata.txt
 
       - name: Install dependencies
         id: install
@@ -34,7 +45,7 @@ jobs:
           set +e
           npm ci 2>&1 | tee reexec-evidence/npm-ci.log
           command_status=${PIPESTATUS[0]}
-          printf "npm_ci_exit_code=%s\n" "$command_status" >> reexec-evidence/npm-ci.log
+          printf "npm_ci_exit_code=%s\\n" "$command_status" >> reexec-evidence/npm-ci.log
           exit "$command_status"
 
       - name: Build
@@ -45,7 +56,7 @@ jobs:
           set +e
           npm run build 2>&1 | tee reexec-evidence/build.log
           command_status=${PIPESTATUS[0]}
-          printf "build_exit_code=%s\n" "$command_status" >> reexec-evidence/build.log
+          printf "build_exit_code=%s\\n" "$command_status" >> reexec-evidence/build.log
           exit "$command_status"
 
       - name: Execute controlled UAT technical simulation
@@ -56,13 +67,13 @@ jobs:
           set +e
           npm test 2>&1 | tee reexec-evidence/uat-technical-execution.log
           command_status=${PIPESTATUS[0]}
-          printf "npm_test_exit_code=%s\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
+          printf "npm_test_exit_code=%s\\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
           exit "$command_status"
 
       - name: Append step outcomes
         if: always()
         run: |
-          printf "install_outcome=%s\nbuild_outcome=%s\ntest_outcome=%s\n" "${{ steps.install.outcome }}" "${{ steps.build.outcome }}" "${{ steps.test.outcome }}" >> eper/reexec-evidence/uat-execution-metadata.txt
+          printf "install_outcome=%s\\nbuild_outcome=%s\\ntest_outcome=%s\\n" "${{ steps.install.outcome }}" "${{ steps.build.outcome }}" "${{ steps.test.outcome }}" >> eper/reexec-evidence/uat-execution-metadata.txt
 
       - name: Upload diagnostic and technical evidence
         if: always()
