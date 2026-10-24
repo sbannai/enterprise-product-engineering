@@ -28,3 +28,9 @@ If the mapping is missing or malformed, tenant-scoped PostgreSQL routes return `
 Issue independent random tokens for each tenant, deliver them through the approved secret-distribution channel, and rotate/revoke credentials using the deployment's secret manager. The repository does not assume an identity-provider issuer or accept caller-supplied JWT claims. If production identity needs central issuance, replace this static mapping only with an issuer-verified, audience-checked, expiring tenant principal and equivalent isolation tests.
 
 This code change does not enable production payment routes, run live UAT, migrate a database, or provision infrastructure. Production payment routes remain fail-closed. Before UAT, test at minimum cross-tenant order creation, verification, and receipt access with tenant-A and tenant-B credentials, and confirm all three reject before downstream lookups.
+
+## Trusted transaction authority response boundary
+
+The transaction authority adapter is a separate trust boundary from tenant authentication. Before a response can be used to reserve a payment order, validate the complete snapshot at runtime: requested tenant and reference must match exactly; kind, status, INR currency, positive safe-integer amounts, line items, adjustments, arithmetic totals, and source provenance must satisfy the transaction/receipt contract. Approval timestamps must be real calendar timestamps with an explicit timezone. Malformed or mismatched authority responses must fail closed and must not reach the gateway or persistence layer.
+
+The automated workflow run on a commit is evidence only for that exact commit and workflow. A passing pilot matrix or PostgreSQL integration run does not substitute for the controlled QA/UAT technical re-execution, independent security review, or the 12 business PAY-UAT cases. Keep business acceptance and formal sign-off marked `NOT EXECUTED` until their own evidence is attached.
