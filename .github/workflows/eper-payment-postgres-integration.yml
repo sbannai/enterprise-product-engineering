@@ -23,6 +23,7 @@ on:
       - "eper/tests/payment-readiness.test.mjs"
       - "eper/tests/invoice-amount-authority.test.mjs"
       - "eper/tests/http-invoice-amount-source.test.mjs"
+      - "eper/tests/http-transaction-snapshot-source.test.mjs"
       - "eper/tests/transaction-receipt-contract.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
