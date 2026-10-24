@@ -418,12 +418,12 @@ export class PostgresPaymentStore {
       );
       const activeInvoice = await client.query<{
         id: string | number; transaction_public_id: string; provider_order_id: string | null;
-        invoice_reference: string; amount_minor: string | number; currency: string;
+        idempotency_key: string; invoice_reference: string; amount_minor: string | number; currency: string;
         invoice_source_id: string; invoice_source_version: string;
         invoice_approved_at: Date | string; status: StoredPaymentOrder["status"];
         creation_lease_until: Date | string | null;
       }>(
-        `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
+        `SELECT id, transaction_public_id, provider_order_id, idempotency_key, invoice_reference, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND invoice_reference = $2
@@ -442,7 +442,9 @@ export class PostgresPaymentStore {
           new Date(active.invoice_approved_at).toISOString() === new Date(input.invoiceApprovedAt).toISOString();
         if (!sameAuthority) {
           await client.query("ROLLBACK");
-          return { ok: false, reason: "invoice_payment_conflict" };
+          return { ok: false, reason: active.idempotency_key === input.idempotencyKey
+            ? "idempotency_conflict"
+            : "invoice_payment_conflict" };
         }
         if (active.status === "captured") {
           await client.query("ROLLBACK");
