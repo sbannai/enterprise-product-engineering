@@ -97,3 +97,33 @@ test("production payment guard blocks orders, webhooks, verification, and receip
     }
   }
 });
+
+
+test("legacy JSON payment persistence is denied unless an isolated test explicitly opts in", async () => {
+  const oldNodeEnv = process.env.NODE_ENV;
+  const oldPersistence = process.env.EPER_PAYMENT_PERSISTENCE;
+  process.env.NODE_ENV = "test";
+  delete process.env.EPER_PAYMENT_PERSISTENCE;
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/payments/orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tenantId: "tenant-guard", reference: "invoice-guard" }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "payment_persistence_mode_not_allowed" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    if (oldNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = oldNodeEnv;
+    if (oldPersistence === undefined) delete process.env.EPER_PAYMENT_PERSISTENCE;
+    else process.env.EPER_PAYMENT_PERSISTENCE = oldPersistence;
+  }
+});
