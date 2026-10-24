@@ -479,7 +479,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           try { rejectionDetails = (await orderResponse.clone().text()).toLowerCase(); } catch { /* fail closed below */ }
           const duplicateOrExistingOrder = /duplicate|already.{0,20}(?:exists|created|been.{0,5}used)|receipt.{0,40}(?:exists|duplicate)/i.test(rejectionDetails);
           const definitiveValidationRejection = orderResponse.status === 422 ||
-            /input_validation_failed|invalid.{0,12}(?:amount|currency|receipt|request|parameter)|authentication.{0,12}failed|unauthorized|invalid.{0,8}api.{0,8}key/i.test(rejectionDetails);
+            /input_validation_failed|bad_request_encoding_validation_failed|encoding.{0,20}(?:validation|receipt)|unsupported.{0,20}receipt|invalid.{0,12}(?:amount|currency|receipt|request|parameter)|authentication.{0,12}failed|unauthorized|invalid.{0,8}api.{0,8}key/i.test(rejectionDetails);
           if (duplicateOrExistingOrder || !definitiveValidationRejection) {
             // Unknown 4xx responses are not proof that no provider order exists.
             // Retain the reservation and require reconciliation rather than risk a duplicate charge.
