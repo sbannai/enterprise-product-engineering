@@ -127,8 +127,8 @@ export class PostgresPaymentStore {
 
       // Readiness must verify database-enforced immutability, not merely columns.
       // A manually assembled or partially migrated schema must fail closed.
-      const triggers = await client.query<{ table_name: string; trigger_name: string }>(
-        `SELECT c.relname AS table_name, t.tgname AS trigger_name
+      const triggers = await client.query<{ table_name: string; trigger_name: string; trigger_enabled: string }>(
+        `SELECT c.relname AS table_name, t.tgname AS trigger_name, t.tgenabled AS trigger_enabled
            FROM pg_trigger t
            JOIN pg_class c ON c.oid = t.tgrelid
            JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -137,7 +137,9 @@ export class PostgresPaymentStore {
             AND ((c.relname = 'eper_payment_orders' AND t.tgname = 'eper_payment_order_snapshot_immutable')
               OR (c.relname = 'eper_payment_receipts' AND t.tgname = 'eper_payment_receipt_immutability_guard'))`
       );
-      const foundTriggers = new Set(triggers.rows.map((row) => row.table_name + "." + row.trigger_name));
+      const foundTriggers = new Set(triggers.rows
+        .filter((row) => row.trigger_enabled === "O" || row.trigger_enabled === "A")
+        .map((row) => row.table_name + "." + row.trigger_name));
       const requiredTriggersPresent = [
         "eper_payment_orders.eper_payment_order_snapshot_immutable",
         "eper_payment_receipts.eper_payment_receipt_immutability_guard",
