@@ -6,7 +6,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 test("PostgreSQL route exposes stable transaction UUID and downloads persisted receipt by its own UUID", async () => {
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -45,6 +45,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     RAZORPAY_KEY_SECRET: "route-secret",
     RAZORPAY_WEBHOOK_SECRET: "route-webhook-secret",
     EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ "tenant-route-test": token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-eper-payment-ledger.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
