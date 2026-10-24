@@ -72,6 +72,21 @@ const payable = new Set<TransactionPayability>(["DUE", "PARTIALLY_PAID"]);
 const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const isMinor = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
+/** Require a real calendar timestamp with an explicit timezone; Date.parse alone normalizes impossible dates. */
+export function isValidIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,9})?(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]) return false;
+  if (/[+-]14:(?!00)/.test(value)) return false;
+  return Number.isFinite(Date.parse(value));
+}
+
 /** Resolve and validate a source-owned transaction snapshot before payment-order creation. */
 export async function resolveTrustedTransactionSnapshot(
   source: TrustedTransactionSnapshotSource | null | undefined,
@@ -98,7 +113,7 @@ export async function resolveTrustedTransactionSnapshot(
   if (!isText(transaction.description)) return { ok: false, error: "transaction_description_missing" };
   if (
     !isText(transaction.sourceId) || !isText(transaction.sourceVersion) ||
-    !isText(transaction.approvedAt) || !Number.isFinite(Date.parse(transaction.approvedAt))
+    !isValidIsoTimestamp(transaction.approvedAt)
   ) return { ok: false, error: "transaction_provenance_missing" };
 
   if (!Array.isArray(transaction.lineItems) || !Array.isArray(transaction.adjustments)) {
