@@ -471,9 +471,15 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
       }
       if (!orderResponse.ok) {
-        // A 4xx definitively rejects provider order creation; release only the
-        // still-uncompleted reservation. 5xx remains ambiguous and must be reconciled.
         if (orderResponse.status >= 400 && orderResponse.status < 500) {
+          // Razorpay's duplicate-receipt response can mean an order already exists.
+          // Do not release the local reservation unless the provider response is a
+          // definitive rejection that cannot refer to an existing order.
+          let rejectionDetails = "";
+          try { rejectionDetails = (await orderResponse.clone().text()).toLowerCase(); } catch { /* fail closed below */ }
+          if (/duplicate|already\\s+(?:exists|created|been\\s+used)|receipt.{0,40}(?:exists|duplicate)/i.test(rejectionDetails)) {
+            json(res, 503, { error: "gateway_order_creation_outcome_unknown" }); return true;
+          }
           try {
             const released = await paymentStore.releaseOrderCreationAfterRejection(tenantId, idempotencyKey);
             if (!released.ok) {
