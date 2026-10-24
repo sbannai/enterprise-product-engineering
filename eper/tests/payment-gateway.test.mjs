@@ -67,7 +67,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
       };
     },
   };
-  const server = createAppServer({ invoiceAmountSource });
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true, invoiceAmountSource });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -315,7 +315,7 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
       } : null;
     },
   };
-  const server = createAppServer({
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true,
     invoiceAmountSource,
     paymentStore,
     transactionSnapshotSource: {
@@ -418,7 +418,7 @@ test("PostgreSQL-backed order route does not create a second gateway order after
       } : null;
     },
   };
-  const server = createAppServer({
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true,
     invoiceAmountSource,
     paymentStore,
     transactionSnapshotSource: {
@@ -527,7 +527,7 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
       } : null;
     },
   };
-  const server = createAppServer({
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true,
     invoiceAmountSource,
     paymentStore,
     transactionSnapshotSource: {
@@ -614,7 +614,7 @@ test("PostgreSQL order creation fails closed without an authoritative invoice so
     },
   };
   // Deliberately omit invoiceAmountSource to model the current unconfigured integration.
-  const server = createAppServer({ paymentStore });
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true, paymentStore });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -691,7 +691,7 @@ test("PostgreSQL receipt download fails closed when persisted PDF digest does no
       };
     },
   };
-  const server = createAppServer({ paymentStore });
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true, paymentStore });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -785,7 +785,7 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
       };
     },
   };
-  const server = createAppServer({ paymentStore });
+  const server = createAppServer({ allowLegacyPaymentLedgerForTests: true, paymentStore });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
