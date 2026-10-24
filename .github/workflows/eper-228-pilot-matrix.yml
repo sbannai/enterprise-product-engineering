@@ -31,6 +31,10 @@ jobs:
       - name: Execute 38 chapter pilot test suites and build 228-row matrix
         run: node eper/scripts/run-chapter-pilot-matrix.mjs
 
+      - name: Payment gateway contract regression tests
+        working-directory: eper
+        run: node --test tests/payment-gateway.test.mjs
+
       - name: Smoke-test available chapter HTTP pilot apps
         if: always()
         run: node eper/scripts/run-pilot-http-smoke.mjs
