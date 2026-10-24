@@ -3,12 +3,16 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { PostgresPaymentStore } from "../dist/packages/payments/postgres-payment-store.js";
 
-function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41", activeInvoiceOrder = null } = {}) {
+function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".repeat(64), duplicateEventType = "payment.captured", orderTenantId = "tenant-a", orderAmountMinor = 12500, orderStatus = "created", orderInsertConflict = false, existingOrderProviderId = "order_test_41", existingOrderInvoiceReference = "invoice-41", activeInvoiceOrder = null, existingKeyBinding = null } = {}) {
   const calls = [];
   let released = 0;
   const client = {
     async query(sql, values = []) {
       calls.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
+      if (sql.includes("SELECT invoice_reference, amount_minor, currency, invoice_source_id, invoice_source_version, invoice_approved_at") &&
+          sql.includes("WHERE tenant_id = $1 AND idempotency_key = $2")) {
+        return { rows: existingKeyBinding ? [existingKeyBinding] : [], rowCount: existingKeyBinding ? 1 : 0 };
+      }
       if (sql.includes("WHERE tenant_id = $1 AND invoice_reference = $2") && sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")) {
         return { rows: activeInvoiceOrder ? [activeInvoiceOrder] : [], rowCount: activeInvoiceOrder ? 1 : 0 };
       }
@@ -478,4 +482,34 @@ test("reserveOrder safely re-arms the same idempotency key after a definitive ga
   const restart = fake.calls.find(({ sql }) => sql.includes("SET status = 'creating'") && sql.includes("last_creation_error = 'gateway_rejected'"));
   assert.ok(restart, "only a recorded definitive rejection may re-arm the reservation");
   assert.equal(fake.calls.at(-1).sql, "COMMIT");
+});
+
+
+test("reserveOrder rejects an idempotency key bound to another invoice before reusing an active order", async () => {
+  const fake = makePool({
+    existingKeyBinding: {
+      invoice_reference: "invoice-other",
+      amount_minor: 12500,
+      currency: "INR",
+      invoice_source_id: "approved-invoice-service",
+      invoice_source_version: "v3",
+      invoice_approved_at: "2026-10-20T12:00:00.000Z",
+    },
+    activeInvoiceOrder: {
+      id: 42, transaction_public_id: "txn-public-42", provider_order_id: "order_invoice_41",
+      idempotency_key: "other-key", invoice_reference: "invoice-41", amount_minor: 12500,
+      currency: "INR", invoice_source_id: "approved-invoice-service", invoice_source_version: "v3",
+      invoice_approved_at: "2026-10-20T12:00:00.000Z", status: "created", creation_lease_until: null,
+    },
+  });
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.reserveOrder({
+    tenantId: "tenant-a", invoiceReference: "invoice-41", idempotencyKey: "key-bound-elsewhere",
+    amountMinor: 12500, currency: "INR", invoiceSourceId: "approved-invoice-service",
+    invoiceSourceVersion: "v3", invoiceApprovedAt: "2026-10-20T12:00:00.000Z",
+  });
+  assert.deepEqual(result, { ok: false, reason: "idempotency_conflict" });
+  assert.equal(fake.calls.some(({ sql }) => sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")), false,
+    "key binding must be validated before active-order lookup");
+  assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
 });
