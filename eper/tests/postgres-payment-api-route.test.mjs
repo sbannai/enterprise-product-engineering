@@ -92,12 +92,17 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
-      // Model durable idempotency and payload-conflict behavior for provider event IDs.
-      if (captured && input.providerEventId === "evt_route_test_001") {
-        return { ok: false, reason: input.payloadSha256 === originalWebhookPayloadSha256 ? "duplicate_event" : "event_conflict" };
+      // The replay key is the hash of the signed raw payload, never the unsigned header.
+      if (captured) {
+        if (input.payloadSha256 === originalWebhookPayloadSha256) {
+          return { ok: false, reason: "duplicate_event" };
+        }
+        // A distinct signed payload for the same already-captured payment may only
+        // reuse the existing receipt; it must not capture or issue another receipt.
+        return { ok: true, value: { receiptPublicId, receiptNumber } };
       }
       webhookCaptureCalls += 1;
-      assert.equal(input.providerEventId, "evt_route_test_001");
+      assert.equal(input.providerEventId, createHash("sha256").update(event).digest("hex"));
       assert.equal(input.amountMinor, webhookGatewayAmount);
       assert.equal(input.tenantId, tenantId);
       assert.equal(input.receiptNumber, receiptNumber);
@@ -389,25 +394,6 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await missingOrderWebhook.json()).error, "payment_order_not_persisted_retry_webhook");
     assert.equal(webhookCaptureCalls, 0, "unknown order must not reach capture persistence");
 
-    const malformedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "   " },
-      body: event,
-    });
-    assert.equal(malformedEventId.status, 400);
-    assert.equal((await malformedEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "blank provider event ID must not reach capture persistence");
-
-
-    const paddedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test padded" },
-      body: event,
-    });
-    assert.equal(paddedEventId.status, 400);
-    assert.equal((await paddedEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "padded provider event ID must not reach capture persistence");
-
     receiptNumberSourceThrows = true;
     const unavailableWebhookReceiptPolicy = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
@@ -446,29 +432,6 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal((await blankGatewayPaymentIdEvent.json()).error, "captured_payment_event_invalid");
     assert.equal(webhookCaptureCalls, 0, "blank gateway payment ID must not reach capture persistence");
 
-    const missingEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": signature },
-      body: event,
-    });
-    assert.equal(missingEventId.status, 400);
-    assert.equal((await missingEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "webhook without provider event ID must not reach capture persistence");
-
-    const oversizedEventId = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-razorpay-signature": signature,
-        "x-razorpay-event-id": "e".repeat(201),
-      },
-      body: event,
-    });
-    assert.equal(oversizedEventId.status, 400);
-    assert.equal((await oversizedEventId.json()).error, "captured_payment_event_invalid");
-    assert.equal(webhookCaptureCalls, 0, "oversized provider event ID must not reach capture persistence");
-
-
     const webhook = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "evt_route_test_001" },
@@ -501,23 +464,17 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(duplicateBody.receiptUrl, `/api/payments/receipts/${receiptPublicId}.pdf`);
     assert.equal(transactionSourceCalls, 4, "four attempted order requests each use an authoritative snapshot; webhook duplicates use the persisted snapshot");
 
-    const eventConflictPayload = JSON.stringify({
-      event: "payment.captured",
-      payload: { payment: { entity: {
-        id: providerPaymentId, order_id: providerOrderId, amount: 12500, currency: "INR", status: "captured",
-        notes: { replay: "different-payload-same-event-id" },
-      } } },
-    });
-    const eventConflictSignature = createHmac("sha256", "route-webhook-secret").update(eventConflictPayload).digest("hex");
-    const eventConflict = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
+    // Changing the unsigned event-id header must not bypass replay deduplication.
+    const changedHeaderReplay = await nativeFetch(`${base}/api/payments/webhooks/razorpay`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-razorpay-signature": eventConflictSignature, "x-razorpay-event-id": "evt_route_test_001" },
-      body: eventConflictPayload,
+      headers: { "content-type": "application/json", "x-razorpay-signature": signature, "x-razorpay-event-id": "attacker-chosen-new-id" },
+      body: event,
     });
-    assert.equal(eventConflict.status, 409);
-    assert.equal((await eventConflict.json()).error, "event_conflict");
-    assert.equal(webhookCaptureCalls, 1, "same event ID with a different payload must not capture again");
-
+    assert.equal(changedHeaderReplay.status, 200);
+    const changedHeaderReplayBody = await changedHeaderReplay.json();
+    assert.equal(changedHeaderReplayBody.duplicate, true);
+    assert.equal(changedHeaderReplayBody.receiptId, receiptPublicId);
+    assert.equal(webhookCaptureCalls, 1, "changing the unsigned event-id header must not cause another capture");
 
 
     const verificationSignature = createHmac("sha256", "route-secret")
