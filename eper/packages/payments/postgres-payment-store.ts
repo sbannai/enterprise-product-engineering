@@ -408,6 +408,61 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      // Serialize reservations for a tenant/invoice pair, even when concurrent
+      // callers supply different idempotency keys. The invoice authority can lag
+      // after capture, so idempotency-key uniqueness alone cannot prevent a
+      // second full-balance order for the same invoice.
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.tenantId, input.invoiceReference],
+      );
+      const activeInvoice = await client.query<{
+        id: string | number; transaction_public_id: string; provider_order_id: string | null;
+        invoice_reference: string; amount_minor: string | number; currency: string;
+        invoice_source_id: string; invoice_source_version: string;
+        invoice_approved_at: Date | string; status: StoredPaymentOrder["status"];
+        creation_lease_until: Date | string | null;
+      }>(
+        `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
+                invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until
+           FROM eper_payment_orders
+          WHERE tenant_id = $1 AND invoice_reference = $2
+            AND status IN ('creating', 'created', 'authorized', 'captured')
+          ORDER BY id DESC
+          LIMIT 1
+          FOR UPDATE`,
+        [input.tenantId, input.invoiceReference],
+      );
+      const active = activeInvoice.rows[0];
+      if (active) {
+        const sameAuthority = Number(active.amount_minor) === input.amountMinor &&
+          active.currency === input.currency &&
+          active.invoice_source_id === input.invoiceSourceId &&
+          active.invoice_source_version === input.invoiceSourceVersion &&
+          new Date(active.invoice_approved_at).toISOString() === new Date(input.invoiceApprovedAt).toISOString();
+        if (!sameAuthority) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "invoice_payment_conflict" };
+        }
+        if (active.status === "captured") {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "invoice_already_paid" };
+        }
+        if (active.status === "creating") {
+          const leaseExpired = active.creation_lease_until !== null &&
+            new Date(active.creation_lease_until).getTime() <= Date.now();
+          await client.query("ROLLBACK");
+          return { ok: false, reason: leaseExpired
+            ? "order_creation_reconciliation_required"
+            : "order_creation_in_progress" };
+        }
+        if (!active.provider_order_id) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "order_creation_reconciliation_required" };
+        }
+        await client.query("COMMIT");
+        return { ok: true, value: { id: String(active.id), transactionPublicId: active.transaction_public_id, providerOrderId: active.provider_order_id } };
+      }
       const inserted = await client.query<{ id: string | number; transaction_public_id: string }>(
         `INSERT INTO eper_payment_orders
           (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
