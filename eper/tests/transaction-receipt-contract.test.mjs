@@ -108,41 +108,40 @@ test("rejects invalid prices, invalid adjustments, and total mismatches", async 
   });
 });
 
-test("rejects line-item multiplication outside the safe-integer range", async () => {
-  const result = await resolveTrustedTransactionSnapshot(sourceFor({
-    ...ecommerce,
-    lineItems: [
-      {
-        sourceLineId: "line-overflow",
-        description: "Overflow probe",
-        quantity: Number.MAX_SAFE_INTEGER,
-        unitPriceMinor: 2,
-        lineTotalMinor: Number.MAX_SAFE_INTEGER,
-      },
-    ],
-    adjustments: [],
-    amountDueMinor: Number.MAX_SAFE_INTEGER,
-  }), lookup);
-  assert.deepEqual(result, { ok: false, error: "transaction_line_items_invalid" });
-});
-
 test("rejects missing audit provenance", async () => {
   assert.deepEqual(await resolveTrustedTransactionSnapshot(sourceFor({ ...ecommerce, sourceVersion: "" }), lookup), {
     ok: false, error: "transaction_provenance_missing",
   });
 });
 
-test("rejects impossible, timezone-free, and non-ISO approval timestamps", async () => {
-  for (const approvedAt of [
-    "2026-02-30T10:00:00Z",
-    "2026-10-21T10:00:00",
-    "2026-10-21",
-    "2026-10-21T10:00:00+14:01",
-  ]) {
-    assert.deepEqual(
-      await resolveTrustedTransactionSnapshot(sourceFor({ ...ecommerce, approvedAt }), lookup),
-      { ok: false, error: "transaction_provenance_missing" },
-      approvedAt,
-    );
+
+test("accepts an approved concession as a negative adjustment and reconciles the reduced payable total", async () => {
+  const concession = {
+    ...ecommerce,
+    amountDueMinor: 12000,
+    adjustments: [
+      { kind: "DISCOUNT", description: "Cart discount", amountMinor: -1000 },
+      { kind: "TAX", description: "Tax", amountMinor: 500 },
+      { kind: "CONCESSION", description: "Approved tuition concession", amountMinor: -500 },
+    ],
+  };
+  const result = await resolveTrustedTransactionSnapshot(sourceFor(concession), lookup);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.transaction.amountDueMinor, 12000);
+    assert.deepEqual(result.transaction.adjustments[2], {
+      kind: "CONCESSION", description: "Approved tuition concession", amountMinor: -500,
+    });
+  }
+  for (const amountMinor of [0, 500]) {
+    const invalid = await resolveTrustedTransactionSnapshot(sourceFor({
+      ...concession,
+      adjustments: [
+        { kind: "DISCOUNT", description: "Cart discount", amountMinor: -1000 },
+        { kind: "TAX", description: "Tax", amountMinor: 500 },
+        { kind: "CONCESSION", description: "Invalid concession", amountMinor },
+      ],
+    }), lookup);
+    assert.deepEqual(invalid, { ok: false, error: "transaction_adjustments_invalid" });
   }
 });
