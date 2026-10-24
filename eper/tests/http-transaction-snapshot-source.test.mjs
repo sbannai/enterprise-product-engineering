@@ -139,3 +139,28 @@ test("rejects malformed trusted-snapshot fields before returning upstream JSON",
     );
   }
 });
+
+
+test("rejects a schema-valid authority snapshot for a different tenant", async () => {
+  const source = new HttpTransactionSnapshotSource({
+    endpoint: "https://authority.example/api/transaction",
+    bearerToken: "authority-test-token-1234567890",
+    fetchImpl: async () => response(JSON.stringify({ ...validSnapshot, tenantId: "tenant-b" })),
+  });
+  await assert.rejects(
+    source.findTransaction({ tenantId: "tenant-a", reference: "checkout-001" }),
+    /EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID/,
+  );
+});
+
+test("rejects a schema-valid authority snapshot for a different transaction reference", async () => {
+  const source = new HttpTransactionSnapshotSource({
+    endpoint: "https://authority.example/api/transaction",
+    bearerToken: "authority-test-token-1234567890",
+    fetchImpl: async () => response(JSON.stringify({ ...validSnapshot, reference: "checkout-other" })),
+  });
+  await assert.rejects(
+    source.findTransaction({ tenantId: "tenant-a", reference: "checkout-001" }),
+    /EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID/,
+  );
+});

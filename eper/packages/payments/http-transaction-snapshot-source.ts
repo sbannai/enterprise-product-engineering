@@ -160,7 +160,9 @@ export class HttpTransactionSnapshotSource implements TrustedTransactionSnapshot
     } catch {
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID");
     }
-    if (!isTrustedTransactionSnapshot(value)) {
+    if (!isTrustedTransactionSnapshot(value) ||
+        value.tenantId !== input.tenantId ||
+        value.reference !== input.reference) {
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_INVALID");
     }
     return value;
