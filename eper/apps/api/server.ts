@@ -2,6 +2,10 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
+import { handlePaymentRoute } from "./payments.js";
+import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
+import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
+import type { TrustedReceiptNumberSource } from "./payments.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -58,7 +62,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -73,6 +77,70 @@ export function createAppServer(): Server {
         service: "eper-api",
         buildId: buildIdIsCommit ? buildId : null,
       });
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/readyz/payments") {
+      // Dedicated subsystem readiness is intentionally separate from /health:
+      // capability API health must not imply payment readiness, and payment
+      // blockers must not expose configuration values or secret material.
+      const blockers: string[] = [];
+      if (process.env.EPER_PAYMENT_PERSISTENCE !== "postgres" || !options.paymentStore) {
+        blockers.push("durable_postgres_payment_store_unavailable");
+      } else {
+        try {
+          if (typeof options.paymentStore.checkConnectivity !== "function" || !(await options.paymentStore.checkConnectivity())) {
+            blockers.push("postgres_payment_database_unreachable");
+          }
+        } catch {
+          blockers.push("postgres_payment_database_unreachable");
+        }
+      }
+      if (!options.invoiceAmountSource || typeof options.invoiceAmountSource.findInvoice !== "function") {
+        blockers.push("trusted_invoice_authority_unavailable");
+      }
+      if (typeof options.receiptNumberSource !== "function") {
+        blockers.push("receipt_numbering_policy_unconfigured");
+      }
+      // Verify the schema separately from simple network connectivity. Older test doubles
+      // may not expose this method; the real PostgresPaymentStore does.
+      if (options.paymentStore && typeof (options.paymentStore as PostgresPaymentStore & { checkSchema?: () => Promise<boolean> }).checkSchema === "function") {
+        try {
+          if (!(await (options.paymentStore as PostgresPaymentStore & { checkSchema: () => Promise<boolean> }).checkSchema())) {
+            blockers.push("postgres_payment_schema_unavailable");
+          }
+        } catch {
+          blockers.push("postgres_payment_schema_unavailable");
+        }
+      }
+      if (blockers.length === 0 && process.env.NODE_ENV !== "production") {
+        const gatewayConfigured = Boolean(
+          process.env.RAZORPAY_KEY_ID &&
+          process.env.RAZORPAY_KEY_SECRET &&
+          process.env.RAZORPAY_WEBHOOK_SECRET &&
+          (process.env.EPER_PAYMENT_API_TOKEN ?? "").length >= 32
+        );
+        if (!gatewayConfigured) blockers.push("payment_gateway_unconfigured");
+      }
+      if (process.env.NODE_ENV === "production") {
+        blockers.push("production_payment_enablement_requires_authorized_readiness_review");
+      }
+      const ready = blockers.length === 0;
+      sendJson(response, ready ? 200 : 503, {
+        status: ready ? "ready" : "blocked",
+        subsystem: "payments",
+        blockers,
+      });
+      return;
+    }
+
+    // Catch rejected async payment operations at the HTTP boundary. A rejected
+    // async createServer listener is not automatically converted into an HTTP response.
+    try {
+      if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource)) return;
+    } catch {
+      if (!response.headersSent) sendJson(response, 503, { error: "payment_operation_unavailable" });
+      else response.destroy();
       return;
     }
 

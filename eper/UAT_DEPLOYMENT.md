@@ -38,6 +38,23 @@ Before an authorized remote preflight can run, the project owner must select and
 
 Do not put credentials in the repository or build arguments. Configure provider secrets through the hosting platform or GitHub Environment secrets as applicable.
 
+## PostgreSQL payment schema migration
+
+The API image contains the versioned payment migrations and the checksum-verifying migration runner. Schema changes are **not** applied automatically when the API container starts.
+
+For an explicitly authorized non-production target only, run the migration command once before starting the API, using the exact same database URL and approved image build:
+
+```sh
+docker run --rm \
+  --entrypoint node \
+  --env EPER_PAYMENT_DATABASE_URL \
+  eper-uat:rc1 scripts/migrate-payments.mjs
+```
+
+Supply `EPER_PAYMENT_DATABASE_URL` through the deployment platform's secret/environment mechanism; do not put database credentials in command history, image build arguments, or the repository. The runner serializes concurrent invocations with a PostgreSQL advisory lock, applies migrations in filename order, records each applied file and SHA-256 checksum, and fails if an already-applied migration's contents have changed. Confirm the target database and backup/rollback plan before running. Do not run against production as part of this UAT procedure.
+
+The PostgreSQL integration workflow uses the same `npm run migrate:payments` runner against disposable PostgreSQL and then exercises persistence/immutability. A passing workflow is not authorization to enable production payment routes; those routes remain fail-closed pending owner approval and approved end-to-end evidence.
+
 ## Acceptance boundary
 
 A successful health check verifies reachability and build identity only. Authentication, role permissions, tenant isolation, requirement-level functional execution, business acceptance, and formal UAT sign-off remain separate controls.
