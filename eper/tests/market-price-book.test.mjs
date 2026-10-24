@@ -63,6 +63,45 @@ test("invalid clock fails closed", () => {
   assert.throws(() => service.listMarkets("uat-fee"), /MARKET_PRICE_CLOCK_INVALID/);
 });
 
+test("effective window boundaries are start-inclusive and end-exclusive", () => {
+  const startsNow = new MarketPriceBookService([
+    { ...entries[0], effectiveFrom: now().toISOString() },
+  ], now);
+  assert.equal(startsNow.quote({ productId: "uat-fee", marketId: "IN" }).amountMinor, 12550);
+
+  const endsNow = new MarketPriceBookService([
+    { ...entries[0], effectiveTo: now().toISOString() },
+  ], now);
+  assert.throws(
+    () => endsNow.quote({ productId: "uat-fee", marketId: "IN" }),
+    /APPROVED_MARKET_PRICE_NOT_FOUND/,
+  );
+});
+
+test("unsafe minor-unit amounts and invalid statuses fail closed", () => {
+  assert.throws(
+    () => new MarketPriceBookService([{ ...entries[0], amountMinor: Number.MAX_SAFE_INTEGER + 1 }], now),
+    /MARKET_PRICE_AMOUNT_INVALID/,
+  );
+  assert.throws(
+    () => new MarketPriceBookService([{ ...entries[0], status: "PENDING" }], now),
+    /MARKET_PRICE_STATUS_INVALID/,
+  );
+});
+
+test("blank quote and market-list identifiers fail closed", () => {
+  const service = new MarketPriceBookService(entries, now);
+  assert.throws(
+    () => service.quote({ productId: " ", marketId: "IN" }),
+    /PRICE_PRODUCT_REQUIRED/,
+  );
+  assert.throws(
+    () => service.quote({ productId: "uat-fee", marketId: " " }),
+    /PRICE_MARKET_REQUIRED/,
+  );
+  assert.throws(() => service.listMarkets(" "), /PRICE_PRODUCT_REQUIRED/);
+});
+
 test("effective timestamps require a valid calendar date and explicit timezone", () => {
   for (const invalid of [
     "2026-02-30T00:00:00Z",
