@@ -509,6 +509,36 @@ export class PostgresPaymentStore {
     }
   }
 
+  /** Release a reservation only when the gateway definitively rejected order creation. */
+  async releaseOrderCreationAfterRejection(tenantId: string, idempotencyKey: string): Promise<PersistResult<{ id: string }>> {
+    if (!tenantId.trim() || !idempotencyKey.trim()) {
+      throw new Error("INVALID_PAYMENT_ORDER_REJECTION_INPUT");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string | number }>(
+        `UPDATE eper_payment_orders
+            SET status = 'failed', creation_lease_until = NULL, last_creation_error = 'gateway_rejected', updated_at = NOW()
+          WHERE tenant_id = $1 AND idempotency_key = $2
+            AND status = 'creating' AND provider_order_id IS NULL
+          RETURNING id`,
+        [tenantId, idempotencyKey],
+      );
+      if (!result.rows[0]) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
+      await client.query("COMMIT");
+      return { ok: true, value: { id: String(result.rows[0].id) } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   /** Attach the provider order to the reserved row; safe to repeat with the same ID. */
   async completeOrderCreation(tenantId: string, idempotencyKey: string, providerOrderId: string): Promise<PersistResult<{ id: string; transactionPublicId: string; providerOrderId: string }>> {
     if (!tenantId.trim() || !idempotencyKey.trim() || !providerOrderId.trim()) {
