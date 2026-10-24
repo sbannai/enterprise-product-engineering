@@ -6,7 +6,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 test("PostgreSQL legacy order without an immutable snapshot fails closed on webhook and verify", async () => {
   const envKeys = [
     "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
-    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
+    "EPER_PAYMENT_API_TOKEN", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_LEDGER_FILE", "EPER_PAYMENT_PERSISTENCE", "NODE_ENV",
   ];
   const oldEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const nativeFetch = globalThis.fetch;
@@ -24,7 +24,8 @@ test("PostgreSQL legacy order without an immutable snapshot fails closed on webh
     RAZORPAY_KEY_ID: "rzp_test_key",
     RAZORPAY_KEY_SECRET: keySecret,
     RAZORPAY_WEBHOOK_SECRET: webhookSecret,
-    EPER_PAYMENT_API_TOKEN: token,
+    EPER_PAYMENT_API_TOKEN: "shared-api-token-unused-for-tenant-scope".padEnd(40, "z"),
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ [tenantId]: token }),
     EPER_PAYMENT_LEDGER_FILE: "/tmp/unused-legacy-order-ledger.json",
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
