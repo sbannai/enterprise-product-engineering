@@ -12,6 +12,9 @@ function makePool({ duplicateEvent = false, duplicateEventPayloadSha256 = "b".re
       if (sql.includes("WHERE tenant_id = $1 AND invoice_reference = $2") && sql.includes("status IN ('creating', 'created', 'authorized', 'captured')")) {
         return { rows: activeInvoiceOrder ? [activeInvoiceOrder] : [], rowCount: activeInvoiceOrder ? 1 : 0 };
       }
+      if (sql.includes("UPDATE eper_payment_orders") && sql.includes("status = 'failed'")) {
+        return { rows: [{ id: 41 }], rowCount: 1 };
+      }
       if (sql.includes("INSERT INTO eper_payment_orders")) {
         return { rows: orderInsertConflict ? [] : [{ id: 41, provider_order_id: "order_test_41" }], rowCount: orderInsertConflict ? 0 : 1 };
       }
@@ -435,4 +438,18 @@ test("reserveOrder refuses a second order when the invoice already has a capture
   assert.deepEqual(result, { ok: false, reason: "invoice_already_paid" });
   assert.equal(fake.calls.some(({ sql }) => sql.includes("INSERT INTO eper_payment_orders")), false);
   assert.equal(fake.calls.at(-1).sql, "ROLLBACK");
+});
+
+
+test("releaseOrderCreationAfterRejection releases only an uncompleted reservation", async () => {
+  const fake = makePool();
+  const store = new PostgresPaymentStore(fake.pool);
+  const result = await store.releaseOrderCreationAfterRejection("tenant-a", "idem-rejected-41");
+  assert.deepEqual(result, { ok: true, value: { id: "41" } });
+  const update = fake.calls.find(({ sql }) => sql.includes("UPDATE eper_payment_orders") && sql.includes("status = 'failed'"));
+  assert.ok(update, "definitive rejection should mark the reservation failed");
+  assert.match(update.sql, /status = 'creating'/);
+  assert.match(update.sql, /provider_order_id IS NULL/);
+  assert.deepEqual(update.values, ["tenant-a", "idem-rejected-41"]);
+  assert.equal(fake.calls.at(-1).sql, "COMMIT");
 });
