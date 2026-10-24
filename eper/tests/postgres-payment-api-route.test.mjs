@@ -23,6 +23,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let captured = false;
   let transactionSourceStatus = "DUE";
   let gatewayOrderStatus = 200;
+  let gatewayOrderError = "definitive_rejection";
   let releasedRejectedReservations = 0;
   let transactionSourceCalls = 0;
   const reservationKeys = [];
@@ -58,7 +59,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
       if (gatewayOrderStatus >= 400) {
-        return new Response(JSON.stringify({ error: "definitive_rejection" }), {
+        return new Response(JSON.stringify({ error: gatewayOrderError }), {
           status: gatewayOrderStatus, headers: { "content-type": "application/json" },
         });
       }
@@ -239,9 +240,22 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(sharedTokenRequest.status, 401);
 
-    // A definitive provider 4xx releases only the in-flight reservation. A later
-    // successful order is allowed; ambiguous 5xx outcomes are handled separately.
+    // Razorpay duplicate-receipt responses may refer to an existing provider order;
+    // keep the reservation and require reconciliation rather than allowing a new order.
+    gatewayOrderStatus = 400;
+    gatewayOrderError = "Duplicate request";
+    const duplicateOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-duplicate-001" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(duplicateOrder.status, 503);
+    assert.deepEqual(await duplicateOrder.json(), { error: "gateway_order_creation_outcome_unknown" });
+    assert.equal(releasedRejectedReservations, 0, "duplicate response must retain reservation for reconciliation");
+
+    // A definitive provider rejection can release the in-flight reservation; the
+    // original idempotency key can then be retried safely.
     gatewayOrderStatus = 422;
+    gatewayOrderError = "definitive_rejection";
     const rejectedOrder = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-rejected-001" },
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
@@ -256,13 +270,13 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
     });
     assert.equal(created.status, 201);
-    assert.deepEqual(reservationKeys, ["route-rejected-001", "route-rejected-001"],
-      "retry after definitive rejection must reuse the same idempotency key");
+    assert.deepEqual(reservationKeys, ["route-duplicate-001", "route-rejected-001", "route-rejected-001"],
+      "duplicate response stays reserved and retry after definitive rejection reuses its original key");
     const createdBody = await created.json();
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
-    assert.equal(transactionSourceCalls, 2, "each order attempt captures one authoritative snapshot");
+    assert.equal(transactionSourceCalls, 3, "each order attempt captures one authoritative snapshot");
     // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
     transactionSourceStatus = "PAID";
 
