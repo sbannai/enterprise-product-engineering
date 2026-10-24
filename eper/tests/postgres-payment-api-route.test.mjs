@@ -22,6 +22,8 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let receiptNumberSourceThrows = false;
   let captured = false;
   let transactionSourceStatus = "DUE";
+  let gatewayOrderStatus = 200;
+  let releasedRejectedReservations = 0;
   let transactionSourceCalls = 0;
   let webhookCaptureCalls = 0;
   let originalWebhookPayloadSha256 = null;
@@ -54,6 +56,11 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url === "https://api.razorpay.com/v1/orders") {
+      if (gatewayOrderStatus >= 400) {
+        return new Response(JSON.stringify({ error: "definitive_rejection" }), {
+          status: gatewayOrderStatus, headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ id: providerOrderId }), {
         status: 200, headers: { "content-type": "application/json" },
       });
@@ -75,6 +82,10 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     },
     async completeOrderCreation() {
       return { ok: true, value: { id: "41", transactionPublicId, providerOrderId } };
+    },
+    async releaseOrderCreationAfterRejection() {
+      releasedRejectedReservations += 1;
+      return { ok: true, value: { id: "41" } };
     },
     async findOrderByProviderOrderId(id) { return id === providerOrderId ? { ...order } : null; },
     async capturePayment(input) {
@@ -226,6 +237,18 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(sharedTokenRequest.status, 401);
 
+    // A definitive provider 4xx releases only the in-flight reservation. A later
+    // successful order is allowed; ambiguous 5xx outcomes are handled separately.
+    gatewayOrderStatus = 422;
+    const rejectedOrder = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST", headers: { ...headers, "idempotency-key": "route-rejected-001" },
+      body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
+    });
+    assert.equal(rejectedOrder.status, 502);
+    assert.deepEqual(await rejectedOrder.json(), { error: "gateway_order_creation_rejected" });
+    assert.equal(releasedRejectedReservations, 1);
+    gatewayOrderStatus = 200;
+
     const created = await nativeFetch(`${base}/api/payments/orders`, {
       method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
@@ -235,7 +258,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
     assert.notEqual(createdBody.payment.id, receiptPublicId);
-    assert.equal(transactionSourceCalls, 1, "order creation captures one authoritative snapshot");
+    assert.equal(transactionSourceCalls, 2, "each order attempt captures one authoritative snapshot");
     // Simulate the upstream invoice changing to PAID before the delayed capture webhook.
     transactionSourceStatus = "PAID";
 
