@@ -131,7 +131,7 @@ export class HttpTransactionSnapshotSource implements TrustedTransactionSnapshot
     // transaction-authority outage or compromised endpoint from exhausting API memory.
     const maxResponseBytes = 64 * 1024;
     const declaredLength = response.headers.get("content-length");
-    if (declaredLength && /^\\d+$/.test(declaredLength) && Number(declaredLength) > maxResponseBytes) {
+    if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxResponseBytes) {
       await response.body?.cancel();
       throw new Error("EPER_TRANSACTION_AUTHORITY_RESPONSE_TOO_LARGE");
     }
