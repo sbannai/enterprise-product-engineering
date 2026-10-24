@@ -472,6 +472,13 @@ export class PostgresPaymentStore {
           await client.query("ROLLBACK");
           return { ok: false, reason: "invoice_already_paid" };
         }
+        // A new key must not silently inherit another key's active order. Since
+        // this request is rejected without returning or persisting an outcome,
+        // the caller may safely retry with the original key or reconcile first.
+        if (active.idempotency_key !== input.idempotencyKey) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "invoice_payment_conflict" };
+        }
         if (active.status === "creating") {
           const leaseExpired = active.creation_lease_until !== null &&
             new Date(active.creation_lease_until).getTime() <= Date.now();
