@@ -40,17 +40,36 @@ function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransacti
       (item.sku !== undefined && typeof item.sku !== "string") ||
       !isSafeInteger(item.quantity) || item.quantity <= 0 ||
       !isSafeInteger(item.unitPriceMinor) || item.unitPriceMinor < 0 ||
-      !isSafeInteger(item.lineTotalMinor) || item.lineTotalMinor < 0
+      !isSafeInteger(item.lineTotalMinor) || item.lineTotalMinor < 0 ||
+      !Number.isSafeInteger(item.quantity * item.unitPriceMinor) ||
+      item.lineTotalMinor !== item.quantity * item.unitPriceMinor
     ) return false;
   }
   for (const adjustment of value.adjustments) {
     if (!isRecord(adjustment) ||
       !adjustmentKinds.has(String(adjustment.kind)) ||
       !isNonEmptyText(adjustment.description) ||
-      !isSafeInteger(adjustment.amountMinor)
+      !isSafeInteger(adjustment.amountMinor) ||
+      (adjustment.kind === "DISCOUNT" && adjustment.amountMinor >= 0)
     ) return false;
   }
-  return value.kind !== "ECOMMERCE" || value.lineItems.length > 0;
+  if (value.kind === "ECOMMERCE" && value.lineItems.length === 0) return false;
+
+  // Match the shared transaction contract at the boundary: any supplied line and
+  // adjustment detail must reconcile to the authoritative amount without overflow.
+  const summaryOnlyGeneral =
+    value.kind === "GENERAL" &&
+    value.lineItems.length === 0 &&
+    value.adjustments.length === 0;
+  if (!summaryOnlyGeneral) {
+    const lineTotal = value.lineItems.reduce((sum, item) => sum + (item as Record<string, unknown>).lineTotalMinor as number, 0);
+    const adjustmentsTotal = value.adjustments.reduce((sum, item) => sum + (item as Record<string, unknown>).amountMinor as number, 0);
+    const computedTotal = lineTotal + adjustmentsTotal;
+    if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(adjustmentsTotal) ||
+        !Number.isSafeInteger(computedTotal) || computedTotal <= 0 ||
+        computedTotal !== value.amountDueMinor) return false;
+  }
+  return true;
 }
 
 /**
