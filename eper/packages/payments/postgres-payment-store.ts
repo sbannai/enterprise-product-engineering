@@ -443,6 +443,84 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      // Serialize reservation attempts for a tenant/invoice pair even when keys differ.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.tenantId, input.invoiceReference]);
+
+      // Validate a key's prior binding before inspecting any active invoice order.
+      const keyBinding = await client.query<{
+        invoice_reference: string; amount_minor: string | number; currency: string;
+        invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
+      }>(
+        `SELECT invoice_reference, amount_minor, currency, invoice_source_id, invoice_source_version,
+                invoice_approved_at, transaction_snapshot
+           FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
+        [input.tenantId, input.idempotencyKey],
+      );
+      const bound = keyBinding.rows[0];
+      if (bound && (bound.invoice_reference !== input.invoiceReference ||
+          Number(bound.amount_minor) !== input.amountMinor || bound.currency !== input.currency ||
+          bound.invoice_source_id !== input.invoiceSourceId ||
+          bound.invoice_source_version !== input.invoiceSourceVersion ||
+          new Date(bound.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString() ||
+          stableJson(bound.transaction_snapshot) !== stableJson(input.transactionSnapshot))) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
+
+      const activeInvoice = await client.query<{
+        id: string | number; transaction_public_id: string; provider_order_id: string | null;
+        idempotency_key: string; amount_minor: string | number; currency: string;
+        invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
+        transaction_snapshot: TrustedTransactionSnapshot | null; status: StoredPaymentOrder["status"];
+        creation_lease_until: Date | string | null;
+      }>(
+        `SELECT id, transaction_public_id, provider_order_id, idempotency_key, amount_minor, currency,
+                invoice_source_id, invoice_source_version, invoice_approved_at, transaction_snapshot,
+                status, creation_lease_until
+           FROM eper_payment_orders
+          WHERE tenant_id = $1 AND invoice_reference = $2
+            AND status IN ('creating', 'created', 'authorized', 'captured')
+          ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+        [input.tenantId, input.invoiceReference],
+      );
+      const active = activeInvoice.rows[0];
+      if (active) {
+        const sameAuthority = Number(active.amount_minor) === input.amountMinor &&
+          active.currency === input.currency &&
+          active.invoice_source_id === input.invoiceSourceId &&
+          active.invoice_source_version === input.invoiceSourceVersion &&
+          new Date(active.invoice_approved_at).toISOString() === new Date(input.invoiceApprovedAt).toISOString() &&
+          stableJson(active.transaction_snapshot) === stableJson(input.transactionSnapshot);
+        if (!sameAuthority) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: active.idempotency_key === input.idempotencyKey
+            ? "idempotency_conflict" : "invoice_payment_conflict" };
+        }
+        if (active.status === "captured") {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "invoice_already_paid" };
+        }
+        if (active.idempotency_key !== input.idempotencyKey) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "invoice_payment_conflict" };
+        }
+        if (active.status === "creating") {
+          const leaseExpired = active.creation_lease_until !== null &&
+            new Date(active.creation_lease_until).getTime() <= Date.now();
+          await client.query("ROLLBACK");
+          return { ok: false, reason: leaseExpired
+            ? "order_creation_reconciliation_required" : "order_creation_in_progress" };
+        }
+        if (!active.provider_order_id) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "order_creation_reconciliation_required" };
+        }
+        await client.query("COMMIT");
+        return { ok: true, value: { id: String(active.id), transactionPublicId: active.transaction_public_id, providerOrderId: active.provider_order_id } };
+      }
+
       const inserted = await client.query<{ id: string | number; transaction_public_id: string }>(
         `INSERT INTO eper_payment_orders
           (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
@@ -461,17 +539,16 @@ export class PostgresPaymentStore {
         return { ok: true, value: { id: String(inserted.rows[0].id), transactionPublicId: inserted.rows[0].transaction_public_id, providerOrderId: null } };
       }
       const existing = await client.query<{
-        id: string | number; transaction_public_id: string; provider_order_id: string | null; invoice_reference: string;
-        amount_minor: string | number; currency: string; invoice_source_id: string;
-        invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
-        transaction_snapshot: TrustedTransactionSnapshot | null;
+        id: string | number; transaction_public_id: string; provider_order_id: string | null;
+        invoice_reference: string; amount_minor: string | number; currency: string;
+        invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
+        status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
+        transaction_snapshot: TrustedTransactionSnapshot | null; last_creation_error: string | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until,
-                transaction_snapshot
-           FROM eper_payment_orders
-          WHERE tenant_id = $1 AND idempotency_key = $2
-          FOR UPDATE`,
+                transaction_snapshot, last_creation_error
+           FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
         [input.tenantId, input.idempotencyKey],
       );
       const row = existing.rows[0];
@@ -484,16 +561,29 @@ export class PostgresPaymentStore {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
+      if (row.status === "failed" && row.provider_order_id === null && row.last_creation_error === "gateway_rejected") {
+        const restarted = await client.query<{ id: string | number }>(
+          `UPDATE eper_payment_orders
+              SET status = 'creating', creation_lease_until = NOW() + INTERVAL '2 minutes',
+                  creation_attempts = creation_attempts + 1, last_creation_error = NULL, updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2 AND status = 'failed'
+              AND provider_order_id IS NULL AND last_creation_error = 'gateway_rejected'
+            RETURNING id`,
+          [row.id, input.tenantId],
+        );
+        if (!restarted.rows[0]) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "idempotency_conflict" };
+        }
+        await client.query("COMMIT");
+        return { ok: true, value: { id: String(row.id), transactionPublicId: row.transaction_public_id, providerOrderId: null } };
+      }
       if (row.status === "creating") {
-        // An expired lease is not permission to call Razorpay again: the previous
-        // process may have created a remote order before crashing. Require explicit
-        // provider-side reconciliation rather than risking duplicate payable orders.
         const leaseExpired = row.creation_lease_until !== null &&
           new Date(row.creation_lease_until).getTime() <= Date.now();
         await client.query("ROLLBACK");
         return { ok: false, reason: leaseExpired
-          ? "order_creation_reconciliation_required"
-          : "order_creation_in_progress" };
+          ? "order_creation_reconciliation_required" : "order_creation_in_progress" };
       }
       if (!row.provider_order_id) {
         await client.query("ROLLBACK");
@@ -501,6 +591,35 @@ export class PostgresPaymentStore {
       }
       await client.query("COMMIT");
       return { ok: true, value: { id: String(row.id), transactionPublicId: row.transaction_public_id, providerOrderId: row.provider_order_id } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async releaseOrderCreationAfterRejection(tenantId: string, idempotencyKey: string): Promise<PersistResult<{ id: string }>> {
+    if (!tenantId.trim() || !idempotencyKey.trim()) {
+      throw new Error("INVALID_PAYMENT_ORDER_REJECTION_INPUT");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string | number }>(
+        `UPDATE eper_payment_orders
+            SET status = 'failed', creation_lease_until = NULL, last_creation_error = 'gateway_rejected', updated_at = NOW()
+          WHERE tenant_id = $1 AND idempotency_key = $2
+            AND status = 'creating' AND provider_order_id IS NULL
+          RETURNING id`,
+        [tenantId, idempotencyKey],
+      );
+      if (!result.rows[0]) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
+      await client.query("COMMIT");
+      return { ok: true, value: { id: String(result.rows[0].id) } };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
