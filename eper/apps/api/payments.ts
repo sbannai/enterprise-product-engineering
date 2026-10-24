@@ -189,7 +189,42 @@ function config(): { keyId: string; keySecret: string; webhookSecret: string; to
   if (!keyId || !keySecret || !webhookSecret || token.length < 32) return null;
   return { keyId, keySecret, webhookSecret, token, ledgerFile: resolve(process.env.EPER_PAYMENT_LEDGER_FILE ?? "./data/payments.json") };
 }
+function configuredTenantTokens(): Record<string, string> | null {
+  const raw = process.env.EPER_PAYMENT_TENANT_TOKENS ?? "";
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const entries = Object.entries(parsed as Record<string, unknown>);
+    const sharedToken = process.env.EPER_PAYMENT_API_TOKEN ?? "";
+    if (entries.length === 0 || entries.some(([tenant, token]) =>
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenant) || typeof token !== "string" || token.length < 32 ||
+      token === sharedToken) ||
+      new Set(entries.map(([, token]) => token)).size !== entries.length) return null;
+    return Object.fromEntries(entries) as Record<string, string>;
+  } catch { return null; }
+}
+export function paymentTenantIdentityConfigured(): boolean {
+  return configuredTenantTokens() !== null;
+}
+function authenticatedTenant(req: IncomingMessage, tokens: Record<string, string>): string | null {
+  const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
+  if (!match) return null;
+  const supplied = Buffer.from(match[1]);
+  let matched: string | null = null;
+  // Compare against every configured tenant token; never fall back to the shared API token.
+  for (const [tenantId, token] of Object.entries(tokens)) {
+    const expected = Buffer.from(token);
+    if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) matched = tenantId;
+  }
+  return matched;
+}
+function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean {
+  const requested = req.headers["x-tenant-id"];
+  return requested === undefined || requested === tenantId;
+}
 function tenantMatches(req: IncomingMessage, tenantId: string): boolean { return req.headers["x-tenant-id"] === tenantId; }
+function tenantHeaderMatches(req: IncomingMessage, tenantId: string): boolean { const requested = req.headers["x-tenant-id"]; return requested === undefined || requested === tenantId; }
 function bearer(req: IncomingMessage, token: string): boolean {
   const match = /^Bearer (.+)$/.exec(req.headers.authorization ?? "");
   if (!match) return false;
@@ -204,7 +239,7 @@ function bearer(req: IncomingMessage, token: string): boolean {
  * This ledger is single-process JSON persistence; use a transactional database
  * before horizontal scaling or high-volume production use.
  */
-export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource, transactionSnapshotSource?: TrustedTransactionSnapshotSource): Promise<boolean> {
+export async function handlePaymentRoute(req: IncomingMessage, res: ServerResponse, pathname: string, invoiceAmountSource?: TrustedInvoiceAmountSource, paymentStore?: PostgresPaymentStore, receiptNumberSource?: TrustedReceiptNumberSource, transactionSnapshotSource?: TrustedTransactionSnapshotSource, allowLegacyPaymentLedgerForTests = false): Promise<boolean> {
   if (!pathname.startsWith("/api/payments/")) return false;
   // The JSON ledger has no cross-process transaction/locking guarantees. Never enable
   // payment mutation or receipt issuance in production until a transactional store is wired.
@@ -212,7 +247,15 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     json(res, 503, { error: "payment_persistence_not_production_ready" });
     return true;
   }
-  if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres" && !paymentStore) {
+  const persistenceMode = process.env.EPER_PAYMENT_PERSISTENCE;
+  if (persistenceMode !== "postgres" &&
+      !(allowLegacyPaymentLedgerForTests === true &&
+        process.env.NODE_ENV === "test" &&
+        (persistenceMode === undefined || persistenceMode === "json-file"))) {
+    json(res, 503, { error: "payment_persistence_mode_not_allowed" });
+    return true;
+  }
+  if (persistenceMode === "postgres" && !paymentStore) {
     json(res, 503, { error: "payment_persistence_store_unavailable" });
     return true;
   }
@@ -313,12 +356,25 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
 
   if (!bearer(req, cfg.token)) { json(res, 401, { error: "unauthorized" }); return true; }
 
+  let principalTenantId: string | null = null;
+  if (process.env.EPER_PAYMENT_PERSISTENCE === "postgres") {
+    const tenantTokens = configuredTenantTokens();
+    if (!tenantTokens) { json(res, 503, { error: "tenant_identity_unconfigured" }); return true; }
+    principalTenantId = authenticatedTenant(req, tenantTokens);
+    if (!principalTenantId) { json(res, 401, { error: "unauthorized" }); return true; }
+    if (!tenantHeaderMatches(req, principalTenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+  } else {
+    if (!bearer(req, cfg.token)) { json(res, 401, { error: "unauthorized" }); return true; }
+    principalTenantId = typeof req.headers["x-tenant-id"] === "string" ? req.headers["x-tenant-id"] : null;
+  }
+  if (!principalTenantId) { json(res, 403, { error: "tenant_scope_required" }); return true; }
+
   if (req.method === "POST" && pathname === "/api/payments/orders") {
     let input: any;
     try { input = JSON.parse((await body(req)).toString("utf8")); } catch { json(res, 400, { error: "invalid_json" }); return true; }
     const tenantId = typeof input?.tenantId === "string" ? input.tenantId.trim() : "";
     const reference = typeof input?.reference === "string" ? input.reference.trim() : "";
-    if (!tenantId || !tenantMatches(req, tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (!tenantId || principalTenantId !== tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (!tenantId || !reference) {
       json(res, 400, { error: "tenant_and_invoice_reference_required" }); return true;
     }
@@ -542,7 +598,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.razorpayOrderId === orderId);
     if (!record) { json(res, 404, { error: "order_not_found" }); return true; }
-    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (principalTenantId !== record.tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     const gatewayResponse = await fetch("https://api.razorpay.com/v1/payments/" + encodeURIComponent(paymentId), {
       headers: { authorization: "Basic " + Buffer.from(cfg.keyId + ":" + cfg.keySecret).toString("base64") },
     });
@@ -607,7 +663,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.receiptId === publicReceiptMatch[1]);
     if (!record) { json(res, 404, { error: "receipt_not_found" }); return true; }
-    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (principalTenantId !== record.tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     const pdf = receiptPdf(record);
     res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
@@ -623,7 +679,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     const ledger = await readLedger(cfg.ledgerFile);
     const record = ledger.records.find(item => item.id === decodeURIComponent(receiptMatch[1]));
     if (!record) { json(res, 404, { error: "payment_not_found" }); return true; }
-    if (!tenantMatches(req, record.tenantId)) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
+    if (principalTenantId !== record.tenantId) { json(res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     if (!record.receiptId) { record.receiptId = randomUUID(); await saveLedger(cfg.ledgerFile, ledger); }
     const pdf = receiptPdf(record);
