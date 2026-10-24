@@ -25,6 +25,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   let gatewayOrderStatus = 200;
   let releasedRejectedReservations = 0;
   let transactionSourceCalls = 0;
+  const reservationKeys = [];
   let webhookCaptureCalls = 0;
   let originalWebhookPayloadSha256 = null;
   let webhookGatewayAmount = 12500;
@@ -76,6 +77,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
 
   const paymentStore = {
     async reserveOrder(input) {
+      reservationKeys.push(input.idempotencyKey);
       // Model the immutable snapshot persisted with the order reservation.
       order = { ...order, transactionSnapshot: structuredClone(input.transactionSnapshot) };
       return { ok: true, value: { id: "41", transactionPublicId, providerOrderId: null } };
@@ -250,10 +252,12 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     gatewayOrderStatus = 200;
 
     const created = await nativeFetch(`${base}/api/payments/orders`, {
-      method: "POST", headers: { ...headers, "idempotency-key": "route-idem-001" },
+      method: "POST", headers: { ...headers, "idempotency-key": "route-rejected-001" },
       body: JSON.stringify({ tenantId, reference: "invoice-route-test" }),
     });
     assert.equal(created.status, 201);
+    assert.deepEqual(reservationKeys, ["route-rejected-001", "route-rejected-001"],
+      "retry after definitive rejection must reuse the same idempotency key");
     const createdBody = await created.json();
     assert.equal(createdBody.payment.id, transactionPublicId);
     assert.match(createdBody.payment.id, /^[0-9a-f-]{36}$/i);
