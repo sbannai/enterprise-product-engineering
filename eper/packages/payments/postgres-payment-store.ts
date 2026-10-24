@@ -416,6 +416,28 @@ export class PostgresPaymentStore {
         "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
         [input.tenantId, input.invoiceReference],
       );
+      // Bind the idempotency key to its original invoice and authority before
+      // returning any invoice-level active order. Otherwise a key already used
+      // for invoice A could accidentally return invoice B's active provider order.
+      const keyBinding = await client.query<{
+        invoice_reference: string; amount_minor: string | number; currency: string;
+        invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
+      }>(
+        `SELECT invoice_reference, amount_minor, currency, invoice_source_id, invoice_source_version, invoice_approved_at
+           FROM eper_payment_orders
+          WHERE tenant_id = $1 AND idempotency_key = $2
+          FOR UPDATE`,
+        [input.tenantId, input.idempotencyKey],
+      );
+      const bound = keyBinding.rows[0];
+      if (bound && (bound.invoice_reference !== input.invoiceReference ||
+          Number(bound.amount_minor) !== input.amountMinor || bound.currency !== input.currency ||
+          bound.invoice_source_id !== input.invoiceSourceId ||
+          bound.invoice_source_version !== input.invoiceSourceVersion ||
+          new Date(bound.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString())) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "idempotency_conflict" };
+      }
       const activeInvoice = await client.query<{
         id: string | number; transaction_public_id: string; provider_order_id: string | null;
         idempotency_key: string; invoice_reference: string; amount_minor: string | number; currency: string;
