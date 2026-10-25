@@ -1,6 +1,12 @@
+# Re-run technical UAT simulation after payment/receipt branch reconciliation.
 name: EPER REEXEC-002 Controlled UAT Technical Simulation
 
 on:
+  pull_request:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-uat.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
   push:
     paths:

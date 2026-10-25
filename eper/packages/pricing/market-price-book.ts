@@ -23,40 +23,11 @@ export interface MarketPriceQuote {
 }
 
 /**
- * Resolves one approved, effective market-specific price. It never performs FX
- * conversion. Commercial prices must come from controlled configuration, not
- * hard-coded application defaults.
+ * Resolves an approved local-market price. It deliberately does not perform FX
+ * conversion: each market/currency/product combination must have its own
+ * approved price-book entry. Supply entries from a controlled configuration
+ * source; do not place commercial prices in code.
  */
-function parseEffectiveDate(value: unknown): number {
-  if (typeof value !== "string") throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
-  // Validate the calendar components before Date.parse, which can normalize
-  // impossible dates (for example, February 30) into a different instant.
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
-  if (!match) throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const second = Number(secondText);
-  const daysInMonth = month >= 1 && month <= 12
-    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
-    : 0;
-  if (day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) {
-    throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
-  }
-  if (zone !== "Z") {
-    const offset = /[+-](\d{2}):(\d{2})$/.exec(zone);
-    if (!offset || Number(offset[1]) > 23 || Number(offset[2]) > 59) {
-      throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
-    }
-  }
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
-  return timestamp;
-}
-
 export class MarketPriceBookService {
   constructor(
     private readonly entries: readonly MarketPriceEntry[],
@@ -74,7 +45,6 @@ export class MarketPriceBookService {
     const unique = new Map<string, { marketId: string; currency: string }>();
     for (const entry of this.entries) {
       if (entry.productId !== productId || !this.isEffective(entry, at)) continue;
-      // Do not hide duplicate active records, even when their currencies match.
       if (unique.has(entry.marketId)) {
         throw new Error("MARKET_PRICE_CONFIGURATION_AMBIGUOUS");
       }
@@ -128,22 +98,37 @@ export class MarketPriceBookService {
       (entry.effectiveTo == null || Date.parse(entry.effectiveTo) > at);
   }
 
+  private isStrictTimestamp(value: string): boolean {
+    // Require a full RFC3339-style timestamp with an explicit timezone. Date.parse
+    // alone accepts date-only strings and normalizes impossible calendar dates.
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+    if (!match || !Number.isFinite(Date.parse(value))) return false;
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText, zone, offsetHourText, offsetMinuteText] = match;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+    const second = Number(secondText);
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth ||
+        hour > 23 || minute > 59 || second > 59) return false;
+    if (zone !== "Z" && (Number(offsetHourText) > 23 || Number(offsetMinuteText) > 59)) return false;
+    return true;
+  }
+
   private validateEntry(entry: MarketPriceEntry): void {
     if (!entry || typeof entry !== "object") {
       throw new Error("MARKET_PRICE_REQUIRED_FIELDS_MISSING");
     }
     const identifiers = [entry.productId, entry.marketId, entry.priceBookId, entry.priceBookVersion];
-    if (identifiers.some((value) =>
-      typeof value !== "string" || !value.trim() || value.length > 128
-    )) {
+    if (identifiers.some((value) => typeof value !== "string" || !value.trim() || value.length > 128)) {
       throw new Error("MARKET_PRICE_REQUIRED_FIELDS_MISSING");
     }
     if (typeof entry.currency !== "string" || !/^[A-Z]{3}$/.test(entry.currency)) {
       throw new Error("MARKET_PRICE_CONFIGURATION_INVALID");
     }
-    if (!(["INR", "USD", "EUR", "GBP", "AED"] as const).includes(
-      entry.currency as "INR" | "USD" | "EUR" | "GBP" | "AED"
-    )) {
+    if (!(["INR", "USD", "EUR", "GBP", "AED"] as const).includes(entry.currency as "INR" | "USD" | "EUR" | "GBP" | "AED")) {
       throw new Error("MARKET_PRICE_CURRENCY_UNSUPPORTED");
     }
     if (!Number.isSafeInteger(entry.amountMinor) || entry.amountMinor <= 0) {
@@ -152,9 +137,13 @@ export class MarketPriceBookService {
     if (!(["DRAFT", "APPROVED", "RETIRED"] as const).includes(entry.status)) {
       throw new Error("MARKET_PRICE_STATUS_INVALID");
     }
-    const effectiveFrom = parseEffectiveDate(entry.effectiveFrom);
-    const effectiveTo = entry.effectiveTo == null ? null : parseEffectiveDate(entry.effectiveTo);
-    if (effectiveTo != null && effectiveTo <= effectiveFrom) {
+    if (typeof entry.effectiveFrom !== "string" ||
+        (entry.effectiveTo != null && typeof entry.effectiveTo !== "string") ||
+        !this.isStrictTimestamp(entry.effectiveFrom) ||
+        (entry.effectiveTo != null && !this.isStrictTimestamp(entry.effectiveTo))) {
+      throw new Error("MARKET_PRICE_EFFECTIVE_DATE_INVALID");
+    }
+    if (entry.effectiveTo != null && Date.parse(entry.effectiveTo) <= Date.parse(entry.effectiveFrom)) {
       throw new Error("MARKET_PRICE_EFFECTIVE_WINDOW_INVALID");
     }
   }

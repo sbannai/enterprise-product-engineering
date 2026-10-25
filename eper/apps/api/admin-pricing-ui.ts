@@ -1,0 +1,124 @@
+import type { IncomingMessage } from "node:http";
+import { applicationToastMarkup } from "./app-toast.js";
+import { enterpriseDesignSystemCss } from "./design-system.js";
+
+/** Minimal same-origin admin console. Secrets are never persisted in browser storage. */
+export const adminPricingUiHtml = String.raw`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EPER · Pricing & Payments</title>
+<style>
+:root{color-scheme:light;--ink:#17233b;--muted:#63718a;--line:#dfe5ee;--bg:#f4f7fb;--card:#fff;--navy:#142544;--blue:#275df5;--green:#13795b;--amber:#9a5b00;--red:#b42318}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink)}
+header{background:var(--navy);color:white;padding:22px clamp(16px,4vw,44px);display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center}.logo{width:38px;height:38px;border-radius:12px;background:#315ff4;display:grid;place-items:center;font-weight:800}.brand h1{font-size:18px;margin:0}.brand p{margin:2px 0 0;color:#c3cce0;font-size:12px}
+.header-note{font-size:12px;color:#d1d9e8}.shell{max-width:1240px;margin:auto;padding:24px clamp(14px,3vw,32px) 60px}
+.notice{padding:12px 14px;border:1px solid #e6c98e;background:#fff8e7;border-radius:12px;color:#65450d;margin-bottom:18px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:var(--card);border:1px solid var(--line);padding:14px;border-radius:14px;margin-bottom:18px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:140px;flex:1}.field label{font-size:12px;color:var(--muted);font-weight:650}
+input,select,textarea{font:inherit;color:var(--ink);border:1px solid #cdd6e3;background:white;border-radius:9px;padding:10px 11px;min-width:0;width:100%}
+input:focus,select:focus{outline:3px solid #dbe5ff;border-color:var(--blue)}
+button{font:inherit;font-weight:700;border:0;border-radius:9px;padding:10px 14px;cursor:pointer;background:var(--blue);color:white}button.secondary{background:#e9eef8;color:#263b61}button.danger{background:#fff0ef;color:var(--red)}button:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:18px}
+.tab{background:transparent;color:var(--muted);border-radius:9px 9px 0 0;padding:12px 16px}.tab.active{background:white;color:var(--blue);box-shadow:inset 0 -3px var(--blue)}
+.panel{display:none}.panel.active{display:block}.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:18px;min-width:0}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-7{grid-column:span 7}.span-6{grid-column:span 6}.span-5{grid-column:span 5}.span-4{grid-column:span 4}
+.card h2{font-size:16px;margin:0 0 5px}.sub{color:var(--muted);font-size:12px;margin:0 0 16px}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;min-width:760px;background:white}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid #edf0f5;white-space:nowrap}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f8faff}tr:last-child td{border-bottom:0}.pill{display:inline-flex;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:750;background:#eef2f7;color:#49566d}.pill.ok{background:#e5f6ef;color:#12674e}.pill.warn{background:#fff2d8;color:#805000}.pill.bad{background:#ffebe9;color:#a32920}
+.metric{font-size:26px;font-weight:800;letter-spacing:-.04em}.metric-label{font-size:12px;color:var(--muted)}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}.metricbox{background:#f8faff;border:1px solid var(--line);border-radius:11px;padding:13px}
+.quote{border:1px solid #b9cdfd;background:#f5f8ff;border-radius:14px;padding:18px;margin-top:14px}.quote .amount{font-size:32px;font-weight:850;letter-spacing:-.04em}.quote .details{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.help{font-size:12px;color:var(--muted);margin-top:6px}.statusline{min-height:22px;font-size:12px;color:var(--muted)}.statusline.error{color:var(--red)}.statusline.success{color:var(--green)}
+.vendor-option{border:1px solid var(--line);padding:12px;border-radius:10px;display:flex;gap:10px;align-items:flex-start}.vendor-option input{width:auto;margin-top:4px}.vendor-option strong{display:block}.vendor-option small{display:block;color:var(--muted)}
+footer{font-size:12px;color:var(--muted);margin-top:20px}
+@media(max-width:780px){.span-8,.span-7,.span-6,.span-5,.span-4{grid-column:span 12}.formgrid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.toolbar .field{min-width:100%}.header-note{width:100%}}
+${enterpriseDesignSystemCss}
+</style>
+</head>
+<body>
+<header><div class="brand"><div class="logo">E</div><div><h1>EPER Pricing & Payments</h1><p>Market price book · Resolver · Vendor controls</p></div></div><div class="header-note">Admin console · API-backed · Production charging disabled by default</div></header>
+<main class="shell">
+<div class="notice"><strong>Controlled configuration:</strong> price-book changes are currently held in API process memory unless your deployment supplies a durable configuration adapter. Vendor credentials are read from server environment/secrets and are never displayed or saved in this browser. Do not enable production charging from this console.</div>
+<section class="toolbar">
+<div class="field"><label for="apiBase">API base URL</label><input id="apiBase" value="" placeholder="Same origin (recommended)"></div>
+<div class="field"><label for="adminToken">Admin API bearer token</label><input id="adminToken" type="password" autocomplete="off" placeholder="Paste admin token for this session"></div><div class="field"><label for="pricingToken">Pricing API bearer token</label><input id="pricingToken" type="password" autocomplete="off" placeholder="Optional if same as admin token"></div>
+<button id="connectBtn">Connect</button><button class="secondary" id="refreshBtn">Refresh data</button>
+<div id="connectionStatus" class="statusline" role="status" aria-live="polite"></div>
+</section>
+<nav class="tabs" aria-label="Pricing administration tabs">
+<button class="tab active" data-tab="pricebook">Price Book</button><button class="tab" data-tab="resolver">Market Resolver</button><button class="tab" data-tab="vendor">Payment Vendor</button>
+</nav>
+<section id="pricebook" class="panel active">
+<div class="metrics"><div class="metricbox"><div class="metric" id="entryCount">—</div><div class="metric-label">Configured entries</div></div><div class="metricbox"><div class="metric" id="approvedCount">—</div><div class="metric-label">Approved entries</div></div><div class="metricbox"><div class="metric" id="marketCount">—</div><div class="metric-label">Markets represented</div></div></div>
+<div class="grid">
+<div class="card span-5"><h2>Add or update price entry</h2><p class="sub">Use a unique product + market combination for each effective price. Commercial values require business approval.</p>
+<form id="priceForm"><div class="formgrid">
+<div class="field"><label for="productId">Product ID</label><input id="productId" required placeholder="e.g. COURSE-FEE-01"></div>
+<div class="field"><label for="marketId">Market ID</label><input id="marketId" required placeholder="e.g. IN, AE, US"></div>
+<div class="field"><label for="currency">Currency</label><select id="currency" required><option>INR</option><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></div>
+<div class="field"><label for="amountMajor">Amount (major units)</label><input id="amountMajor" type="number" min="0.01" step="0.01" required placeholder="e.g. 125.50"></div>
+<div class="field"><label for="priceBookId">Price book ID</label><input id="priceBookId" required placeholder="e.g. INDIA-2026"></div>
+<div class="field"><label for="priceBookVersion">Version</label><input id="priceBookVersion" required placeholder="e.g. v1.0"></div>
+<div class="field"><label for="priceStatus">Status</label><select id="priceStatus"><option value="DRAFT">Draft</option><option value="APPROVED">Approved</option><option value="RETIRED">Retired</option></select></div>
+<div class="field"><label for="effectiveFrom">Effective from (your local time)</label><input id="effectiveFrom" type="datetime-local" required></div>
+<div class="field"><label for="effectiveTo">Effective to (optional, your local time)</label><input id="effectiveTo" type="datetime-local"></div>
+</div><div class="actions"><button type="submit">Save price entry</button><button type="button" class="secondary" id="clearPriceForm">Clear form</button></div><p class="help">Amounts are stored as integer minor units. Draft is the default; only approved, effective entries can resolve to a quote.</p><div id="priceStatusMsg" class="statusline" role="status" aria-live="polite"></div></form></div>
+<div class="card span-7"><h2>Configured price book</h2><p class="sub">Loaded from the authenticated price-book API.</p><div class="tablewrap"><table><thead><tr><th>Product</th><th>Market</th><th>Price</th><th>Price book</th><th>State</th><th>Effective from</th><th>Action</th></tr></thead><tbody id="priceRows"><tr><td colspan="7">Connect to load entries.</td></tr></tbody></table></div><div class="actions"><button class="secondary" id="reloadPrices">Reload entries</button></div><div id="priceTableMsg" class="statusline" role="status" aria-live="polite"></div></div>
+</div>
+</section>
+<section id="resolver" class="panel">
+<div class="grid"><div class="card span-5"><h2>Resolve local market price</h2><p class="sub">The server determines the price. Changing market is not an FX conversion.</p>
+<form id="resolveForm"><div class="field"><label for="resolveProduct">Product</label><select id="resolveProduct" required><option value="">Load price book first</option></select></div>
+<div class="field" style="margin-top:12px"><label for="resolveMarket">Market</label><select id="resolveMarket" required><option value="">Select product first</option></select></div>
+<div class="field" style="margin-top:12px"><label for="resolveCurrency">Validate currency (optional)</label><select id="resolveCurrency"><option value="">Use market currency</option><option>INR</option><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></div>
+<div class="actions"><button type="submit">Resolve price</button><button type="button" class="secondary" id="compareMarkets">Compare all markets</button></div></form><div id="resolveStatus" class="statusline" role="status" aria-live="polite"></div></div>
+<div class="card span-7"><h2>Resolved quote</h2><p class="sub">Quote values are sourced from the API response, not calculated in the browser.</p><div id="quoteResult"><div class="quote"><div class="sub">No quote resolved yet</div><div>Choose a product and market, then resolve the price.</div></div></div><div id="compareResult"></div></div></div>
+</section>
+<section id="vendor" class="panel">
+<div class="grid">
+<div class="card span-7"><h2>Payment vendor settings</h2><p class="sub">Configure the adapter selection and mode. Production vendors remain unavailable until a verified provider adapter is implemented and approved.</p>
+<form id="vendorForm"><div class="field"><label for="vendorProvider">Payment provider</label><select id="vendorProvider"><option value="sandbox">EPER Sandbox (available for UAT)</option><option value="razorpay">Razorpay (adapter pending)</option><option value="stripe">Stripe (adapter pending)</option><option value="adyen">Adyen (adapter pending)</option></select></div>
+<div class="field" style="margin-top:12px"><label for="vendorMode">Mode</label><select id="vendorMode"><option value="sandbox">Sandbox / test</option><option value="production" disabled>Production — locked pending gateway approval</option></select></div>
+<label class="vendor-option" style="margin-top:14px"><input type="checkbox" id="vendorEnabled"><span><strong>Enable sandbox payment flow</strong><small>Only effective when EPER_PAYMENT_SANDBOX_ENABLED is enabled on the server and sandbox credentials/tenant are configured.</small></span></label>
+<div class="actions"><button type="submit">Save vendor settings</button><button type="button" class="secondary" id="reloadVendor">Reload status</button></div><div id="vendorStatus" class="statusline" role="status" aria-live="polite"></div></form>
+</div>
+<div class="card span-5"><h2>Credential readiness</h2><p class="sub">Only readiness indicators are returned. Secret values are never returned by the API.</p><div id="credentialStatus"><p>Connect to inspect server-side readiness.</p></div><div class="notice" style="margin-top:14px;margin-bottom:0"><strong>Security rule:</strong> add provider API keys and webhook secrets through the server's approved secret manager/environment configuration. This UI intentionally does not collect or persist raw secrets.</div></div>
+<div class="card span-12"><h2>Provider readiness checklist</h2><div class="tablewrap"><table style="min-width:500px"><thead><tr><th>Control</th><th>Current boundary</th></tr></thead><tbody><tr><td>Market quote used for amount</td><td><span class="pill ok">Implemented in sandbox API</span></td></tr><tr><td>Live provider adapter</td><td><span class="pill warn">Not implemented</span></td></tr><tr><td>Signed webhook verification</td><td><span class="pill warn">Pending</span></td></tr><tr><td>Durable quote/payment storage</td><td><span class="pill warn">Pending</span></td></tr><tr><td>Production activation</td><td><span class="pill bad">Disabled</span></td></tr></tbody></table></div></div>
+</div>
+</section>
+<footer>EPER admin UI · Uses authenticated same-origin APIs. Admin token is held in page memory only. Never use this console over an untrusted network.</footer>
+</main>
+<script>
+(function(){
+"use strict";
+var entries=[],activeQuote=null;
+var $=function(id){return document.getElementById(id)};
+var base=function(){return ($("apiBase").value||"").trim().replace(/\/$/,"")};
+var token=function(){return $("adminToken").value.trim()};var tokenFor=function(path){return path.indexOf("/pricing/")===0?($("pricingToken").value.trim()||token()):token()};
+function status(id,msg,kind){var el=$(id);el.textContent=msg||"";el.className="statusline"+(kind?" "+kind:"");if(kind==="success"&&msg&&window.EPERToast)window.EPERToast.success(msg);if(kind==="error"&&msg&&window.EPERToast)window.EPERToast.error(msg)}
+function money(minor,currency){try{return new Intl.NumberFormat(undefined,{style:"currency",currency:currency}).format(minor/100)}catch(e){return (minor/100).toFixed(2)+" "+currency}}
+async function api(path,options){options=options||{};options.headers=Object.assign({},options.headers||{},{authorization:"Bearer "+tokenFor(path)});if(options.body)options.headers["content-type"]="application/json";var response=await fetch(base()+path,options);var type=response.headers.get("content-type")||"";var data=type.indexOf("application/json")>=0?await response.json():await response.text();if(!response.ok)throw new Error(data&&data.error?data.error:"HTTP "+response.status);return data}
+function esc(value){return String(value==null?"":value).replace(/[&<>"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]})}
+function renderPrices(){var rows=$("priceRows");if(!entries.length){rows.innerHTML='<tr><td colspan="7">No configured entries. Add an entry to start.</td></tr>'}else{rows.innerHTML=entries.map(function(e,i){return '<tr><td>'+esc(e.productId)+'</td><td>'+esc(e.marketId)+'</td><td>'+esc(money(e.amountMinor,e.currency))+'</td><td>'+esc(e.priceBookId)+'<br><span class="help">'+esc(e.priceBookVersion)+'</span></td><td><span class="pill '+(e.status==="APPROVED"?"ok":e.status==="DRAFT"?"warn":"")+'">'+esc(e.status)+'</span></td><td>'+esc(e.effectiveFrom)+'</td><td><button class="secondary" data-edit="'+i+'">Edit</button></td></tr>'}).join("");Array.prototype.forEach.call(rows.querySelectorAll("[data-edit]"),function(btn){btn.addEventListener("click",function(){var e=entries[Number(btn.getAttribute("data-edit"))];$("productId").value=e.productId;$("marketId").value=e.marketId;$("currency").value=e.currency;$("amountMajor").value=(e.amountMinor/100).toFixed(2);$("priceBookId").value=e.priceBookId;$("priceBookVersion").value=e.priceBookVersion;$("priceStatus").value=e.status;$("effectiveFrom").value=String(e.effectiveFrom).slice(0,16);$("effectiveTo").value=e.effectiveTo?String(e.effectiveTo).slice(0,16):"";window.scrollTo({top:0,behavior:"smooth"})})})}
+$("entryCount").textContent=entries.length;$("approvedCount").textContent=entries.filter(function(e){return e.status==="APPROVED"}).length;$("marketCount").textContent=new Set(entries.map(function(e){return e.marketId})).size;renderProductOptions()}
+function renderProductOptions(){var products=Array.from(new Set(entries.map(function(e){return e.productId}))).sort();$("resolveProduct").innerHTML='<option value="">Select product</option>'+products.map(function(p){return '<option>'+esc(p)+'</option>'}).join("");renderMarketOptions()}
+function renderMarketOptions(){var product=$("resolveProduct").value;var markets=Array.from(new Set(entries.filter(function(e){return e.productId===product&&e.status==="APPROVED"}).map(function(e){return e.marketId}))).sort();$("resolveMarket").innerHTML='<option value="">Select market</option>'+markets.map(function(m){return '<option>'+esc(m)+'</option>'}).join("")}
+async function loadPrices(){try{var data=await api("/admin/config/price-book");entries=data.entries||[];renderPrices();status("connectionStatus","Connected · "+entries.length+" price entries loaded","success");status("priceTableMsg","Loaded from /admin/config/price-book","success")}catch(e){status("connectionStatus",e.message,"error");status("priceTableMsg",e.message,"error")}}
+async function loadVendor(){try{var data=await api("/admin/config/payment-vendor");$("vendorProvider").value=data.provider||"sandbox";$("vendorMode").value=data.mode||"sandbox";$("vendorEnabled").checked=!!data.sandboxEnabled;var creds=data.credentials||{};$("credentialStatus").innerHTML='<p><span class="pill '+(creds.providerKeyConfigured?"ok":"warn")+'">Provider key '+(creds.providerKeyConfigured?"configured":"not detected")+'</span></p><p><span class="pill '+(creds.webhookSecretConfigured?"ok":"warn")+'">Webhook secret '+(creds.webhookSecretConfigured?"configured":"not detected")+'</span></p><p><span class="pill '+(data.adapterAvailable?"ok":"warn")+'">'+(data.adapterAvailable?"Adapter available":"Adapter unavailable")+'</span></p><p><span class="pill '+(data.productionEnabled?"ok":"bad")+'">Production '+(data.productionEnabled?"enabled":"disabled")+'</span></p><p class="help">Credential values are not returned.</p>';status("vendorStatus",data.message||"Vendor status loaded","success")}catch(e){status("vendorStatus",e.message,"error")}}
+$("connectBtn").addEventListener("click",async function(){await loadPrices();await loadVendor()});
+$("refreshBtn").addEventListener("click",async function(){await loadPrices();await loadVendor()});
+$("reloadPrices").addEventListener("click",loadPrices);$("reloadVendor").addEventListener("click",loadVendor);
+$("resolveProduct").addEventListener("change",renderMarketOptions);
+Array.prototype.forEach.call(document.querySelectorAll("[data-tab]"),function(btn){btn.addEventListener("click",function(){document.querySelectorAll("[data-tab]").forEach(function(b){b.classList.toggle("active",b===btn)});document.querySelectorAll(".panel").forEach(function(p){p.classList.toggle("active",p.id===btn.getAttribute("data-tab"))})})});
+$("clearPriceForm").addEventListener("click",function(){$("priceForm").reset();status("priceStatusMsg","")});
+$("priceForm").addEventListener("submit",async function(ev){ev.preventDefault();try{var currency=$("currency").value,major=Number($("amountMajor").value);var factor=100;var amountMinor=Math.round(major*factor);if(!Number.isFinite(major)||major<=0||Math.abs(major*factor-amountMinor)>0.000001)throw new Error("Enter a valid amount with at most two decimal places");var payload={productId:$("productId").value.trim(),marketId:$("marketId").value.trim().toUpperCase(),currency:currency,amountMinor:amountMinor,priceBookId:$("priceBookId").value.trim(),priceBookVersion:$("priceBookVersion").value.trim(),status:$("priceStatus").value,effectiveFrom:new Date($("effectiveFrom").value).toISOString(),effectiveTo:$("effectiveTo").value?new Date($("effectiveTo").value).toISOString():null};var data=await api("/admin/config/price-book",{method:"PUT",body:JSON.stringify({entry:payload})});entries=data.entries||[];renderPrices();status("priceStatusMsg","Price entry saved to the running API process. Confirm durable configuration before restart.","success");status("connectionStatus","Price book updated","success")}catch(e){status("priceStatusMsg",e.message,"error")}});
+$("resolveForm").addEventListener("submit",async function(ev){ev.preventDefault();try{var body={productId:$("resolveProduct").value,marketId:$("resolveMarket").value};if($("resolveCurrency").value)body.currency=$("resolveCurrency").value;var data=await api("/pricing/quote",{method:"POST",body:JSON.stringify(body)});activeQuote=data.quote;$("quoteResult").innerHTML='<div class="quote"><div class="sub">Resolved market price · '+esc(data.quote.marketId)+'</div><div class="amount">'+esc(money(data.quote.amountMinor,data.quote.currency))+'</div><div class="details"><span class="pill ok">'+esc(data.quote.currency)+'</span><span class="pill">Book '+esc(data.quote.priceBookId)+'</span><span class="pill">Version '+esc(data.quote.priceBookVersion)+'</span></div><p class="help">Quoted at '+esc(data.quote.quotedAt)+'</p><p><strong>Before authorization:</strong> show this amount and currency to the payer and obtain confirmation.</p></div>';status("resolveStatus","Quote resolved by API","success")}catch(e){activeQuote=null;status("resolveStatus",e.message,"error");$("quoteResult").innerHTML='<div class="quote"><strong>Quote unavailable</strong><p>'+esc(e.message)+'</p></div>'}});
+$("compareMarkets").addEventListener("click",async function(){var product=$("resolveProduct").value;if(!product){status("resolveStatus","Select a product first","error");return}var markets=Array.from(new Set(entries.filter(function(e){return e.productId===product&&e.status==="APPROVED"}).map(function(e){return e.marketId})));try{var results=await Promise.all(markets.map(async function(m){try{var d=await api("/pricing/quote",{method:"POST",body:JSON.stringify({productId:product,marketId:m})});return d.quote}catch(e){return {marketId:m,error:e.message}}}));$("compareResult").innerHTML='<div class="tablewrap" style="margin-top:14px"><table style="min-width:400px"><thead><tr><th>Market</th><th>Resolved price</th><th>Book version</th></tr></thead><tbody>'+results.map(function(q){return '<tr><td>'+esc(q.marketId)+'</td><td>'+(q.error?'<span class="pill bad">'+esc(q.error)+'</span>':esc(money(q.amountMinor,q.currency)))+'</td><td>'+esc(q.priceBookVersion||"—")+'</td></tr>'}).join("")+'</tbody></table></div>'}catch(e){status("resolveStatus",e.message,"error")}});
+$("vendorForm").addEventListener("submit",async function(ev){ev.preventDefault();try{var data=await api("/admin/config/payment-vendor",{method:"PUT",body:JSON.stringify({provider:$("vendorProvider").value,mode:$("vendorMode").value,sandboxEnabled:$("vendorEnabled").checked})});status("vendorStatus",data.message||"Vendor settings updated","success");await loadVendor()}catch(e){status("vendorStatus",e.message,"error")}});
+})();
+</script>
+${applicationToastMarkup}
+</body></html>`;
+
+export function isAdminPricingUiRequest(request: IncomingMessage): boolean {
+  return request.method === "GET" && (request.url ?? "").split("?")[0] === "/admin/pricing-ui";
+}

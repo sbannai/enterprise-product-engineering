@@ -7,10 +7,15 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/apps/api/main.js",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "migrate:payments": "node scripts/migrate-payments.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "migrate:audit": "node scripts/migrate-audit.mjs"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
     "typescript": "5.6.3"
+  },
+  "dependencies": {
+    "pg": "8.22.0"
   }
 }

@@ -19,7 +19,11 @@ WORKDIR /app
 ARG EPER_BUILD_ID
 ENV EPER_BUILD_ID=${EPER_BUILD_ID}
 COPY package.json package-lock.json ./
+# Runtime needs the production pg driver for the PostgreSQL payment store and migration runner.
+RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/packages/payments/migrations ./packages/payments/migrations
+COPY scripts ./scripts
 USER node
 EXPOSE 8080
 CMD ["node", "dist/apps/api/main.js"]
