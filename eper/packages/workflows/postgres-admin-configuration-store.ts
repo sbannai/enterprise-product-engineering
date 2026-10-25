@@ -97,12 +97,18 @@ export class PostgresAdminConfigurationStore {
         "SELECT pg_advisory_xact_lock(hashtext($1))",
         ["eper-admin-config:" + input.tenantId + ":" + input.resourceType],
       );
-      const prior = await client.query<{ version: number | string }>(
-        "SELECT version FROM eper_admin_configuration WHERE tenant_id = $1 AND resource_type = $2 FOR UPDATE",
+      const prior = await client.query<{ version: number | string; config: unknown }>(
+        "SELECT version, config FROM eper_admin_configuration WHERE tenant_id = $1 AND resource_type = $2 FOR UPDATE",
         [input.tenantId, input.resourceType],
       );
       const currentVersion = prior.rows[0] ? Number(prior.rows[0].version) : 0;
       if (currentVersion !== input.expectedVersion) throw new AdminConfigurationConflictError(currentVersion);
+      const priorConfig = prior.rows[0]
+        ? (typeof prior.rows[0].config === "string" ? JSON.parse(prior.rows[0].config) : prior.rows[0].config)
+        : undefined;
+      const beforeDigest = prior.rows[0]
+        ? createHash("sha256").update(JSON.stringify(priorConfig)).digest("hex")
+        : undefined;
       const nextVersion = currentVersion + 1;
       const saved = await client.query<{
         tenant_id: string; resource_type: AdminConfigurationResource; config: unknown;
@@ -125,8 +131,8 @@ export class PostgresAdminConfigurationStore {
         outcome: "success", resourceType: input.resourceType, resourceId: input.resourceType,
         correlationId: input.correlationId, source: "api",
         operationName: "PUT /admin/config/" + input.resourceType,
-        serviceVersion: input.serviceVersion, beforeHash: undefined, afterHash: digest,
-        payload: { resourceType: input.resourceType, version: nextVersion },
+        serviceVersion: input.serviceVersion, beforeHash: beforeDigest, afterHash: digest,
+        payload: { resourceType: input.resourceType, previousVersion: currentVersion, version: nextVersion },
       });
       await client.query("COMMIT");
       return {
