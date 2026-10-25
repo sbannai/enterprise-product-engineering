@@ -150,3 +150,54 @@ export async function appendAuditEvent(pool: AuditSqlPool, input: AuditEventInpu
     client.release();
   }
 }
+
+
+/**
+ * Refuses to start protected audit-backed routes when the deployed schema is
+ * absent or its append-only triggers are missing/disabled. This validates
+ * deployment state; it does not prove hash-chain correctness or full coverage.
+ */
+export async function assertAuditStoreReady(pool: AuditSqlPool): Promise<void> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      events_table: string | null;
+      chain_head_table: string | null;
+      has_no_update_trigger: boolean;
+      has_no_delete_trigger: boolean;
+      chain_head_count: string | number;
+    }>(`
+      SELECT
+        to_regclass('public.eper_audit_events')::text AS events_table,
+        to_regclass('public.eper_audit_chain_head')::text AS chain_head_table,
+        EXISTS (
+          SELECT 1 FROM pg_trigger
+          WHERE tgrelid = to_regclass('public.eper_audit_events')
+            AND tgname = 'eper_audit_events_no_update'
+            AND tgenabled <> 'D'
+        ) AS has_no_update_trigger,
+        EXISTS (
+          SELECT 1 FROM pg_trigger
+          WHERE tgrelid = to_regclass('public.eper_audit_events')
+            AND tgname = 'eper_audit_events_no_delete'
+            AND tgenabled <> 'D'
+        ) AS has_no_delete_trigger,
+        (SELECT COUNT(*) FROM eper_audit_chain_head WHERE singleton = TRUE) AS chain_head_count
+    `);
+    const state = result.rows[0];
+    if (!state || !state.events_table || !state.chain_head_table) {
+      throw new Error("EPER_AUDIT_SCHEMA_NOT_APPLIED");
+    }
+    if (!state.has_no_update_trigger || !state.has_no_delete_trigger) {
+      throw new Error("EPER_AUDIT_APPEND_ONLY_CONTROLS_MISSING");
+    }
+    if (Number(state.chain_head_count) !== 1) {
+      throw new Error("EPER_AUDIT_CHAIN_HEAD_NOT_INITIALIZED");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("EPER_AUDIT_")) throw error;
+    throw new Error("EPER_AUDIT_READINESS_CHECK_FAILED", { cause: error });
+  } finally {
+    client.release();
+  }
+}
