@@ -53,7 +53,7 @@ test("durable admin API resolves tenant and actor only from server-side credenti
     const response = await fetch(`${base}/admin/config/roles-access`, {
       method: "PUT",
       headers: { authorization: `Bearer ${TOKEN_A}`, "content-type": "application/json", "x-tenant-id": "tenant-b" },
-      body: JSON.stringify({ tenantId: "tenant-b", actorId: "admin-b", expectedVersion: 0, roles: [] }),
+      body: JSON.stringify({ tenantId: "tenant-b", actorId: "admin-b", expectedVersion: 0, roles: [{ id: "finance", name: "Finance", members: ["payer-1"], permissions: ["workflow:view"] }] }),
     });
     assert.equal(response.status, 200);
     const result = await response.json();
@@ -68,9 +68,12 @@ test("durable admin API resolves tenant and actor only from server-side credenti
     const tenantB = await fetch(`${base}/admin/config/roles-access`, {
       headers: { authorization: `Bearer ${TOKEN_B}` },
     });
-    assert.deepEqual((await tenantA.json()).roles, []);
-    assert.deepEqual((await tenantB.json()).roles, []);
-    assert.equal((await tenantB.json().catch(() => null))?.version, undefined);
+    const tenantAData = await tenantA.json();
+    const tenantBData = await tenantB.json();
+    assert.equal(tenantAData.roles[0].id, "finance");
+    assert.equal(tenantAData.version, 1);
+    assert.deepEqual(tenantBData.roles, []);
+    assert.equal(tenantBData.version, 0);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
