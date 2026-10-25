@@ -6,11 +6,10 @@ This change adds one shared, provider-neutral draft workflow for CRM, Sales and 
 ## API (disabled by default)
 Configure only in an isolated non-production environment:
 - `EPER_AGENTS_API_ENABLED=true`
-- `EPER_AGENTS_API_TOKEN`: at least 32 characters
 - `EPER_AGENTS_TENANT_ID`: the tenant bound by the server
-- `EPER_AGENTS_ALLOWED_PRINCIPALS`: comma-separated allowlist with at least two distinct principals
+- `EPER_AGENTS_PRINCIPAL_TOKENS`: semicolon-separated `principal-id=unique-token` entries, with at least two distinct principals; every token must be at least 32 characters and be stored as a managed secret
 
-Every request requires `Authorization: Bearer <token>` and `X-EPER-Principal-Id`. Do not expose the shared bearer-token model as a production identity system; replace it with the approved identity provider and permission checks before production.
+Every request requires `Authorization: Bearer <principal-specific-token>`. The server derives the principal from the matching credential; caller-supplied `X-EPER-Principal-Id` is ignored and must never be treated as identity. Do not reuse one token across principals. Before production, replace this pilot credential map with the approved identity provider and permission checks.
 
 ### Create drafts
 - `POST /v1/agents/crm/drafts`: `lead-qualification`, `contact-summary`, `next-action`
