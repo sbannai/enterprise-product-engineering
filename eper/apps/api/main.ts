@@ -25,6 +25,9 @@ const receiptNumberSource = receiptPrefix && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,19}$
 const invoiceAmountSource = createConfiguredHttpInvoiceAmountSource();
 const transactionSnapshotSource = createConfiguredHttpTransactionSnapshotSource();
 const auditMode = process.env.EPER_AUDIT_PERSISTENCE ?? "disabled";
+if (process.env.NODE_ENV === "production" && process.env.EPER_AGENTS_API_ENABLED === "true" && auditMode !== "postgres") {
+  throw new Error("PRODUCTION_AGENT_API_REQUIRES_DURABLE_AUDIT");
+}
 if (auditMode !== "disabled" && auditMode !== "postgres") {
   throw new Error("EPER_AUDIT_PERSISTENCE_UNSUPPORTED");
 }
