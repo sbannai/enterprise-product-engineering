@@ -25,7 +25,7 @@ test("JSON reporting store validates required context, timestamps, values and pr
     assert.throws(() => store.publish({ ...row, generatedAt: "not-a-date" }), /REPORT_TIMESTAMP_INVALID/);
     assert.throws(() => store.publish({ ...row, values: [] }), /REPORT_VALUES_INVALID/);
     assert.throws(() => store.publish({ ...row, sourceRequirementIds: "REQ-46306" }), /REPORT_PROVENANCE_INVALID/);
-    assert.throws(() => store.publish({ ...row, sourceRequirementIds: [" "] }), /REPORT_PROVENANCE_INVALID/);
+    assert.throws(() => store.publish({ ...row, sourceRequirementIds: [" "] }), /REPORT_PROVENANCE_REQUIRED/);
     assert.throws(() => store.publish({ ...row, sourceRequirementIds: [] }), /REPORT_PROVENANCE_REQUIRED/);
     assert.equal(store.query({ tenantId: "tenant-a", reportId: "rpt-1" }).length, 0);
   });

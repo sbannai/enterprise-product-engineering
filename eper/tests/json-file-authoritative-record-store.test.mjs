@@ -30,7 +30,7 @@ test("JSON record store rejects malformed create context, version and data", () 
 test("JSON record store validates updates and uses optimistic version checks", () => {
   withStore(store => {
     store.create(record);
-    assert.throws(() => store.update("tenant-a", "record-1", 0, { state: "ACTIVE" }), /RECORD_VERSION_INVALID/);
+    assert.throws(() => store.update("tenant-a", "record-1", 0, { state: "ACTIVE" }), /RECORD_EXPECTED_VERSION_INVALID/);
     assert.throws(() => store.update("tenant-a", "record-1", 1, null), /RECORD_PATCH_INVALID/);
     assert.throws(() => store.update("tenant-a", "record-1", 1, { state: " " }), /RECORD_STATE_INVALID/);
     assert.throws(() => store.update("tenant-a", "record-1", 1, { data: [] }), /RECORD_DATA_INVALID/);
