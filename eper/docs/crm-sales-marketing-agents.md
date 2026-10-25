@@ -1,0 +1,48 @@
+# CRM, Sales and Marketing Agents — controlled workflow API
+
+## Scope
+This change adds one shared, provider-neutral draft workflow for CRM, Sales and Marketing. It uses the existing API server and keeps all 228 requirement IDs, 38 chapters, six capability families and the capability router unchanged.
+
+## API (disabled by default)
+Configure only in an isolated non-production environment:
+- `EPER_AGENTS_API_ENABLED=true`
+- `EPER_AGENTS_TENANT_ID`: the tenant bound by the server
+- `EPER_AGENTS_PRINCIPAL_TOKENS`: semicolon-separated `principal-id=unique-token` entries, with at least two distinct principals; every token must be at least 32 characters and be stored as a managed secret
+
+Every request requires `Authorization: Bearer <principal-specific-token>`. The server derives the principal from the matching credential; caller-supplied `X-EPER-Principal-Id` is ignored and must never be treated as identity. Do not reuse one token across principals. Before production, replace this pilot credential map with the approved identity provider and permission checks.
+
+### Create drafts
+- `POST /v1/agents/crm/drafts`: `lead-qualification`, `contact-summary`, `next-action`
+- `POST /v1/agents/sales/drafts`: `follow-up`, `opportunity-plan`, `proposal-outline`
+- `POST /v1/agents/marketing/drafts`: `campaign-brief`, `email-copy`, `social-copy`
+
+Body shape: `{ "intent": "...", "input": { "objective": "...", "context": "...", "audience": "...", "offer": "..." } }`
+
+### Review and list
+- `GET /v1/agents/drafts` (optional `?status=PENDING_APPROVAL`)
+- `POST /v1/agents/drafts/{id}/approve`
+- `POST /v1/agents/drafts/{id}/reject`
+
+A reviewer must differ from the draft creator (maker-checker). Approval changes only the draft's status. It does not send messages, publish content, write to CRM, modify pipeline stages, or execute transactions.
+
+## Current boundaries and production gaps
+- The current content generator is deterministic/template-based, not connected to an LLM provider.
+- Draft storage is bounded process memory; drafts disappear on restart and are not suitable as an audit system.
+- No CRM connector, email/SMS/social publisher, campaign scheduler, or execution adapter is called.
+- Before production: use durable tenant-scoped storage, real user/role identity, permissioned CRM read/write adapters, immutable audit evidence, retention rules, rate limiting, provider-managed secrets, model/provider policy, prompt-injection/data-loss controls, consent/opt-out enforcement, and separate execution approvals.
+- UI screens must call these routes through the authenticated same-origin API; the standalone wireframe's local demo interactions are not a backend integration.
+
+## Verification
+Automated API tests cover each agent's draft creation, allowlisted principals, maker-checker separation, listing, unsupported intents, and the no-side-effect approval contract. CI must pass on the final commit before the implementation is considered verified.
+
+
+## WhatsApp tool configuration (tenant/application scoped)
+
+The Agent Tools Configuration screen at `/agents-tools` includes WhatsApp Business settings for each tenant, application, and environment:
+- Provider choice: Meta WhatsApp Cloud API, Twilio adapter, or provider-neutral adapter.
+- Non-secret identifiers: WhatsApp Business Account ID and Phone Number ID.
+- Approved template name and draft/template-preview mode.
+- Recipient opt-in requirement, separate human approval, and audit requirement.
+- Sending remains disabled. The configuration preview does not persist settings or connect a provider.
+
+Do not place access tokens, app secrets, webhook verification tokens, or signing secrets in the browser configuration. Store them server-side per tenant/application in a managed secret store. Before live messaging, implement and test provider adapter, webhook signature verification, delivery/status callbacks, template and WhatsApp policy validation, opt-in/opt-out suppression, rate limits, idempotency, tenant isolation, durable audit logs, and approved execution authorization. A post draft is not a WhatsApp send; no message is sent by this screen.
