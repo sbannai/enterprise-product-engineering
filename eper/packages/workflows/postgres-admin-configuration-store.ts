@@ -41,6 +41,23 @@ export interface ReplaceAdminConfigurationInput {
 export class PostgresAdminConfigurationStore {
   constructor(private readonly pool: AuditSqlPool) {}
 
+  async assertReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ configuration_table: string | null }>(
+        "SELECT to_regclass('public.eper_admin_configuration')::text AS configuration_table",
+      );
+      if (!result.rows[0]?.configuration_table) {
+        throw new Error("EPER_ADMIN_CONFIGURATION_SCHEMA_NOT_APPLIED");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_ADMIN_CONFIGURATION_SCHEMA_NOT_APPLIED") throw error;
+      throw new Error("EPER_ADMIN_CONFIGURATION_READINESS_CHECK_FAILED", { cause: error });
+    } finally {
+      client.release();
+    }
+  }
+
   async get(tenantId: string, resourceType: AdminConfigurationResource): Promise<StoredAdminConfiguration | null> {
     this.validateIdentity(tenantId, "tenantId");
     const client = await this.pool.connect();
