@@ -117,6 +117,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
       });
       response.end(adminWorkflowUiHtml);
       return;
@@ -293,6 +294,60 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       }
       return;
     }
+
+    // Market-specific pricing quotes. No FX conversion is performed; each
+    // market/currency pair must be present in the approved price-book config.
+    if (requestUrl.pathname === "/pricing/options" || requestUrl.pathname === "/pricing/quote") {
+      if (process.env.EPER_PRICING_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      const pricingToken = process.env.EPER_PRICING_API_TOKEN ?? "";
+      if (pricingToken.length < 32) {
+        sendJson(response, 503, { error: "pricing_api_unconfigured" });
+        return;
+      }
+      if (!bearerMatches(request, pricingToken)) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      try {
+        if (request.method === "GET" && requestUrl.pathname === "/pricing/options") {
+          const productId = requestUrl.searchParams.get("productId") ?? "";
+          sendJson(response, 200, { markets: marketPriceBook.listMarkets(productId) });
+          return;
+        }
+        if (request.method === "POST" && requestUrl.pathname === "/pricing/quote") {
+          const body = await readJson(request);
+          if (typeof body.productId !== "string" || typeof body.marketId !== "string" ||
+              (body.currency !== undefined && typeof body.currency !== "string")) {
+            sendJson(response, 400, { error: "productId and marketId are required; currency must be a string when supplied" });
+            return;
+          }
+          const quote = marketPriceBook.quote({
+            productId: body.productId,
+            marketId: body.marketId,
+            ...(typeof body.currency === "string" ? { currency: body.currency } : {}),
+          });
+          sendJson(response, 200, { quote, amountMajor: quote.amountMinor / 100 });
+          return;
+        }
+        response.writeHead(405, { allow: "GET, POST", "cache-control": "no-store" });
+        response.end();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "MARKET_PRICING_OPERATION_FAILED";
+        const status = message === "APPROVED_MARKET_PRICE_NOT_FOUND" ? 404
+          : message === "MARKET_PRICE_CONFIGURATION_AMBIGUOUS" ? 409
+          : message === "MARKET_CURRENCY_MISMATCH" || message.startsWith("PRICE_") ||
+            message.startsWith("MARKET_PRICE_") || message === "MARKET_PRICE_BOOK_JSON_ARRAY_REQUIRED" ? 400
+          : message === "REQUEST_BODY_TOO_LARGE" ? 413
+          : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
+          : 422;
+        sendJson(response, status, { error: message });
+      }
+      return;
+    }
+
 
     if (request.method === "GET" && requestUrl.pathname === "/localization/options") {
       sendJson(response, 200, { ...localizationService.options() });
