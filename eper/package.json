@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "start": "node dist/apps/api/main.js",
     "migrate:payments": "node scripts/migrate-payments.mjs",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "migrate:audit": "node scripts/migrate-audit.mjs"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
