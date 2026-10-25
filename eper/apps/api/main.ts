@@ -36,23 +36,25 @@ if (!["production", "uat", "sandbox"].includes(auditEnvironment)) {
   throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
 }
 const auditWriter = auditMode === "postgres" && paymentPool
-  ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord) => appendAuditEvent(paymentPool, {
-      tenantId: record.tenantId,
-      applicationId: "eper",
-      environment: auditEnvironment as "production" | "uat" | "sandbox",
-      actorType: record.actorId === "anonymous" ? "system" : "human",
-      actorId: record.actorId,
-      action: record.action,
-      outcome: record.outcome,
-      reasonCode: record.outcome === "denied" ? "request_denied" : undefined,
-      resourceType: record.resourceType,
-      resourceId: record.resourceId,
-      requestId: record.requestId,
-      source: "api",
-      operationName: record.operationName,
-      serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-      payload: record.payload,
-    })
+  ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord): Promise<void> => {
+      await appendAuditEvent(paymentPool, {
+        tenantId: record.tenantId,
+        applicationId: "eper",
+        environment: auditEnvironment as "production" | "uat" | "sandbox",
+        actorType: record.actorId === "anonymous" ? "system" : "human",
+        actorId: record.actorId,
+        action: record.action,
+        outcome: record.outcome,
+        reasonCode: record.outcome === "denied" ? "request_denied" : undefined,
+        resourceType: record.resourceType,
+        resourceId: record.resourceId,
+        requestId: record.requestId,
+        source: "api",
+        operationName: record.operationName,
+        serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+        payload: record.payload,
+      });
+    }
   : undefined;
 const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter });
 
