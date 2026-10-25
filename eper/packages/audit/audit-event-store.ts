@@ -96,10 +96,11 @@ export async function appendAuditEvent(pool: AuditSqlPool, input: AuditEventInpu
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext('eper_audit_events_chain'))");
-    const head = await client.query<{ event_hash: string }>(
-      "SELECT event_hash FROM eper_audit_events ORDER BY ctid DESC LIMIT 1"
+    const head = await client.query<{ last_event_hash: string | null }>(
+      "SELECT last_event_hash FROM eper_audit_chain_head WHERE singleton = TRUE FOR UPDATE"
     );
-    const previousEventHash = head.rows[0]?.event_hash ?? null;
+    if (head.rows.length !== 1) throw new Error("audit_chain_head_not_initialized");
+    const previousEventHash = head.rows[0].last_event_hash;
     const envelope = {
       eventId, occurredAt, tenantId: input.tenantId, applicationId: input.applicationId,
       environment: input.environment, actorType: input.actorType, actorId: input.actorId,
@@ -135,6 +136,10 @@ export async function appendAuditEvent(pool: AuditSqlPool, input: AuditEventInpu
         JSON.stringify(envelope.payload), envelope.previousEventHash, eventHash,
         JSON.stringify({ algorithm: "sha256", chain: "global-advisory-lock-v1" }),
       ],
+    );
+    await client.query(
+      "UPDATE eper_audit_chain_head SET last_event_hash = $1, updated_at = NOW() WHERE singleton = TRUE",
+      [eventHash],
     );
     await client.query("COMMIT");
     return { eventId, eventHash };
