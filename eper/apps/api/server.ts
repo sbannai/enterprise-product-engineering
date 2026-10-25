@@ -94,7 +94,7 @@ async function handleDurableAdminConfig(
   const correlationId = typeof correlationHeader === "string" &&
     /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
   const getConfig = (resource: AdminConfigurationResource) => store.get(identity.tenantId, resource);
-  const saveConfig = (resourceType: AdminConfigurationResource, config: unknown, expectedVersion: unknown) => {
+  const saveConfig = async (resourceType: AdminConfigurationResource, config: unknown, expectedVersion: unknown) => {
     if (!Number.isSafeInteger(expectedVersion) || Number(expectedVersion) < 0) {
       throw new Error("ADMIN_CONFIGURATION_EXPECTED_VERSION_REQUIRED");
     }
