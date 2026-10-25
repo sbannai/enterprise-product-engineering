@@ -273,3 +273,46 @@ test("durable admin API returns 503 when the configuration store is unavailable"
     }
   }
 });
+
+
+test("durable admin API treats a missing expected version as a client error", async () => {
+  const keys = [
+    "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE",
+    "EPER_ADMIN_CONFIG_IDENTITIES_JSON", "EPER_ADMIN_CONFIG_API_TOKEN",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
+    EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({
+      [TOKEN_A]: { tenantId: "tenant-a", actorId: "admin-a" },
+    }),
+    EPER_ADMIN_CONFIG_API_TOKEN: TOKEN_B,
+  });
+  const store = {
+    async get() { return null; },
+    async replace() { throw new Error("replace must not be called for invalid expectedVersion"); },
+  };
+  const server = createAppServer({ adminConfigurationStore: store });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch(`http://127.0.0.1:${address.port}/admin/config/roles-access`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${TOKEN_A}`, "content-type": "application/json" },
+      body: JSON.stringify({ roles: [] }),
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "ADMIN_CONFIGURATION_EXPECTED_VERSION_REQUIRED" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
