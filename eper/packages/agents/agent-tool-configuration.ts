@@ -16,7 +16,7 @@ export type AgentToolConfiguration = {
   updatedAt: string;
   tools: {
     alerts: { enabled: boolean; channel: "in-app" | "email-draft" | "webhook-proposal"; leadScoreThreshold: number };
-    posts: { enabled: boolean; channels: Array<"linkedin" | "instagram" | "facebook" | "website">; approvalRequired: true };
+    posts: { enabled: boolean; channels: Array<"linkedin" | "instagram" | "facebook" | "website">; approvalRequired: true; whatsapp: { enabled: boolean; provider: "meta-cloud-api" | "twilio" | "provider-neutral"; businessAccountId: string; phoneNumberId: string; templateName: string; mode: "draft-only" | "template-preview"; recipientOptInRequired: true; humanApprovalRequired: true; auditRequired: true; sendingEnabled: false } };
     reports: { enabled: boolean; types: Array<"lead-pipeline" | "source-conversion" | "lead-aging" | "campaign-performance">; cadence: "on-demand" | "daily" | "weekly" | "monthly" };
     leadMaterialization: { enabled: boolean; target: "native-crm" | "csv-review" | "external-crm-proposal"; dedupeRequired: true; consentCheckRequired: true; approvalRequired: true };
   };
@@ -28,7 +28,7 @@ export const DEFAULT_AGENT_TOOL_CONFIGURATION: Omit<AgentToolConfiguration, "ten
   schemaVersion: 1,
   tools: {
     alerts: { enabled: false, channel: "in-app", leadScoreThreshold: 80 },
-    posts: { enabled: true, channels: ["website"], approvalRequired: true },
+    posts: { enabled: true, channels: ["website"], approvalRequired: true, whatsapp: { enabled: false, provider: "meta-cloud-api", businessAccountId: "", phoneNumberId: "", templateName: "", mode: "draft-only", recipientOptInRequired: true, humanApprovalRequired: true, auditRequired: true, sendingEnabled: false } },
     reports: { enabled: true, types: ["lead-pipeline", "source-conversion", "lead-aging"], cadence: "on-demand" },
     leadMaterialization: { enabled: false, target: "native-crm", dedupeRequired: true, consentCheckRequired: true, approvalRequired: true },
   },
