@@ -13,8 +13,32 @@ export class JsonFileAuditEvidenceStore implements AuditEvidenceStore {
   }
   private key(tenantId: string, id: string): string { return JSON.stringify([tenantId, id]); }
   private read(): AuditEvidence[] {
-    try { const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8")); if (!Array.isArray(parsed)) throw new Error(); return parsed as AuditEvidence[]; }
-    catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.filePath, "utf8"));
+      if (!Array.isArray(parsed)) throw new Error();
+      const entries = parsed as AuditEvidence[];
+      const identities = new Set<string>();
+      for (const entry of entries) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry) ||
+            typeof entry.id !== "string" || !entry.id.trim() ||
+            typeof entry.tenantId !== "string" || !entry.tenantId.trim() ||
+            typeof entry.requirementId !== "string" || !entry.requirementId.trim() ||
+            typeof entry.principalId !== "string" || !entry.principalId.trim() ||
+            typeof entry.correlationId !== "string" || !entry.correlationId.trim() ||
+            typeof entry.action !== "string" || !entry.action.trim() ||
+            typeof entry.occurredAt !== "string" || Number.isNaN(Date.parse(entry.occurredAt)) ||
+            !entry.payload || typeof entry.payload !== "object" || Array.isArray(entry.payload) ||
+            typeof entry.integrityHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.integrityHash)) {
+          throw new Error();
+        }
+        const identity = this.key(entry.tenantId, entry.id);
+        if (identities.has(identity)) throw new Error();
+        identities.add(identity);
+        const { integrityHash, ...material } = entry;
+        if (createHash("sha256").update(this.material(material)).digest("hex") !== integrityHash) throw new Error();
+      }
+      return entries;
+    } catch { throw new Error("PERSISTENCE_DATA_INVALID"); }
   }
   private commit(entries: AuditEvidence[]): void {
     const temporary = `${this.filePath}.${randomUUID()}.tmp`;
@@ -28,9 +52,26 @@ export class JsonFileAuditEvidenceStore implements AuditEvidenceStore {
     return JSON.stringify({ id: entry.id, tenantId: entry.tenantId, requirementId: entry.requirementId, action: entry.action, principalId: entry.principalId, correlationId: entry.correlationId, occurredAt: entry.occurredAt, payload });
   }
   append(input: Omit<AuditEvidence, "integrityHash">): AuditEvidence {
-    if (!input.id || !input.tenantId || !input.requirementId || !input.principalId || !input.correlationId) throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
-    if (!input.action || !input.occurredAt) throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+        typeof input.id !== "string" || !input.id.trim() ||
+        typeof input.tenantId !== "string" || !input.tenantId.trim() ||
+        typeof input.requirementId !== "string" || !input.requirementId.trim() ||
+        typeof input.principalId !== "string" || !input.principalId.trim() ||
+        typeof input.correlationId !== "string" || !input.correlationId.trim()) {
+      throw new Error("AUDIT_EVIDENCE_CONTEXT_REQUIRED");
+    }
+    if (typeof input.action !== "string" || !input.action.trim() ||
+        typeof input.occurredAt !== "string" || !input.occurredAt.trim()) {
+      throw new Error("AUDIT_EVIDENCE_FIELDS_REQUIRED");
+    }
     if (Number.isNaN(Date.parse(input.occurredAt))) throw new Error("AUDIT_EVIDENCE_TIMESTAMP_INVALID");
+    if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) {
+      throw new Error("AUDIT_PAYLOAD_INVALID");
+    }
+    let serializedPayload: string | undefined;
+    try { serializedPayload = JSON.stringify(input.payload); }
+    catch { throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE"); }
+    if (serializedPayload === undefined) throw new Error("AUDIT_PAYLOAD_NOT_SERIALIZABLE");
     const entries = this.read();
     if (entries.some(e => this.key(e.tenantId,e.id)===this.key(input.tenantId,input.id))) throw new Error("AUDIT_EVIDENCE_ALREADY_EXISTS");
     const integrityHash = createHash("sha256").update(this.material(input)).digest("hex");

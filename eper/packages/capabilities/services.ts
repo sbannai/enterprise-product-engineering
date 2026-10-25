@@ -38,19 +38,31 @@ function prepare(
 
   const contracts = validateRequirementContracts(requirement);
   const value = (input ?? {}) as CapabilityInput;
-  if (value.context) {
-    if (!value.context.tenantId || !value.context.principalId || !value.context.correlationId) {
+  if (value.context !== undefined) {
+    const context: unknown = value.context;
+    if (!context || typeof context !== "object" || Array.isArray(context)) {
+      throw new Error("CAPABILITY_CONTEXT_REQUIRED");
+    }
+    const candidate = context as Record<string, unknown>;
+    if (typeof candidate.tenantId !== "string" || !candidate.tenantId.trim() ||
+        typeof candidate.principalId !== "string" || !candidate.principalId.trim() ||
+        typeof candidate.correlationId !== "string" || !candidate.correlationId.trim()) {
       throw new Error("CAPABILITY_CONTEXT_REQUIRED");
     }
   }
   return { value, contracts };
 }
 
-function requireTenantContext(value: CapabilityInput, requestedTenantId?: string): string {
+function requireTenantContext(value: CapabilityInput, requestedTenantId?: unknown): string {
   const tenantId = value.context?.tenantId;
   if (!tenantId) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
-  if (requestedTenantId && requestedTenantId !== tenantId) {
-    throw new Error("TENANT_CONTEXT_MISMATCH");
+  if (requestedTenantId !== undefined) {
+    if (typeof requestedTenantId !== "string" || !requestedTenantId.trim()) {
+      throw new Error("TENANT_CONTEXT_INVALID");
+    }
+    if (requestedTenantId !== tenantId) {
+      throw new Error("TENANT_CONTEXT_MISMATCH");
+    }
   }
   return tenantId;
 }
@@ -151,8 +163,19 @@ export class AuditEvidenceService implements CapabilityService {
     const payload = (value.payload ?? input) as any;
     if (payload && typeof payload === "object" && payload.operation) {
       if (payload.operation === "append") {
-        requireTenantContext(value, payload.evidence?.tenantId);
-        return Promise.resolve(result(requirement, contracts, { operation: "append", evidence: this.store.append(payload.evidence) }));
+        const tenantId = requireTenantContext(value, payload.evidence?.tenantId);
+        if (!payload.evidence || typeof payload.evidence !== "object" || Array.isArray(payload.evidence)) {
+          throw new Error("AUDIT_EVIDENCE_REQUIRED");
+        }
+        // Security identity and tenant scope come from the authenticated execution context,
+        // never from caller-controlled audit payload fields.
+        const evidence = this.store.append({
+          ...payload.evidence,
+          tenantId,
+          principalId: value.context!.principalId,
+          correlationId: value.context!.correlationId,
+        });
+        return Promise.resolve(result(requirement, contracts, { operation: "append", evidence }));
       }
       if (payload.operation === "get") {
         requireTenantContext(value, payload.tenantId);
