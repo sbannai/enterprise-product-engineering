@@ -31,11 +31,18 @@ async function readBody(request: IncomingMessage): Promise<Record<string, unknow
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("JSON_OBJECT_REQUIRED");
   return parsed as Record<string, unknown>;
 }
-function bearerMatches(request: IncomingMessage, expected: string): boolean {
+function authenticatedPrincipal(request: IncomingMessage, credentials: Map<string, string>): string | null {
   const match = /^Bearer (.+)$/i.exec(request.headers.authorization ?? "");
-  if (!match) return false;
-  const a = Buffer.from(match[1]); const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (!match) return null;
+  const presented = Buffer.from(match[1]);
+  let principal: string | null = null;
+  // Check every configured credential without early-exit timing differences.
+  for (const [id, token] of credentials) {
+    const expected = Buffer.from(token);
+    const matches = presented.length === expected.length && timingSafeEqual(presented, expected);
+    if (matches) principal = id;
+  }
+  return principal;
 }
 function cleanText(value: unknown, field: string, max = 2000): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > max) throw new Error(`INVALID_${field.toUpperCase()}`);
@@ -125,15 +132,22 @@ function errorStatus(message: string): number {
 export async function handleAgentRoute(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<boolean> {
   if (!pathname.startsWith("/v1/agents/")) return false;
   if (process.env.EPER_AGENTS_API_ENABLED !== "true") { send(response, 404, { error: "not_found" }); return true; }
-  const token = process.env.EPER_AGENTS_API_TOKEN ?? "";
   const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
-  const allowed = new Set((process.env.EPER_AGENTS_ALLOWED_PRINCIPALS ?? "").split(",").map((x) => x.trim()).filter(Boolean));
-  if (token.length < 32 || !tenantId || allowed.size < 2) {
-    send(response, 503, { error: "agents_api_unconfigured", required: ["EPER_AGENTS_API_TOKEN (32+ chars)", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_ALLOWED_PRINCIPALS (at least two principals)"] }); return true;
+  // Each principal has a distinct bearer credential. Never trust a principal ID supplied by the caller.
+  // Format: EPER_AGENTS_PRINCIPAL_TOKENS="maker-a=<32+ chars>;reviewer-b=<32+ chars>"
+  const credentials = new Map<string, string>();
+  for (const entry of (process.env.EPER_AGENTS_PRINCIPAL_TOKENS ?? "").split(";")) {
+    const separator = entry.indexOf("=");
+    if (separator < 1) continue;
+    const id = entry.slice(0, separator).trim();
+    const token = entry.slice(separator + 1).trim();
+    if (/^[a-zA-Z0-9._-]{1,100}$/.test(id) && token.length >= 32) credentials.set(id, token);
   }
-  if (!bearerMatches(request, token)) { send(response, 401, { error: "unauthorized" }); return true; }
-  const principalId = request.headers["x-eper-principal-id"];
-  if (typeof principalId !== "string" || !allowed.has(principalId)) { send(response, 403, { error: "principal_not_allowed" }); return true; }
+  if (!tenantId || credentials.size < 2) {
+    send(response, 503, { error: "agents_api_unconfigured", required: ["EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS (at least two distinct principal=32+ character tokens separated by semicolons)"] }); return true;
+  }
+  const principalId = authenticatedPrincipal(request, credentials);
+  if (!principalId) { send(response, 401, { error: "unauthorized" }); return true; }
 
   try {
     const draftMatch = /^\/v1\/agents\/(crm|sales|marketing)\/drafts$/.exec(pathname);
