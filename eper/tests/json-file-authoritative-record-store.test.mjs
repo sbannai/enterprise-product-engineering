@@ -21,7 +21,7 @@ test("JSON record store rejects malformed create context, version and data", () 
   withStore(store => {
     assert.throws(() => store.create(null), /RECORD_CONTEXT_REQUIRED/);
     assert.throws(() => store.create({ ...record, tenantId: 7 }), /RECORD_CONTEXT_REQUIRED/);
-    assert.throws(() => store.create({ ...record, version: 0 }), /RECORD_VERSION_INVALID/);
+    assert.throws(() => store.create({ ...record, version: 0 }), /RECORD_EXPECTED_VERSION_INVALID/);
     assert.throws(() => store.create({ ...record, data: [] }), /RECORD_DATA_INVALID/);
     assert.equal(store.get("tenant-a", "record-1"), undefined);
   });

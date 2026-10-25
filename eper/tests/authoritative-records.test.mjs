@@ -100,8 +100,8 @@ test("JSON-file record store enforces in-memory validation before persistence", 
   const directory = mkdtempSync(join(tmpdir(), "eper-records-"));
   try {
     const store = new JsonFileAuthoritativeRecordStore(join(directory, "records.json"));
-    assert.throws(() => store.create(null), /RECORD_FIELDS_INVALID/);
-    assert.throws(() => store.create({ id: " ", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} }), /RECORD_FIELDS_INVALID/);
+    assert.throws(() => store.create(null), /RECORD_CONTEXT_REQUIRED/);
+    assert.throws(() => store.create({ id: " ", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} }), /RECORD_CONTEXT_REQUIRED/);
     store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 } });
     assert.throws(() => store.update("tenant-a", "r1", 0, { state: "REVISED" }), /RECORD_EXPECTED_VERSION_INVALID/);
     assert.throws(() => store.update("tenant-a", "r1", 1, { state: " " }), /RECORD_STATE_INVALID/);
