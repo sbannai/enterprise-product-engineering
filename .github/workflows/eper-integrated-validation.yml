@@ -1,0 +1,264 @@
+name: EPER Integrated Validation (same-commit end-to-end)
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/**"
+  push:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payment-postgres:
+    name: Payment API + PostgreSQL + receipt contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_integrated_ci
+          POSTGRES_DB: eper_integrated_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_integrated_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://eper:eper_integrated_ci@localhost:5432/eper_integrated_test
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - run: npm ci
+      - name: Typecheck and build
+        run: |
+          npm run typecheck
+          npm run build
+      - name: Apply schema to ephemeral PostgreSQL
+        run: npm run migrate:payments
+      - name: Run full EPER test suite with PostgreSQL enabled
+        run: npm test
+      - name: Run payment gateway and invoice authority regressions
+        run: |
+          node --test tests/payment-gateway.test.mjs
+          node --test tests/invoice-amount-authority.test.mjs
+      - name: Run PostgreSQL runtime, route, store, and real-database integration
+        run: |
+          node --test tests/postgres-payment-runtime.test.mjs
+          node --test tests/postgres-payment-api-route.test.mjs
+          node --test tests/postgres-legacy-order-snapshot-gate.test.mjs
+          node --test tests/postgres-payment-store.test.mjs
+          node --test tests/postgres-payment-store.integration.test.mjs
+      - name: Run trusted transaction and receipt contracts
+        run: |
+          node --test tests/http-invoice-amount-source.test.mjs
+          node --test tests/http-transaction-snapshot-source.test.mjs
+          node --test tests/transaction-receipt-contract.test.mjs
+
+  requirement-matrix:
+    name: 228 requirements / 38 chapter pilot matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Execute all chapter suites and build requirement matrix
+        run: node eper/scripts/run-chapter-pilot-matrix.mjs
+      - name: Smoke-test available chapter HTTP pilot apps
+        if: always()
+        run: node eper/scripts/run-pilot-http-smoke.mjs
+      - name: Upload matrix and raw logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-INTEGRATED-228-MATRIX-${{ github.run_id }}
+          path: eper/reexec-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+
+  runtime-six-family:
+    name: Container health + all six capability families
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build exact-commit runtime image
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: docker build --file eper/Dockerfile --tag "eper-integrated:${BUILD_ID}" --build-arg "EPER_BUILD_ID=${BUILD_ID}" eper
+      - name: Configure isolated synthetic tenant identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EPER_LOCAL_CAPABILITY_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "EPER_LOCAL_TENANT_ID=integrated-test-tenant" >> "$GITHUB_ENV"
+          echo "EPER_LOCAL_PRINCIPAL_ID=integrated-test-operator" >> "$GITHUB_ENV"
+      - name: Start loopback-only API container
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          docker run --detach --rm --name eper-integrated             --publish 127.0.0.1:18080:8080             --env "EPER_BUILD_ID=${BUILD_ID}"             --env "EPER_LOCAL_CAPABILITY_API=true"             --env "EPER_LOCAL_CAPABILITY_TOKEN=${EPER_LOCAL_CAPABILITY_TOKEN}"             --env "EPER_LOCAL_TENANT_ID=${EPER_LOCAL_TENANT_ID}"             --env "EPER_LOCAL_PRINCIPAL_ID=${EPER_LOCAL_PRINCIPAL_ID}"             "eper-integrated:${BUILD_ID}"
+      - name: Verify health identity and unknown-route contract
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health --output /tmp/eper-health.json; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then docker logs eper-integrated; exit 1; fi
+          python3 - <<'PY'
+          import json, os
+          with open("/tmp/eper-health.json", encoding="utf-8") as f: actual=json.load(f)
+          expected={"status":"ok","service":"eper-api","buildId":os.environ["BUILD_ID"]}
+          if actual != expected: raise SystemExit(f"health mismatch: expected {expected!r}, got {actual!r}")
+          print(json.dumps({"health":"PASS","buildId":actual["buildId"]}))
+          PY
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/not-a-real-route)" = "404"
+      - name: Exercise all six capability families over HTTP
+        shell: pwsh
+        run: |
+          ./eper/uat/run-six-family-local-uat.ps1 `
+            -BaseUrl "http://127.0.0.1:18080" `
+            -Token $env:EPER_LOCAL_CAPABILITY_TOKEN `
+            -EvidencePath "./EPER-SIX-FAMILY-INTEGRATED.json"
+      - name: Capture container diagnostics on failure
+        if: failure()
+        run: docker logs eper-integrated || true
+      - name: Upload six-family execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-INTEGRATED-SIX-FAMILY-${{ github.run_id }}
+          path: EPER-SIX-FAMILY-INTEGRATED.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Stop test container
+        if: always()
+        run: docker stop eper-integrated || true
+
+  release-and-traceability:
+    name: Release artifact + G9 traceability checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Verify G9 reconciliation
+        run: node --test tests/g9-reconciliation-gate.test.mjs
+      - name: Build container image without pushing or deploying
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: docker build --file Dockerfile --tag "eper-release-check:${BUILD_ID}" --build-arg "EPER_BUILD_ID=${BUILD_ID}" .
+      - name: Package and checksum release candidate
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-candidate
+          tar -czf "release-candidate/eper-${BUILD_ID}.tgz" package.json package-lock.json dist
+          (cd release-candidate && sha256sum "eper-${BUILD_ID}.tgz" > SHA256SUMS && sha256sum --check SHA256SUMS)
+          printf 'commit=%s\nclassification=CI CANDIDATE ONLY; NOT RELEASED\nbusiness_uat=NOT_EXECUTED\n' "$BUILD_ID" > release-candidate/metadata.txt
+      - name: Upload candidate bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-INTEGRATED-CANDIDATE-${{ github.sha }}
+          path: eper/release-candidate/
+          if-no-files-found: error
+          retention-days: 30
+
+  uat-readiness-evidence:
+    name: UAT readiness audit + six-wave technical evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Run read-only B01 readiness audit
+        run: |
+          python3 eper/uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
+          python3 -c "import json; d=json.load(open('/tmp/b01-readiness.json')); print(json.dumps({'readiness': d['readiness'], 'counts': d['counts'], 'blockers': d['blockers'], 'integrityErrors': d['integrityErrors']}, indent=2))"
+      - name: Execute controlled technical preflight
+        id: preflight
+        continue-on-error: true
+        run: node eper/scripts/run-b01-technical-preflight.mjs
+      - name: Build six-wave evidence bundle
+        if: always()
+        run: node eper/scripts/build-b01-wave-evidence.mjs
+      - name: Record non-acceptance status
+        if: always()
+        run: |
+          mkdir -p eper/integrated-evidence
+          printf 'commit=%s\nrun_id=%s\npreflight_outcome=%s\nbusiness_uat=NOT_EXECUTED\nbusiness_acceptance=PENDING\nproduction_release=NOT_AUTHORIZED\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "${{ steps.preflight.outcome }}" > eper/integrated-evidence/status.txt
+      - name: Upload readiness and technical evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-INTEGRATED-UAT-READINESS-${{ github.run_id }}
+          path: |
+            /tmp/b01-readiness.json
+            eper/uat-evidence/B01/
+            eper/integrated-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+
+  integrated-gate:
+    name: Same-commit integrated gate
+    if: always()
+    needs:
+      - payment-postgres
+      - requirement-matrix
+      - runtime-six-family
+      - release-and-traceability
+      - uat-readiness-evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every technical lane to complete successfully
+        env:
+          PAYMENT: ${{ needs.payment-postgres.result }}
+          MATRIX: ${{ needs.requirement-matrix.result }}
+          RUNTIME: ${{ needs.runtime-six-family.result }}
+          RELEASE: ${{ needs.release-and-traceability.result }}
+          READINESS: ${{ needs.uat-readiness-evidence.result }}
+        run: |
+          printf 'payment-postgres=%s\nrequirement-matrix=%s\nruntime-six-family=%s\nrelease-traceability=%s\nuat-readiness-evidence=%s\n' "$PAYMENT" "$MATRIX" "$RUNTIME" "$RELEASE" "$READINESS"
+          test "$PAYMENT" = success
+          test "$MATRIX" = success
+          test "$RUNTIME" = success
+          test "$RELEASE" = success
+          test "$READINESS" = success
+          echo "PASS: all integrated technical lanes completed on the same commit."
+          echo "NOTE: this is not business UAT acceptance or production release authorization."
