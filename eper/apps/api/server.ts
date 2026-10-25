@@ -150,11 +150,11 @@ async function handleDurableAdminConfig(
       return;
     }
     const validator = await loadWorkflowService(true);
-    sendJson(response, 200, validator.checkAccess(
+    sendJson(response, 200, { ...validator.checkAccess(
       body.principalId,
       body.permission as import("../../packages/workflows/workflow-configuration.js").WorkflowPermission,
       body.workflowId as string | undefined,
-    ));
+    ) });
     return;
   }
   if (path === "/admin/config/price-book" && request.method === "GET") {
