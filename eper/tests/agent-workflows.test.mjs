@@ -11,12 +11,13 @@ const makerToken = "maker-test-token-with-at-least-32-characters";
 const reviewerToken = "reviewer-test-token-with-at-least-32-characters";
 let server;
 let baseUrl;
+const auditEvents = [];
 
 test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   process.env.EPER_AGENTS_API_ENABLED = "true";
   process.env.EPER_AGENTS_PRINCIPAL_TOKENS = `maker-test=${makerToken};reviewer-test=${reviewerToken}`;
   process.env.EPER_AGENTS_TENANT_ID = "tenant-test";
-  server = createAppServer();
+  server = createAppServer({ auditWriter: async (event) => { auditEvents.push(event); } });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 
@@ -84,6 +85,14 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
       headers: { authorization: "Bearer intruder-token-with-at-least-32-characters", "x-eper-principal-id": "maker-test" },
     });
     assert.equal(denied.status, 401);
+  });
+
+  await t.test("records draft creation, list, approval, and denied self-approval in the audit sink", async () => {
+    assert.ok(auditEvents.some((event) => event.action === "agent.draft.create" && event.outcome === "success"));
+    assert.ok(auditEvents.some((event) => event.action === "agent.draft.review" && event.outcome === "denied"));
+    assert.ok(auditEvents.some((event) => event.action === "agent.draft.approve" && event.outcome === "success"));
+    assert.ok(auditEvents.some((event) => event.action === "agent.drafts.list" && event.outcome === "success"));
+    assert.ok(auditEvents.every((event) => event.tenantId === "tenant-test" && event.actorId));
   });
 
   await t.test("lists tenant-scoped drafts", async () => {
