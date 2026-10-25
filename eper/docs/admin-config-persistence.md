@@ -34,6 +34,10 @@ npm run migrate:audit
 
 The audit migration runner applies both the audit chain schema and `002_admin_configuration.sql`. Startup checks fail if the required audit schema or admin configuration table is absent. CI applies migrations only to its ephemeral PostgreSQL service. No hosted UAT migration is implied by this document or by the draft PR.
 
+## Admin UI shell boundary
+
+The admin workflow/pricing UI routes currently serve static HTML shells when the feature flag is enabled; serving the shell does not authenticate a user or return configuration data. In durable mode, every configuration API call requires a mapped bearer credential. If the deployment's security policy requires restricting even static shell access, enforce that at the ingress or add a session-authenticated UI gateway before enabling these routes publicly. Do not treat shell access as an authorization decision.
+
 ## Behavior and release boundary
 
 - Configuration is partitioned by `tenant_id` and resource type.
