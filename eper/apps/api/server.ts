@@ -9,6 +9,7 @@ import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 import { handleAgentRoute } from "../../packages/agents/agent-workflows.js";
+import { renderAgentConsole } from "./agent-console.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -337,6 +338,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : 422;
         sendJson(response, status, { error: status === 422 ? "capability_execution_failed" : message });
       }
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/agents-ui") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "no-referrer" });
+      response.end(renderAgentConsole());
       return;
     }
 
