@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendAuditEvent, hashAuditEnvelope } from "../dist/packages/audit/audit-event-store.js";
+import { appendAuditEvent, assertAuditStoreReady, hashAuditEnvelope } from "../dist/packages/audit/audit-event-store.js";
 
 function mockPool({ failInsert = false, headHash = null } = {}) {
   const calls = [];
@@ -56,4 +56,30 @@ test("required actor and tenant context cannot be empty", async () => {
 
 test("canonical event hash is stable for object key order", () => {
   assert.equal(hashAuditEnvelope({ b: 2, a: 1 }), hashAuditEnvelope({ a: 1, b: 2 }));
+});
+
+
+function readinessPool(state = {}) {
+  const client = {
+    async query(sql) {
+      if (sql.includes("to_regclass")) return { rows: [{
+        events_table: state.events_table === undefined ? "eper_audit_events" : state.events_table,
+        chain_head_table: state.chain_head_table === undefined ? "eper_audit_chain_head" : state.chain_head_table,
+        has_no_update_trigger: state.has_no_update_trigger === undefined ? true : state.has_no_update_trigger,
+        has_no_delete_trigger: state.has_no_delete_trigger === undefined ? true : state.has_no_delete_trigger,
+        chain_head_count: state.chain_head_count === undefined ? "1" : state.chain_head_count,
+      }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  return { async connect() { return client; } };
+}
+
+test("audit readiness passes only when schema, append-only triggers and chain head exist", async () => {
+  await assert.doesNotReject(() => assertAuditStoreReady(readinessPool()));
+  await assert.rejects(() => assertAuditStoreReady(readinessPool({ events_table: null })), /EPER_AUDIT_SCHEMA_NOT_APPLIED/);
+  await assert.rejects(() => assertAuditStoreReady(readinessPool({ has_no_update_trigger: false })), /EPER_AUDIT_APPEND_ONLY_CONTROLS_MISSING/);
+  await assert.rejects(() => assertAuditStoreReady(readinessPool({ has_no_delete_trigger: false })), /EPER_AUDIT_APPEND_ONLY_CONTROLS_MISSING/);
+  await assert.rejects(() => assertAuditStoreReady(readinessPool({ chain_head_count: "0" })), /EPER_AUDIT_CHAIN_HEAD_NOT_INITIALIZED/);
 });
