@@ -36,3 +36,29 @@ test("business validation rejects duplicate and invalid rules", () => {
   assert.throws(() => engine.addRule({ id: "r1", evaluate: () => null }), /VALIDATION_RULE_DUPLICATE/);
   assert.throws(() => engine.addRule({ id: "", evaluate: () => null }), /VALIDATION_RULE_INVALID/);
 });
+
+
+test("business validation rejects malformed runtime rule results", () => {
+  const engine = new BusinessValidationEngine();
+  engine.addRule({ id: "bad-result", evaluate: () => ({ code: "", message: "missing code", severity: "ERROR" }) });
+  assert.throws(() => engine.validate({}), /VALIDATION_ISSUE_INVALID:bad-result/);
+});
+
+test("business validation rejects unsupported severity and non-object results", () => {
+  const invalidResults = [
+    { code: "BAD", message: "Bad severity", severity: "FATAL" },
+    "not-an-issue",
+    false,
+  ];
+  for (const invalid of invalidResults) {
+    const engine = new BusinessValidationEngine();
+    engine.addRule({ id: "invalid-result", evaluate: () => invalid });
+    assert.throws(() => engine.validate({}), /VALIDATION_ISSUE_INVALID:invalid-result/);
+  }
+});
+
+test("business validation rejects malformed rule registrations", () => {
+  const engine = new BusinessValidationEngine();
+  assert.throws(() => engine.addRule(null), /VALIDATION_RULE_INVALID/);
+  assert.throws(() => engine.addRule({ id: " ", evaluate: () => null }), /VALIDATION_RULE_INVALID/);
+});

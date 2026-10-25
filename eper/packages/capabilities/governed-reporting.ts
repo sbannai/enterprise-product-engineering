@@ -35,22 +35,44 @@ export class InMemoryGovernedReportingService {
   }
 
   publish(row: ReportRow): void {
-    if (!row.tenantId || !row.reportId || !row.generatedAt) {
+    if (!row || typeof row !== "object" || Array.isArray(row) ||
+        typeof row.tenantId !== "string" || !row.tenantId.trim() ||
+        typeof row.reportId !== "string" || !row.reportId.trim() ||
+        typeof row.generatedAt !== "string" || !row.generatedAt.trim()) {
       throw new Error("REPORT_CONTEXT_REQUIRED");
     }
-    if (row.sourceRequirementIds.length === 0) {
+    if (!Array.isArray(row.sourceRequirementIds) ||
+        row.sourceRequirementIds.length === 0 ||
+        !row.sourceRequirementIds.every((id) => typeof id === "string" && id.trim().length > 0)) {
       throw new Error("REPORT_PROVENANCE_REQUIRED");
     }
-    this.rows.push(this.cloneRow(row));
+    if (new Set(row.sourceRequirementIds).size !== row.sourceRequirementIds.length) {
+      throw new Error("REPORT_PROVENANCE_DUPLICATE");
+    }
+    if (!row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
+      throw new Error("REPORT_VALUES_INVALID");
+    }
+    if (Number.isNaN(Date.parse(row.generatedAt))) {
+      throw new Error("REPORT_TIMESTAMP_INVALID");
+    }
+    // Validate serialization before committing a row so rejected reports never partially enter storage.
+    const stored = this.cloneRow(row);
+    this.rows.push(stored);
   }
 
   query(request: ReportQuery): readonly ReportRow[] {
-    if (!request.tenantId || !request.reportId) {
+    if (!request || typeof request !== "object" || Array.isArray(request) ||
+        typeof request.tenantId !== "string" || !request.tenantId.trim() ||
+        typeof request.reportId !== "string" || !request.reportId.trim()) {
       throw new Error("REPORT_QUERY_CONTEXT_REQUIRED");
+    }
+    if (request.filters !== undefined &&
+        (!request.filters || typeof request.filters !== "object" || Array.isArray(request.filters))) {
+      throw new Error("REPORT_FILTERS_INVALID");
     }
 
     const limit = request.limit ?? 100;
-    if (!Number.isInteger(limit) || limit <= 0) {
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
       throw new Error("REPORT_LIMIT_INVALID");
     }
 

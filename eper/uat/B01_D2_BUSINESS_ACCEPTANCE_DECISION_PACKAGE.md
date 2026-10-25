@@ -147,3 +147,62 @@ No additional generic technical testing campaign is requested by this package. E
 3. D3 reviewer reviews the existing 48 UAT cases against the resolved acceptance sources.
 4. D4 authorization is considered only after D1–D3 and the required E1–E13 controls are complete.
 5. Business UAT may then be executed if formally authorized.
+
+
+## 9. Execution plan to close Business UAT prerequisites — 2026-10-16
+
+This section operationalizes the existing closure sequence. It does not change requirement text, invent business rules, authorize execution, or mark any requirement accepted.
+
+### Workstream A — controlled source correction
+- Owner: Design authority / BRD owner.
+- Scope: Chapter 463 canonical Procurement & Source-to-Pay domain source and the conflicting legacy EM-BRD-001 chapter heading.
+- Required output: controlled correction/reissue reference, version, effective date, and exact locators. Preserve B01-BASELINE-APPROVAL-001 and do not silently overwrite the approved baseline.
+- Exit check: source identity is consistent across the controlled BRD/HLD/traceability records.
+
+### Workstream B — requirement-level design traceability
+- Owner: Design authority / solution architect.
+- Scope: REQ-46301–REQ-47006 (48 rows).
+- Required output per row: exact approved HLD document/version/section; exact approved LLD document/version/component/section; explicit HLD-to-LLD pairing; consistency check against the governing design baseline.
+- Exit check: all 48 rows have evidenced exact bindings or remain explicitly OPEN with a controlled source-authoring decision. Generic section names and component IDs are not sufficient.
+
+### Workstream C — DATA/API/EVENT contracts
+- Owner: Data, API and event contract owners, coordinated by design authority.
+- Required output per applicable row: versioned data schema/entity, API operation/request-response/error semantics, and event name/payload/schema/producer-consumer contract; alternatively, a separate explicit approved N/A decision with rationale.
+- Exit check: contract locators and versions are evidenced in the requirement traceability record. Registry placeholders and implementation-derived shapes remain candidates until reviewed and approved.
+
+### Workstream D — measurable business acceptance oracles
+- Owner: accountable business/requirements owner; UAT lead coordinates.
+- Scope: all 48 rows in B01_48_ACCEPTANCE_CRITERIA_RESOLUTION_MATRIX.csv and B01_48_CASE_APPROVAL_CHECKLIST.csv.
+- Required output per row: exact controlled source locator; confirmed actor/role/tenant; preconditions and approved test data; positive scenario; negative/boundary scenario where applicable; measurable expected result; no-side-effect/state-integrity expectations; evidence plan; reviewer and approval/change reference.
+- Use the existing source material first. If it does not define a required threshold, state transition, permission, retention period, metric formula or response outcome, record CLARIFICATION_REQUIRED and identify the accountable decision owner. Do not guess values.
+- Exit check: no row is promoted to approved/executable solely because a generic SRS statement or draft source exists.
+
+### Workstream E — D3 case review
+- Owner: named business reviewer and UAT lead.
+- Required output: a recorded APPROVE / APPROVE WITH CHANGES / REJECT decision for each existing case, including reviewer, date, controlled reference and linked evidence.
+- Exit check: all in-scope cases have a valid D3 disposition and all required changes are incorporated.
+
+### Workstream F — D4 execution authorization and actual UAT
+- Owner: business owner and UAT lead.
+- Preconditions: D1/D2/D3 decisions recorded; applicable E1–E13 controls evidenced; target environment and build verified; named testers, approved test data, session window, defect/escalation workflow and evidence archive identified.
+- Required output: explicit D4 authorization reference before any Business UAT execution; then case-by-case actual result, evidence links, defects/retests and final business sign-off.
+- Guardrail: until D4 authorization is recorded, all 48 execution_authorized values remain NO and Business UAT remains HOLD / NOT EXECUTED.
+
+### Batch execution order
+1. Resolve source identity/correction and lock the approved source locators.
+2. Complete exact HLD/LLD pair reconciliation for all 48 rows in chapter batches (463–470).
+3. Reconcile DATA/API/EVENT contracts in parallel with design traceability.
+4. Fill only evidence-backed acceptance-oracle fields; route gaps as explicit owner decisions.
+5. Complete D3 review of the existing 48 cases.
+6. Verify E1–E13 and environment/build/tester readiness; obtain D4 authorization.
+7. Execute the authorized cases, reconcile defects/retests, archive evidence, and issue final business disposition.
+
+### Current gate status
+- D1 baseline identity: recorded under B01-BASELINE-APPROVAL-001.
+- Chapter 463 source precedence: Option A recorded; controlled correction/reissue remains outstanding.
+- D2: 48/48 requirement-level measurable acceptance decisions remain pending in the reviewed matrix.
+- Exact HLD/LLD and DATA/API/EVENT traceability: not evidenced in the reviewed reconciliation.
+- D3: not approved.
+- D4: not granted.
+- Business UAT: HOLD / NOT EXECUTED.
+- AWS: do not provision chargeable resources as part of this closure plan.

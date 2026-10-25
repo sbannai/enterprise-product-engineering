@@ -38,5 +38,18 @@ test("audit evidence rejects payloads that cannot be serialized as JSON", () => 
     correlationId: "invalid-correlation",
     occurredAt: "2026-10-03T00:00:00.000Z",
     payload: undefined,
+  }), /AUDIT_PAYLOAD_INVALID/);
+
+  const circular = {};
+  circular.self = circular;
+  assert.throws(() => store.append({
+    id: "circular-evidence",
+    tenantId: "tenant-a",
+    requirementId: "REQ-46304",
+    action: "TEST",
+    principalId: "tester",
+    correlationId: "circular-correlation",
+    occurredAt: "2026-10-03T00:00:00.000Z",
+    payload: circular,
   }), /AUDIT_PAYLOAD_NOT_SERIALIZABLE/);
 });

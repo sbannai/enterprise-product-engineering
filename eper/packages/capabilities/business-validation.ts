@@ -20,7 +20,9 @@ export class BusinessValidationEngine<T> {
   private readonly rules: ValidationRule<T>[] = [];
 
   addRule(rule: ValidationRule<T>): void {
-    if (!rule.id || typeof rule.evaluate !== "function") {
+    if (!rule || typeof rule !== "object" || Array.isArray(rule) ||
+        typeof rule.id !== "string" || !rule.id.trim() ||
+        typeof rule.evaluate !== "function") {
       throw new Error("VALIDATION_RULE_INVALID");
     }
     if (this.rules.some((existing) => existing.id === rule.id)) {
@@ -30,9 +32,25 @@ export class BusinessValidationEngine<T> {
   }
 
   validate(input: T): ValidationResult {
-    const issues = this.rules
-      .map((rule) => rule.evaluate(input))
-      .filter((issue): issue is ValidationIssue => issue !== null);
+    const issues: ValidationIssue[] = [];
+    for (const rule of this.rules) {
+      const issue: unknown = rule.evaluate(input);
+      if (issue === null) continue;
+      if (!issue || typeof issue !== "object" || Array.isArray(issue)) {
+        throw new Error(`VALIDATION_ISSUE_INVALID:${rule.id}`);
+      }
+      const candidate = issue as Partial<ValidationIssue>;
+      if (typeof candidate.code !== "string" || !candidate.code.trim() ||
+          typeof candidate.message !== "string" || !candidate.message.trim() ||
+          (candidate.severity !== "ERROR" && candidate.severity !== "WARNING")) {
+        throw new Error(`VALIDATION_ISSUE_INVALID:${rule.id}`);
+      }
+      issues.push({
+        code: candidate.code,
+        message: candidate.message,
+        severity: candidate.severity,
+      });
+    }
 
     return {
       valid: !issues.some((issue) => issue.severity === "ERROR"),

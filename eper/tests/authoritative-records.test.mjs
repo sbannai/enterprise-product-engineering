@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { JsonFileAuthoritativeRecordStore } from "../dist/packages/capabilities/json-file-authoritative-record-store.js";
 import { InMemoryAuthoritativeRecordStore } from "../dist/packages/capabilities/authoritative-records.js";
 
 test("authoritative records are isolated by tenant", () => {
@@ -63,4 +67,68 @@ test("authoritative records reject circular data instead of storing partial evid
   const circular = {};
   circular.self = circular;
   assert.throws(() => store.create({ id: "bad", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: circular }), /RECORD_DATA_NOT_SERIALIZABLE/);
+});
+
+
+test("authoritative records reject structurally invalid create fields", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  for (const record of [
+    { id: "", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} },
+    { id: "r2", tenantId: "", version: 1, state: "ACTIVE", data: {} },
+    { id: "r3", tenantId: "tenant-a", version: 0, state: "ACTIVE", data: {} },
+    { id: "r4", tenantId: "tenant-a", version: 1.5, state: "ACTIVE", data: {} },
+    { id: "r5", tenantId: "tenant-a", version: 1, state: "", data: {} },
+    { id: "r6", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: [] },
+  ]) {
+    assert.throws(() => store.create(record), /RECORD_FIELDS_INVALID/);
+  }
+});
+
+test("authoritative record updates reject malformed versions and patches without mutation", () => {
+  const store = new InMemoryAuthoritativeRecordStore();
+  store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 } });
+  assert.throws(() => store.update("tenant-a", "r1", 0, { state: "REVISED" }), /RECORD_EXPECTED_VERSION_INVALID/);
+  assert.throws(() => store.update("tenant-a", "r1", 1, { state: "" }), /RECORD_STATE_INVALID/);
+  assert.throws(() => store.update("tenant-a", "r1", 1, { data: [] }), /RECORD_DATA_INVALID/);
+  assert.deepEqual(store.get("tenant-a", "r1"), {
+    id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 }
+  });
+});
+
+
+test("JSON-file record store enforces in-memory validation before persistence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-records-"));
+  try {
+    const store = new JsonFileAuthoritativeRecordStore(join(directory, "records.json"));
+    assert.throws(() => store.create(null), /RECORD_FIELDS_INVALID/);
+    assert.throws(() => store.create({ id: " ", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} }), /RECORD_FIELDS_INVALID/);
+    store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 } });
+    assert.throws(() => store.update("tenant-a", "r1", 0, { state: "REVISED" }), /RECORD_EXPECTED_VERSION_INVALID/);
+    assert.throws(() => store.update("tenant-a", "r1", 1, { state: " " }), /RECORD_STATE_INVALID/);
+    assert.throws(() => store.update("tenant-a", "r1", 1, { data: [] }), /RECORD_DATA_INVALID/);
+    assert.deepEqual(store.get("tenant-a", "r1"), {
+      id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: { value: 1 }
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("JSON-file record store rejects malformed persisted records on read", () => {
+  const directory = mkdtempSync(join(tmpdir(), "eper-records-corrupt-"));
+  const file = join(directory, "records.json");
+  try {
+    const store = new JsonFileAuthoritativeRecordStore(file);
+    store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "ACTIVE", data: {} });
+    const persisted = JSON.parse(readFileSync(file, "utf8"));
+    persisted[0].version = 1.5;
+    writeFileSync(file, JSON.stringify(persisted));
+    assert.throws(() => store.get("tenant-a", "r1"), /PERSISTENCE_DATA_INVALID/);
+    persisted[0].version = 1;
+    persisted.push({ ...persisted[0], state: "REVISED" });
+    writeFileSync(file, JSON.stringify(persisted));
+    assert.throws(() => store.get("tenant-a", "r1"), /PERSISTENCE_DATA_INVALID/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
