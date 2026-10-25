@@ -49,6 +49,8 @@ jobs:
         run: npm run build
       - name: Apply payment schema migrations to ephemeral CI database
         run: npm run migrate:payments
+      - name: Apply audit and admin-configuration migrations to ephemeral CI database
+        run: npm run migrate:audit
       - name: Test
         run: npm test
       - name: Payment gateway contract tests
