@@ -62,7 +62,7 @@ test("rejects unsafe theme and unsupported glyphs without fetching remote assets
   assert.throws(()=>generatePdfReport(base,{...theme,primaryColor:"red"}),/REPORT_THEME_COLOR_INVALID/);
   assert.throws(()=>generatePdfReport(base,{...theme,logoUrl:"javascript:alert(1)"}),/REPORT_THEME_LOGO_URL_INVALID/);
   assert.throws(()=>generatePdfReport({...base,title:"Payment 😀 Summary"},theme),/REPORT_PDF_UNSUPPORTED_CHARACTER/);
-  for (const title of ["Payment\\nSummary", "Payment\\tSummary"]) {
+  for (const title of ["Payment\nSummary", "Payment\tSummary"]) {
     assert.throws(()=>generatePdfReport({...base,title},theme),/REPORT_TITLE_CONTROL_CHARACTER_INVALID/);
   }
 });
