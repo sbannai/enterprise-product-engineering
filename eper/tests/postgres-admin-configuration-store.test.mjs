@@ -7,7 +7,7 @@ function poolFactory({ currentVersion = null, failAudit = false } = {}) {
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
-      if (sql.includes("SELECT version FROM eper_admin_configuration")) {
+      if (sql.includes("SELECT version, config FROM eper_admin_configuration")) {
         return { rows: currentVersion === null ? [] : [{ version: currentVersion }], rowCount: currentVersion === null ? 0 : 1 };
       }
       if (sql.includes("INSERT INTO eper_admin_configuration")) {
