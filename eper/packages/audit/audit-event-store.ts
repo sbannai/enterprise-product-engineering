@@ -254,8 +254,8 @@ export async function verifyAuditChain(pool: AuditSqlPool): Promise<AuditVerific
     let previousHash: string | null = null;
     const visited = new Set<string>();
     while (true) {
-      const candidates = byPrevious.get(previousHash ?? "__GENESIS__") ?? [];
-      const next = candidates.find((row) => !visited.has(String(row.event_id)));
+      const candidates: Record<string, unknown>[] = byPrevious.get(previousHash ?? "__GENESIS__") ?? [];
+      const next: Record<string, unknown> | undefined = candidates.find((row: Record<string, unknown>) => !visited.has(String(row.event_id)));
       if (!next) break;
       const eventId = String(next.event_id);
       visited.add(eventId);
@@ -291,7 +291,7 @@ export async function verifyAuditChain(pool: AuditSqlPool): Promise<AuditVerific
         previousEventHash: actualPrevious,
       };
       const computedHash = hashAuditEnvelope(envelope);
-      const storedHash = String(next.event_hash ?? "").trim();
+      const storedHash: string = String(next.event_hash ?? "").trim();
       if (computedHash !== storedHash) errors.push("event_hash_mismatch:" + eventId);
       previousHash = storedHash;
     }
