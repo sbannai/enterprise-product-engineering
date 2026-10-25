@@ -533,7 +533,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         // admin edits immediately affect quotes/options and survive process restarts.
         let requestPriceBook = marketPriceBook;
         if (durablePricingMode && options.adminConfigurationStore && pricingIdentity) {
-          let savedPriceBook;
+          let savedPriceBook: { config?: unknown } | null;
           try {
             savedPriceBook = await options.adminConfigurationStore.get(pricingIdentity.tenantId, "price-book");
           } catch {
