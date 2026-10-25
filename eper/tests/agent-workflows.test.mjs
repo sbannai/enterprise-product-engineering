@@ -4,19 +4,18 @@ import { createAppServer } from "../dist/apps/api/server.js";
 
 const original = {
   enabled: process.env.EPER_AGENTS_API_ENABLED,
-  token: process.env.EPER_AGENTS_API_TOKEN,
+  principalTokens: process.env.EPER_AGENTS_PRINCIPAL_TOKENS,
   tenant: process.env.EPER_AGENTS_TENANT_ID,
-  principals: process.env.EPER_AGENTS_ALLOWED_PRINCIPALS,
 };
-const token = "agents-test-token-with-at-least-32-characters";
+const makerToken = "maker-test-token-with-at-least-32-characters";
+const reviewerToken = "reviewer-test-token-with-at-least-32-characters";
 let server;
 let baseUrl;
 
 test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   process.env.EPER_AGENTS_API_ENABLED = "true";
-  process.env.EPER_AGENTS_API_TOKEN = token;
+  process.env.EPER_AGENTS_PRINCIPAL_TOKENS = `maker-test=${makerToken};reviewer-test=${reviewerToken}`;
   process.env.EPER_AGENTS_TENANT_ID = "tenant-test";
-  process.env.EPER_AGENTS_ALLOWED_PRINCIPALS = "maker-test,reviewer-test";
   server = createAppServer();
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -25,8 +24,7 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
     const response = await fetch(baseUrl + path, {
       method,
       headers: {
-        authorization: `Bearer ${token}`,
-        "x-eper-principal-id": principal,
+        authorization: `Bearer ${principal === "reviewer-test" ? reviewerToken : makerToken}`,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -69,7 +67,7 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
     const unsupported = await request("/v1/agents/crm/drafts", { method: "POST", body: { intent: "delete-all", input: {} } });
     assert.equal(unsupported.status, 400);
     const denied = await fetch(baseUrl + "/v1/agents/drafts", {
-      headers: { authorization: `Bearer ${token}`, "x-eper-principal-id": "intruder" },
+      headers: { authorization: `Bearer ${"intruder-token-with-at-least-32-characters"}`, "x-eper-principal-id": "maker-test" },
     });
     assert.equal(denied.status, 403);
   });
@@ -86,9 +84,8 @@ test.after(async () => {
   if (server?.listening) await new Promise((resolve) => server.close(resolve));
   for (const [key, value] of Object.entries({
     EPER_AGENTS_API_ENABLED: original.enabled,
-    EPER_AGENTS_API_TOKEN: original.token,
+    EPER_AGENTS_PRINCIPAL_TOKENS: original.principalTokens,
     EPER_AGENTS_TENANT_ID: original.tenant,
-    EPER_AGENTS_ALLOWED_PRINCIPALS: original.principals,
   })) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
