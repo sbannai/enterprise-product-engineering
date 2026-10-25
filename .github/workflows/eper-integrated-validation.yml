@@ -52,8 +52,10 @@ jobs:
         run: |
           npm run typecheck
           npm run build
-      - name: Apply schema to ephemeral PostgreSQL
+      - name: Apply payment schema to ephemeral PostgreSQL
         run: npm run migrate:payments
+      - name: Apply audit and admin-configuration schema to ephemeral PostgreSQL
+        run: npm run migrate:audit
       - name: Run full EPER test suite with PostgreSQL enabled
         run: npm test
       - name: Run payment gateway and invoice authority regressions
