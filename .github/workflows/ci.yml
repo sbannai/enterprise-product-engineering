@@ -13,6 +13,22 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_ci_password
+          POSTGRES_DB: eper_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://eper:eper_ci_password@localhost:5432/eper_test
     defaults:
       run:
         working-directory: eper
@@ -31,6 +47,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Apply payment schema migrations to ephemeral CI database
+        run: npm run migrate:payments
       - name: Test
         run: npm test
       - name: Payment gateway contract tests
