@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendAuditEvent, assertAuditStoreReady, hashAuditEnvelope } from "../dist/packages/audit/audit-event-store.js";
+import { appendAuditEvent, assertAuditStoreReady, hashAuditEnvelope, verifyAuditChain } from "../dist/packages/audit/audit-event-store.js";
 
 function mockPool({ failInsert = false, headHash = null } = {}) {
   const calls = [];
@@ -82,4 +82,35 @@ test("audit readiness passes only when schema, append-only triggers and chain he
   await assert.rejects(() => assertAuditStoreReady(readinessPool({ has_no_update_trigger: false })), /EPER_AUDIT_APPEND_ONLY_CONTROLS_MISSING/);
   await assert.rejects(() => assertAuditStoreReady(readinessPool({ has_no_delete_trigger: false })), /EPER_AUDIT_APPEND_ONLY_CONTROLS_MISSING/);
   await assert.rejects(() => assertAuditStoreReady(readinessPool({ chain_head_count: "0" })), /EPER_AUDIT_CHAIN_HEAD_NOT_INITIALIZED/);
+});
+
+
+test("audit chain verifier detects a stored-head mismatch", async () => {
+  const client = {
+    async query(sql) {
+      if (sql.includes("SELECT last_event_hash")) return { rows: [{ last_event_hash: "f".repeat(64) }], rowCount: 1 };
+      if (sql.includes("FROM eper_audit_events")) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const result = await verifyAuditChain({ async connect() { return client; } });
+  assert.equal(result.eventsChecked, 0);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("stored_chain_head_mismatch"));
+});
+
+test("audit chain verifier accepts an empty chain only with an empty head", async () => {
+  const client = {
+    async query(sql) {
+      if (sql.includes("SELECT last_event_hash")) return { rows: [{ last_event_hash: null }], rowCount: 1 };
+      if (sql.includes("FROM eper_audit_events")) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const result = await verifyAuditChain({ async connect() { return client; } });
+  assert.equal(result.eventsChecked, 0);
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.errors, []);
 });
