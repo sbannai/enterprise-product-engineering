@@ -67,3 +67,37 @@ test("tenant identity is a required server-side input", async () => {
     /ADMIN_CONFIGURATION_TENANTID_INVALID/);
   assert.equal(calls.length, 0);
 });
+
+
+test("cross-resource version changes reject stale workflow/role validation under the tenant-wide lock", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (sql.includes("SELECT version FROM eper_admin_configuration")) {
+        return { rows: [{ version: 4 }], rowCount: 1 };
+      }
+      if (sql.includes("SELECT version, config FROM eper_admin_configuration")) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+    release() { calls.push({ sql: "RELEASE", values: [] }); },
+  };
+  const pool = { async connect() { return client; } };
+  await assert.rejects(
+    () => new PostgresAdminConfigurationStore(pool).replace({
+      ...input,
+      relatedResourceType: "roles-access",
+      expectedRelatedVersion: 3,
+    }),
+    (error) => error?.name === "AdminConfigurationConflictError" && error.currentVersion === 4,
+  );
+  assert.ok(calls.some((call) =>
+    call.sql.includes("pg_advisory_xact_lock") &&
+    call.values[0] === "eper-admin-config:" + input.tenantId
+  ), "all config resources for one tenant share the same transaction lock");
+  assert.ok(!calls.some((call) => call.sql.includes("INSERT INTO eper_admin_configuration")));
+  assert.ok(!calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+});
