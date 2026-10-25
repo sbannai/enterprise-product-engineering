@@ -88,6 +88,8 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   });
 
   await t.test("records draft creation, list, approval, and denied self-approval in the audit sink", async () => {
+    const listResponse = await request("/v1/agents/drafts");
+    assert.equal(listResponse.status, 200);
     assert.ok(auditEvents.some((event) => event.action === "agent.draft.create" && event.outcome === "success"));
     assert.ok(auditEvents.some((event) => event.action === "agent.draft.review" && event.outcome === "denied"));
     assert.ok(auditEvents.some((event) => event.action === "agent.draft.approve" && event.outcome === "success"));
