@@ -76,7 +76,12 @@ export function hashAuditEnvelope(envelope: Record<string, unknown>): string {
 }
 
 function validateAuditInput(input: AuditEventInput): void {
-  validateAuditInput(input);
+  for (const [name, value] of Object.entries({
+    tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+    action: input.action, operationName: input.operationName,
+  })) {
+    if (typeof value !== "string" || !value.trim()) throw new Error("audit_required_field_missing:" + name);
+  }
 }
 
 /**
