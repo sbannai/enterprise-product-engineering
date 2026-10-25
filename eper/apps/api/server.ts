@@ -8,7 +8,7 @@ import type { PostgresPaymentStore } from "../../packages/payments/postgres-paym
 import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
-import { handleAgentRoute } from "../../packages/agents/agent-workflows.js";
+import { handleAgentRoute, type AgentAuditWriter } from "../../packages/agents/agent-workflows.js";
 import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 
@@ -66,7 +66,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter } = {}): Server {
   const services = createConfiguredCapabilityServices();
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
@@ -354,7 +354,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
-    if (await handleAgentRoute(request, response, requestUrl.pathname)) return;
+    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
 
     sendJson(response, 404, { error: "not_found" });
   });
