@@ -193,6 +193,6 @@ test("services reject malformed typed context and blank requested tenant IDs", (
   const requirement = requirementBindings.find(r => r.pattern === "XX01");
   const service = new AuthoritativeRecordService();
   assert.throws(() => service.execute(requirement, { context: { tenantId: 7, principalId: "user", correlationId: "c" }, payload: { operation: "get", id: "r1" } }), /CAPABILITY_CONTEXT_REQUIRED/);
-  assert.throws(() => service.execute(requirement, { context: { tenantId: "tenant-a", principalId: "user", correlationId: "c" }, payload: { operation: "get", tenantId: "", id: "r1" } }), /TENANT_CONTEXT_MISMATCH/);
+  assert.throws(() => service.execute(requirement, { context: { tenantId: "tenant-a", principalId: "user", correlationId: "c" }, payload: { operation: "get", tenantId: "", id: "r1" } }), /TENANT_CONTEXT_INVALID/);
   assert.throws(() => service.execute(requirement, null), /CAPABILITY_OPERATION_REQUIRED/);
 });
