@@ -7,7 +7,7 @@ const TOKEN_B = "tenant-b-admin-credential-that-is-at-least-32-characters";
 
 test("durable admin API resolves tenant and actor only from server-side credential mapping", async () => {
   const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON", "EPER_ADMIN_CONFIG_API_TOKEN"];
-  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]));
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_ADMIN_CONFIG_API_ENABLED: "true",
     EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
