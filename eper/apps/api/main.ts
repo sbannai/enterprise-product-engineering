@@ -73,6 +73,9 @@ const auditWriter = auditMode === "postgres" && paymentPool
 if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
+if (adminConfigMode === "postgres" && adminConfigurationStore) {
+  await adminConfigurationStore.assertReady();
+}
 
 const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, adminConfigurationStore, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
