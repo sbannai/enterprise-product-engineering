@@ -114,3 +114,88 @@ test("audit chain verifier accepts an empty chain only with an empty head", asyn
   assert.equal(result.valid, true);
   assert.deepEqual(result.errors, []);
 });
+
+function verifierEvent({ id, previous = null, payload = { value: 1 }, eventHash } = {}) {
+  const row = {
+    event_id: id,
+    occurred_at: "2026-10-25T08:00:00.000Z",
+    tenant_id: "tenant-a",
+    application_id: "school-erp",
+    environment: "uat",
+    actor_type: "human",
+    actor_id: "reviewer-7",
+    effective_roles: ["fee-accountant"],
+    action: "receipt.issue",
+    outcome: "success",
+    reason_code: null,
+    resource_type: "receipt",
+    resource_id: id,
+    operation_id: null,
+    correlation_id: "corr-123",
+    request_id: null,
+    source: "api",
+    operation_name: "POST /v1/receipts",
+    service_version: null,
+    approval_id: null,
+    parent_event_id: null,
+    idempotency_key: null,
+    schema_version: 1,
+    before_hash: null,
+    after_hash: null,
+    payload,
+    previous_event_hash: previous,
+  };
+  const envelope = {
+    eventId: row.event_id, occurredAt: new Date(row.occurred_at).toISOString(),
+    tenantId: row.tenant_id, applicationId: row.application_id,
+    environment: row.environment, actorType: row.actor_type, actorId: row.actor_id,
+    effectiveRoles: row.effective_roles, action: row.action, outcome: row.outcome,
+    reasonCode: row.reason_code, resourceType: row.resource_type, resourceId: row.resource_id,
+    operationId: row.operation_id, correlationId: row.correlation_id, requestId: row.request_id,
+    source: row.source, operationName: row.operation_name, serviceVersion: row.service_version,
+    approvalId: row.approval_id, parentEventId: row.parent_event_id,
+    idempotencyKey: row.idempotency_key, schemaVersion: row.schema_version,
+    beforeHash: row.before_hash, afterHash: row.after_hash, payload,
+    previousEventHash: previous,
+  };
+  row.event_hash = eventHash ?? hashAuditEnvelope(envelope);
+  return row;
+}
+
+function verifierPool(rows, headHash) {
+  const client = {
+    async query(sql) {
+      if (sql.includes("SELECT last_event_hash")) return { rows: [{ last_event_hash: headHash }], rowCount: 1 };
+      if (sql.includes("FROM eper_audit_events")) return { rows, rowCount: rows.length };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  return { async connect() { return client; } };
+}
+
+test("audit chain verifier detects a broken predecessor link", async () => {
+  const first = verifierEvent({ id: "event-1" });
+  const second = verifierEvent({ id: "event-2", previous: "e".repeat(64) });
+  const result = await verifyAuditChain(verifierPool([first, second], second.event_hash));
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("orphan_or_unreachable_events"));
+});
+
+test("audit chain verifier detects a modified payload", async () => {
+  const row = verifierEvent({ id: "event-payload", payload: { amountMinor: 100 } });
+  row.payload = { amountMinor: 999 };
+  const result = await verifyAuditChain(verifierPool([row], row.event_hash));
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("event_hash_mismatch:event-payload"));
+});
+
+test("audit chain verifier detects a fork from the same predecessor", async () => {
+  const first = verifierEvent({ id: "event-fork-a" });
+  const second = verifierEvent({ id: "event-fork-b" });
+  const result = await verifyAuditChain(verifierPool([first, second], first.event_hash));
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("chain_fork_after:GENESIS"));
+  assert.ok(result.errors.includes("orphan_or_unreachable_events"));
+});
+
