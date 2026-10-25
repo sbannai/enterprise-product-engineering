@@ -46,7 +46,7 @@ test("admin config write is versioned and audited in the same transaction", asyn
 test("stale admin config version is rejected without writing", async () => {
   const { pool, calls } = poolFactory({ currentVersion: 2 });
   await assert.rejects(() => new PostgresAdminConfigurationStore(pool).replace({ ...input, expectedVersion: 1 }),
-    (error) => error instanceof AdminConfigurationConflictError && error.currentVersion === 2);
+    (error) => error?.name === "AdminConfigurationConflictError" && error.currentVersion === 2);
   assert.ok(!calls.some((c) => c.sql.includes("INSERT INTO eper_admin_configuration")));
   assert.ok(!calls.some((c) => c.sql.includes("INSERT INTO eper_audit_events")));
   assert.ok(calls.some((c) => c.sql === "ROLLBACK"));
