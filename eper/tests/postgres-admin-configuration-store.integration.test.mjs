@@ -33,7 +33,7 @@ test("PostgreSQL admin configuration persists by tenant, versions writes, and ap
       await assert.rejects(() => store.replace({
         tenantId, actorId: "integration-admin", resourceType, config: [],
         expectedVersion: 0, correlationId: randomUUID(), environment: "uat",
-      }), (error) => error instanceof AdminConfigurationConflictError && error.currentVersion === 1);
+      }), (error) => error?.name === "AdminConfigurationConflictError" && error.currentVersion === 1);
 
       const client = await pool.connect();
       try {
