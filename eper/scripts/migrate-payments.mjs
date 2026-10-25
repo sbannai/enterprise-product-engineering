@@ -28,6 +28,8 @@ export async function runMigrations(connectionString, options = {}) {
   });
   const directory = options.directory ?? migrationDirectory;
   const lockName = options.lockName ?? "eper:payment-schema-migrations";
+  const ledgerTable = options.ledgerTable ?? "eper_payment_schema_migrations";
+  if (!/^[a-z_][a-z0-9_]*$/.test(ledgerTable)) throw new Error("EPER_MIGRATION_LEDGER_TABLE_INVALID");
   let lockAcquired = false;
 
   try {
@@ -35,7 +37,7 @@ export async function runMigrations(connectionString, options = {}) {
     await client.query("SELECT pg_advisory_lock(hashtext($1))", [lockName]);
     lockAcquired = true;
     await client.query(`
-      CREATE TABLE IF NOT EXISTS eper_payment_schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${ledgerTable} (
         migration_name TEXT PRIMARY KEY,
         sha256 CHAR(64) NOT NULL,
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -52,7 +54,7 @@ export async function runMigrations(connectionString, options = {}) {
       const sql = await readFile(join(directory, name), "utf8");
       const digest = createHash("sha256").update(sql).digest("hex");
       const prior = await client.query(
-        "SELECT sha256 FROM eper_payment_schema_migrations WHERE migration_name = $1",
+        `SELECT sha256 FROM ${ledgerTable} WHERE migration_name = $1`,
         [name],
       );
 
@@ -74,7 +76,7 @@ export async function runMigrations(connectionString, options = {}) {
       try {
         await client.query(body);
         await client.query(
-          "INSERT INTO eper_payment_schema_migrations (migration_name, sha256) VALUES ($1, $2)",
+          `INSERT INTO ${ledgerTable} (migration_name, sha256) VALUES ($1, $2)`,
           [name, digest],
         );
         await client.query("COMMIT");

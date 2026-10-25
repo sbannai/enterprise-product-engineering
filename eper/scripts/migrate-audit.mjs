@@ -16,6 +16,7 @@ if (!connectionString.trim()) {
   await runMigrations(connectionString, {
     directory: join(here, "..", "packages", "audit", "migrations"),
     lockName: "eper:audit-schema-migrations",
+    ledgerTable: "eper_audit_schema_migrations",
     applicationName: "eper-audit-migrations",
   });
 }

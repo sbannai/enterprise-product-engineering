@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
+import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { appendAuditEvent, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
@@ -16,6 +17,16 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const paymentPool = postgresPaymentMode ? createPostgresPaymentPool() : null;
 const paymentStore = paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
+const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
+if (adminConfigMode !== "memory" && adminConfigMode !== "postgres") {
+  throw new Error("EPER_ADMIN_CONFIG_PERSISTENCE_UNSUPPORTED");
+}
+if (adminConfigMode === "postgres" && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
+  throw new Error("EPER_ADMIN_CONFIG_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+const adminConfigurationStore = adminConfigMode === "postgres" && paymentPool
+  ? new PostgresAdminConfigurationStore(paymentPool)
+  : undefined;
 // Receipt numbering is an explicit operator/business configuration. Never silently
 // choose a receipt-numbering policy; capture routes fail closed when the prefix is absent.
 const receiptPrefix = process.env.EPER_PAYMENT_RECEIPT_NUMBER_PREFIX?.trim();
@@ -62,8 +73,11 @@ const auditWriter = auditMode === "postgres" && paymentPool
 if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
+if (adminConfigMode === "postgres" && adminConfigurationStore) {
+  await adminConfigurationStore.assertReady();
+}
 
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter });
+const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, adminConfigurationStore, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);

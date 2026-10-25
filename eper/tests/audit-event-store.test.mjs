@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendAuditEvent, assertAuditStoreReady, hashAuditEnvelope, verifyAuditChain } from "../dist/packages/audit/audit-event-store.js";
+import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady, hashAuditEnvelope, verifyAuditChain } from "../dist/packages/audit/audit-event-store.js";
 
 function mockPool({ failInsert = false, headHash = null } = {}) {
   const calls = [];
@@ -199,3 +199,16 @@ test("audit chain verifier detects a fork from the same predecessor", async () =
   assert.ok(result.errors.includes("orphan_or_unreachable_events"));
 });
 
+
+
+test("transaction-scoped audit append leaves transaction lifecycle to caller", async () => {
+  const { pool, calls } = mockPool();
+  const client = await pool.connect();
+  const result = await appendAuditEventInTransaction(client, valid);
+  assert.match(result.eventId, /^[0-9a-f-]{36}$/);
+  assert.match(result.eventHash, /^[0-9a-f]{64}$/);
+  assert.ok(calls.some((c) => c.sql.includes("pg_advisory_xact_lock")));
+  assert.ok(calls.some((c) => c.sql.includes("INSERT INTO eper_audit_events")));
+  assert.ok(calls.some((c) => c.sql.includes("UPDATE eper_audit_chain_head")));
+  assert.ok(!calls.some((c) => ["BEGIN", "COMMIT", "ROLLBACK", "RELEASE"].includes(c.sql)));
+});
