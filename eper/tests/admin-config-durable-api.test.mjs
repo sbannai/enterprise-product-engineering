@@ -187,3 +187,48 @@ test("durable pricing reads the authenticated tenant's persisted price book", as
     }
   }
 });
+
+test("durable pricing returns 503 when the persisted price book store is unavailable", async () => {
+  const keys = [
+    "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE",
+    "EPER_ADMIN_CONFIG_IDENTITIES_JSON", "EPER_PRICING_API_ENABLED",
+    "EPER_PRICING_API_TOKEN", "EPER_MARKET_PRICE_BOOK_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
+    EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({
+      [TOKEN_A]: { tenantId: "tenant-a", actorId: "admin-a" },
+    }),
+    EPER_PRICING_API_ENABLED: "true",
+    EPER_PRICING_API_TOKEN: "legacy-shared-pricing-token-that-is-at-least-32-chars",
+    EPER_MARKET_PRICE_BOOK_JSON: "[]",
+  });
+  const store = {
+    async get() { throw new Error("postgres connection unavailable"); },
+    async replace() { throw new Error("not used"); },
+  };
+  const server = createAppServer({ adminConfigurationStore: store });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch(`http://127.0.0.1:${address.port}/pricing/quote`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN_A}`, "content-type": "application/json" },
+      body: JSON.stringify({ productId: "uat-fee", marketId: "IN" }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "pricing_durable_store_unavailable" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
