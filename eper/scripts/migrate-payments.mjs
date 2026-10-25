@@ -23,15 +23,16 @@ export async function runMigrations(connectionString, options = {}) {
   const { Client } = require("pg");
   const client = new Client({
     connectionString,
-    application_name: "eper-payment-migrations",
+    application_name: options.applicationName ?? "eper-payment-migrations",
     connectionTimeoutMillis: 5_000,
   });
   const directory = options.directory ?? migrationDirectory;
+  const lockName = options.lockName ?? "eper:payment-schema-migrations";
   let lockAcquired = false;
 
   try {
     await client.connect();
-    await client.query("SELECT pg_advisory_lock(hashtext($1))", ["eper:payment-schema-migrations"]);
+    await client.query("SELECT pg_advisory_lock(hashtext($1))", [lockName]);
     lockAcquired = true;
     await client.query(`
       CREATE TABLE IF NOT EXISTS eper_payment_schema_migrations (
@@ -86,7 +87,7 @@ export async function runMigrations(connectionString, options = {}) {
   } finally {
     if (lockAcquired) {
       try {
-        await client.query("SELECT pg_advisory_unlock(hashtext($1))", ["eper:payment-schema-migrations"]);
+        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockName]);
       } catch {
         // Closing the session releases the advisory lock even if unlock fails.
       }
