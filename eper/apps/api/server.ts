@@ -4,7 +4,7 @@ import { executeIntegratedRequirement } from "../../packages/capability-router.j
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
 import { LocalizationService, type SupportedLocale, type SupportedCurrency } from "../../packages/localization/localization.js";
 import { MarketPriceBookService, type MarketPriceEntry } from "../../packages/pricing/market-price-book.js";
-import { WorkflowConfigurationService } from "../../packages/workflows/workflow-configuration.js";
+import { WorkflowConfigurationService, WorkflowConfigurationError } from "../../packages/workflows/workflow-configuration.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
