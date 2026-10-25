@@ -28,6 +28,9 @@ export interface ReplaceAdminConfigurationInput {
   resourceType: AdminConfigurationResource;
   config: unknown;
   expectedVersion: number;
+  /** Related resource version used to reject cross-resource validation races. */
+  relatedResourceType?: AdminConfigurationResource;
+  expectedRelatedVersion?: number;
   correlationId: string;
   environment: AuditEnvironment;
   serviceVersion?: string;
@@ -93,10 +96,26 @@ export class PostgresAdminConfigurationStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      // Serialize all admin-config writes for this tenant, not only writes to one resource.
+      // Cross-resource validators read the other resource before entering this transaction;
+      // the version check below rejects any change that raced with that read.
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtext($1))",
-        ["eper-admin-config:" + input.tenantId + ":" + input.resourceType],
+        ["eper-admin-config:" + input.tenantId],
       );
+      if (input.relatedResourceType) {
+        if (!Number.isSafeInteger(input.expectedRelatedVersion) || (input.expectedRelatedVersion ?? -1) < 0) {
+          throw new Error("ADMIN_CONFIGURATION_RELATED_EXPECTED_VERSION_REQUIRED");
+        }
+        const related = await client.query<{ version: number | string }>(
+          "SELECT version FROM eper_admin_configuration WHERE tenant_id = $1 AND resource_type = $2 FOR UPDATE",
+          [input.tenantId, input.relatedResourceType],
+        );
+        const relatedVersion = related.rows[0] ? Number(related.rows[0].version) : 0;
+        if (relatedVersion !== input.expectedRelatedVersion) {
+          throw new AdminConfigurationConflictError(relatedVersion);
+        }
+      }
       const prior = await client.query<{ version: number | string; config: unknown }>(
         "SELECT version, config FROM eper_admin_configuration WHERE tenant_id = $1 AND resource_type = $2 FOR UPDATE",
         [input.tenantId, input.resourceType],
