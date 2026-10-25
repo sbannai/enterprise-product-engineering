@@ -8,6 +8,7 @@ import type { PostgresPaymentStore } from "../../packages/payments/postgres-paym
 import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
+import { handleAgentRoute } from "../../packages/agents/agent-workflows.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -338,6 +339,8 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       }
       return;
     }
+
+    if (await handleAgentRoute(request, response, requestUrl.pathname)) return;
 
     sendJson(response, 404, { error: "not_found" });
   });
