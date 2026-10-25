@@ -201,3 +201,93 @@ export async function assertAuditStoreReady(pool: AuditSqlPool): Promise<void> {
     client.release();
   }
 }
+
+
+export interface AuditVerificationResult {
+  eventsChecked: number;
+  valid: boolean;
+  errors: string[];
+  computedHeadHash: string | null;
+  storedHeadHash: string | null;
+}
+
+/**
+ * Replays the global append chain in occurred_at/event_id order, recomputes
+ * canonical event hashes, checks each predecessor, and compares the result
+ * with the persisted chain head. A valid report is evidence only for the
+ * rows visible to this database role at verification time.
+ */
+export async function verifyAuditChain(pool: AuditSqlPool): Promise<AuditVerificationResult> {
+  const client = await pool.connect();
+  const errors: string[] = [];
+  let eventsChecked = 0;
+  let computedHeadHash: string | null = null;
+  let storedHeadHash: string | null = null;
+  try {
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    const head = await client.query<{ last_event_hash: string | null }>(
+      "SELECT last_event_hash FROM eper_audit_chain_head WHERE singleton = TRUE"
+    );
+    if (head.rows.length !== 1) {
+      errors.push("chain_head_missing_or_duplicated");
+    } else {
+      storedHeadHash = head.rows[0].last_event_hash;
+    }
+    const rows = await client.query<Record<string, unknown>>(
+      `SELECT event_id, occurred_at, tenant_id, application_id, environment, actor_type, actor_id,
+        effective_roles, action, outcome, reason_code, resource_type, resource_id, operation_id,
+        correlation_id, request_id, source, operation_name, service_version, approval_id,
+        parent_event_id, idempotency_key, schema_version, before_hash, after_hash, payload,
+        previous_event_hash, event_hash
+       FROM eper_audit_events ORDER BY occurred_at ASC, event_id ASC`
+    );
+    let previousHash: string | null = null;
+    for (const row of rows.rows) {
+      eventsChecked += 1;
+      const actualPrevious = row.previous_event_hash == null ? null : String(row.previous_event_hash).trim();
+      if (actualPrevious !== previousHash) errors.push("predecessor_mismatch:" + String(row.event_id));
+      const envelope = {
+        eventId: String(row.event_id),
+        occurredAt: new Date(row.occurred_at as string | Date).toISOString(),
+        tenantId: String(row.tenant_id),
+        applicationId: String(row.application_id),
+        environment: row.environment,
+        actorType: row.actor_type,
+        actorId: row.actor_id,
+        effectiveRoles: typeof row.effective_roles === "string" ? JSON.parse(row.effective_roles) : row.effective_roles,
+        action: row.action,
+        outcome: row.outcome,
+        reasonCode: row.reason_code ?? null,
+        resourceType: row.resource_type ?? null,
+        resourceId: row.resource_id ?? null,
+        operationId: row.operation_id ?? null,
+        correlationId: row.correlation_id ?? null,
+        requestId: row.request_id ?? null,
+        source: row.source,
+        operationName: row.operation_name,
+        serviceVersion: row.service_version ?? null,
+        approvalId: row.approval_id ?? null,
+        parentEventId: row.parent_event_id ?? null,
+        idempotencyKey: row.idempotency_key ?? null,
+        schemaVersion: Number(row.schema_version),
+        beforeHash: row.before_hash == null ? null : String(row.before_hash).trim(),
+        afterHash: row.after_hash == null ? null : String(row.after_hash).trim(),
+        payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload,
+        previousEventHash: actualPrevious,
+      };
+      const computedHash = hashAuditEnvelope(envelope);
+      const storedHash = String(row.event_hash ?? "").trim();
+      if (computedHash !== storedHash) errors.push("event_hash_mismatch:" + String(row.event_id));
+      previousHash = storedHash;
+    }
+    computedHeadHash = previousHash;
+    if (computedHeadHash !== storedHeadHash) errors.push("stored_chain_head_mismatch");
+    await client.query("COMMIT");
+    return { eventsChecked, valid: errors.length === 0, errors, computedHeadHash, storedHeadHash };
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
