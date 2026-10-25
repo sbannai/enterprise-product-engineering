@@ -212,10 +212,10 @@ export interface AuditVerificationResult {
 }
 
 /**
- * Replays the global append chain in occurred_at/event_id order, recomputes
- * canonical event hashes, checks each predecessor, and compares the result
- * with the persisted chain head. A valid report is evidence only for the
- * rows visible to this database role at verification time.
+ * Verifies the global append chain by predecessor pointers, not timestamps:
+ * occurred_at is assigned before the writer acquires the chain lock, so
+ * concurrent writers can legitimately commit in a different timestamp order.
+ * A valid report covers only rows visible to this database role at read time.
  */
 export async function verifyAuditChain(pool: AuditSqlPool): Promise<AuditVerificationResult> {
   const client = await pool.connect();
@@ -228,58 +228,74 @@ export async function verifyAuditChain(pool: AuditSqlPool): Promise<AuditVerific
     const head = await client.query<{ last_event_hash: string | null }>(
       "SELECT last_event_hash FROM eper_audit_chain_head WHERE singleton = TRUE"
     );
-    if (head.rows.length !== 1) {
-      errors.push("chain_head_missing_or_duplicated");
-    } else {
-      storedHeadHash = head.rows[0].last_event_hash;
-    }
+    if (head.rows.length !== 1) errors.push("chain_head_missing_or_duplicated");
+    else storedHeadHash = head.rows[0].last_event_hash;
+
     const rows = await client.query<Record<string, unknown>>(
       `SELECT event_id, occurred_at, tenant_id, application_id, environment, actor_type, actor_id,
         effective_roles, action, outcome, reason_code, resource_type, resource_id, operation_id,
         correlation_id, request_id, source, operation_name, service_version, approval_id,
         parent_event_id, idempotency_key, schema_version, before_hash, after_hash, payload,
         previous_event_hash, event_hash
-       FROM eper_audit_events ORDER BY occurred_at ASC, event_id ASC`
+       FROM eper_audit_events`
     );
-    let previousHash: string | null = null;
+
+    const byPrevious = new Map<string, Record<string, unknown>[]>();
     for (const row of rows.rows) {
+      const key = row.previous_event_hash == null ? "__GENESIS__" : String(row.previous_event_hash).trim();
+      const bucket = byPrevious.get(key) ?? [];
+      bucket.push(row);
+      byPrevious.set(key, bucket);
+    }
+    for (const [key, bucket] of byPrevious) {
+      if (bucket.length > 1) errors.push("chain_fork_after:" + (key === "__GENESIS__" ? "GENESIS" : key));
+    }
+
+    let previousHash: string | null = null;
+    const visited = new Set<string>();
+    while (true) {
+      const candidates = byPrevious.get(previousHash ?? "__GENESIS__") ?? [];
+      const next = candidates.find((row) => !visited.has(String(row.event_id)));
+      if (!next) break;
+      const eventId = String(next.event_id);
+      visited.add(eventId);
       eventsChecked += 1;
-      const actualPrevious = row.previous_event_hash == null ? null : String(row.previous_event_hash).trim();
-      if (actualPrevious !== previousHash) errors.push("predecessor_mismatch:" + String(row.event_id));
+      const actualPrevious = next.previous_event_hash == null ? null : String(next.previous_event_hash).trim();
       const envelope = {
-        eventId: String(row.event_id),
-        occurredAt: new Date(row.occurred_at as string | Date).toISOString(),
-        tenantId: String(row.tenant_id),
-        applicationId: String(row.application_id),
-        environment: row.environment,
-        actorType: row.actor_type,
-        actorId: row.actor_id,
-        effectiveRoles: typeof row.effective_roles === "string" ? JSON.parse(row.effective_roles) : row.effective_roles,
-        action: row.action,
-        outcome: row.outcome,
-        reasonCode: row.reason_code ?? null,
-        resourceType: row.resource_type ?? null,
-        resourceId: row.resource_id ?? null,
-        operationId: row.operation_id ?? null,
-        correlationId: row.correlation_id ?? null,
-        requestId: row.request_id ?? null,
-        source: row.source,
-        operationName: row.operation_name,
-        serviceVersion: row.service_version ?? null,
-        approvalId: row.approval_id ?? null,
-        parentEventId: row.parent_event_id ?? null,
-        idempotencyKey: row.idempotency_key ?? null,
-        schemaVersion: Number(row.schema_version),
-        beforeHash: row.before_hash == null ? null : String(row.before_hash).trim(),
-        afterHash: row.after_hash == null ? null : String(row.after_hash).trim(),
-        payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload,
+        eventId,
+        occurredAt: new Date(next.occurred_at as string | Date).toISOString(),
+        tenantId: String(next.tenant_id),
+        applicationId: String(next.application_id),
+        environment: next.environment,
+        actorType: next.actor_type,
+        actorId: next.actor_id,
+        effectiveRoles: typeof next.effective_roles === "string" ? JSON.parse(next.effective_roles) : next.effective_roles,
+        action: next.action,
+        outcome: next.outcome,
+        reasonCode: next.reason_code ?? null,
+        resourceType: next.resource_type ?? null,
+        resourceId: next.resource_id ?? null,
+        operationId: next.operation_id ?? null,
+        correlationId: next.correlation_id ?? null,
+        requestId: next.request_id ?? null,
+        source: next.source,
+        operationName: next.operation_name,
+        serviceVersion: next.service_version ?? null,
+        approvalId: next.approval_id ?? null,
+        parentEventId: next.parent_event_id ?? null,
+        idempotencyKey: next.idempotency_key ?? null,
+        schemaVersion: Number(next.schema_version),
+        beforeHash: next.before_hash == null ? null : String(next.before_hash).trim(),
+        afterHash: next.after_hash == null ? null : String(next.after_hash).trim(),
+        payload: typeof next.payload === "string" ? JSON.parse(next.payload) : next.payload,
         previousEventHash: actualPrevious,
       };
       const computedHash = hashAuditEnvelope(envelope);
-      const storedHash = String(row.event_hash ?? "").trim();
-      if (computedHash !== storedHash) errors.push("event_hash_mismatch:" + String(row.event_id));
+      const storedHash = String(next.event_hash ?? "").trim();
+      if (computedHash !== storedHash) errors.push("event_hash_mismatch:" + eventId);
       previousHash = storedHash;
     }
+    if (visited.size !== rows.rows.length) errors.push("orphan_or_unreachable_events");
     computedHeadHash = previousHash;
     if (computedHeadHash !== storedHeadHash) errors.push("stored_chain_head_mismatch");
     await client.query("COMMIT");
