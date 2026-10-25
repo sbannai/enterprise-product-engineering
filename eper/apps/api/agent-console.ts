@@ -1,5 +1,5 @@
 export function renderAgentConsole(): string {
-  return \`<!doctype html>
+  return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EPER Agent Workspace</title><style>
 :root{color-scheme:light;--forest:#254d3a;--sage:#e7eee6;--ivory:#faf8f0;--gold:#b99a56;--ink:#243128;--muted:#647267;--line:#d9e0d6}
@@ -44,5 +44,5 @@ async function loadQueue(){try{const r=await api("/v1/agents/drafts");drafts=r.d
 $("agent").addEventListener("change",fillIntents);$("connect").onclick=loadQueue;$("refresh").onclick=loadQueue;$("statusFilter").onchange=render;fillIntents();
 $("create").onclick=async()=>{try{const agent=$("agent").value;const input={objective:$("objective").value.trim(),audience:$("audience").value.trim(),context:$("context").value.trim(),offer:$("offer").value.trim()};if(!input.objective&&!input.context)throw new Error("Enter an objective or source context.");const result=await api("/v1/agents/"+agent+"/drafts",{method:"POST",body:JSON.stringify({intent:$("intent").value,input})});drafts.unshift(result.draft);render();setNotice("Draft created and awaiting human review.",true);}catch(e){setNotice(e.message,false);}};
 })();
-</script></body></html>\`;
+</script></body></html>`;
 }
