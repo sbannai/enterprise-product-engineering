@@ -5,6 +5,7 @@ import { createCapabilityServices } from "../../packages/capabilities/index.js";
 import { LocalizationService, type SupportedLocale, type SupportedCurrency } from "../../packages/localization/localization.js";
 import { MarketPriceBookService, type MarketPriceEntry } from "../../packages/pricing/market-price-book.js";
 import { WorkflowConfigurationService, WorkflowConfigurationError } from "../../packages/workflows/workflow-configuration.js";
+import { AdminConfigurationConflictError, PostgresAdminConfigurationStore, type AdminConfigurationResource } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
@@ -52,6 +53,180 @@ function bearerMatches(request: IncomingMessage, expected: string): boolean {
   return provided.length === secret.length && timingSafeEqual(provided, secret);
 }
 
+
+interface TrustedAdminConfigIdentity {
+  tenantId: string;
+  actorId: string;
+}
+
+/** Maps individual bearer credentials to trusted tenant/actor identities configured server-side. */
+function resolveAdminConfigIdentity(request: IncomingMessage): TrustedAdminConfigIdentity | null {
+  const match = /^Bearer (.+)$/i.exec(request.headers.authorization ?? "");
+  if (!match) return null;
+  const supplied = Buffer.from(match[1], "utf8");
+  const raw = process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON ?? "";
+  let mapping: unknown;
+  try { mapping = JSON.parse(raw); } catch { return null; }
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) return null;
+  for (const [credential, identity] of Object.entries(mapping as Record<string, unknown>)) {
+    const expected = Buffer.from(credential, "utf8");
+    if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
+    if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
+    const record = identity as Record<string, unknown>;
+    if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId.length > 128 ||
+        typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId.length > 128) return null;
+    return { tenantId: record.tenantId, actorId: record.actorId };
+  }
+  return null;
+}
+
+async function handleDurableAdminConfig(
+  request: IncomingMessage,
+  response: ServerResponse,
+  path: string,
+  store: PostgresAdminConfigurationStore,
+  identity: TrustedAdminConfigIdentity,
+  environment: "production" | "uat" | "sandbox",
+  serviceVersion?: string,
+  initialPriceEntries: MarketPriceEntry[] = [],
+): Promise<void> {
+  const correlationHeader = request.headers["x-correlation-id"];
+  const correlationId = typeof correlationHeader === "string" &&
+    /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+  const getConfig = (resource: AdminConfigurationResource) => store.get(identity.tenantId, resource);
+  const saveConfig = (resourceType: AdminConfigurationResource, config: unknown, expectedVersion: unknown) => {
+    if (!Number.isSafeInteger(expectedVersion) || Number(expectedVersion) < 0) {
+      throw new Error("ADMIN_CONFIGURATION_EXPECTED_VERSION_REQUIRED");
+    }
+    return store.replace({
+      tenantId: identity.tenantId, actorId: identity.actorId, resourceType, config,
+      expectedVersion: Number(expectedVersion), correlationId, environment, serviceVersion,
+    });
+  };
+  const loadWorkflowService = async (needWorkflows = true): Promise<WorkflowConfigurationService> => {
+    const service = new WorkflowConfigurationService();
+    const roles = await getConfig("roles-access");
+    if (roles) service.replaceRoles(roles.config);
+    if (needWorkflows) {
+      const workflows = await getConfig("workflows");
+      if (workflows) service.replaceWorkflows(workflows.config);
+    }
+    return service;
+  };
+
+  if (path === "/admin/config/workflows" && request.method === "GET") {
+    const saved = await getConfig("workflows");
+    sendJson(response, 200, { workflows: saved?.config ?? [], version: saved?.version ?? 0, persistence: "postgres", restartPersistence: true });
+    return;
+  }
+  if (path === "/admin/config/workflows" && request.method === "PUT") {
+    const body = await readJson(request);
+    const validator = await loadWorkflowService(false);
+    const workflows = validator.replaceWorkflows(body.workflows);
+    const saved = await saveConfig("workflows", workflows, body.expectedVersion);
+    sendJson(response, 200, { workflows: saved.config, version: saved.version, persistence: "postgres", restartPersistence: true });
+    return;
+  }
+  if (path === "/admin/config/roles-access" && request.method === "GET") {
+    const saved = await getConfig("roles-access");
+    sendJson(response, 200, { roles: saved?.config ?? [], version: saved?.version ?? 0, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "postgres", restartPersistence: true });
+    return;
+  }
+  if (path === "/admin/config/roles-access" && request.method === "PUT") {
+    const body = await readJson(request);
+    const validator = await loadWorkflowService(true);
+    const roles = validator.replaceRoles(body.roles);
+    const saved = await saveConfig("roles-access", roles, body.expectedVersion);
+    sendJson(response, 200, { roles: saved.config, version: saved.version, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "postgres", restartPersistence: true });
+    return;
+  }
+  if (path === "/admin/config/access-check" && request.method === "POST") {
+    const body = await readJson(request);
+    if (typeof body.principalId !== "string" || !body.principalId.trim() || body.principalId.length > 128 ||
+        typeof body.permission !== "string" ||
+        !(WorkflowConfigurationService.PERMISSIONS as readonly string[]).includes(body.permission) ||
+        (body.workflowId !== undefined && (typeof body.workflowId !== "string" || body.workflowId.length > 128))) {
+      sendJson(response, 400, { error: "principalId_and_supported_permission_required" });
+      return;
+    }
+    const validator = await loadWorkflowService(true);
+    sendJson(response, 200, validator.checkAccess(
+      body.principalId,
+      body.permission as import("../../packages/workflows/workflow-configuration.js").WorkflowPermission,
+      body.workflowId as string | undefined,
+    ));
+    return;
+  }
+  if (path === "/admin/config/price-book" && request.method === "GET") {
+    const saved = await getConfig("price-book");
+    sendJson(response, 200, { entries: saved?.config ?? initialPriceEntries, version: saved?.version ?? 0, persistence: "postgres", restartPersistence: true });
+    return;
+  }
+  if (path === "/admin/config/price-book" && request.method === "PUT") {
+    const body = await readJson(request);
+    const candidate = body.entry;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      sendJson(response, 400, { error: "entry_object_required" });
+      return;
+    }
+    const savedBefore = await getConfig("price-book");
+    const entries = (savedBefore?.config ?? initialPriceEntries) as MarketPriceEntry[];
+    const entry = candidate as MarketPriceEntry;
+    const nextEntries = entries.filter((current) =>
+      !(current.productId === entry.productId && current.marketId === entry.marketId &&
+        current.priceBookId === entry.priceBookId && current.priceBookVersion === entry.priceBookVersion));
+    if (nextEntries.length >= 10_000) throw new Error("MARKET_PRICE_BOOK_CAPACITY_EXCEEDED");
+    nextEntries.push(entry);
+    const nextService = new MarketPriceBookService(nextEntries);
+    void nextService;
+    const saved = await saveConfig("price-book", nextEntries, body.expectedVersion);
+    sendJson(response, 200, { entries: saved.config, version: saved.version, persistence: "postgres", restartPersistence: true });
+    return;
+  }
+  if (path === "/admin/config/payment-vendor" && request.method === "GET") {
+    const saved = await getConfig("payment-vendor");
+    const config = (saved?.config ?? {
+      provider: process.env.EPER_PAYMENT_PROVIDER ?? "sandbox",
+      mode: "sandbox",
+      sandboxEnabled: process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
+    }) as { provider: string; mode: string; sandboxEnabled: boolean };
+    const provider = config.provider;
+    const providerKeyConfigured = provider === "razorpay"
+      ? Boolean(process.env.EPER_RAZORPAY_KEY_ID && process.env.EPER_RAZORPAY_KEY_SECRET)
+      : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_SECRET_KEY)
+      : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_API_KEY && process.env.EPER_ADYEN_MERCHANT_ACCOUNT)
+      : Boolean(process.env.EPER_PAYMENT_SANDBOX_TOKEN && process.env.EPER_PAYMENT_SANDBOX_TENANT_ID && process.env.EPER_PAYMENT_SANDBOX_PRINCIPAL_ID);
+    const webhookSecretConfigured = provider === "razorpay"
+      ? Boolean(process.env.EPER_RAZORPAY_WEBHOOK_SECRET)
+      : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_WEBHOOK_SECRET)
+      : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_HMAC_KEY) : false;
+    sendJson(response, 200, {
+      ...config, version: saved?.version ?? 0, productionEnabled: false, adapterAvailable: provider === "sandbox",
+      credentials: { providerKeyConfigured, webhookSecretConfigured }, persistence: "postgres",
+      message: provider === "sandbox" ? "Sandbox adapter selected; no live charges can be made." : "Provider selection is planning-only; no live payment adapter is enabled.",
+    });
+    return;
+  }
+  if (path === "/admin/config/payment-vendor" && request.method === "PUT") {
+    const body = await readJson(request);
+    const allowedProviders = ["sandbox", "razorpay", "stripe", "adyen"];
+    if (typeof body.provider !== "string" || !allowedProviders.includes(body.provider) ||
+        body.mode !== "sandbox" || typeof body.sandboxEnabled !== "boolean") {
+      sendJson(response, 400, { error: "provider must be supported; mode must remain sandbox; sandboxEnabled must be boolean" });
+      return;
+    }
+    const config = {
+      provider: body.provider, mode: "sandbox",
+      sandboxEnabled: body.sandboxEnabled && body.provider === "sandbox" && process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
+    };
+    const saved = await saveConfig("payment-vendor", config, body.expectedVersion);
+    sendJson(response, 200, { ...config, version: saved.version, productionEnabled: false, adapterAvailable: config.provider === "sandbox", persistence: "postgres", message: config.provider === "sandbox" ? "Sandbox configuration updated; server-side sandbox opt-in and tenant settings are still required." : "Provider selection is planning-only; no live adapter is enabled." });
+    return;
+  }
+  response.writeHead(405, { allow: path === "/admin/config/access-check" ? "POST" : "GET, PUT", "cache-control": "no-store" });
+  response.end();
+}
+
 /**
  * Health endpoint plus an explicitly opt-in local capability execution route.
  * The local route is disabled by default and is not a production identity system.
@@ -72,7 +247,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; adminConfigurationStore?: PostgresAdminConfigurationStore; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -149,16 +324,38 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(response, 404, { error: "not_found" });
         return;
       }
-      const adminToken = process.env.EPER_ADMIN_CONFIG_API_TOKEN ?? "";
-      if (adminToken.length < 32) {
-        sendJson(response, 503, { error: "admin_config_api_unconfigured" });
-        return;
-      }
-      if (!bearerMatches(request, adminToken)) {
-        sendJson(response, 401, { error: "unauthorized" });
-        return;
+      const durableAdminMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE === "postgres";
+      let adminIdentity: TrustedAdminConfigIdentity | null = null;
+      if (durableAdminMode) {
+        if (!options.adminConfigurationStore) {
+          sendJson(response, 503, { error: "admin_config_durable_store_unconfigured" });
+          return;
+        }
+        adminIdentity = resolveAdminConfigIdentity(request);
+        if (!adminIdentity) {
+          sendJson(response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+          return;
+        }
+      } else {
+        const adminToken = process.env.EPER_ADMIN_CONFIG_API_TOKEN ?? "";
+        if (adminToken.length < 32) {
+          sendJson(response, 503, { error: "admin_config_api_unconfigured" });
+          return;
+        }
+        if (!bearerMatches(request, adminToken)) {
+          sendJson(response, 401, { error: "unauthorized" });
+          return;
+        }
       }
       try {
+        if (durableAdminMode && options.adminConfigurationStore && adminIdentity) {
+          const environment = options.adminConfigEnvironment ?? "uat";
+          await handleDurableAdminConfig(
+            request, response, adminConfigPath, options.adminConfigurationStore, adminIdentity,
+            environment, options.serviceVersion, marketPriceEntries,
+          );
+          return;
+        }
         if (adminConfigPath === "/admin/config/workflows" && request.method === "GET") {
           sendJson(response, 200, { workflows: workflowConfig.listWorkflows(), persistence: "process-memory", restartPersistence: false });
           return;
@@ -287,6 +484,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       } catch (error) {
         const message = error instanceof Error ? error.message : "ADMIN_CONFIG_OPERATION_FAILED";
         const status = error instanceof WorkflowConfigurationError ? error.statusCode
+          : error instanceof AdminConfigurationConflictError ? 409
           : message === "MARKET_PRICE_CONFIGURATION_AMBIGUOUS" ? 409
           : message.startsWith("MARKET_PRICE_") || message.startsWith("PRICE_") ||
             message === "MARKET_PRICE_REQUIRED_FIELDS_MISSING" ? 400
