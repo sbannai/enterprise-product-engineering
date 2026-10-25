@@ -76,6 +76,10 @@ export class PostgresAdminConfigurationStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        ["eper-admin-config:" + input.tenantId + ":" + input.resourceType],
+      );
       const prior = await client.query<{ version: number | string }>(
         "SELECT version FROM eper_admin_configuration WHERE tenant_id = $1 AND resource_type = $2 FOR UPDATE",
         [input.tenantId, input.resourceType],
