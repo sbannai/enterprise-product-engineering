@@ -61,11 +61,11 @@ Never log passwords, bearer/API tokens, secret values, payment card data, full b
 
 ## Current status and implementation sequence
 
-**Status: requirement defined here; runtime-wide durable audit trail is not yet implemented by this document.** The current agent drafts are process-memory only, so their history is not durable and must not be represented as an audit trail.
+**Status: partial implementation in PR #206; not yet release-ready.** A PostgreSQL append writer, migration, payload-key redaction, hash-chain head, and agent-route audit-writer seam are present. API startup can connect the writer to the payment PostgreSQL pool only when `EPER_AUDIT_PERSISTENCE=postgres`; this also requires `EPER_PAYMENT_PERSISTENCE=postgres` and a successfully applied audit migration. The default is `disabled`, so audit capture is not automatic unless explicitly configured. Agent draft state remains process-memory only; the audit record does not make the draft itself durable. Runtime-wide audit coverage, production database role grants, verified migration execution, audit search/export, retention, and integrity verification remain open. Do not describe the system as fully audited until these controls are implemented and tested.
 
 Implement in one consolidated change on the existing feature PR:
-1. Establish the canonical event schema, append-only repository interface, and migrations for durable audit/outbox storage.
-2. Wire API request identity/correlation and central audit helpers; instrument agent draft/list/review, payment state transitions, capability execution, configuration, authentication/authorization, and administrative actions.
+1. Establish the canonical event schema, append-only repository interface, and migrations for durable audit/outbox storage. The initial event migration must be applied and verified before enabling the writer.
+2. Enable the configured PostgreSQL writer in the protected environment; wire trusted request identity/correlation and instrument agent draft/list/review, payment state transitions, capability execution, configuration, authentication/authorization, and administrative actions. The current change instruments the agent route seam only; other routes are still open.
 3. Add actor/tenant authorization and sensitive-field redaction tests; prove audit-failure behavior and transactional/outbox recovery.
 4. Add permissioned audit search/export and retention/integrity operations, with those operations audited too.
 5. Generate a route/job-to-event traceability matrix and evidence report from automated tests.
