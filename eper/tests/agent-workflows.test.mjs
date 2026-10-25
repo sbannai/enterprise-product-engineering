@@ -63,13 +63,27 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
     assert.equal(approval.json.execution, "NOT_EXECUTED");
   });
 
-  await t.test("rejects unsupported intent and denies unknown principals", async () => {
+  await t.test("ignores spoofed principal headers and denies unknown credentials", async () => {
+    const created = await fetch(baseUrl + "/v1/agents/sales/drafts", {
+      method: "POST",
+      headers: { authorization: `Bearer ${makerToken}`, "x-eper-principal-id": "reviewer-test", "content-type": "application/json" },
+      body: JSON.stringify({ intent: "follow-up", input: { objective: "identity binding regression" } }),
+    });
+    assert.equal(created.status, 201);
+    const draft = (await created.json()).draft;
+    assert.equal(draft.createdBy, "maker-test");
+    const selfApproval = await fetch(baseUrl + `/v1/agents/drafts/${draft.id}/approve`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${makerToken}`, "x-eper-principal-id": "reviewer-test", "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(selfApproval.status, 403);
     const unsupported = await request("/v1/agents/crm/drafts", { method: "POST", body: { intent: "delete-all", input: {} } });
     assert.equal(unsupported.status, 400);
     const denied = await fetch(baseUrl + "/v1/agents/drafts", {
-      headers: { authorization: `Bearer ${"intruder-token-with-at-least-32-characters"}`, "x-eper-principal-id": "maker-test" },
+      headers: { authorization: "Bearer intruder-token-with-at-least-32-characters", "x-eper-principal-id": "maker-test" },
     });
-    assert.equal(denied.status, 403);
+    assert.equal(denied.status, 401);
   });
 
   await t.test("lists tenant-scoped drafts", async () => {
