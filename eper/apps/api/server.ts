@@ -489,6 +489,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : message.startsWith("MARKET_PRICE_") || message.startsWith("PRICE_") ||
             message === "MARKET_PRICE_REQUIRED_FIELDS_MISSING" ? 400
           : message === "REQUEST_BODY_TOO_LARGE" ? 413
+          : message === "ADMIN_CONFIGURATION_EXPECTED_VERSION_REQUIRED" ? 400
           : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
           // Unknown failures in durable mode are store/operational failures, not client input.
           : durableAdminMode ? 503
