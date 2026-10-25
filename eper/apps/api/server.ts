@@ -503,19 +503,43 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(response, 404, { error: "not_found" });
         return;
       }
-      const pricingToken = process.env.EPER_PRICING_API_TOKEN ?? "";
-      if (pricingToken.length < 32) {
-        sendJson(response, 503, { error: "pricing_api_unconfigured" });
-        return;
-      }
-      if (!bearerMatches(request, pricingToken)) {
-        sendJson(response, 401, { error: "unauthorized" });
-        return;
+      const durablePricingMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE === "postgres";
+      let pricingIdentity: TrustedAdminConfigIdentity | null = null;
+      if (durablePricingMode) {
+        if (!options.adminConfigurationStore) {
+          sendJson(response, 503, { error: "pricing_durable_store_unconfigured" });
+          return;
+        }
+        // In durable mode, price lookup must use the same trusted tenant identity as
+        // admin configuration. A shared pricing token cannot safely select a tenant.
+        pricingIdentity = resolveAdminConfigIdentity(request);
+        if (!pricingIdentity) {
+          sendJson(response, 401, { error: "unauthorized_or_unmapped_pricing_identity" });
+          return;
+        }
+      } else {
+        const pricingToken = process.env.EPER_PRICING_API_TOKEN ?? "";
+        if (pricingToken.length < 32) {
+          sendJson(response, 503, { error: "pricing_api_unconfigured" });
+          return;
+        }
+        if (!bearerMatches(request, pricingToken)) {
+          sendJson(response, 401, { error: "unauthorized" });
+          return;
+        }
       }
       try {
+        // Resolve the tenant's persisted price book on every request so successful
+        // admin edits immediately affect quotes/options and survive process restarts.
+        let requestPriceBook = marketPriceBook;
+        if (durablePricingMode && options.adminConfigurationStore && pricingIdentity) {
+          const savedPriceBook = await options.adminConfigurationStore.get(pricingIdentity.tenantId, "price-book");
+          const entries = (savedPriceBook?.config ?? marketPriceEntries) as MarketPriceEntry[];
+          requestPriceBook = new MarketPriceBookService(entries);
+        }
         if (request.method === "GET" && requestUrl.pathname === "/pricing/options") {
           const productId = requestUrl.searchParams.get("productId") ?? "";
-          sendJson(response, 200, { markets: marketPriceBook.listMarkets(productId) });
+          sendJson(response, 200, { markets: requestPriceBook.listMarkets(productId) });
           return;
         }
         if (request.method === "POST" && requestUrl.pathname === "/pricing/quote") {
@@ -525,7 +549,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             sendJson(response, 400, { error: "productId and marketId are required; currency must be a string when supplied" });
             return;
           }
-          const quote = marketPriceBook.quote({
+          const quote = requestPriceBook.quote({
             productId: body.productId,
             marketId: body.marketId,
             ...(typeof body.currency === "string" ? { currency: body.currency } : {}),
