@@ -10,6 +10,7 @@ import type { TrustedTransactionSnapshotSource } from "../../packages/payments/t
 import { requirementBindings } from "../../packages/requirements/registry.js";
 import { handleAgentRoute } from "../../packages/agents/agent-workflows.js";
 import { renderAgentConsole } from "./agent-console.js";
+import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -344,6 +345,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     if (request.method === "GET" && requestUrl.pathname === "/agents-ui") {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "no-referrer" });
       response.end(renderAgentConsole());
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/agents-tools") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "no-referrer" });
+      response.end(renderAgentToolsConfiguration());
       return;
     }
 
