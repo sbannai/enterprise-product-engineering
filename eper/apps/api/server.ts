@@ -490,8 +490,10 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             message === "MARKET_PRICE_REQUIRED_FIELDS_MISSING" ? 400
           : message === "REQUEST_BODY_TOO_LARGE" ? 413
           : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
+          // Unknown failures in durable mode are store/operational failures, not client input.
+          : durableAdminMode ? 503
           : 422;
-        sendJson(response, status, { error: message });
+        sendJson(response, status, { error: status === 503 && durableAdminMode ? "admin_config_durable_store_unavailable" : message });
       }
       return;
     }
