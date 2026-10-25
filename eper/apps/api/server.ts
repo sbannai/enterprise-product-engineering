@@ -533,7 +533,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         // admin edits immediately affect quotes/options and survive process restarts.
         let requestPriceBook = marketPriceBook;
         if (durablePricingMode && options.adminConfigurationStore && pricingIdentity) {
-          const savedPriceBook = await options.adminConfigurationStore.get(pricingIdentity.tenantId, "price-book");
+          let savedPriceBook;
+          try {
+            savedPriceBook = await options.adminConfigurationStore.get(pricingIdentity.tenantId, "price-book");
+          } catch {
+            // A durable-store outage is an operational failure, not bad client input.
+            sendJson(response, 503, { error: "pricing_durable_store_unavailable" });
+            return;
+          }
           const entries = (savedPriceBook?.config ?? marketPriceEntries) as MarketPriceEntry[];
           requestPriceBook = new MarketPriceBookService(entries);
         }
