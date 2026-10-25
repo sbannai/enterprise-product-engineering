@@ -93,14 +93,27 @@ async function handleDurableAdminConfig(
   const correlationHeader = request.headers["x-correlation-id"];
   const correlationId = typeof correlationHeader === "string" &&
     /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
-  const getConfig = (resource: AdminConfigurationResource) => store.get(identity.tenantId, resource);
+  const loadedConfigVersions = new Map<AdminConfigurationResource, number>();
+  const getConfig = async (resource: AdminConfigurationResource) => {
+    const saved = await store.get(identity.tenantId, resource);
+    loadedConfigVersions.set(resource, saved?.version ?? 0);
+    return saved;
+  };
   const saveConfig = async (resourceType: AdminConfigurationResource, config: unknown, expectedVersion: unknown) => {
     if (!Number.isSafeInteger(expectedVersion) || Number(expectedVersion) < 0) {
       throw new Error("ADMIN_CONFIGURATION_EXPECTED_VERSION_REQUIRED");
     }
+    const relatedResourceType: AdminConfigurationResource | undefined =
+      resourceType === "workflows" ? "roles-access" :
+      resourceType === "roles-access" ? "workflows" : undefined;
     return store.replace({
       tenantId: identity.tenantId, actorId: identity.actorId, resourceType, config,
       expectedVersion: Number(expectedVersion), correlationId, environment, serviceVersion,
+      ...(relatedResourceType ? {
+        relatedResourceType,
+        // Compare the exact snapshot used by validation against the version in the write transaction.
+        expectedRelatedVersion: loadedConfigVersions.get(relatedResourceType) ?? 0,
+      } : {}),
     });
   };
   const loadWorkflowService = async (needWorkflows = true): Promise<WorkflowConfigurationService> => {
