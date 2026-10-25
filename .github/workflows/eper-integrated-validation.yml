@@ -111,8 +111,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "EPER_LOCAL_CAPABILITY_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "EPER_LOCAL_TENANT_ID=integrated-test-tenant" >> "$GITHUB_ENV"
-          echo "EPER_LOCAL_PRINCIPAL_ID=integrated-test-operator" >> "$GITHUB_ENV"
+          echo "EPER_LOCAL_TENANT_ID=uat-test-tenant" >> "$GITHUB_ENV"
+          echo "EPER_LOCAL_PRINCIPAL_ID=uat-test-operator" >> "$GITHUB_ENV"
       - name: Start loopback-only API container
         env:
           BUILD_ID: ${{ github.sha }}
