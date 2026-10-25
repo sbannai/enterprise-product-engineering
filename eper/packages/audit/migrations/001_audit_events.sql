@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS eper_audit_events (
     CHECK (jsonb_typeof(integrity_metadata) = 'object')
 );
 
+CREATE TABLE IF NOT EXISTS eper_audit_chain_head (
+  singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+  last_event_hash CHAR(64),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO eper_audit_chain_head (singleton, last_event_hash)
+VALUES (TRUE, NULL) ON CONFLICT (singleton) DO NOTHING;
+
 CREATE INDEX IF NOT EXISTS eper_audit_events_tenant_time_idx
   ON eper_audit_events (tenant_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS eper_audit_events_actor_time_idx
