@@ -118,6 +118,9 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
         "referrer-policy": "no-referrer",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "cross-origin-resource-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'",
       });
       response.end(adminWorkflowUiHtml);
       return;
