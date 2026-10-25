@@ -75,6 +75,10 @@ export function hashAuditEnvelope(envelope: Record<string, unknown>): string {
   return createHash("sha256").update(canonical(envelope)).digest("hex");
 }
 
+function validateAuditInput(input: AuditEventInput): void {
+  validateAuditInput(input);
+}
+
 /**
  * Appends one audit event and its integrity hash in a database transaction.
  * The advisory transaction lock serializes chain-head selection so concurrent
@@ -161,6 +165,7 @@ export async function appendAuditEvent(
   pool: AuditSqlPool,
   input: AuditEventInput,
 ): Promise<{ eventId: string; eventHash: string }> {
+  validateAuditInput(input);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
