@@ -35,3 +35,15 @@ A reviewer must differ from the draft creator (maker-checker). Approval changes 
 
 ## Verification
 Automated API tests cover each agent's draft creation, allowlisted principals, maker-checker separation, listing, unsupported intents, and the no-side-effect approval contract. CI must pass on the final commit before the implementation is considered verified.
+
+
+## WhatsApp tool configuration (tenant/application scoped)
+
+The Agent Tools Configuration screen at `/agents-tools` includes WhatsApp Business settings for each tenant, application, and environment:
+- Provider choice: Meta WhatsApp Cloud API, Twilio adapter, or provider-neutral adapter.
+- Non-secret identifiers: WhatsApp Business Account ID and Phone Number ID.
+- Approved template name and draft/template-preview mode.
+- Recipient opt-in requirement, separate human approval, and audit requirement.
+- Sending remains disabled. The configuration preview does not persist settings or connect a provider.
+
+Do not place access tokens, app secrets, webhook verification tokens, or signing secrets in the browser configuration. Store them server-side per tenant/application in a managed secret store. Before live messaging, implement and test provider adapter, webhook signature verification, delivery/status callbacks, template and WhatsApp policy validation, opt-in/opt-out suppression, rate limits, idempotency, tenant isolation, durable audit logs, and approved execution authorization. A post draft is not a WhatsApp send; no message is sent by this screen.
