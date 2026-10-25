@@ -129,7 +129,25 @@ function errorStatus(message: string): number {
  * and never send messages, publish campaigns, or write CRM records. Approval is a
  * separate human action by a different allowlisted principal.
  */
-export async function handleAgentRoute(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<boolean> {
+export type AgentAuditRecord = {
+  tenantId: string;
+  actorId: string;
+  action: string;
+  outcome: "success" | "denied" | "failure";
+  resourceType: "agent-draft" | "agent-api";
+  resourceId?: string;
+  operationName: string;
+  requestId?: string;
+  payload?: Record<string, unknown>;
+};
+export type AgentAuditWriter = (record: AgentAuditRecord) => Promise<void>;
+
+export async function handleAgentRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  pathname: string,
+  auditWriter?: AgentAuditWriter,
+): Promise<boolean> {
   if (!pathname.startsWith("/v1/agents/")) return false;
   if (process.env.EPER_AGENTS_API_ENABLED !== "true") { send(response, 404, { error: "not_found" }); return true; }
   const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
@@ -147,7 +165,24 @@ export async function handleAgentRoute(request: IncomingMessage, response: Serve
     send(response, 503, { error: "agents_api_unconfigured", required: ["EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS (at least two distinct principal=32+ character tokens separated by semicolons)"] }); return true;
   }
   const principalId = authenticatedPrincipal(request, credentials);
-  if (!principalId) { send(response, 401, { error: "unauthorized" }); return true; }
+  if (!principalId) {
+    if (auditWriter) {
+      try {
+        await auditWriter({ tenantId, actorId: "anonymous", action: "agent.authentication", outcome: "denied",
+          resourceType: "agent-api", operationName: `${request.method ?? "UNKNOWN"} ${pathname}`,
+          requestId: typeof request.headers["x-request-id"] === "string" ? request.headers["x-request-id"] : undefined });
+      } catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
+    }
+    send(response, 401, { error: "unauthorized" }); return true;
+  }
+
+  const recordAudit = async (record: Omit<AgentAuditRecord, "tenantId" | "actorId" | "requestId">) => {
+    if (!auditWriter) return;
+    await auditWriter({
+      ...record, tenantId, actorId: principalId,
+      requestId: typeof request.headers["x-request-id"] === "string" ? request.headers["x-request-id"] : undefined,
+    });
+  };
 
   try {
     const draftMatch = /^\/v1\/agents\/(crm|sales|marketing)\/drafts$/.exec(pathname);
@@ -159,23 +194,60 @@ export async function handleAgentRoute(request: IncomingMessage, response: Serve
       const content = buildDraft(draftMatch[1] as AgentKind, intent, body.input as Record<string, unknown>);
       const draft: Draft = { id: randomUUID(), tenantId, createdBy: principalId, agent: draftMatch[1] as AgentKind, intent, content, status: "PENDING_APPROVAL", createdAt: new Date().toISOString() };
       drafts.set(draft.id, draft);
+      try {
+        await recordAudit({ action: "agent.draft.create", outcome: "success", resourceType: "agent-draft",
+          resourceId: draft.id, operationName: `${request.method} ${pathname}`,
+          payload: { agent: draft.agent, intent: draft.intent, status: draft.status } });
+      } catch {
+        drafts.delete(draft.id);
+        send(response, 503, { error: "audit_persistence_unavailable" }); return true;
+      }
       send(response, 201, { draft, controls: { externalActionsExecuted: false, crmWritesExecuted: false, humanApprovalRequired: true } }); return true;
     }
     if (request.method === "GET" && pathname === "/v1/agents/drafts") {
       const status = new URL(request.url ?? "/", "http://localhost").searchParams.get("status");
       const items = [...drafts.values()].filter((d) => d.tenantId === tenantId && (!status || d.status === status)).map((d) => ({ ...d }));
+      try {
+        await recordAudit({ action: "agent.drafts.list", outcome: "success", resourceType: "agent-api",
+          operationName: `${request.method} ${pathname}`, payload: { statusFilter: status, resultCount: items.length } });
+      } catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
       send(response, 200, { drafts: items, total: items.length, persistence: "process-memory" }); return true;
     }
     const reviewMatch = /^\/v1\/agents\/drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
     if (request.method === "POST" && reviewMatch) {
       const draft = drafts.get(reviewMatch[1]);
-      if (!draft || draft.tenantId !== tenantId) { send(response, 404, { error: "draft_not_found" }); return true; }
-      if (draft.createdBy === principalId) { send(response, 403, { error: "maker_checker_separation_required" }); return true; }
-      if (draft.status !== "PENDING_APPROVAL") { send(response, 409, { error: "draft_already_reviewed", status: draft.status }); return true; }
+      if (!draft || draft.tenantId !== tenantId) {
+        try { await recordAudit({ action: "agent.draft.review", outcome: "denied", resourceType: "agent-draft",
+          resourceId: reviewMatch[1], operationName: `${request.method} ${pathname}`, payload: { reason: "draft_not_found_or_wrong_tenant" } }); }
+        catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
+        send(response, 404, { error: "draft_not_found" }); return true;
+      }
+      if (draft.createdBy === principalId) {
+        try { await recordAudit({ action: "agent.draft.review", outcome: "denied", resourceType: "agent-draft",
+          resourceId: draft.id, operationName: `${request.method} ${pathname}`, payload: { reason: "maker_checker_separation_required" } }); }
+        catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
+        send(response, 403, { error: "maker_checker_separation_required" }); return true;
+      }
+      if (draft.status !== "PENDING_APPROVAL") {
+        try { await recordAudit({ action: "agent.draft.review", outcome: "denied", resourceType: "agent-draft",
+          resourceId: draft.id, operationName: `${request.method} ${pathname}`, payload: { reason: "draft_already_reviewed", status: draft.status } }); }
+        catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
+        send(response, 409, { error: "draft_already_reviewed", status: draft.status }); return true;
+      }
       const body = await readBody(request);
       const note = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
+      const previousStatus = draft.status;
       draft.status = reviewMatch[2] === "approve" ? "APPROVED" : "REJECTED";
       draft.reviewedBy = principalId; draft.reviewedAt = new Date().toISOString(); draft.reviewNote = note;
+      try {
+        await recordAudit({ action: reviewMatch[2] === "approve" ? "agent.draft.approve" : "agent.draft.reject",
+          outcome: "success", resourceType: "agent-draft", resourceId: draft.id,
+          operationName: `${request.method} ${pathname}`,
+          payload: { previousStatus, status: draft.status, noteProvided: Boolean(note) } });
+      } catch {
+        draft.status = previousStatus; delete draft.reviewedBy; delete draft.reviewedAt; delete draft.reviewNote;
+        send(response, 503, { error: "audit_persistence_unavailable" }); return true;
+      }
       send(response, 200, { draft, execution: "NOT_EXECUTED", nextStep: "Approved drafts require a separately authorized execution adapter." }); return true;
     }
     send(response, 404, { error: "not_found" }); return true;
