@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
-import { appendAuditEvent } from "../../packages/audit/audit-event-store.js";
+import { appendAuditEvent, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -59,6 +59,10 @@ const auditWriter = auditMode === "postgres" && paymentPool
       });
     }
   : undefined;
+if (auditMode === "postgres" && paymentPool) {
+  await assertAuditStoreReady(paymentPool);
+}
+
 const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter });
 
 server.listen(port, host, () => {
