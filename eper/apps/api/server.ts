@@ -20,6 +20,8 @@ import { requirementBindings } from "../../packages/requirements/registry.js";
 import { handleAgentRoute, type AgentAuditWriter } from "../../packages/agents/agent-workflows.js";
 import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
+import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
+import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   response.writeHead(statusCode, {
@@ -290,7 +292,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -773,6 +775,87 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
+
+
+    // Tenant-scoped customer ticket API. Disabled unless explicitly enabled and backed by
+    // PostgreSQL plus the canonical transactional audit writer configured at startup.
+    const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+))?$/.exec(requestUrl.pathname);
+    if (ticketPathMatch && (request.method === "GET" || request.method === "POST")) {
+      if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.ticketStore) {
+        sendJson(response, 503, { error: "ticketing_unavailable" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      let applicationId: string;
+      try { applicationId = decodeURIComponent(ticketPathMatch[1]); }
+      catch { sendJson(response, 400, { error: "invalid_path_encoding" }); return; }
+      if (!applicationId.trim() || applicationId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
+        sendJson(response, 400, { error: "invalid_application_id" });
+        return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+      catch { assignments = null; }
+      if (!assignments || typeof assignments !== "object" || Array.isArray(assignments) ||
+          !Array.isArray((assignments as Record<string, unknown>)[identity.tenantId]) ||
+          !((assignments as Record<string, unknown[]>)[identity.tenantId] as unknown[]).includes(applicationId)) {
+        sendJson(response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      const correlationHeader = request.headers["x-correlation-id"];
+      const correlationId = typeof correlationHeader === "string" &&
+        /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      try {
+        if (request.method === "POST" && !ticketPathMatch[2]) {
+          const body = await readJson(request);
+          const validated = validateCreateTicketInput(body);
+          if (!validated.valid) {
+            sendJson(response, 400, { error: "invalid_ticket_input", details: validated.errors });
+            return;
+          }
+          const ticket = await options.ticketStore.create({
+            tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId,
+          }, validated.value);
+          sendJson(response, 201, { ticket });
+          return;
+        }
+        if (request.method === "GET" && !ticketPathMatch[2]) {
+          const query = requestUrl.searchParams;
+          const status = query.get("status") ?? undefined;
+          const severity = query.get("severity") ?? undefined;
+          const type = query.get("type") ?? undefined;
+          const limit = query.has("limit") ? Number(query.get("limit")) : 50;
+          const offset = query.has("offset") ? Number(query.get("offset")) : 0;
+          if ((status && !(TICKET_STATUSES as readonly string[]).includes(status)) ||
+              (severity && !(TICKET_SEVERITIES as readonly string[]).includes(severity)) ||
+              (type && !(TICKET_TYPES as readonly string[]).includes(type)) ||
+              !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+              !Number.isInteger(offset) || offset < 0) {
+            sendJson(response, 400, { error: "invalid_ticket_filters" });
+            return;
+          }
+          const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
+            applicationId, status: status as typeof TICKET_STATUSES[number] | undefined,
+            severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
+            type: type as typeof TICKET_TYPES[number] | undefined, limit, offset,
+          });
+          sendJson(response, 200, { tickets, limit, offset });
+          return;
+        }
+        sendJson(response, 405, { error: "method_not_allowed" });
+      } catch {
+        sendJson(response, 503, { error: "ticket_operation_unavailable" });
+      }
+      return;
+    }
 
     // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
     if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
