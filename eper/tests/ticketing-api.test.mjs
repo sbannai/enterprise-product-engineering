@@ -90,11 +90,12 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
     assert.equal(captured.identity.applicationId, "app-a");
     assert.equal(captured.input.title, "UI");
     assert.equal(captured.idempotencyKey, "ticket-submit-key-001");
-    const listed = await fetch(base + "/customer/applications/app-a/tickets?limit=10", {
-      headers: { authorization: `Bearer ${credential}` },
+    const listed = await fetch(base + "/customer/applications/app-a/tickets?limit=10&tenantId=tenant-b&applicationId=app-b", {
+      headers: { authorization: `Bearer ${credential}`, "x-tenant-id": "tenant-b", "x-actor-id": "actor-b", "x-role-key": "super-admin" },
     });
     assert.equal(listed.status, 200);
     assert.equal(captured.identity.tenantId, "tenant-a");
+    assert.equal(captured.identity.actorId, "actor-a");
     assert.equal(captured.filter.applicationId, "app-a");
   });
 });
