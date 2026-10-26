@@ -435,13 +435,13 @@ test("localization method-not-allowed response negotiates standard v1 error with
       authorization: "Bearer localization-contract-test-token-0123456789-0123456789",
       "x-correlation-id": "localization-method-contract",
     };
-    const legacy = await fetch(`${base}/localization/preference`, { method: "POST", headers });
+    const legacy = await fetch(`${base}/localization/preferences`, { method: "POST", headers });
     assert.equal(legacy.status, 405);
     assert.equal(await legacy.text(), "");
     assert.equal(legacy.headers.get("allow"), "GET, PUT");
     assert.equal(legacy.headers.get("x-request-id"), "localization-method-contract");
 
-    const standardized = await fetch(`${base}/localization/preference`, {
+    const standardized = await fetch(`${base}/localization/preferences`, {
       method: "POST",
       headers: { ...headers, accept: "application/vnd.eper.v1+json" },
     });
