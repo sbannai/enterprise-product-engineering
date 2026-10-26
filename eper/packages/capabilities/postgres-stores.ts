@@ -54,7 +54,7 @@ function stableAuditMaterial(input: Omit<AuditEvidence, "integrityHash">): strin
   return canonicalJson({
     id: input.id, tenantId: input.tenantId, requirementId: input.requirementId,
     action: input.action, principalId: input.principalId, correlationId: input.correlationId,
-    occurredAt: input.occurredAt, payload: input.payload,
+    occurredAt: new Date(input.occurredAt).toISOString(), payload: input.payload,
   });
 }
 
