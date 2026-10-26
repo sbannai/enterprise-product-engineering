@@ -75,6 +75,10 @@ Choose the most accurate status for each endpoint; don't relabel domain-specific
 5. Treat envelope changes as API-contract changes; don't silently break existing consumers.
 6. Track migrated endpoints and legacy exceptions in an API conformance matrix.
 
-## 6. Current implementation gap
+## 6. Shared implementation and first adoption
+
+`apps/api/api-response.ts` provides `sendApiSuccess()` and `sendApiError()` for the standard envelope, safe request IDs (`X-Correlation-ID` is accepted only when it matches the character/length policy; otherwise a UUID is generated), and an `X-Request-ID` response header. Contract tests cover envelope shape, status, headers, correlation behavior, and error details. The customer session, workspace-module discovery, and Help Center/Growth Hub content endpoints are the first adopters. Their success payloads are now under `data`; errors use `error.code` and `error.message`. Other route families retain legacy response bodies until their clients and tests can be migrated together.
+
+## 7. Current implementation gap
 
 EPER's current `sendJson()` helper standardizes selected headers, but success bodies and errors still vary by route. This document is a proposed target contract, not a claim that all existing routes conform. Extend or pair `sendJson()` with shared response builders in a focused follow-up rather than mass-rewriting all routes in one risky commit.
