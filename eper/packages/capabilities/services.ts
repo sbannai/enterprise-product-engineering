@@ -13,6 +13,8 @@ import { JsonFileAuthorizationPolicyStore } from "./json-file-authorization-poli
 import { JsonFileAuditEvidenceStore } from "./json-file-audit-evidence-store.js";
 import { JsonFileExceptionStore } from "./json-file-exception-store.js";
 import { JsonFileGovernedReportingStore } from "./json-file-governed-reporting-store.js";
+import type { Pool } from "pg";
+import { createPostgresCapabilityServices } from "./postgres-services.js";
 
 export interface CapabilityInput {
   context?: {
@@ -311,7 +313,9 @@ export class GovernedReportingService implements CapabilityService {
 
 export interface CapabilityServiceOptions {
   /** Opt-in local persistence for isolated development/UAT only. */
-  persistence?: "memory" | "json-file";
+  persistence?: "memory" | "json-file" | "postgres";
+  /** Explicit local/integration PostgreSQL pool; never provisioned by this factory. */
+  postgresPool?: Pool;
   /** Required when persistence is json-file. Keep outside the repository and restrict filesystem access. */
   dataDirectory?: string;
 }
@@ -321,6 +325,10 @@ export interface CapabilityServiceOptions {
  * mode is single-process local/UAT persistence, not a production database.
  */
 export function createCapabilityServices(options: CapabilityServiceOptions = {}): Readonly<Record<RequirementPattern, CapabilityService>> {
+  if (options.persistence === "postgres") {
+    if (!options.postgresPool) throw new Error("CAPABILITY_POSTGRES_POOL_REQUIRED");
+    return createPostgresCapabilityServices(options.postgresPool);
+  }
   if (!options.persistence || options.persistence === "memory") {
     return {
       XX01: new AuthoritativeRecordService(),
