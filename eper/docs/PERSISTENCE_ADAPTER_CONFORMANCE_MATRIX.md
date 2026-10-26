@@ -55,7 +55,7 @@ The draft workstream in PR #224 currently adds:
 - Exception create/transition and report publication paths that write state, audit evidence, and outbox intent in one transaction.
 - Unit tests using a deterministic fake PostgreSQL client for tenant transaction setup, rollback, record compare-and-swap predicates, default-deny policy behavior, audit hashing, exception atomicity, and report publication atomicity.
 
-This is a code checkpoint only. The async stores have **not yet been wired into the production capability service factory**, and live PostgreSQL integration/conformance tests have not yet been run. The existing synchronous service contracts still need coordinated migration. CI evidence is pending; do not mark G1–G4 complete on this basis.
+This is a code checkpoint only. An explicit `persistence: "postgres"` option now wires the async PostgreSQL capability service factory without changing the default in-memory mode. The legacy in-memory/JSON service contracts remain synchronous and separate. Live PostgreSQL capability integration/conformance tests have not yet been run, and the first CI build exposed missing PostgreSQL TypeScript declarations and strict typing errors; fixes are committed, but a clean rerun is still required. Do not mark G1–G4 complete on this basis.
 
 ## Merge / production gates
 
