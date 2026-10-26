@@ -325,6 +325,49 @@ test("support admin queue storage failures use the same safe response contract",
 });
 
 
+
+test("support admin lifecycle storage failures use the standardized safe error envelope", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  const ticketStore = {
+    async assertReady() {},
+    async list() { return []; },
+    async changeStatus() { throw new Error("private status database exception"); },
+    async assign() { throw new Error("private assignment database exception"); },
+  };
+  const ticketId = "00000000-0000-4000-8000-000000000001";
+  await withServer({ ticketStore }, async (base) => {
+    const requests = [
+      { path: `/admin/support/tickets/${ticketId}/status`, body: { status: "resolved" }, requestId: "ticket-status-failure-1" },
+      { path: `/admin/support/tickets/${ticketId}/assignment`, body: { assignedTo: "support-agent" }, requestId: "ticket-assignment-failure-1" },
+    ];
+    for (const item of requests) {
+      const response = await fetch(base + item.path, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${credential}`,
+          accept: "application/vnd.eper.v1+json",
+          "content-type": "application/json",
+          "x-correlation-id": item.requestId,
+        },
+        body: JSON.stringify(item.body),
+      });
+      assert.equal(response.status, 503);
+      assert.equal(response.headers.get("x-request-id"), item.requestId);
+      const payload = await response.json();
+      assert.equal(payload.success, false);
+      assert.equal(payload.error.code, "TICKET_OPERATION_UNAVAILABLE");
+      assert.equal(payload.error.message, "The service could not complete the request.");
+      assert.equal(payload.meta.requestId, item.requestId);
+      assert.equal(JSON.stringify(payload).includes("private status database exception"), false);
+      assert.equal(JSON.stringify(payload).includes("private assignment database exception"), false);
+    }
+  });
+});
+
 test("support admin lifecycle mutations reject malformed and over-posted payloads before storage", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
