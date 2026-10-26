@@ -219,6 +219,7 @@ test("support admin triage console is feature-gated and calls protected tenant-s
       "Client-Submitted Ticket Queue", "Support admin bearer credential", "all client-submitted tickets within your authorized tenant", "Customer users see only tickets for the application they select", "/admin/support/tickets?",
       "filterStatus", "filterType", "filterSeverity", "Update status", "Save assignment",
       "authenticated tenant", "NOT CONNECTED", "queueLoadSequence", "requestToken!==token", "CONNECTING", "Could not load the authorized queue",
+      "previousPage", "nextPage", "queueOffset", "limit:\"100\"", "aria-label=\"Ticket queue pagination\"",
     ]) assert.ok(html.includes(marker), "missing support triage contract: " + marker);
     assert.match(html, /const endpoint="\/admin\/support\/tickets\/"/, "lifecycle mutations must use the protected admin ticket route");
     assert.match(html, /authorization:"Bearer "\+token/, "admin API requests must use the entered in-memory credential");
