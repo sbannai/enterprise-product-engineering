@@ -81,7 +81,7 @@ document.getElementById("disconnectButton").addEventListener("click",()=>{bearer
 nav.addEventListener("click",e=>{const button=e.target.closest("button[data-view]");if(button&&!button.hidden){if(!bearerToken){apiStatus.textContent="Connect your customer workspace before opening modules.";return;}renderCards(button.dataset.view);}});
 cards.addEventListener("click",e=>{const button=e.target.closest("button[data-view]");if(button&&bearerToken)renderCards(button.dataset.view);});
 })();
-</script>></body></html>`;
+</script></body></html>`;
 
 export function isCustomerPortalPreviewRequest(request: { url?: string }): boolean {
   return new URL(request.url ?? "/", "http://localhost").pathname === "/customer-portal-preview";
