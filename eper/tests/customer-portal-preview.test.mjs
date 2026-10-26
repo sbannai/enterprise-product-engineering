@@ -80,6 +80,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
   assert.ok(html.includes("clearAssetSearch"), "client asset search can be cleared without another API request");
   assert.ok(html.includes('search.value="";search.focus();drawAssets();'), "clearing search resets the local filter and returns focus to the search field");
+  assert.ok(html.includes('event.key==="Escape"&&search.value'), "Escape clears a non-empty asset search without changing file-type filtering");
     assert.ok(html.includes("assetTypeFilter"), "client asset view provides file-type filtering");
     assert.ok(html.includes("No matching assets"), "empty filtered results explain how to recover");
   assert.ok(html.includes("refreshClientAssets"), "client assets can be refreshed asynchronously");
