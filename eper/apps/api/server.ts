@@ -1110,7 +1110,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Tenant-scoped customer ticket API. Disabled unless explicitly enabled and backed by
     // PostgreSQL plus the canonical transactional audit writer configured at startup.
-    const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+))?$/.exec(requestUrl.pathname);
+    const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+)(?:\/(replies))?)?$/.exec(requestUrl.pathname);
     if (ticketPathMatch && (request.method === "GET" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
@@ -1199,6 +1199,29 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 200, { tickets, limit, offset });
           return;
         }
+        if (ticketPathMatch[2] && ticketPathMatch[3] === "replies" &&
+            (request.method === "GET" || request.method === "POST")) {
+          let ticketId: string;
+          try { ticketId = decodeURIComponent(ticketPathMatch[2]); }
+          catch { sendJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
+          if (!/^[0-9a-f-]{36}$/i.test(ticketId)) {
+            sendJson(request, response, 400, { error: "invalid_ticket_id" }); return;
+          }
+          const scopedIdentity = { tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId };
+          if (request.method === "GET") {
+            const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId);
+            if (!replies) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 200, { replies }); return;
+          }
+          const body = await readJson(request);
+          if (typeof body.body !== "string" || !body.body.trim() || body.body.trim().length > 8000 ||
+              Object.keys(body).some((key) => key !== "body")) {
+            sendJson(request, response, 400, { error: "invalid_ticket_reply" }); return;
+          }
+          const reply = await options.ticketStore.addReply(scopedIdentity, ticketId, body.body.trim(), "customer");
+          if (!reply) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+          sendJson(request, response, 201, { reply }); return;
+        }
         sendJson(request, response, 405, { error: "method_not_allowed" });
       } catch (error) {
         if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
@@ -1216,8 +1239,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
     // Tenant-scoped support-admin ticket queue and controlled lifecycle mutations.
-    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment))?$/.exec(requestUrl.pathname);
-    if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH")) {
+    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment|replies))?$/.exec(requestUrl.pathname);
+    if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
         return;
@@ -1288,6 +1311,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 400, { error: "invalid_ticket_id" });
             return;
           }
+          if (adminTicketMatch[2] === "replies" && (request.method === "GET" || request.method === "POST")) {
+            const scopedIdentity = { ...trustedIdentity, applicationId: "eper" };
+            if (request.method === "GET") {
+              const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId);
+              if (!replies) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+              sendJson(request, response, 200, { replies }); return;
+            }
+            const replyBody = await readJson(request);
+            if (typeof replyBody.body !== "string" || !replyBody.body.trim() || replyBody.body.trim().length > 8000 ||
+                Object.keys(replyBody).some((key) => key !== "body")) {
+              sendJson(request, response, 400, { error: "invalid_ticket_reply" }); return;
+            }
+            const reply = await options.ticketStore.addReply(scopedIdentity, ticketId, replyBody.body.trim(), "support");
+            if (!reply) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 201, { reply }); return;
+          }
+          if (request.method !== "PATCH") { sendJson(request, response, 405, { error: "method_not_allowed" }); return; }
           const body = await readJson(request);
           if (adminTicketMatch[2] === "status") {
             if (typeof body.status !== "string" || !(TICKET_STATUSES as readonly string[]).includes(body.status) ||
