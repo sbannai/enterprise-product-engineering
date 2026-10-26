@@ -55,7 +55,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     assert.deepEqual(body.assets.map((asset) => asset.applicationId), ["app-a", "app-a", "app-c"]);
     assert.equal(body.applicationCount, 2);
-    assert.equal(body.assets[0].accessReference, "blobref:opaque-1");
+    assert.equal("accessReference" in body.assets[0], false, "storage references must remain server-side until authorized download is implemented");
     assert.equal("internalSecret" in body.assets[0], false);
     assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
     const otherTenant = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenB } });
