@@ -98,6 +98,39 @@ test("live PostgreSQL ticket creation idempotency: concurrency, conflict, tenant
       );
       assert.equal(count.rows[0].count, 2);
     });
+
+    await t.test("status and assignment mutations roll back when audit persistence fails", async () => {
+      const mutationTicket = await store.create(identity, {
+        ...input,
+        title: "Audit rollback mutation test " + randomUUID(),
+      }, "ticket-mutation-key-" + randomUUID());
+      const failingAuditStore = new PostgresTicketStore(pool, async () => {
+        throw new Error("injected_ticket_audit_failure");
+      });
+
+      await assert.rejects(
+        failingAuditStore.changeStatus(identity, mutationTicket.id, "resolved"),
+        error => error instanceof Error && error.message === "injected_ticket_audit_failure",
+      );
+      let persisted = await pool.query(
+        "SELECT status, assigned_to FROM eper_support_tickets WHERE tenant_id=$1 AND id=$2",
+        [tenant, mutationTicket.id],
+      );
+      assert.equal(persisted.rows[0].status, "new");
+      assert.equal(persisted.rows[0].assigned_to, null);
+
+      await assert.rejects(
+        failingAuditStore.assign(identity, mutationTicket.id, "support-agent"),
+        error => error instanceof Error && error.message === "injected_ticket_audit_failure",
+      );
+      persisted = await pool.query(
+        "SELECT status, assigned_to FROM eper_support_tickets WHERE tenant_id=$1 AND id=$2",
+        [tenant, mutationTicket.id],
+      );
+      assert.equal(persisted.rows[0].status, "new");
+      assert.equal(persisted.rows[0].assigned_to, null);
+    });
+
   } finally {
     await pool.query("DELETE FROM eper_support_tickets WHERE tenant_id = ANY($1::varchar[])", [[tenant, tenant + "-other"]]).catch(() => {});
     await pool.query(`DELETE FROM ${auditTable} WHERE tenant_id = ANY($1::varchar[])`, [[tenant, tenant + "-other"]]).catch(() => {});
