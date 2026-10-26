@@ -212,3 +212,31 @@ test("canonical ticket audit adapter writes the append-only EPER audit envelope"
   assert.deepEqual(JSON.parse(insert.values[25]), { assignedTo: "support-2" });
   assert.ok(calls.some((x) => /UPDATE eper_audit_chain_head/.test(x.sql)));
 });
+
+
+test("canonical audit-chain failure rolls back the ticket mutation", async () => {
+  const { createCanonicalTicketAuditWriter, PostgresTicketStore } = await import("../dist/packages/ticketing/postgres-ticket-store.js");
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/INSERT INTO eper_support_tickets/.test(sql)) {
+        return { rows: [{ ...ticketRow, id: values[0], tenant_id: values[1], application_id: values[2], created_by: values[3] }], rowCount: 1 };
+      }
+      if (/SELECT last_event_hash FROM eper_audit_chain_head/.test(sql)) {
+        return { rows: [{ last_event_hash: null }], rowCount: 1 };
+      }
+      if (/INSERT INTO eper_audit_events/.test(sql)) throw new Error("canonical audit unavailable");
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  const store = new PostgresTicketStore(pool, createCanonicalTicketAuditWriter("uat", "test-version"));
+  await assert.rejects(() => store.create(identity, input), /canonical audit unavailable/);
+  const sql = calls.map((x) => x.sql);
+  assert.ok(sql.some((x) => /INSERT INTO eper_support_tickets/.test(x)));
+  assert.ok(sql.some((x) => /INSERT INTO eper_audit_events/.test(x)));
+  assert.ok(sql.includes("ROLLBACK"));
+  assert.ok(!sql.includes("COMMIT"));
+});
