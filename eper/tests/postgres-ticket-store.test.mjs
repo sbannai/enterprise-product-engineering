@@ -71,6 +71,20 @@ test("ticket listing always scopes by trusted tenant and selected application", 
   assert.deepEqual(query.values, ["tenant-a", "app-a", 20, 0]);
 });
 
+
+test("ticket store accepts the bounded pagination lookahead row and binds it as a parameter", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresTicketStore(pool, async () => {});
+  await store.list({ tenantId: "tenant-a" }, { limit: 101, offset: 200 });
+  const query = calls.find((x) => /SELECT \* FROM eper_support_tickets/.test(x.sql));
+  assert.ok(query);
+  assert.deepEqual(query.values, ["tenant-a", 101, 200]);
+  await assert.rejects(
+    () => store.list({ tenantId: "tenant-a" }, { limit: 102, offset: 200 }),
+    /invalid ticket list pagination/i,
+  );
+});
+
 test("ticket status changes are tenant scoped and audit uses the same transaction", async () => {
   const { calls, pool, client } = fakePool();
   let auditClient;
