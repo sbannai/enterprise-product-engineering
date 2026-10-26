@@ -752,18 +752,36 @@ test("support admin queue trims its lookahead row and reports hasMore accurately
     async list(_identity, filter) { receivedFilter = filter; return rows.slice(0, filter.limit); },
   };
   await withServer({ ticketStore }, async (base) => {
-    const response = await fetch(base + "/admin/support/tickets?limit=2&offset=0", {
+    const response = await fetch(base + "/admin/support/tickets?limit=2&offset=0&search=%20payment%20timeout%20", {
       headers: { authorization: `Bearer ${credential}`, accept: "application/vnd.eper.v1+json" },
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.equal(receivedFilter.limit, 3);
+    assert.equal(receivedFilter.search, "payment timeout");
     assert.equal(payload.data.tickets.length, 2);
     assert.equal(payload.data.hasMore, true);
     assert.equal(payload.data.limit, 2);
   });
 });
 
+
+test("support admin queue rejects search terms longer than the documented bound", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  let listCalled = false;
+  const ticketStore = { async assertReady() {}, async list() { listCalled = true; return []; } };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets?search=" + "x".repeat(201), {
+      headers: { authorization: `Bearer ${credential}` },
+    });
+    assert.equal(response.status, 400);
+    assert.equal(listCalled, false);
+  });
+});
 
 test("support admin maximum page size uses one bounded lookahead row", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
