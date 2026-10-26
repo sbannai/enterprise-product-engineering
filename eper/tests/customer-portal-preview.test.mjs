@@ -19,7 +19,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(response.headers.get("content-security-policy") ?? "", /connect-src 'self'/, "same-origin API access must be explicitly allowed by CSP");
     const html = await response.text();
     assert.match(html, /function customerErrorMessage\(error\)/, "customer UI must map internal API failures to safe user-facing messages");
-    assert.ok(html.includes("applicationToastMarkup"), "customer portal includes the shared toast center");
+    assert.ok(html.includes("eper-toast-region"), "customer portal includes the rendered shared toast center");
     assert.ok(html.includes("window.EPERToast"), "customer portal wires notifications to the shared toast API");
     assert.ok(html.includes("Ticket submitted"), "ticket submission success is surfaced to the customer");
     assert.ok(html.includes("Submission needs retry"), "uncertain ticket submissions surface a warning notification");
