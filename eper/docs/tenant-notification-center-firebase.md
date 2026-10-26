@@ -88,3 +88,33 @@ Tenant-wide settings can show reusable provider connections and applications exp
 6. Add automated isolation/security/regression tests before marking Tested.
 
 This document records requirements only; it does not claim the Notification Center or Firebase delivery is implemented.
+
+## UI ergonomics and accessibility acceptance criteria (2026-10-26)
+
+These criteria apply to both the customer Notification Center and the admin Feedback & Ticketing dashboard. The wireframe is a design artifact; each criterion must be verified against the implemented application before it is marked Tested.
+
+- Use persistent, programmatically associated labels for every form control; placeholders are examples, not substitutes for labels.
+- All navigation, filters, dialogs, forms and actions must be usable by keyboard alone, with a visible focus indicator and a predictable focus order.
+- Announce the active navigation item and meaningful asynchronous outcomes (saved, failed, loading, filtered, ticket submitted) to assistive technology.
+- Keep focus inside modal dialogs while open; on close, return focus to the control that opened the dialog.
+- Ensure controls have practical touch targets, readable text, sufficient contrast, and responsive layouts at desktop, tablet and narrow mobile widths without horizontal page scrolling.
+- Group related event subscriptions and form fields with semantic headings or fieldsets; make required fields and validation errors explicit.
+- Preserve entered values when validation fails; place an understandable error beside the affected field and provide a summary for multi-field forms.
+- Confirm destructive or high-impact actions, including disabling delivery, changing credentials, closing a ticket and changing P1 classification.
+- Admin feedback/ticket queues must expose filters and status/severity through text as well as color; do not rely on color alone.
+- Notification delivery history and ticket timelines must provide clear timestamps, status, safe error explanations and correlation/evidence references without exposing secrets or cross-tenant data.
+- Test at 200% zoom and with keyboard-only navigation; include screen-reader spot checks for primary flows.
+
+### Minimum UX verification scenarios
+
+1. Customer configures an application notification subscription on desktop and mobile.
+2. Customer submits an invalid form, corrects the field and retains all other entered values.
+3. Keyboard-only user reaches and operates each navigation item, filter, checkbox, select and primary action.
+4. Focus and accessible announcement are correct after save success, save failure and test-send failure.
+5. Admin filters feedback/ticket queues by type, severity and status without relying on color.
+6. Ticket submission and P1 triage show clear confirmation and an auditable outcome.
+7. Unauthorized users cannot reach admin ticketing actions by direct URL or API.
+8. Cross-tenant isolation remains enforced for queue search, ticket details, evidence links and notification history.
+
+Do not mark these scenarios passed based on a wireframe review. Record execution result, environment/build ID, evidence reference and defect ID in the test register.
+
