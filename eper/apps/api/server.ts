@@ -1196,6 +1196,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       } catch (error) {
         if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
           sendJson(request, response, 409, { error: "idempotency_key_conflict" });
+        } else if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
+          sendJson(request, response, 400, { error: "invalid_json" });
+        } else if (error instanceof Error && error.message === "REQUEST_BODY_TOO_LARGE") {
+          sendJson(request, response, 413, { error: "request_body_too_large" });
         } else {
           sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
         }
