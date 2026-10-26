@@ -81,6 +81,11 @@ test("single-call client assets API returns tenant/application-scoped asset meta
       },
       "tenant-b": { "app-b": [] },
     });
+    const paginatedOversizedManifest = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(paginatedOversizedManifest.status, 200, "paginated access remains available for large asset collections");
+    const firstPage = await paginatedOversizedManifest.json();
+    assert.equal(firstPage.assets.length, 100);
+    assert.equal(firstPage.nextCursor, "100");
     const oversizedManifest = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(oversizedManifest.status, 413, "oversized full manifests fail safely instead of returning an unbounded response");
     process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["help-center"] });
