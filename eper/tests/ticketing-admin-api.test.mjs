@@ -88,3 +88,32 @@ test("admin ticket queue denies roles absent from configured allowlist", async (
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
 });
+
+
+test("admin queue rejects invalid filters before persistence", async () => {
+  let calls = 0;
+  const ticketStore = { async list() { calls++; return []; }, async changeStatus() { return ticket; }, async assign() { return ticket; } };
+  await withServer({ ticketStore }, async (base) => {
+    for (const query of ["?status=bogus", "?severity=critical", "?type=unknown", "?applicationId=bad%20id", "?limit=101", "?offset=-1"]) {
+      const response = await fetch(base + "/admin/support/tickets" + query, { headers: auth });
+      assert.equal(response.status, 400, query);
+      assert.deepEqual(await response.json(), { error: "invalid_ticket_filters" });
+    }
+    assert.equal(calls, 0);
+  });
+});
+
+test("admin assignment rejects extra fields and keeps trusted tenant identity", async () => {
+  let args;
+  const ticketStore = { async list() { return []; }, async changeStatus() { return ticket; }, async assign(identity, id, assignedTo) { args = { identity, id, assignedTo }; return ticket; } };
+  await withServer({ ticketStore }, async (base) => {
+    const url = base + "/admin/support/tickets/" + ticket.id + "/assignment";
+    const bad = await fetch(url, { method: "PATCH", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ assignedTo: "support-2", tenantId: "tenant-b" }) });
+    assert.equal(bad.status, 400);
+    const good = await fetch(url, { method: "PATCH", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ assignedTo: "support-2" }) });
+    assert.equal(good.status, 200);
+    assert.equal(args.identity.tenantId, "tenant-a");
+    assert.equal(args.id, ticket.id);
+    assert.equal(args.assignedTo, "support-2");
+  });
+});
