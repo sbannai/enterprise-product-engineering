@@ -29,6 +29,13 @@
 | 12 | Cross-product responsive/accessibility and integrated regression | All release-group functionality selected for shipment | Browser/viewport checks at 320, 375, 390, 768, 1024 and 1440px; no unintended overflow; keyboard/touch checks; complete regression suite and evidence tied to exact commit | Run per release candidate; source-string assertions alone are not browser evidence |
 | 13 | Consolidated release-candidate review and Business UAT gate review | Selected release group above; formal G1–G13 entry gates | Traceability, evidence, known issues, rollback plan, deployment/health evidence and required approvals reviewed; explicit authorization before Business UAT | NOT AUTHORIZED by this plan; requires separate gate review and approval |
 
+## Ticket visibility and role boundary
+
+- **Customer workspace:** a customer may submit a ticket against an application to which their trusted identity is assigned. Ticket history is restricted to the currently selected/authorized application; changing the selected application changes the history scope. The API derives tenant, actor, role, and application assignment from trusted server-side identity and authorization, never from caller-supplied tenant/actor/role headers or query parameters.
+- **Admin support workspace:** authorized support/admin users see client-submitted tickets across applications **within their authenticated tenant only**. Application ID is an optional queue filter; status, type, and severity filters do not expand access. Assignment and status changes require admin authorization and durable audit events.
+- **No implicit platform-wide access:** “admin” does not mean cross-tenant super-admin. Any cross-tenant support role requires a separately specified permission, explicit approval, and negative/positive cross-tenant regression tests before implementation.
+- **Evidence required:** test customer application-level isolation, admin tenant-wide queue visibility, denial of another tenant’s records, spoofed header/query rejection, and audit of admin state changes. UI labels/copy explain the different scopes but do not replace server authorization. Business UAT remains gated until formal entry criteria are met.
+
 ## First shipment target
 
 Prioritize a coherent **Customer Support foundation**:
