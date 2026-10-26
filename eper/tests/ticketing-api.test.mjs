@@ -195,6 +195,40 @@ test("malformed admin ticket lifecycle JSON returns a safe client error without 
   });
 });
 
+test("oversized admin ticket lifecycle JSON is rejected before mutation", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  let mutationCalled = false;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { return []; },
+    async changeStatus() { mutationCalled = true; },
+    async assign() { mutationCalled = true; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
+      method: "PATCH",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "admin-oversized-json-1",
+      },
+      body: JSON.stringify({ status: "triaged", extra: "x".repeat(1024 * 1024) }),
+    });
+    assert.equal(response.status, 413);
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "REQUEST_BODY_TOO_LARGE");
+    assert.equal(payload.meta.requestId, "admin-oversized-json-1");
+    assert.equal(response.headers.get("x-request-id"), "admin-oversized-json-1");
+    assert.equal(mutationCalled, false);
+  });
+});
+
 test("support admin queue and status updates remain scoped to the trusted admin tenant", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
