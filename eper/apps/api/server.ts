@@ -12,6 +12,7 @@ import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
+import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
@@ -448,6 +449,24 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         "referrer-policy": "no-referrer",
       });
       response.end(wireframesUiHtml);
+      return;
+    }
+
+    if (isAdminSupportTicketUiRequest(request)) {
+      if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(adminSupportTicketUiHtml);
       return;
     }
 
