@@ -39,6 +39,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     }
     assert.match(html, /method:"POST",headers:\{"idempotency-key":pendingIdempotencyKey\},body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API with a stable idempotency key");
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
+    assert.match(html, /sequence!==ticketLoadSequence\|\|application\.value\.trim\(\)!==app/, "late ticket responses must not overwrite the selected application history");
+    assert.match(html, /application\.addEventListener\("change",loadTickets\)/, "changing the assigned application must reload its ticket history");
     assert.match(html, /else if\(assigned\.length===1\)\{application\.value=assigned\[0\]\.applicationId;loadTickets\(\);\}/, "ticket history should load automatically when exactly one assigned application removes ambiguity");
     assert.match(html, /submitButton\.disabled=application\.disabled\|\|!application\.value/, "ticket submission must remain disabled when no assigned application is available");
     assert.match(html, /moduleByView=\{help:"help-center",growth:"growth-hub",assets:"client-assets",tickets:"tickets-feedback"\}/, "home cards must map all entitled customer modules");
