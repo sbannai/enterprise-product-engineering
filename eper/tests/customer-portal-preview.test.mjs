@@ -84,6 +84,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("assetTypeFilter"), "client asset view provides file-type filtering");
   assert.ok(html.includes("assetSortOrder"), "client assets can be sorted by name or file type");
   assert.ok(html.includes('<option value="name-desc">Name (Z–A)</option>'), "client assets support reverse alphabetical sorting");
+  assert.ok(html.includes('<option value="size-desc">Largest files first</option>'), "client assets can be sorted by size");
+  assert.ok(html.includes('if(sort==="size-desc")'), "size sorting is client-side and does not request more data");
+  assert.ok(html.includes('if(as===null&&bs!==null)return 1;if(bs===null&&as!==null)return -1'), "assets with unknown sizes sort after assets with known sizes");
   assert.ok(html.includes('sort==="name-desc"?-comparison:comparison'), "reverse sorting uses a local comparator without another API request");
   assert.ok(html.includes('sort==="type"?a.type:a.name'), "asset sorting runs locally without another API request");
     assert.ok(html.includes("No matching assets"), "empty filtered results explain how to recover");
