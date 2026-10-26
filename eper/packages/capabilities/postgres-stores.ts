@@ -36,9 +36,15 @@ function exceptionFromRow(row: DbRow): VersionedWorkflowException {
     createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
   };
 }
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
+}
 function stableAuditMaterial(input: Omit<AuditEvidence, "integrityHash">): string {
-  // Version 1 canonicalization: fixed top-level field order; JSON-compatible payload.
-  return JSON.stringify({
+  // Version 1 canonicalization: fixed envelope fields and recursively sorted JSON object keys.
+  return canonicalJson({
     id: input.id, tenantId: input.tenantId, requirementId: input.requirementId,
     action: input.action, principalId: input.principalId, correlationId: input.correlationId,
     occurredAt: input.occurredAt, payload: input.payload,
