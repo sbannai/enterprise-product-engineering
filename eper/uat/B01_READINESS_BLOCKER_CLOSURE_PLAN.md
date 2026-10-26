@@ -15,11 +15,20 @@
 - Latest code and regression tests are on `main`; all nine workflows listed above have been verified successful for the same commit. Source-register blocker counts are not automatically cleared by CI.
 - Business UAT: `NOT_EXECUTED`. No production deployment or Business UAT acceptance is implied by the historical successful CI run.
 
+## Newly identified baseline-integrity blocker
+
+A cross-check of the controlled source package in the Library against the GitHub B01 case checklist found a material status conflict:
+
+- The GitHub checklist records the BRD/SRS baseline as approved under `B01-BASELINE-APPROVAL-001`.
+- The Library copies of `EM-SRS-001_Consolidated_SRS_Chapters_463-500_v1.0.docx` and `EM-463-470_Consolidated_BRDSRSHLDLLD_Source_Baseline_v0.1.docx` describe the SRS/source package as a working draft with baseline approval pending / not an approved final baseline.
+
+These records cannot both be treated as authoritative approval evidence without reconciliation. Until the actual controlled approval record is located and validated, treat baseline approval as **UNRESOLVED**; do not rely on the checklist's approval label alone. The baseline owner must either provide the real approval record (with scope, version, approver and date) or correct the register to reflect the controlled source status. This finding does not change or fabricate any approval fields.
+
 ## Closure worklist
 
 | Priority | Gate / control | Current blocker | Required closure evidence | Accountable role | Exit condition |
 |---:|---|---|---|---|---|
-| 1 | E13 — source baseline | 48 in-scope cases lack complete requirement-specific acceptance-source binding / measurable acceptance oracle / design binding | Exact approved BRD/SRS and EM-LLD-001 locators per requirement; measurable expected result; controlled review record | Requirements owner + business owner + test lead | All 48 case rows link to approved sources and measurable expected results |
+| 1 | Baseline approval integrity + E13 — source baseline | GitHub checklist says approved, while controlled source package copies state approval pending; additionally, 48 cases lack complete requirement-specific acceptance-source binding / measurable acceptance oracle / design binding | Exact approved BRD/SRS and EM-LLD-001 locators per requirement; measurable expected result; controlled review record | Requirements owner + business owner + test lead | All 48 case rows link to approved sources and measurable expected results |
 | 2 | D3 — case review | 48 case rows lack complete review decision, reviewer identity, decision date and approval reference | Completed case review fields for each row; retain the real approval reference | Business owner / authorized reviewer | All 48 rows have a valid review record |
 | 3 | D4 — execution authorization | 48 case rows are not explicitly authorized | Recorded explicit authorization for the B01 scope, approver identity, date/time and decision reference | B01 business owner | All 48 rows explicitly say `YES` after valid authorization |
 | 4 | E1–E13 — entry-gate evidence | 13 gates are pending or lack evidence references | Gate-specific evidence reference, named owner, verification date, verifier and recorded disposition | Named owner for each gate; release/service/security/data/audit owners as applicable | All 13 gates are verified/complete with retrievable evidence |
