@@ -501,19 +501,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           });
         }
       }
+      const includeAll = requestUrl.searchParams.get("all") === "true";
       const pageSize = 100;
       const rawCursor = requestUrl.searchParams.get("cursor") ?? "0";
       if (!/^(0|[1-9][0-9]{0,5})$/.test(rawCursor)) {
         sendJson(request, response, 400, { error: "invalid_cursor" }); return;
       }
+      if (includeAll && requestUrl.searchParams.has("cursor")) {
+        sendJson(request, response, 400, { error: "cursor_not_allowed_with_all" }); return;
+      }
       const offset = Number(rawCursor);
       if (offset > allAssets.length) { sendJson(request, response, 400, { error: "invalid_cursor" }); return; }
-      const assets = allAssets.slice(offset, offset + pageSize);
+      const assets = includeAll ? allAssets : allAssets.slice(offset, offset + pageSize);
       const nextOffset = offset + pageSize;
       sendJson(request, response, 200, {
         assets, total: allAssets.length,
         applicationCount: applicationsWithAssets.size,
-        nextCursor: nextOffset < allAssets.length ? String(nextOffset) : null,
+        nextCursor: !includeAll && nextOffset < allAssets.length ? String(nextOffset) : null,
       });
       return;
     }
