@@ -956,9 +956,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 400, { error: "invalid_ticket_input", details: validated.errors });
             return;
           }
+          const idempotencyHeader = request.headers["idempotency-key"];
+          const idempotencyKey = typeof idempotencyHeader === "string" ? idempotencyHeader : undefined;
+          if (idempotencyKey !== undefined && !/^[a-zA-Z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+            sendJson(request, response, 400, { error: "invalid_idempotency_key" });
+            return;
+          }
           const ticket = await options.ticketStore.create({
             tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId,
-          }, validated.value);
+          }, validated.value, idempotencyKey);
           sendJson(request, response, 201, { ticket });
           return;
         }
@@ -986,8 +992,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           return;
         }
         sendJson(request, response, 405, { error: "method_not_allowed" });
-      } catch {
-        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+      } catch (error) {
+        if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
+          sendJson(request, response, 409, { error: "idempotency_key_conflict" });
+        } else {
+          sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+        }
       }
       return;
     }
