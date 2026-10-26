@@ -105,6 +105,39 @@ These are target contracts, not a statement that routes currently exist.
 6. Add integration tests and run the complete existing regression suite.
 7. Deploy to controlled UAT and collect evidence. Business UAT remains blocked until all entry gates pass.
 
+## Module entitlements, permissions, and pricing
+
+EPER is a modular platform: each module must be independently entitled, permissioned, and priced. The admin portal is the authority for the module catalogue, price book, customer subscriptions/entitlements, and the module-level permission policy. Customer users may manage their own application settings only within modules enabled for their tenant and their assigned role.
+
+### Admin controls
+- Maintain a versioned module catalogue with a stable module_key, display name, description, dependency metadata, and lifecycle status.
+- Define one or more prices per module, including currency, amount, billing interval (monthly, annual, or one-time), effective dates, and whether the price is per customer, per application, or usage-based.
+- Assign modules to each customer, with entitlement status, start/end dates, agreed price snapshot, limits/quotas, and optional override/discount requiring an audited reason.
+- Grant module-specific permissions to customer roles, independently of module entitlement. A role cannot use a module unless the tenant is entitled to it and the role has the required permission.
+- Preview the customer's recurring/one-time charges before saving a change; record the accepted price version and effective date to prevent later catalogue price changes from silently rewriting existing agreements.
+
+### Customer controls
+- Show only entitled modules in customer navigation; optionally show unavailable modules as locked only when the product policy allows discovery.
+- For each enabled module, show its permission level and application-specific settings.
+- Do not let customer users self-enable paid modules, change contracted prices, grant themselves permissions, or bypass entitlement checks by calling an API directly.
+- Customer-wide settings remain separate from per-application settings. Module entitlements apply at tenant scope unless the product explicitly models an application-level add-on.
+
+### Authorization and billing invariants
+- Enforce authorization on the server for every route and background job, not only in the UI.
+- Effective access = active customer entitlement + active module + role permission + application assignment (where the operation is application-scoped).
+- Pricing is not an authorization decision by itself. Payment/subscription status and any approved grace period must be evaluated by the entitlement service.
+- Use a versioned price snapshot on each entitlement; store money as decimal/numeric with an explicit ISO currency code, never as floating-point values.
+- Currency display preferences must not change the actual contracted amount or currency charged. Any currency conversion or repricing must be explicit and auditable.
+- Record module enable/disable, role permission, price-book, subscription/entitlement, discount, and billing-relevant changes in the durable audit trail. Never include secrets or payment credentials in audit payloads.
+
+### Additional acceptance tests
+11. A customer with no entitlement cannot access a module by typing its URL or calling its API.
+12. Enabling one module does not implicitly enable unrelated modules.
+13. Customer roles can have different permissions within the same entitled module.
+14. A module price change affects new entitlements by default; existing entitlements retain their accepted price snapshot unless an explicitly approved change is recorded.
+15. The computed invoice uses the contracted currency and amount, independent of the user's display-currency preference.
+16. Module enable/disable and price/permission changes have correlated audit events and cannot be made by unauthorized customer roles.
+
 ## Current implementation boundary
 
 The repository already has a tenant-scoped PostgreSQL admin configuration store with version checks and transactional audit logging. That store currently defines the resource types `workflows`, `roles-access`, `price-book`, and `payment-vendor`. The customer/application scope and explicit customer authorization described here must be implemented before treating the feature as complete.
