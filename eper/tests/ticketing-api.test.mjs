@@ -24,6 +24,17 @@ function restoreEnv() {
 }
 
 async function withServer(options, run) {
+  const previousModules = process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+  // Existing route tests explicitly enable ticketing for each mapped test tenant.
+  if (previousModules === undefined) {
+    let identities = {};
+    try { identities = JSON.parse(process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON ?? "{}"); } catch {}
+    const modules = {};
+    for (const identity of Object.values(identities)) {
+      if (identity && typeof identity.tenantId === "string") modules[identity.tenantId] = ["tickets-feedback"];
+    }
+    process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify(modules);
+  }
   const server = createAppServer(options);
   try {
     await new Promise((resolve, reject) => {
@@ -34,6 +45,8 @@ async function withServer(options, run) {
     await run(`http://127.0.0.1:${address.port}`);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    if (previousModules === undefined) delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+    else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = previousModules;
   }
 }
 
