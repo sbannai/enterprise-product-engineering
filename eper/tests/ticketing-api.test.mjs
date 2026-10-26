@@ -71,7 +71,7 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
   const ticket = { id: "ticket-1", tenantId: "tenant-a", applicationId: "app-a", createdBy: "actor-a", type: "feedback", title: "UI", description: "Issue", businessImpact: "Impact", status: "new", severity: "p3", assignedTo: null, createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z" };
   const ticketStore = {
     async assertReady() {},
-    async create(identity, input) { captured = { identity, input }; return ticket; },
+    async create(identity, input, idempotencyKey) { captured = { identity, input, idempotencyKey }; return ticket; },
     async list(identity, filter) { captured = { identity, filter }; return [ticket]; },
   };
   await withServer({ ticketStore }, async (base) => {
@@ -81,7 +81,7 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
     });
     assert.equal(bad.status, 400);
     const created = await fetch(base + "/customer/applications/app-a/tickets", {
-      method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+      method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-submit-key-001" },
       body: JSON.stringify({ type: "feedback", title: " UI ", description: " Issue ", businessImpact: " Impact " }),
     });
     assert.equal(created.status, 201);
@@ -89,6 +89,7 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
     assert.equal(captured.identity.actorId, "actor-a");
     assert.equal(captured.identity.applicationId, "app-a");
     assert.equal(captured.input.title, "UI");
+    assert.equal(captured.idempotencyKey, "ticket-submit-key-001");
     const listed = await fetch(base + "/customer/applications/app-a/tickets?limit=10", {
       headers: { authorization: `Bearer ${credential}` },
     });
@@ -98,6 +99,50 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
   });
 });
 
+
+test("ticket creation returns a stable conflict when an idempotency key is reused with a different payload", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  const ticketStore = {
+    async assertReady() {},
+    async create(_identity, _input, key) {
+      assert.equal(key, "ticket-reuse-key-001");
+      throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+    },
+    async list() { return []; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      method: "POST",
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-reuse-key-001" },
+      body: JSON.stringify({ type: "feedback", title: "UI", description: "Issue", businessImpact: "Impact" }),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: "idempotency_key_conflict" });
+  });
+});
+
+test("ticket creation rejects malformed idempotency keys", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  let called = false;
+  const ticketStore = { async assertReady() {}, async create() { called = true; }, async list() { return []; } };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      method: "POST",
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "bad key" },
+      body: JSON.stringify({ type: "feedback", title: "UI", description: "Issue", businessImpact: "Impact" }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(called, false);
+  });
+});
 
 test("support admin queue and status updates remain scoped to the trusted admin tenant", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
