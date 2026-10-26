@@ -182,6 +182,7 @@ test("support admin queue and status updates remain scoped to the trusted admin 
     const queueBody = await queue.json();
     assert.equal(queueBody.success, true);
     assert.equal(queueBody.data.tenantId, "tenant-support-a");
+    assert.equal(queueBody.data.hasMore, false);
     assert.ok(queueBody.meta.requestId);
     assert.equal(queue.headers.get("x-request-id"), queueBody.meta.requestId);
     assert.equal(calls[0].identity.tenantId, "tenant-support-a");
@@ -190,9 +191,9 @@ test("support admin queue and status updates remain scoped to the trusted admin 
       severity: "p3",
       type: "feedback",
       applicationId: "app-a",
-      limit: 25,
+      limit: 26,
       offset: 50,
-    }, "authorized filters and pagination must reach the store while caller tenant overrides are ignored");
+    }, "the API must request one lookahead row to calculate hasMore");
 
     const update = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
       method: "PATCH",
