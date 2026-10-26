@@ -56,6 +56,14 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     assert.deepEqual(body.assets.map((asset) => asset.applicationId), ["app-a", "app-a", "app-c"]);
     assert.equal(body.applicationCount, 2);
+    const fullManifestResponse = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(fullManifestResponse.status, 200);
+    const fullManifest = await fullManifestResponse.json();
+    assert.equal(fullManifest.assets.length, fullManifest.total);
+    assert.equal(fullManifest.nextCursor, null, "all=true returns the complete manifest in one request");
+    assert.deepEqual(fullManifest.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
+    const conflictingPagination = await fetch(endpoint + "?all=true&cursor=0", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(conflictingPagination.status, 400, "full-manifest mode cannot silently mix with pagination");
     assert.equal("accessReference" in body.assets[0], false, "storage references must remain server-side until authorized download is implemented");
     assert.equal("internalSecret" in body.assets[0], false);
     assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
