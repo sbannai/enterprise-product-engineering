@@ -84,3 +84,43 @@ test("ticket status changes are tenant scoped and audit uses the same transactio
   assert.match(update.sql, /WHERE tenant_id = \$1 AND id = \$2/);
   assert.deepEqual(update.values, ["tenant-a", "ticket-1", "triaged"]);
 });
+
+
+test("ticket assignment records actor, tenant, correlation and assignee in the same transaction", async () => {
+  const { calls, pool, client } = fakePool();
+  let auditEvent;
+  let auditClient;
+  const store = new PostgresTicketStore(pool, async (event, txClient) => {
+    auditEvent = event;
+    auditClient = txClient;
+    await txClient.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-test')");
+  });
+  const updated = await store.assign(identity, "ticket-1", "support-2");
+  assert.equal(updated?.tenantId, "tenant-a");
+  assert.equal(auditClient, client);
+  assert.deepEqual(auditEvent, {
+    tenantId: "tenant-a",
+    applicationId: "app-a",
+    actorId: "actor-a",
+    correlationId: "corr-1",
+    action: "ticket.assigned",
+    ticketId: "ticket-1",
+    outcome: "success",
+    payload: { assignedTo: "support-2" },
+  });
+  const update = calls.find((x) => /UPDATE eper_support_tickets/.test(x.sql));
+  assert.match(update.sql, /WHERE tenant_id = \$1 AND id = \$2/);
+  assert.ok(calls.some((x) => x.sql === "COMMIT"));
+});
+
+test("ticket assignment rolls back if audit persistence fails", async () => {
+  const { calls, pool } = fakePool({ failAudit: true });
+  const store = new PostgresTicketStore(pool, async (_event, txClient) => {
+    await txClient.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-test')");
+  });
+  await assert.rejects(() => store.assign(identity, "ticket-1", "support-2"), /audit write failed/);
+  const sql = calls.map((x) => x.sql);
+  assert.ok(sql.includes("BEGIN"));
+  assert.ok(sql.includes("ROLLBACK"));
+  assert.ok(!sql.includes("COMMIT"));
+});
