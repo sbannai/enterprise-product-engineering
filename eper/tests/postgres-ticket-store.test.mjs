@@ -240,3 +240,39 @@ test("canonical audit-chain failure rolls back the ticket mutation", async () =>
   assert.ok(sql.includes("ROLLBACK"));
   assert.ok(!sql.includes("COMMIT"));
 });
+
+
+test("ticket status change rolls back if canonical audit persistence fails", async () => {
+  const { calls, pool } = fakePool({ failAudit: true });
+  const store = new PostgresTicketStore(pool, async (_event, txClient) => {
+    await txClient.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-test')");
+  });
+  await assert.rejects(() => store.changeStatus(identity, "ticket-1", "triaged"), /audit write failed/);
+  const sql = calls.map((x) => x.sql);
+  assert.ok(sql.some((x) => /UPDATE eper_support_tickets/.test(x)));
+  assert.ok(sql.includes("BEGIN"));
+  assert.ok(sql.includes("ROLLBACK"));
+  assert.ok(!sql.includes("COMMIT"));
+});
+
+test("ticket assignment cannot mutate or audit a ticket outside the trusted tenant", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/UPDATE eper_support_tickets/.test(sql)) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  let auditCalls = 0;
+  const store = new PostgresTicketStore(pool, async () => { auditCalls++; });
+  assert.equal(await store.assign(identity, "ticket-from-other-tenant", "support-2"), null);
+  assert.equal(auditCalls, 0);
+  const update = calls.find((x) => /UPDATE eper_support_tickets/.test(x.sql));
+  assert.match(update.sql, /WHERE tenant_id = \$1 AND id = \$2/);
+  assert.deepEqual(update.values, ["tenant-a", "ticket-from-other-tenant", "support-2"]);
+  assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
+  assert.ok(!calls.some((x) => x.sql === "COMMIT"));
+});
