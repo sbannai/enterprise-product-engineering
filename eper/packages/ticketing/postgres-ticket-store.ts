@@ -17,7 +17,8 @@ export interface TicketAuditEvent {
   outcome: "success";
   payload: Record<string, unknown>;
 }
-export type TicketAuditWriter = (event: TicketAuditEvent) => Promise<void>;
+/** The writer receives the active transaction client: ticket mutation and audit must commit together. */
+export type TicketAuditWriter = (event: TicketAuditEvent, client: TicketSqlClient) => Promise<void>;
 
 export interface TicketListFilter {
   status?: TicketStatus;
@@ -69,7 +70,7 @@ export class PostgresTicketStore {
         tenantId: identity.tenantId, applicationId: identity.applicationId, actorId: identity.actorId,
         correlationId: identity.correlationId, action: "ticket.created", ticketId: id, outcome: "success",
         payload: { type: input.type, initialStatus: "new", initialSeverity: "p3" },
-      });
+      }, client);
       await client.query("COMMIT");
       return mapRecord(result.rows[0]);
     } catch (error) {
@@ -115,7 +116,7 @@ export class PostgresTicketStore {
         tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
         correlationId: identity.correlationId, action: "ticket.status_changed", ticketId, outcome: "success",
         payload: { newStatus: status },
-      });
+      }, client);
       await client.query("COMMIT");
       return mapRecord(result.rows[0]);
     } catch (error) {
@@ -137,7 +138,7 @@ export class PostgresTicketStore {
         tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
         correlationId: identity.correlationId, action: "ticket.assigned", ticketId, outcome: "success",
         payload: { assignedTo },
-      });
+      }, client);
       await client.query("COMMIT");
       return mapRecord(result.rows[0]);
     } catch (error) {
