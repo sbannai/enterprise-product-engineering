@@ -239,3 +239,44 @@ test("audit integrity verification is stable across PostgreSQL JSONB key reorder
   const reordered = { ...entry, payload: { a: 4, nested: { a: 3, y: 2 }, z: 1 } };
   assert.equal(store.verify(reordered), true);
 });
+
+
+test("report filtering is applied in PostgreSQL before LIMIT", async () => {
+  const { calls, pool } = fakePool({ onQuery: async () => ({ rowCount: 0, rows: [] }) });
+  const store = new PostgresGovernedReportingStore(pool);
+  await store.query({ tenantId: "tenant-a", reportId: "rpt-1", filters: { status: "approved" }, limit: 2 });
+  const query = calls.find(call => call.sql.includes("FROM governed_reports"));
+  assert.ok(query.sql.includes('"values" @> $3::jsonb'));
+  assert.match(query.sql, /LIMIT \$4/);
+  assert.deepEqual(query.params.slice(0, 3), ["tenant-a", "rpt-1", JSON.stringify({ status: "approved" })]);
+});
+
+test("generated lifecycle event IDs differ across tenants with identical domain IDs", async () => {
+  const first = await (async () => {
+    const { calls, pool } = fakePool({ onQuery: async (sql, params) => {
+      if (sql.includes("SELECT * FROM workflow_exceptions")) return { rowCount: 0, rows: [] };
+      if (sql.includes("INSERT INTO workflow_exceptions")) return { rowCount: 1, rows: [{
+        tenant_id: params[0], exception_id: params[1], requirement_id: params[2], code: params[3],
+        message: params[4], state: "OPEN", retry_count: 0, idempotency_key: params[5],
+        request_fingerprint: params[6], owner: params[7], version: 1, created_at: params[8], updated_at: params[8],
+      }] };
+      return { rowCount: 1, rows: [] };
+    }});
+    await new PostgresExceptionStore(pool).create({ id: "same-id", tenantId: "tenant-a", requirementId: "REQ-1", code: "E", message: "m", idempotencyKey: "idem", createdAt: "2026-10-26T08:00:00.000Z" }, "corr-a", "user-a");
+    return calls.find(call => call.sql.includes("INSERT INTO transactional_outbox")).params[0];
+  })();
+  const second = await (async () => {
+    const { calls, pool } = fakePool({ onQuery: async (sql, params) => {
+      if (sql.includes("SELECT * FROM workflow_exceptions")) return { rowCount: 0, rows: [] };
+      if (sql.includes("INSERT INTO workflow_exceptions")) return { rowCount: 1, rows: [{
+        tenant_id: params[0], exception_id: params[1], requirement_id: params[2], code: params[3],
+        message: params[4], state: "OPEN", retry_count: 0, idempotency_key: params[5],
+        request_fingerprint: params[6], owner: params[7], version: 1, created_at: params[8], updated_at: params[8],
+      }] };
+      return { rowCount: 1, rows: [] };
+    }});
+    await new PostgresExceptionStore(pool).create({ id: "same-id", tenantId: "tenant-b", requirementId: "REQ-1", code: "E", message: "m", idempotencyKey: "idem", createdAt: "2026-10-26T08:00:00.000Z" }, "corr-b", "user-b");
+    return calls.find(call => call.sql.includes("INSERT INTO transactional_outbox")).params[0];
+  })();
+  assert.notEqual(first, second);
+});
