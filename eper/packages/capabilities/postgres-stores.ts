@@ -24,11 +24,12 @@ function hash(value: unknown): string {
 function recordFromRow(row: DbRow): AuthoritativeRecord {
   return { id: String(row.record_id), tenantId: String(row.tenant_id), version: Number(row.version), state: String(row.state), data: jsonValue<JsonObject>(row.data) };
 }
-function exceptionFromRow(row: DbRow): WorkflowException {
+type VersionedWorkflowException = WorkflowException & { version: number };
+function exceptionFromRow(row: DbRow): VersionedWorkflowException {
   return {
     id: String(row.exception_id), tenantId: String(row.tenant_id), requirementId: String(row.requirement_id),
     code: String(row.code), message: String(row.message), state: String(row.state) as WorkflowException["state"],
-    retryCount: Number(row.retry_count), idempotencyKey: String(row.idempotency_key),
+    retryCount: Number(row.retry_count), idempotencyKey: String(row.idempotency_key), version: Number(row.version),
     ...(row.owner == null ? {} : { owner: String(row.owner) }),
     createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
   };
@@ -275,7 +276,7 @@ export class PostgresExceptionStore {
       const auditInput = {
         id: `exception-created:${created.id}`, tenantId, requirementId: created.requirementId,
         action: "EXCEPTION_CREATED", principalId, correlationId,
-        occurredAt: created.createdAt, payload: { exceptionId: created.id, state: created.state, version: created.version ?? 1 },
+        occurredAt: created.createdAt, payload: { exceptionId: created.id, state: created.state, version: created.version },
       };
       await this.insertAuditInTransaction(client, auditInput);
       await enqueueOutboxEvent({
