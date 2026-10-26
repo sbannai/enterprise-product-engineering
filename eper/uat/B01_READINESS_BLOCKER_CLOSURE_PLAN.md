@@ -2,17 +2,17 @@
 
 **Status date:** 2026-10-26  
 **Scope:** B01, Chapters 463–470, 48 requirements  
-**Source:** Read-only readiness audit in integrated validation run `40263763747` on commit `e8bdded309edeb365eda856c42b219401e6723b0`  
+**Source:** Latest verified CI and integrated validation for commit `97d6dc3e2fc26fbc359bb84e4867d3eed1f9a956`; readiness counts below remain based on the latest inspected source registers and must be refreshed by running the read-only audit against current main.  
 **Classification:** Action plan only. This document does not approve cases, authorize UAT, record business outcomes, or replace controlled evidence.
 
 ## Current verified state
 
-- Last previously verified integrated validation: 8/8 chapter suites passed; 74/74 tests passed on commit `e8bdded309edeb365eda856c42b219401e6723b0`. This is historical evidence, not verification of the latest audit commits.
+- Latest verified integrated validation: [run 40266843188](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843188) passed on commit `97d6dc3e2fc26fbc359bb84e4867d3eed1f9a956`. [EPER CI run 40266843257](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843257), [controlled QA re-execution 40266843293](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843293), [technical UAT simulation 40266843234](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843234), [G9 reconciliation 40266843227](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843227), [228-requirement pilot matrix 40266843226](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843226), [B01 evidence bridge 40266843219](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843219), [six-family HTTP smoke 40266843215](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843215), and [container runtime smoke 40266843207](https://github.com/sbannai/enterprise-product-engineering/actions/runs/40266843207) also passed on the same commit. These are technical checks, not business approvals.
 - Source-register inspection: 48 B01 cases and 48 gap rows; 13 entry gates; 228 requirement-capture rows.
 - Controlled BRD/SRS baseline status is recorded as approved for all 48 cases, but requirement-specific acceptance oracles remain incomplete for all 48.
 - Case preparation remains incomplete; case review is incomplete for all 48; all 48 execution-authorization fields remain `NO`.
 - All 13 entry gates remain pending or without evidence. The 228 requirement capture rows remain unexecuted / not accepted.
-- Latest audit/test commits are on `main`, but CI status for those commits has not been verified.
+- Latest code and regression tests are on `main`; all nine workflows listed above have been verified successful for the same commit. Source-register blocker counts are not automatically cleared by CI.
 - Business UAT: `NOT_EXECUTED`. No production deployment or Business UAT acceptance is implied by the historical successful CI run.
 
 ## Closure worklist
