@@ -57,9 +57,11 @@ test("health fails closed when a commit build ID is not configured", async () =>
 });
 
 test("unknown routes return 404 without exposing implementation details", async () => {
-  const response = await fetch(`${await startServer()}/not-a-route`);
+  const response = await fetch(`${await startServer()}/not-a-route`, { headers: { "x-correlation-id": "route-test-404" } });
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.equal(response.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+  assert.equal(response.headers.get("x-request-id"), "route-test-404");
 });
 
 test("local capability API is disabled by default", async () => {
