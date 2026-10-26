@@ -347,3 +347,75 @@ test("admin access-check validation negotiates standardized 400 errors without c
     }
   }
 });
+
+
+test("pricing validation negotiates standardized errors while preserving legacy response bodies", async () => {
+  const keys = ["EPER_PRICING_API_ENABLED", "EPER_PRICING_API_TOKEN", "EPER_ADMIN_CONFIG_PERSISTENCE"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_PRICING_API_ENABLED: "true",
+    EPER_PRICING_API_TOKEN: "pricing-contract-test-token-0123456789-0123456789",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "process-memory",
+  });
+  try {
+    const base = await startServer();
+    const headers = {
+      "content-type": "application/json",
+      authorization: "Bearer pricing-contract-test-token-0123456789-0123456789",
+    };
+    const payload = { productId: "", marketId: 42 };
+    const legacy = await fetch(`${base}/pricing/quote`, {
+      method: "POST", headers, body: JSON.stringify(payload),
+    });
+    assert.equal(legacy.status, 400);
+    assert.deepEqual(await legacy.json(), {
+      error: "productId and marketId are required; currency must be a string when supplied",
+    });
+
+    const standardized = await fetch(`${base}/pricing/quote`, {
+      method: "POST",
+      headers: { ...headers, accept: "application/vnd.eper.v1+json", "x-correlation-id": "pricing-validation-contract" },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(standardized.status, 400);
+    assert.equal(standardized.headers.get("x-request-id"), "pricing-validation-contract");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: {
+        code: "PRODUCTID_AND_MARKETID_ARE_REQUIRED_CURRENCY_MUST_BE_A_STRING_WH",
+        message: "The request could not be completed.",
+      },
+      meta: { requestId: "pricing-validation-contract" },
+    });
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test("customer ticketing disabled response supports v1 errors without changing legacy clients", async () => {
+  const previous = process.env.EPER_TICKETING_API_ENABLED;
+  delete process.env.EPER_TICKETING_API_ENABLED;
+  try {
+    const base = await startServer();
+    const legacy = await fetch(`${base}/customer/applications/app-1/tickets`);
+    assert.equal(legacy.status, 404);
+    assert.deepEqual(await legacy.json(), { error: "not_found" });
+
+    const standardized = await fetch(`${base}/customer/applications/app-1/tickets`, {
+      headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "ticketing-disabled-contract" },
+    });
+    assert.equal(standardized.status, 404);
+    assert.equal(standardized.headers.get("x-request-id"), "ticketing-disabled-contract");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: { code: "NOT_FOUND", message: "The requested resource was not found." },
+      meta: { requestId: "ticketing-disabled-contract" },
+    });
+  } finally {
+    if (previous === undefined) delete process.env.EPER_TICKETING_API_ENABLED;
+    else process.env.EPER_TICKETING_API_ENABLED = previous;
+  }
+});
