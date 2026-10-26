@@ -46,6 +46,17 @@ Run the same behavioral tests against in-memory and JSON adapters now, then agai
 4. PostgreSQL adapter and migration scripts are not implemented; ADR-001 is a proposed design, not approval or implementation evidence.
 5. CI passing demonstrates code/test gates only. It does not mean business UAT has executed or any requirement has business acceptance.
 
+
+## PostgreSQL implementation checkpoint (2026-10-26)
+
+The draft workstream in PR #224 currently adds:
+- Versioned schema migrations for the five stateful capability families and transactional outbox, with tenant RLS and an append-only audit trigger.
+- Async PostgreSQL store implementations for authoritative records, authorization policies, audit evidence, exception lifecycle, and governed report publication/query.
+- Exception create/transition and report publication paths that write state, audit evidence, and outbox intent in one transaction.
+- Unit tests using a deterministic fake PostgreSQL client for tenant transaction setup, rollback, record compare-and-swap predicates, default-deny policy behavior, audit hashing, exception atomicity, and report publication atomicity.
+
+This is a code checkpoint only. The async stores have **not yet been wired into the production capability service factory**, and live PostgreSQL integration/conformance tests have not yet been run. The existing synchronous service contracts still need coordinated migration. CI evidence is pending; do not mark G1–G4 complete on this basis.
+
 ## Merge / production gates
 
 - **G1 — Existing behavior:** all current EPER CI and capability integration tests pass.
