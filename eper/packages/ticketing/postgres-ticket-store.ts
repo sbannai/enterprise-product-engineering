@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendAuditEventInTransaction, type AuditEnvironment } from "../audit/audit-event-store.js";
 import type { TicketIdentity, TicketRecord, CreateTicketInput, TicketStatus, TicketSeverity } from "./ticketing-contract.js";
 
@@ -53,19 +53,34 @@ export class PostgresTicketStore {
     } finally { client.release(); }
   }
 
-  async create(identity: TicketIdentity, input: CreateTicketInput): Promise<TicketRecord> {
+  async create(identity: TicketIdentity, input: CreateTicketInput, idempotencyKey?: string): Promise<TicketRecord> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const id = randomUUID();
+      const requestHash = createHash("sha256").update(JSON.stringify({
+        type: input.type, title: input.title, description: input.description,
+        businessImpact: input.businessImpact, evidenceReference: input.evidenceReference ?? null,
+      })).digest("hex");
       const result = await client.query<Record<string, unknown>>(
         `INSERT INTO eper_support_tickets
-          (id, tenant_id, application_id, created_by, type, title, description, business_impact, evidence_reference, status, severity, assigned_to)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'new','p3',NULL)
+          (id, tenant_id, application_id, created_by, type, title, description, business_impact, evidence_reference, status, severity, assigned_to, idempotency_key, request_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'new','p3',NULL,$10,$11)
+         ${idempotencyKey ? "ON CONFLICT (tenant_id, application_id, created_by, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING" : ""}
          RETURNING *`,
         [id, identity.tenantId, identity.applicationId, identity.actorId, input.type, input.title, input.description,
-          input.businessImpact, input.evidenceReference ?? null],
+          input.businessImpact, input.evidenceReference ?? null, idempotencyKey ?? null, idempotencyKey ? requestHash : null],
       );
+      if (!result.rows[0] && idempotencyKey) {
+        const existing = await client.query<Record<string, unknown>>(
+          "SELECT *, request_hash FROM eper_support_tickets WHERE tenant_id=$1 AND application_id=$2 AND created_by=$3 AND idempotency_key=$4 FOR UPDATE",
+          [identity.tenantId, identity.applicationId, identity.actorId, idempotencyKey],
+        );
+        if (!existing.rows[0]) throw new Error("ticket_idempotency_lookup_failed");
+        if (existing.rows[0].request_hash !== requestHash) throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+        await client.query("COMMIT");
+        return mapRecord(existing.rows[0]);
+      }
       if (!result.rows[0]) throw new Error("ticket_insert_returned_no_row");
       await this.audit({
         tenantId: identity.tenantId, applicationId: identity.applicationId, actorId: identity.actorId,
