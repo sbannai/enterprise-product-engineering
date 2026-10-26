@@ -226,3 +226,16 @@ test("governed policy write commits policy, audit, and outbox together", async (
   assert.ok(policy >= 0 && policy < audit && audit < outbox);
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
+
+
+test("audit integrity verification is stable across PostgreSQL JSONB key reordering", async () => {
+  const { pool } = fakePool();
+  const store = new PostgresAuditEvidenceStore(pool);
+  const entry = await store.append({
+    id: "a2", tenantId: "tenant-a", requirementId: "REQ-2", action: "TEST",
+    principalId: "user-1", correlationId: "corr-4", occurredAt: "2026-10-26T08:00:00.000Z",
+    payload: { z: 1, nested: { y: 2, a: 3 }, a: 4 },
+  });
+  const reordered = { ...entry, payload: { a: 4, nested: { a: 3, y: 2 }, z: 1 } };
+  assert.equal(store.verify(reordered), true);
+});
