@@ -311,3 +311,39 @@ test("support admin cannot mutate a ticket outside its tenant and receives non-d
     }
   });
 });
+
+test("customer ticket API fails closed when Tickets & Feedback is not enabled for the tenant", async () => {
+  const previous = {
+    enabled: process.env.EPER_TICKETING_API_ENABLED,
+    identities: process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON,
+    assignments: process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON,
+    modules: process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON,
+  };
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["help-center"] });
+  let storeCalled = false;
+  const ticketStore = {
+    async assertReady() {},
+    async create() { storeCalled = true; throw new Error("must not be called"); },
+    async list() { storeCalled = true; return []; },
+  };
+  try {
+    await withServer({ ticketStore }, async (base) => {
+      const response = await fetch(base + "/customer/applications/app-a/tickets", {
+        headers: { authorization: `Bearer ${credential}` },
+      });
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), { error: "customer_ticketing_not_enabled" });
+      assert.equal(storeCalled, false);
+    });
+  } finally {
+    if (previous.enabled === undefined) delete process.env.EPER_TICKETING_API_ENABLED; else process.env.EPER_TICKETING_API_ENABLED = previous.enabled;
+    if (previous.identities === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON; else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previous.identities;
+    if (previous.assignments === undefined) delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON; else process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = previous.assignments;
+    if (previous.modules === undefined) delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON; else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = previous.modules;
+  }
+});
