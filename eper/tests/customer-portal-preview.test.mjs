@@ -93,7 +93,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
   assert.ok(html.includes('if(as===null&&bs!==null)return 1;if(bs===null&&as!==null)return -1'), "assets with unknown sizes sort after assets with known sizes");
   assert.ok(html.includes('sort==="name-desc"?-comparison:comparison'), "reverse sorting uses a local comparator without another API request");
   assert.ok(html.includes('sort==="type"?a.type:a.name'), "asset sorting runs locally without another API request");
-    assert.ok(html.includes("No matching assets"), "empty filtered results explain how to recover");
+    assert.ok(html.includes('filtered.reduce((total,asset)=>total+(Number.isSafeInteger(asset.sizeBytes)&&asset.sizeBytes>=0?asset.sizeBytes:0),0)'), "filtered asset view summarizes known file sizes locally");
+  assert.ok(html.includes('" known size"'), "asset size summary labels the total as known size when metadata is missing");
+  assert.ok(html.includes("No matching assets"), "empty filtered results explain how to recover");
   assert.ok(html.includes("No assets available"), "an empty manifest has a distinct actionable empty state");
   assert.ok(html.includes("share assets with an assigned application"), "empty manifest guidance tells the customer how to resolve missing assets");
   assert.ok(html.includes("refreshClientAssets"), "client assets can be refreshed asynchronously");
