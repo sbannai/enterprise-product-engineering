@@ -1256,12 +1256,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
-          const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
+          // Fetch one extra row so the UI can know whether another page truly exists.
+          const page = await options.ticketStore.list({ tenantId: identity.tenantId }, {
             status: status as typeof TICKET_STATUSES[number] | undefined,
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
-            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit, offset,
+            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit: limit + 1, offset,
           });
-          sendJson(request, response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
+          const hasMore = page.length > limit;
+          const tickets = hasMore ? page.slice(0, limit) : page;
+          sendJson(request, response, 200, { tickets, limit, offset, hasMore, tenantId: identity.tenantId });
           return;
         }
         if (request.method === "PATCH" && adminTicketMatch[1]) {
