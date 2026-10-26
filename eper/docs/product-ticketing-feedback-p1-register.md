@@ -107,3 +107,34 @@ The EPER administrator product must expose a dedicated **Feedback & Ticketing** 
 4. Internal notes, tenant boundaries and evidence attachments are protected; every administrative change is audited.
 5. Customer-facing ticket submission/status remains in the customer workspace and does not become admin-only.
 6. No P1 threshold or dashboard KPI can be represented as complete without verified source records and evidence.
+
+## UI ergonomics and accessibility acceptance criteria (2026-10-26)
+
+Apply these requirements to the admin Feedback & Ticketing dashboard and customer-facing feedback/ticket submission flows.
+
+- Associate every form control with a persistent programmatic label; use placeholders only as supplementary examples.
+- Ensure all queues, filters, ticket actions, dialogs, comments and evidence controls work using keyboard alone, with visible focus and logical tab order.
+- Announce navigation state, validation errors, queue result counts, save outcomes and ticket status changes to assistive technology.
+- On opening a dialog, move focus into it; keep focus within the dialog while open and return focus to its trigger when closed.
+- Keep desktop, tablet and mobile layouts readable at 200% zoom; avoid horizontal page scrolling for primary ticket workflows.
+- Display severity, status and SLA state using text/icons in addition to color. Provide readable timestamp, owner and next-action context.
+- Make required fields, severity definitions and P1 confirmation criteria explicit. If validation fails, preserve entered values and explain how to fix each error.
+- Confirm high-impact actions such as severity reduction, closing/reopening, bulk reassignment and customer-visible updates; require a reason where the workflow specifies one.
+- Separate internal notes from customer-visible replies visually and structurally. Clearly indicate which audience will receive a message before submission.
+- Evidence attachments and exports must show safe filenames and access errors without exposing secrets, internal notes or another tenant's records.
+- Queue empty states, loading states, errors and filtered/no-results states must be distinct and actionable.
+- Verify keyboard-only operation, contrast, touch target usability, zoom and screen-reader announcements for core customer and admin journeys.
+
+### Minimum UX test scenarios
+
+1. Customer submits feedback and a ticket using keyboard-only navigation.
+2. Invalid submission shows field-level errors while preserving other entered values.
+3. Admin filters tickets by tenant, application, severity and status and can identify active filters and result count.
+4. Admin adds an internal note and a customer-visible reply; verify they remain separate in UI, API and notification content.
+5. Admin changes severity with a required reason and the audit timeline records actor, time, old/new severity and reason.
+6. A user without support authorization is denied both dashboard navigation and direct API access.
+7. Evidence and export access is denied across tenant boundaries.
+8. Queue loading, empty, error and no-results states are understandable to keyboard and screen-reader users.
+
+Record actual build/environment, result, evidence reference and linked defect in the test register. A design review alone does not constitute a passed test.
+
