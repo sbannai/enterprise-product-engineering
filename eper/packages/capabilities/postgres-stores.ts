@@ -481,21 +481,20 @@ export class PostgresGovernedReportingStore {
     const limit = request.limit ?? 100;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("REPORT_LIMIT_INVALID");
     return withTenantTransaction(this.pool, request.tenantId, async ({ client, tenantId }) => {
+      const filters = request.filters ?? {};
+      if (!filters || typeof filters !== "object" || Array.isArray(filters)) throw new Error("REPORT_FILTERS_INVALID");
       const { rows } = await client.query(
         `SELECT tenant_id,report_id,"values",source_requirement_ids,generated_at
-         FROM governed_reports WHERE tenant_id=$1 AND report_id=$2
-         ORDER BY generated_at DESC LIMIT $3`,
-        [tenantId, request.reportId, limit],
+         FROM governed_reports WHERE tenant_id=$1 AND report_id=$2 AND "values" @> $3::jsonb
+         ORDER BY generated_at DESC LIMIT $4`,
+        [tenantId, request.reportId, JSON.stringify(filters), limit],
       );
-      const filters = request.filters ?? {};
-      return rows
-        .map(row => ({
-          tenantId: String(row.tenant_id), reportId: String(row.report_id),
-          values: jsonValue<JsonObject>(row.values),
-          sourceRequirementIds: jsonValue<string[]>(row.source_requirement_ids),
-          generatedAt: new Date(String(row.generated_at)).toISOString(),
-        }))
-        .filter(row => Object.entries(filters).every(([key, value]) => row.values[key] === value));
+      return rows.map(row => ({
+        tenantId: String(row.tenant_id), reportId: String(row.report_id),
+        values: jsonValue<JsonObject>(row.values),
+        sourceRequirementIds: jsonValue<string[]>(row.source_requirement_ids),
+        generatedAt: new Date(String(row.generated_at)).toISOString(),
+      }));
     });
   }
 }
