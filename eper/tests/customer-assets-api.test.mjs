@@ -44,7 +44,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     const address = server.address();
     assert.ok(address && typeof address === "object");
     const base = "http://127.0.0.1:" + address.port;
-    const endpoint = base + "/customer/applications/app-a/assets";
+    const endpoint = base + "/customer/assets";
     assert.equal((await fetch(endpoint)).status, 401);
     const response = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(response.status, 200);
@@ -53,14 +53,13 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.equal(body.total, 2);
     assert.equal(body.nextCursor, null);
     assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1"]);
+    assert.ok(body.assets.every((asset) => asset.applicationId === "app-a"));
+    assert.equal(body.applicationCount, 1);
     assert.equal(body.assets[0].accessReference, "blobref:opaque-1");
     assert.equal("internalSecret" in body.assets[0], false);
-    assert.equal((await fetch(base + "/customer/applications/app-b/assets", {
-      headers: { authorization: "Bearer " + tokenA, "x-tenant-id": "tenant-b" },
-    })).status, 403);
-    assert.equal((await fetch(base + "/customer/applications/app-b/assets", {
-      headers: { authorization: "Bearer " + tokenB },
-    })).status, 403);
+    assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
+    const otherTenant = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenB } });
+    assert.equal(otherTenant.status, 403);
     const invalidCursor = await fetch(endpoint + "?cursor=-1", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(invalidCursor.status, 400);
     process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["help-center"] });
