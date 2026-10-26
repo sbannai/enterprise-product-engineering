@@ -240,6 +240,125 @@ export async function commitGovernedMutation<T>(
   });
 }
 
+export class PostgresExceptionStore {
+  constructor(private readonly pool: Pool) {}
+
+  async create(input: ExceptionCreateInput, correlationId: string, principalId: string): Promise<WorkflowException> {
+    if (!input.tenantId?.trim() || !input.id?.trim() || !input.idempotencyKey?.trim() ||
+        !input.requirementId?.trim() || !input.code?.trim() || !input.message?.trim() ||
+        !correlationId?.trim() || !principalId?.trim()) throw new Error("EXCEPTION_CONTEXT_REQUIRED");
+    const fingerprint = hash({
+      id: input.id, tenantId: input.tenantId, requirementId: input.requirementId,
+      code: input.code, message: input.message, idempotencyKey: input.idempotencyKey,
+      owner: input.owner ?? null, createdAt: input.createdAt,
+    });
+    return withTenantTransaction(this.pool, input.tenantId, async ({ client, tenantId }) => {
+      const existing = await client.query(
+        "SELECT * FROM workflow_exceptions WHERE tenant_id=$1 AND idempotency_key=$2 FOR UPDATE",
+        [tenantId, input.idempotencyKey],
+      );
+      if (existing.rows[0]) {
+        if (existing.rows[0].request_fingerprint !== fingerprint) {
+          throw new Error("IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST");
+        }
+        return exceptionFromRow(existing.rows[0]);
+      }
+
+      const { rows } = await client.query(
+        `INSERT INTO workflow_exceptions
+         (tenant_id,exception_id,requirement_id,code,message,state,retry_count,idempotency_key,request_fingerprint,owner,version,created_at,updated_at)
+         VALUES($1,$2,$3,$4,$5,'OPEN',0,$6,$7,$8,1,$9::timestamptz,$9::timestamptz)
+         RETURNING *`,
+        [tenantId, input.id, input.requirementId, input.code, input.message, input.idempotencyKey, fingerprint, input.owner ?? null, input.createdAt],
+      );
+      const created = exceptionFromRow(rows[0]);
+      const auditInput = {
+        id: `exception-created:${created.id}`, tenantId, requirementId: created.requirementId,
+        action: "EXCEPTION_CREATED", principalId, correlationId,
+        occurredAt: created.createdAt, payload: { exceptionId: created.id, state: created.state, version: created.version ?? 1 },
+      };
+      await this.insertAuditInTransaction(client, auditInput);
+      await enqueueOutboxEvent({
+        tenantId, client,
+      }, {
+        eventId: `exception-created:${created.id}`, tenantId, aggregateType: "workflow_exception",
+        aggregateId: created.id, eventType: "EXCEPTION_CREATED", correlationId,
+        payload: { exceptionId: created.id, state: created.state, requirementId: created.requirementId },
+      });
+      return created;
+    });
+  }
+
+  async get(tenantId: string, id: string): Promise<WorkflowException | undefined> {
+    return withTenantTransaction(this.pool, tenantId, async ({ client }) => {
+      const { rows } = await client.query(
+        "SELECT * FROM workflow_exceptions WHERE tenant_id=$1 AND exception_id=$2",
+        [tenantId, id],
+      );
+      return rows[0] ? exceptionFromRow(rows[0]) : undefined;
+    });
+  }
+
+  async transition(
+    tenantId: string, id: string, expectedVersion: number, patch: ExceptionPatch,
+    correlationId: string, principalId: string,
+  ): Promise<WorkflowException> {
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error("EXCEPTION_VERSION_INVALID");
+    return withTenantTransaction(this.pool, tenantId, async ({ client }) => {
+      const currentResult = await client.query(
+        "SELECT * FROM workflow_exceptions WHERE tenant_id=$1 AND exception_id=$2 FOR UPDATE",
+        [tenantId, id],
+      );
+      if (!currentResult.rows[0]) throw new Error("EXCEPTION_NOT_FOUND");
+      const current = exceptionFromRow(currentResult.rows[0]);
+      if (current.version !== expectedVersion) throw new Error("EXCEPTION_VERSION_CONFLICT");
+      const allowed: Record<WorkflowException["state"], readonly WorkflowException["state"][]> = {
+        OPEN: ["RETRYING", "RESOLVED", "ESCALATED"],
+        RETRYING: ["RETRYING", "RESOLVED", "ESCALATED"],
+        RESOLVED: [],
+        ESCALATED: ["RESOLVED"],
+      };
+      if (patch.state && !allowed[current.state].includes(patch.state)) throw new Error("EXCEPTION_INVALID_TRANSITION");
+      const nextState = patch.state ?? current.state;
+      const retryCount = nextState === "RETRYING" && patch.state === "RETRYING" ? current.retryCount + 1 : current.retryCount;
+      const { rows } = await client.query(
+        `UPDATE workflow_exceptions SET state=$4, retry_count=$5, owner=$6, message=$7,
+         version=version+1, updated_at=now()
+         WHERE tenant_id=$1 AND exception_id=$2 AND version=$3 RETURNING *`,
+        [tenantId, id, expectedVersion, nextState, retryCount, patch.owner ?? current.owner ?? null, patch.message ?? current.message],
+      );
+      if (!rows[0]) throw new Error("EXCEPTION_VERSION_CONFLICT");
+      const next = exceptionFromRow(rows[0]);
+      const auditInput = {
+        id: `exception-transition:${next.id}:v${next.version ?? expectedVersion + 1}`,
+        tenantId, requirementId: next.requirementId, action: "EXCEPTION_TRANSITIONED",
+        principalId, correlationId, occurredAt: next.updatedAt,
+        payload: { exceptionId: next.id, from: current.state, to: next.state, version: expectedVersion + 1 },
+      };
+      await this.insertAuditInTransaction(client, auditInput);
+      await enqueueOutboxEvent({ tenantId, client }, {
+        eventId: auditInput.id, tenantId, aggregateType: "workflow_exception",
+        aggregateId: next.id, eventType: "EXCEPTION_TRANSITIONED", correlationId,
+        payload: { exceptionId: next.id, from: current.state, to: next.state, requirementId: next.requirementId },
+      });
+      return next;
+    });
+  }
+
+  private async insertAuditInTransaction(
+    client: import("pg").PoolClient,
+    input: Omit<AuditEvidence, "integrityHash">,
+  ): Promise<void> {
+    const integrityHash = createHash("sha256").update(stableAuditMaterial(input)).digest("hex");
+    await client.query(
+      `INSERT INTO audit_evidence
+       (tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash)
+       VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)`,
+      [input.tenantId, input.id, input.requirementId, input.action, input.principalId, input.correlationId, input.occurredAt, JSON.stringify(input.payload), integrityHash],
+    );
+  }
+}
+
 // Type-level conformance target for the next service refactor; intentionally async.
 export interface AsyncCapabilityPersistence {
   records: Pick<PostgresAuthoritativeRecordStore, "create" | "get" | "update" | "delete">;
