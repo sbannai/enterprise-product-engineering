@@ -9,7 +9,7 @@
 
 | Capability family | Contract / service | In-memory implementation | Local JSON adapter | Existing integration coverage | Production transactional adapter |
 |---|---|---|---|---|---|
-| Authoritative records | `AuthoritativeRecordStore` / `AuthoritativeRecordService` | Yes | `JsonFileAuthoritativeRecordStore` | Create/reload through service; separate store tests cover tenant scope, versioning, stale-write rejection | Implemented (local/integration only; live conformance pending) |
+| Authoritative records | `AuthoritativeRecordStore` / `AuthoritativeRecordService` | Yes | `JsonFileAuthoritativeRecordStore` | Create/reload through service; separate store tests cover tenant scope, versioning, stale-write rejection | Implemented (local/integration; live CI conformance evidenced on the prior tested head) |
 | Authorization | `AuthorizationPolicyStore` / `AuthorizationService` | Yes | `JsonFileAuthorizationPolicyStore` | Policy reload, tenant/principal isolation, default deny, explicit deny | Implemented (local/integration only; live conformance pending) |
 | Business validation | Stateless capability service | Not applicable | Not applicable | Capability boundary tests; no persistence expected | Not applicable |
 | Audit evidence | `AuditEvidenceStore` / `AuditEvidenceService` | Yes | `JsonFileAuditEvidenceStore` | Append/reload and integrity verification | Implemented (local/integration only; live conformance pending) |
@@ -43,7 +43,7 @@ Run the same behavioral tests against in-memory and JSON adapters now, then agai
 1. The local JSON adapters are development/UAT tools only. Atomic rename protects against partial file replacement, but does not provide multi-process locking, database transactions, or durable cross-store atomicity.
 2. The exception adapter stores state and lifecycle evidence in one document, but they are still written in separate file replacements. A crash between those writes can leave state and evidence inconsistent.
 3. A transactional outbox and database-level constraints are not implemented.
-4. PostgreSQL adapters and migrations are implemented for local development/integration. Dedicated live conformance is now wired into EPER CI, but its first execution on the current PR head must pass before this gate can be considered evidenced.
+4. PostgreSQL adapters and migrations are implemented for local development/integration. Dedicated live conformance is wired into EPER CI. The prior tested PR head passed the live conformance suite, including cross-tenant write rejection, audit UPDATE/DELETE protection, rollback, concurrent exception idempotency, and injected audit/outbox failures. Reconfirm on the latest commit before calling the gate evidenced.
 5. CI passing demonstrates code/test gates only. It does not mean business UAT has executed or any requirement has business acceptance.
 
 
@@ -55,7 +55,7 @@ The implementation workstream in PR #224 currently includes:
 - Exception create/transition and report publication paths that write state, audit evidence, and outbox intent in one transaction.
 - Unit tests using a deterministic fake PostgreSQL client for tenant transaction setup, rollback, record compare-and-swap predicates, default-deny policy behavior, audit hashing, exception atomicity, and report publication atomicity.
 
-This is a code checkpoint only. An explicit `persistence: "postgres"` option now wires the async PostgreSQL capability service factory without changing the default in-memory mode. The legacy in-memory/JSON service contracts remain synchronous and separate. The first live PostgreSQL conformance run passed tenant isolation/cross-tenant write rejection, database-enforced audit immutability, and rollback. It exposed an audit hash round-trip failure caused by converting node-postgres Date objects through String(), which drops milliseconds; the read path was corrected to preserve timestamp precision, and the full live conformance step then passed on commit 6d0d836f199d5e398ab41bd857dccc1be56da2f5. The latest PR head additionally adds a real concurrent-idempotency test for exception creation and reruns the capability migrations to verify repeatability; those newest checks are pending CI. Do not mark G4 complete until the latest head passes, including concurrent idempotency and repeatable migrations.
+This is a code checkpoint only. An explicit `persistence: "postgres"` option now wires the async PostgreSQL capability service factory without changing the default in-memory mode. The legacy in-memory/JSON service contracts remain synchronous and separate. The first live PostgreSQL conformance run passed tenant isolation/cross-tenant write rejection, database-enforced audit immutability, and rollback. It exposed an audit hash round-trip failure caused by converting node-postgres Date objects through String(), which drops milliseconds; the read path was corrected to preserve timestamp precision, and the full live conformance step then passed on commit 6d0d836f199d5e398ab41bd857dccc1be56da2f5. The tested PR head also passed concurrent exception idempotency, injected audit/outbox failure rollback, and repeatable migration checks. Do not mark G4 complete until the current PR head has passing CI evidence for all required transaction/failure-injection checks.
 
 ## Merge / production gates
 
