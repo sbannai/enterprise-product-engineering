@@ -163,7 +163,7 @@ test("support admin queue and status updates remain scoped to the trusted admin 
   };
   await withServer({ ticketStore }, async (base) => {
     const queue = await fetch(base + "/admin/support/tickets?tenantId=tenant-attacker&applicationId=app-a", {
-      headers: { authorization: `Bearer ${credential}`, "x-correlation-id": "ticket-admin-test-1", accept: "application/vnd.eper.v1+json" },
+      headers: { authorization: `Bearer ${credential}`, "x-correlation-id": "ticket-admin-test-1", "x-tenant-id": "tenant-attacker", "x-actor-id": "attacker-actor", "x-role-key": "super_admin", accept: "application/vnd.eper.v1+json" },
     });
     assert.equal(queue.status, 200);
     const queueBody = await queue.json();
@@ -176,12 +176,13 @@ test("support admin queue and status updates remain scoped to the trusted admin 
 
     const update = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
       method: "PATCH",
-      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "x-correlation-id": "ticket-admin-test-2" },
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "x-correlation-id": "ticket-admin-test-2", "x-tenant-id": "tenant-attacker", "x-actor-id": "attacker-actor", "x-role-key": "customer" },
       body: JSON.stringify({ status: "in_progress" }),
     });
     assert.equal(update.status, 200);
     assert.equal(calls[1].identity.tenantId, "tenant-support-a");
     assert.equal(calls[1].identity.actorId, "support-actor-a");
+    assert.equal(calls[1].identity.roleKey, "support_admin");
     assert.equal(calls[1].identity.correlationId, "ticket-admin-test-2");
     assert.equal(calls[1].ticketId, ticket.id);
     assert.equal(calls[1].status, "in_progress");
