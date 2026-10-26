@@ -124,3 +124,47 @@ test("ticket assignment rolls back if audit persistence fails", async () => {
   assert.ok(sql.includes("ROLLBACK"));
   assert.ok(!sql.includes("COMMIT"));
 });
+
+
+test("ticket status change audit captures the transition and trusted request context", async () => {
+  const { calls, pool, client } = fakePool();
+  let event;
+  let eventClient;
+  const store = new PostgresTicketStore(pool, async (auditEvent, txClient) => {
+    event = auditEvent;
+    eventClient = txClient;
+    await txClient.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-test')");
+  });
+  await store.changeStatus(identity, "ticket-1", "triaged");
+  assert.equal(eventClient, client);
+  assert.deepEqual(event, {
+    tenantId: "tenant-a",
+    applicationId: "app-a",
+    actorId: "actor-a",
+    correlationId: "corr-1",
+    action: "ticket.status_changed",
+    ticketId: "ticket-1",
+    outcome: "success",
+    payload: { newStatus: "triaged" },
+  });
+  assert.ok(calls.some((x) => x.sql === "COMMIT"));
+});
+
+test("missing tenant-scoped ticket does not emit a success audit event", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/UPDATE eper_support_tickets/.test(sql)) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  let auditCalls = 0;
+  const store = new PostgresTicketStore(pool, async () => { auditCalls++; });
+  assert.equal(await store.changeStatus(identity, "ticket-from-other-tenant", "triaged"), null);
+  assert.equal(auditCalls, 0);
+  assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
+  assert.ok(!calls.some((x) => x.sql === "COMMIT"));
+});
