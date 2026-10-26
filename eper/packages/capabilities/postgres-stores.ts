@@ -156,6 +156,21 @@ export class PostgresAuthoritativeRecordStore {
 export class PostgresAuthorizationPolicyStore {
   constructor(private readonly pool: Pool) {}
 
+
+  async addPolicyGoverned(policy: AuthorizationPolicy & { id?: string }, context: { principalId: string; correlationId: string; requirementId: string }): Promise<void> {
+    if (!policy.tenantId?.trim() || !Array.isArray(policy.actions) || !policy.actions.length ||
+        !Array.isArray(policy.resources) || !policy.resources.length ||
+        !["ALLOW", "DENY"].includes(policy.effect)) throw new Error("AUTHORIZATION_POLICY_INVALID");
+    const policyId = policy.id ?? hash(policy).slice(0, 32);
+    await withTenantTransaction(this.pool, policy.tenantId, async ({ client, tenantId }) => {
+      await client.query("INSERT INTO authorization_policies(tenant_id,policy_id,principal_id,actions,resources,effect) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6)", [tenantId,policyId,policy.principalId ?? null,JSON.stringify(policy.actions),JSON.stringify(policy.resources),policy.effect]);
+      const audit = { id: `policy-created:${policyId}`, tenantId, requirementId: context.requirementId, action: "AUTHORIZATION_POLICY_CREATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { policyId, effect: policy.effect, actions: policy.actions, resources: policy.resources } };
+      const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
+      await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
+      await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authorization_policy", aggregateId: policyId, eventType: "AUTHORIZATION_POLICY_CREATED", correlationId: context.correlationId, payload: { policyId, effect: policy.effect } });
+    });
+  }
+
   async addPolicy(policy: AuthorizationPolicy & { id?: string }): Promise<void> {
     if (!policy.tenantId?.trim() || !Array.isArray(policy.actions) || !policy.actions.length ||
         !Array.isArray(policy.resources) || !policy.resources.length ||
