@@ -112,6 +112,20 @@ test("customer application access check uses only server-mapped tenant and role 
       },
       moduleKey: "records",
     });
+    const versioned = await fetch(url, { headers: {
+      authorization: "Bearer " + token,
+      accept: "application/vnd.eper.v1+json",
+      "x-tenant-id": "attacker-tenant",
+      "x-role-key": "super-admin",
+    } });
+    assert.equal(versioned.status, 200);
+    const versionedBody = await versioned.json();
+    assert.equal(versionedBody.success, true);
+    assert.equal(versionedBody.data.tenantId, undefined, "access decision must not expose or accept caller-supplied tenant identity");
+    assert.equal(versionedBody.data.applicationId, "application-from-path");
+    assert.equal(versionedBody.data.allowed, false);
+    assert.ok(versionedBody.meta.requestId);
+    assert.equal(versioned.headers.get("x-request-id"), versionedBody.meta.requestId);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
