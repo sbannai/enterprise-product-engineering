@@ -1007,3 +1007,53 @@ test("ticket admin APIs fail closed when the admin role allowlist is missing or 
     if (previous.roles === undefined) delete process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON; else process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = previous.roles;
   }
 });
+
+
+test("support admin can read and post ticket replies through the tenant-scoped API", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  const ticketId = "00000000-0000-4000-8000-000000000001";
+  const calls = [];
+  const reply = {
+    id: "00000000-0000-4000-8000-000000000002",
+    tenantId: "tenant-support-a", applicationId: "app-a", ticketId,
+    authorId: "support-actor-a", authorRole: "support", body: "We are investigating",
+    createdAt: "2026-10-26T10:00:00.000Z",
+  };
+  const ticketStore = {
+    async assertReady() {},
+    async list() { return []; },
+    async listReplies(identity, id) { calls.push({ operation: "listReplies", identity, id }); return [reply]; },
+    async addReply(identity, id, body, role) { calls.push({ operation: "addReply", identity, id, body, role }); return reply; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const headers = {
+      authorization: `Bearer ${credential}`,
+      accept: "application/vnd.eper.v1+json",
+      "content-type": "application/json",
+      "x-correlation-id": "ticket-reply-test-1",
+    };
+    const listed = await fetch(base + "/admin/support/tickets/" + ticketId + "/replies", { headers });
+    assert.equal(listed.status, 200);
+    const listedPayload = await listed.json();
+    assert.equal(listedPayload.success, true);
+    assert.deepEqual(listedPayload.data.replies, [reply]);
+
+    const posted = await fetch(base + "/admin/support/tickets/" + ticketId + "/replies", {
+      method: "POST", headers, body: JSON.stringify({ body: "We are investigating" }),
+    });
+    assert.equal(posted.status, 201);
+    const postedPayload = await posted.json();
+    assert.equal(postedPayload.success, true);
+    assert.deepEqual(postedPayload.data.reply, reply);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].identity.tenantId, "tenant-support-a");
+    assert.equal(calls[0].identity.applicationId, "eper");
+    assert.equal(calls[1].identity.actorId, "support-actor-a");
+    assert.equal(calls[1].role, "support");
+    assert.equal(calls[1].body, "We are investigating");
+  });
+});
