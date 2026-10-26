@@ -265,6 +265,46 @@ test("support admin triage console is feature-gated and calls protected tenant-s
 
 
 
+
+test("customer ticket list uses the versioned success envelope and preserves pagination metadata", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  const ticket = {
+    id: "ticket-1", tenantId: "tenant-a", applicationId: "app-a", createdBy: "actor-a",
+    type: "feedback", title: "UI issue", description: "A description",
+    businessImpact: "Impact", status: "new", severity: "p3", assignedTo: null,
+    createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z",
+  };
+  let receivedFilter;
+  const ticketStore = {
+    async assertReady() {},
+    async list(_identity, filter) { receivedFilter = filter; return [ticket]; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets?limit=10&offset=20", {
+      headers: {
+        authorization: `Bearer ${credential}`,
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "customer-ticket-list-success-1",
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-request-id"), "customer-ticket-list-success-1");
+    const payload = await response.json();
+    assert.equal(payload.success, true);
+    assert.deepEqual(payload.data.tickets, [ticket]);
+    assert.equal(payload.data.limit, 10);
+    assert.equal(payload.data.offset, 20);
+    assert.equal(payload.meta.requestId, "customer-ticket-list-success-1");
+    assert.equal(receivedFilter.applicationId, "app-a");
+    assert.equal(receivedFilter.limit, 10);
+    assert.equal(receivedFilter.offset, 20);
+  });
+});
+
 test("customer ticket creation storage failures use the standardized safe error envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
