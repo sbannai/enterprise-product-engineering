@@ -168,3 +168,47 @@ test("missing tenant-scoped ticket does not emit a success audit event", async (
   assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
   assert.ok(!calls.some((x) => x.sql === "COMMIT"));
 });
+
+
+test("canonical ticket audit adapter writes the append-only EPER audit envelope", async () => {
+  const { createCanonicalTicketAuditWriter } = await import("../dist/packages/ticketing/postgres-ticket-store.js");
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT last_event_hash FROM eper_audit_chain_head/.test(sql)) {
+        return { rows: [{ last_event_hash: null }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const writer = createCanonicalTicketAuditWriter("uat", "test-version");
+  await writer({
+    tenantId: "tenant-a",
+    applicationId: "app-a",
+    actorId: "actor-a",
+    correlationId: "corr-1",
+    action: "ticket.assigned",
+    ticketId: "ticket-1",
+    outcome: "success",
+    payload: { assignedTo: "support-2" },
+  }, client);
+  const insert = calls.find((x) => /INSERT INTO eper_audit_events/.test(x.sql));
+  assert.ok(insert, "must use the canonical append-only audit table");
+  assert.match(insert.sql, /previous_event_hash, event_hash, integrity_metadata/);
+  assert.equal(insert.values[2], "tenant-a");
+  assert.equal(insert.values[3], "app-a");
+  assert.equal(insert.values[4], "uat");
+  assert.equal(insert.values[6], "actor-a");
+  assert.equal(insert.values[8], "ticket.assigned");
+  assert.equal(insert.values[9], "success");
+  assert.equal(insert.values[14], "corr-1");
+  assert.equal(insert.values[16], "api");
+  assert.equal(insert.values[17], "ticket.assigned");
+  assert.equal(insert.values[18], "test-version");
+  assert.equal(insert.values[11], "support_ticket");
+  assert.equal(insert.values[12], "ticket-1");
+  assert.deepEqual(JSON.parse(insert.values[25]), { assignedTo: "support-2" });
+  assert.ok(calls.some((x) => /UPDATE eper_audit_chain_head/.test(x.sql)));
+});
