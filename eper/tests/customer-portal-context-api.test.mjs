@@ -282,3 +282,45 @@ test("customer application list returns only server-assigned applications for th
     }
   }
 });
+
+
+test("customer application list fails closed for malformed or non-canonical assignment configuration", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-app-list-invalid-config-token-0000000001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications";
+    for (const invalidConfig of [
+      "{malformed",
+      JSON.stringify({ "tenant-a": "app-a" }),
+      JSON.stringify({ "tenant-a": ["app-a", " app-b"] }),
+      JSON.stringify({ "tenant-a": ["app-a", 42] }),
+    ]) {
+      process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = invalidConfig;
+      const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "customer_applications_unavailable" });
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
