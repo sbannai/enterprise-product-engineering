@@ -54,7 +54,7 @@ export function createPostgresCapabilityServices(pool: Pool): Readonly<Record<Re
   } };
 
   const XX02: CapabilityService = { async execute(req, input) {
-    const { context, contracts, payload: p } = prepare(req, input, "XX02", "authorization");
+    const { requirement, context, contracts, payload: p } = prepare(req, input, "XX02", "authorization");
     if (p.operation === "addPolicy") { const policy = p.policy as AuthorizationPolicy & { id?: string }; await policies.addPolicyGoverned({ ...policy, tenantId: tenant(context, policy?.tenantId) }, { principalId: context.principalId, correlationId: context.correlationId, requirementId: requirement.id }); return result(req, contracts, { operation: "addPolicy", added: true }); }
     if (p.operation === "decide") { const request = p.request as AuthorizationRequest; tenant(context, request?.tenantId); if (request?.principalId !== context.principalId) throw new Error("AUTHORIZATION_PRINCIPAL_MISMATCH"); return result(req, contracts, { operation: "decide", decision: await policies.decide(request) }); }
     if (p.operation === "snapshot") return result(req, contracts, { operation: "snapshot", policies: await policies.snapshot(context.tenantId) });
