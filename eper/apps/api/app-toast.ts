@@ -10,11 +10,16 @@ export const applicationToastMarkup = String.raw`
 (function(){
   var region=document.getElementById('eper-toast-region');if(!region)return;
   var timers=new WeakMap();
-  function dismiss(item){var timer=timers.get(item);if(timer!==undefined){clearTimeout(timer);timers.delete(item)}item.remove()}
+  var recent=new Map();
+  function dismiss(item){var timer=timers.get(item);if(timer!==undefined){clearTimeout(timer);timers.delete(item)}recent.forEach(function(entry,key){if(entry.item===item)recent.delete(key)});item.remove()}
   var icons={success:'✓',error:'!',warning:'⚠',info:'i'};
   function show(kind,message,title,options){
     options=options||{};kind=icons[kind]?kind:'info';
-    var item=document.createElement('section');item.className='eper-toast';item.dataset.kind=kind;item.setAttribute('role',kind==='error'?'alert':'status');
+    var dedupeKey=kind+"\\u0000"+String(message||"");var previous=recent.get(dedupeKey);var now=Date.now();
+    if(previous&&region.contains(previous.item)&&now-previous.at<1800)return previous.item;
+    var item=document.createElement('section');recent.set(dedupeKey,{item:item,at:now});
+    var itemPlaceholder_unused;
+    item.className='eper-toast';item.dataset.kind=kind;item.setAttribute('role',kind==='error'?'alert':'status');
     var icon=document.createElement('div');icon.className='eper-toast-icon';icon.setAttribute('aria-hidden','true');icon.textContent=icons[kind];
     var body=document.createElement('div');var heading=document.createElement('div');heading.className='eper-toast-title';heading.textContent=title||({success:'Saved',error:'Something went wrong',warning:'Attention needed',info:'Notice'}[kind]);
     var copy=document.createElement('div');copy.className='eper-toast-message';copy.textContent=String(message||'');body.append(heading,copy);
