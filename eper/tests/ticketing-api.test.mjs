@@ -342,6 +342,41 @@ test("customer ticket validation errors use the versioned envelope and secure re
   });
 });
 
+
+test("malformed customer ticket JSON returns a safe versioned error without persistence", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  let storeCalled = false;
+  const ticketStore = {
+    async assertReady() {},
+    async create() { storeCalled = true; },
+    async list() { return []; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "customer-malformed-json-1",
+      },
+      body: '{"type":',
+    });
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "INVALID_JSON");
+    assert.equal(payload.meta.requestId, "customer-malformed-json-1");
+    assert.equal(response.headers.get("x-request-id"), "customer-malformed-json-1");
+    assert.equal(JSON.stringify(payload).includes('{"type":'), false);
+    assert.equal(storeCalled, false);
+  });
+});
+
 test("customer ticket creation storage failures use the standardized safe error envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
