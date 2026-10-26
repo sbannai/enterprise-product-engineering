@@ -721,7 +721,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (principalTenantId !== record.tenantId) { json(req, res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(req, res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     const pdf = receiptPdf(record);
-    sendReceiptPdf(req, res, pdf, record.receiptId); return true;
+    sendReceiptPdf(req, res, pdf, record.receiptId ?? (publicReceiptMatch ? publicReceiptMatch[1] : record.id)); return true;
   }
 
   const receiptMatch = /^\/api\/payments\/([^/]+)\/receipt\.pdf$/.exec(pathname);
