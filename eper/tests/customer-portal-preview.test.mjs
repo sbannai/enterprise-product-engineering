@@ -53,6 +53,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
     assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;bearerToken="";enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "disconnect must invalidate in-flight requests and clear customer data");
     assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
+    assert.match(html, /ticketViewSessionGeneration=sessionGeneration/, "ticket view application bootstrap must capture its session");
+    assert.match(html, /if\(ticketViewSessionGeneration!==sessionGeneration\)return;const assigned=/, "late assigned-application responses must not mutate a stale ticket view");
+    assert.match(html, /requestSessionGeneration!==sessionGeneration\|\|sequence!==ticketLoadSequence/, "ticket-history errors from earlier sessions must be ignored");
     assert.match(html, /const submissionSessionGeneration=sessionGeneration/, "ticket submissions must capture the session that initiated them");
     assert.match(html, /if\(submissionSessionGeneration!==sessionGeneration\)return;result\.textContent="Ticket submitted\./, "late ticket success must not update the UI after a session change");
     assert.match(html, /if\(submissionSessionGeneration===sessionGeneration\)\{form\.dataset\.submitting="false";submitButton\.disabled=application\.disabled\|\|!application\.value;\}/, "late ticket completion must not mutate stale form controls");
