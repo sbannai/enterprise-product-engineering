@@ -260,6 +260,13 @@ test("customer identity mapping rejects non-canonical tenant, actor, and role id
       assert.equal(response.status, 401);
       assert.deepEqual(await response.json(), { error: "unauthorized" });
     }
+    // Server-side identity mappings must never accept weak bearer credentials.
+    process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+      "short-token": { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    });
+    const weakCredential = await fetch(url, { headers: { authorization: "Bearer short-token" } });
+    assert.equal(weakCredential.status, 401);
+    assert.deepEqual(await weakCredential.json(), { error: "unauthorized" });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
