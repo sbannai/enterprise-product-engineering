@@ -1103,6 +1103,37 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    // Authenticated customer application list. Assignment data is server-managed and tenant-scoped.
+    if (request.method === "GET" && requestUrl.pathname === "/customer/applications") {
+      if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(request, response, 401, { error: "unauthorized" });
+        return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+      catch { assignments = null; }
+      if (!assignments || typeof assignments !== "object" || Array.isArray(assignments)) {
+        sendJson(request, response, 503, { error: "customer_applications_unavailable" });
+        return;
+      }
+      const tenantAssignments = (assignments as Record<string, unknown>)[identity.tenantId];
+      if (!Array.isArray(tenantAssignments) || tenantAssignments.some((item) =>
+        typeof item !== "string" || item !== item.trim() || item.length < 1 || item.length > 128 ||
+        !/^[a-zA-Z0-9._:-]+$/.test(item))) {
+        sendJson(request, response, 503, { error: "customer_applications_unavailable" });
+        return;
+      }
+      sendJson(request, response, 200, {
+        applications: [...new Set(tenantAssignments as string[])].map((applicationId) => ({ applicationId })),
+      });
+      return;
+    }
+
     // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
     if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
       if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
