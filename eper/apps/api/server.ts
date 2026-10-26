@@ -490,6 +490,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               typeof asset.name !== "string" || !asset.name.trim() || asset.name.length > 200 ||
               typeof asset.type !== "string" || !["document", "video", "image", "audio", "other"].includes(asset.type) ||
               typeof asset.accessReference !== "string" || !asset.accessReference.trim() || asset.accessReference.length > 2048) continue;
+          if (allAssets.length >= 10000) {
+            sendJson(request, response, 413, { error: "customer_asset_manifest_too_large" }); return;
+          }
           applicationsWithAssets.add(assignedId);
           allAssets.push({
             id: asset.id, applicationId: assignedId, name: asset.name, type: asset.type,
