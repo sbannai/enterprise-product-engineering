@@ -103,6 +103,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
   assert.ok(html.includes("exportClientAssets"), "customer can export the currently visible asset inventory");
   assert.ok(html.includes("visibleItems.map(asset=>columns.map(column=>csvCell(asset[column])).join(","))"), "CSV export follows active search and filters");
   assert.ok(html.includes("URL.createObjectURL(new Blob(["), "CSV export is generated locally without another API request");
+  assert.ok(html.includes("exportButton.disabled=filtered.length===0"), "CSV export is disabled when filters produce no visible assets");
+  assert.ok(html.includes("setTimeout(()=>URL.revokeObjectURL(url),1000)"), "CSV object URL remains valid briefly for browser download handling");
   assert.ok(html.includes('/^[\\s]*[=+\\-@]/.test(text)'), "CSV export neutralizes spreadsheet formula-leading values");
   assert.ok(html.includes("refreshClientAssets"), "client assets can be refreshed asynchronously");
   assert.ok(html.includes("Refreshing all client assets"), "asset refresh exposes loading status");
