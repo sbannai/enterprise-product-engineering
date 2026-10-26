@@ -28,6 +28,8 @@ main{padding:30px;min-width:0}.top{display:flex;justify-content:space-between;ga
 .support-field input:focus,.support-field select:focus,.support-field textarea:focus{outline:3px solid #dbe5ff;border-color:#315efb}
 .support-hint{font-size:11px;color:#718096;margin:0}
 .support-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.support-actions button,.card button{min-height:44px}
+.asset-refresh-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:2px 0 12px}.asset-refresh-row button{min-height:42px}.asset-refresh-row .support-hint{overflow-wrap:anywhere}
+@media(max-width:480px){.asset-refresh-row{align-items:stretch;flex-direction:column;gap:8px}.asset-refresh-row button{width:100%}}
 .support-side{display:grid;gap:12px}.support-side-card{background:#fbfcff;border:1px solid #e0e6ef;border-radius:12px;padding:15px}
 .support-side-card strong{font-size:13px}.support-side-card p,.support-side-card li{font-size:12px;color:#647188;line-height:1.55}.support-side-card p{margin:7px 0 0}.support-side-card ul{padding-left:18px;margin:9px 0 0}
 .support-pill{display:inline-flex;border-radius:999px;padding:5px 9px;background:#edf2ff;color:#3150aa;font-size:11px;font-weight:750}
