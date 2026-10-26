@@ -3,6 +3,7 @@
 import csv
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -23,6 +24,16 @@ def count_values(rows, field):
         value = (row.get(field) or "").strip() or "(blank)"
         result[value] = result.get(value, 0) + 1
     return result
+
+
+def valid_iso_date(value):
+    """Accept only a real calendar date in YYYY-MM-DD format."""
+    value = (value or "").strip()
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return False
+    return parsed.isoformat() == value
 
 
 def audit_records(checklist, gates, capture, gaps):
@@ -93,7 +104,7 @@ def audit_records(checklist, gates, capture, gaps):
     unapproved_cases = [r.get("requirement_id", "") for r in checklist
                         if (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED"}
                         or not (r.get("reviewer_identity") or "").strip()
-                        or not (r.get("decision_date") or "").strip()
+                        or not valid_iso_date(r.get("decision_date"))
                         or not (r.get("approval_reference") or "").strip()]
     unauthorized_cases = [r.get("requirement_id", "") for r in checklist
                           if (r.get("execution_authorized") or "").strip().upper() != "YES"]
