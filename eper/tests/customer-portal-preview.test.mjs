@@ -143,3 +143,32 @@ test("customer help and growth content APIs enforce module entitlement and tenan
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+test("customer content APIs expose only bounded title/body fields", async () => {
+  const keys = ["EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_HELP_CONTENT_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "bounded-content-test-credential-12345678901234567890";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" } });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-b": ["help-center"] });
+  process.env.EPER_CUSTOMER_HELP_CONTENT_JSON = JSON.stringify({
+    "tenant-b": [
+      { title: "Safe article", body: "Visible text", internalSecret: "must not leak" },
+      { title: 42, body: "invalid title" },
+      ...Array.from({ length: 105 }, (_, index) => ({ title: "Article " + index, body: "Body " + index }))
+    ]
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/help-center/content", { headers: { authorization: "Bearer " + credential } });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.items.length, 100);
+    assert.deepEqual(payload.items[0], { title: "Safe article", body: "Visible text" });
+    assert.equal("internalSecret" in payload.items[0], false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
