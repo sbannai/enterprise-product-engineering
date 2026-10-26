@@ -99,7 +99,30 @@ document.getElementById("connectButton").addEventListener("click",connect);
 document.getElementById("customerCredential").addEventListener("keydown",e=>{if(e.key==="Enter")connect();});
 document.getElementById("disconnectButton").addEventListener("click",()=>{bearerToken="";enabledModules.clear();document.getElementById("connectPanel").hidden=false;document.getElementById("customerCredential").value="";document.querySelector(".preview").textContent="NOT CONNECTED";nav.querySelectorAll("button").forEach(b=>b.hidden=false);renderCards("home");});
 nav.addEventListener("click",e=>{const button=e.target.closest("button[data-view]");if(button&&!button.hidden){if(!bearerToken){apiStatus.textContent="Connect your customer workspace before opening modules.";return;}renderCards(button.dataset.view);}});
-cards.addEventListener("click",e=>{const button=e.target.closest("button[data-view]");if(button&&bearerToken)renderCards(button.dataset.view);});
+cards.addEventListener("click",async e=>{
+const viewButton=e.target.closest("button[data-view]");
+if(viewButton&&bearerToken){renderCards(viewButton.dataset.view);return;}
+const button=e.target.closest("button[data-download-asset]");
+if(!button||!bearerToken)return;
+const status=button.parentElement.querySelector(".asset-download-status");
+const applicationId=button.dataset.downloadApplication;
+const assetId=button.dataset.downloadAsset;
+if(!applicationId||!assetId||!status)return;
+const downloadWindow=window.open("about:blank","_blank");
+if(!downloadWindow){status.textContent="Allow pop-ups for this site to open the secure download.";return;}
+downloadWindow.opener=null;
+button.disabled=true;
+status.textContent="Requesting secure download…";
+try{
+const grant=await api("/customer/applications/"+encodeURIComponent(applicationId)+"/assets/"+encodeURIComponent(assetId)+"/download");
+if(typeof grant.downloadUrl!=="string"||typeof grant.expiresAt!=="string")throw new Error("invalid_download_response");
+downloadWindow.location.replace(grant.downloadUrl);
+status.textContent="Secure download opened. The link expires shortly.";
+}catch(error){
+downloadWindow.close();
+status.textContent="Download unavailable: "+error.message;
+}finally{button.disabled=false;}
+});
 })();
 </script></body></html>`;
 
