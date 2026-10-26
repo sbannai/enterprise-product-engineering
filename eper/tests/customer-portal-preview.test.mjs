@@ -37,7 +37,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     for (const ticketContract of ["ticketForm", "ticketApplication", "businessImpact", "/customer/applications/", "Submit ticket", "Load my tickets", "ticketResult"]) {
       assert.ok(html.includes(ticketContract), "customer ticket UI must expose: " + ticketContract);
     }
-    assert.match(html, /method:"POST",headers:\{"idempotency-key":pendingIdempotencyKey\},body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API with a stable idempotency key");
+    assert.match(html, /method:"POST",headers:\{"idempotency-key":pendingIdempotencyKey\},body:JSON\.stringify\(pendingTicketPayload\)/, "ticket submission must retry the original payload with a stable idempotency key");
+    assert.match(html, /JSON\.stringify\(body\)!==JSON\.stringify\(pendingTicketPayload\)/, "edited form data must not silently reuse an idempotency key after an uncertain outcome");
+    assert.match(html, /pendingTicketPayload=null/, "successful ticket submission must clear the pending retry snapshot");
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
     assert.match(html, /sequence!==ticketLoadSequence\|\|application\.value\.trim\(\)!==app/, "late ticket responses must not overwrite the selected application history");
     assert.match(html, /application\.addEventListener\("change",loadTickets\)/, "changing the assigned application must reload its ticket history");
