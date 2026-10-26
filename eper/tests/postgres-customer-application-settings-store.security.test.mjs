@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PostgresCustomerApplicationSettingsStore } from "../packages/workflows/postgres-customer-application-settings-store.js";
+import { PostgresCustomerApplicationSettingsStore } from "../dist/packages/workflows/postgres-customer-application-settings-store.js";
 
 function storeThatMustNotConnect() {
   let connections = 0;
