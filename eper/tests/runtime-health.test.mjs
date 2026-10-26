@@ -80,6 +80,16 @@ test("unknown routes negotiate standardized v1 error envelopes without changing 
     error: { code: "NOT_FOUND", message: "The requested resource was not found." },
     meta: { requestId: "v1-error-contract" },
   });
+
+  const caseInsensitive = await fetch(`${base}/missing-v1-case-route`, {
+    headers: { accept: "application/vnd.EPER.v1+JSON; charset=utf-8, application/json" },
+  });
+  assert.equal(caseInsensitive.status, 404);
+  assert.deepEqual(await caseInsensitive.json(), {
+    success: false,
+    error: { code: "NOT_FOUND", message: "The requested resource was not found." },
+    meta: { requestId: caseInsensitive.headers.get("x-request-id") },
+  });
 });
 
 test("local capability API is disabled by default", async () => {
