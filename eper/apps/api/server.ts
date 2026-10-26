@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { sendApiSuccess, sendApiError } from "./api-response.js";
+import { sendApiSuccess, sendApiError, resolveApiRequestId } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
@@ -24,11 +24,33 @@ import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 
-function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+  // Opt-in v1 error envelope gives legacy clients a safe migration path without
+  // changing their default payloads. Success payloads stay route-owned until clients migrate.
+  const acceptsStandardErrors = (request.headers.accept ?? "")
+    .split(",")
+    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  if (statusCode >= 400 && acceptsStandardErrors) {
+    const legacyCode = typeof body.error === "string" ? body.error : "request_failed";
+    const normalizedCode = legacyCode.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+    const code = /^[A-Z][A-Z0-9_]{1,63}$/.test(normalizedCode) ? normalizedCode : "REQUEST_FAILED";
+    const message = statusCode >= 500 ? "The service could not complete the request."
+      : statusCode === 401 ? "Authentication is required."
+      : statusCode === 403 ? "You are not allowed to perform this action."
+      : statusCode === 404 ? "The requested resource was not found."
+      : statusCode === 409 ? "The request conflicts with the current resource state."
+      : statusCode === 429 ? "Too many requests. Try again later."
+      : "The request could not be completed.";
+    sendApiError(request, response, statusCode, code, message);
+    return;
+  }
+
+  const requestId = resolveApiRequestId(request);
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
+    "x-request-id": requestId,
   });
   response.end(JSON.stringify(body));
 }
@@ -162,7 +184,7 @@ async function handleDurableAdminConfig(
 
   if (path === "/admin/config/workflows" && request.method === "GET") {
     const saved = await getConfig("workflows");
-    sendJson(response, 200, { workflows: saved?.config ?? [], version: saved?.version ?? 0, persistence: "postgres", restartPersistence: true });
+    sendJson(request, response, 200, { workflows: saved?.config ?? [], version: saved?.version ?? 0, persistence: "postgres", restartPersistence: true });
     return;
   }
   if (path === "/admin/config/workflows" && request.method === "PUT") {
@@ -170,12 +192,12 @@ async function handleDurableAdminConfig(
     const validator = await loadWorkflowService(false);
     const workflows = validator.replaceWorkflows(body.workflows);
     const saved = await saveConfig("workflows", workflows, body.expectedVersion);
-    sendJson(response, 200, { workflows: saved.config, version: saved.version, persistence: "postgres", restartPersistence: true });
+    sendJson(request, response, 200, { workflows: saved.config, version: saved.version, persistence: "postgres", restartPersistence: true });
     return;
   }
   if (path === "/admin/config/roles-access" && request.method === "GET") {
     const saved = await getConfig("roles-access");
-    sendJson(response, 200, { roles: saved?.config ?? [], version: saved?.version ?? 0, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "postgres", restartPersistence: true });
+    sendJson(request, response, 200, { roles: saved?.config ?? [], version: saved?.version ?? 0, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "postgres", restartPersistence: true });
     return;
   }
   if (path === "/admin/config/roles-access" && request.method === "PUT") {
@@ -183,7 +205,7 @@ async function handleDurableAdminConfig(
     const validator = await loadWorkflowService(true);
     const roles = validator.replaceRoles(body.roles);
     const saved = await saveConfig("roles-access", roles, body.expectedVersion);
-    sendJson(response, 200, { roles: saved.config, version: saved.version, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "postgres", restartPersistence: true });
+    sendJson(request, response, 200, { roles: saved.config, version: saved.version, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "postgres", restartPersistence: true });
     return;
   }
   if (path === "/admin/config/access-check" && request.method === "POST") {
@@ -192,11 +214,11 @@ async function handleDurableAdminConfig(
         typeof body.permission !== "string" ||
         !(WorkflowConfigurationService.PERMISSIONS as readonly string[]).includes(body.permission) ||
         (body.workflowId !== undefined && (typeof body.workflowId !== "string" || body.workflowId.length > 128))) {
-      sendJson(response, 400, { error: "principalId_and_supported_permission_required" });
+      sendJson(request, response, 400, { error: "principalId_and_supported_permission_required" });
       return;
     }
     const validator = await loadWorkflowService(true);
-    sendJson(response, 200, { ...validator.checkAccess(
+    sendJson(request, response, 200, { ...validator.checkAccess(
       body.principalId,
       body.permission as import("../../packages/workflows/workflow-configuration.js").WorkflowPermission,
       body.workflowId as string | undefined,
@@ -205,14 +227,14 @@ async function handleDurableAdminConfig(
   }
   if (path === "/admin/config/price-book" && request.method === "GET") {
     const saved = await getConfig("price-book");
-    sendJson(response, 200, { entries: saved?.config ?? initialPriceEntries, version: saved?.version ?? 0, persistence: "postgres", restartPersistence: true });
+    sendJson(request, response, 200, { entries: saved?.config ?? initialPriceEntries, version: saved?.version ?? 0, persistence: "postgres", restartPersistence: true });
     return;
   }
   if (path === "/admin/config/price-book" && request.method === "PUT") {
     const body = await readJson(request);
     const candidate = body.entry;
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      sendJson(response, 400, { error: "entry_object_required" });
+      sendJson(request, response, 400, { error: "entry_object_required" });
       return;
     }
     const savedBefore = await getConfig("price-book");
@@ -226,7 +248,7 @@ async function handleDurableAdminConfig(
     const nextService = new MarketPriceBookService(nextEntries);
     void nextService;
     const saved = await saveConfig("price-book", nextEntries, body.expectedVersion);
-    sendJson(response, 200, { entries: saved.config, version: saved.version, persistence: "postgres", restartPersistence: true });
+    sendJson(request, response, 200, { entries: saved.config, version: saved.version, persistence: "postgres", restartPersistence: true });
     return;
   }
   if (path === "/admin/config/payment-vendor" && request.method === "GET") {
@@ -246,7 +268,7 @@ async function handleDurableAdminConfig(
       ? Boolean(process.env.EPER_RAZORPAY_WEBHOOK_SECRET)
       : provider === "stripe" ? Boolean(process.env.EPER_STRIPE_WEBHOOK_SECRET)
       : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_HMAC_KEY) : false;
-    sendJson(response, 200, {
+    sendJson(request, response, 200, {
       ...config, version: saved?.version ?? 0, productionEnabled: false, adapterAvailable: provider === "sandbox",
       credentials: { providerKeyConfigured, webhookSecretConfigured }, persistence: "postgres",
       message: provider === "sandbox" ? "Sandbox adapter selected; no live charges can be made." : "Provider selection is planning-only; no live payment adapter is enabled.",
@@ -258,7 +280,7 @@ async function handleDurableAdminConfig(
     const allowedProviders = ["sandbox", "razorpay", "stripe", "adyen"];
     if (typeof body.provider !== "string" || !allowedProviders.includes(body.provider) ||
         body.mode !== "sandbox" || typeof body.sandboxEnabled !== "boolean") {
-      sendJson(response, 400, { error: "provider must be supported; mode must remain sandbox; sandboxEnabled must be boolean" });
+      sendJson(request, response, 400, { error: "provider must be supported; mode must remain sandbox; sandboxEnabled must be boolean" });
       return;
     }
     const config = {
@@ -266,7 +288,7 @@ async function handleDurableAdminConfig(
       sandboxEnabled: body.sandboxEnabled && body.provider === "sandbox" && process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
     };
     const saved = await saveConfig("payment-vendor", config, body.expectedVersion);
-    sendJson(response, 200, { ...config, version: saved.version, productionEnabled: false, adapterAvailable: config.provider === "sandbox", persistence: "postgres", message: config.provider === "sandbox" ? "Sandbox configuration updated; server-side sandbox opt-in and tenant settings are still required." : "Provider selection is planning-only; no live adapter is enabled." });
+    sendJson(request, response, 200, { ...config, version: saved.version, productionEnabled: false, adapterAvailable: config.provider === "sandbox", persistence: "postgres", message: config.provider === "sandbox" ? "Sandbox configuration updated; server-side sandbox opt-in and tenant settings are still required." : "Provider selection is planning-only; no live adapter is enabled." });
     return;
   }
   response.writeHead(405, { allow: path === "/admin/config/access-check" ? "POST" : "GET, PUT", "cache-control": "no-store" });
@@ -443,29 +465,29 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const adminConfigPath = requestUrl.pathname;
     if (["/admin/config/price-book", "/admin/config/payment-vendor", "/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
       if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       const durableAdminMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE === "postgres";
       let adminIdentity: TrustedAdminConfigIdentity | null = null;
       if (durableAdminMode) {
         if (!options.adminConfigurationStore) {
-          sendJson(response, 503, { error: "admin_config_durable_store_unconfigured" });
+          sendJson(request, response, 503, { error: "admin_config_durable_store_unconfigured" });
           return;
         }
         adminIdentity = resolveAdminConfigIdentity(request);
         if (!adminIdentity) {
-          sendJson(response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+          sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
           return;
         }
       } else {
         const adminToken = process.env.EPER_ADMIN_CONFIG_API_TOKEN ?? "";
         if (adminToken.length < 32) {
-          sendJson(response, 503, { error: "admin_config_api_unconfigured" });
+          sendJson(request, response, 503, { error: "admin_config_api_unconfigured" });
           return;
         }
         if (!bearerMatches(request, adminToken)) {
-          sendJson(response, 401, { error: "unauthorized" });
+          sendJson(request, response, 401, { error: "unauthorized" });
           return;
         }
       }
@@ -479,17 +501,17 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           return;
         }
         if (adminConfigPath === "/admin/config/workflows" && request.method === "GET") {
-          sendJson(response, 200, { workflows: workflowConfig.listWorkflows(), persistence: "process-memory", restartPersistence: false });
+          sendJson(request, response, 200, { workflows: workflowConfig.listWorkflows(), persistence: "process-memory", restartPersistence: false });
           return;
         }
         if (adminConfigPath === "/admin/config/workflows" && request.method === "PUT") {
           const body = await readJson(request);
           const workflows = workflowConfig.replaceWorkflows(body.workflows);
-          sendJson(response, 200, { workflows, persistence: "process-memory", restartPersistence: false });
+          sendJson(request, response, 200, { workflows, persistence: "process-memory", restartPersistence: false });
           return;
         }
         if (adminConfigPath === "/admin/config/roles-access" && request.method === "GET") {
-          sendJson(response, 200, {
+          sendJson(request, response, 200, {
             roles: workflowConfig.listRoles(),
             availablePermissions: WorkflowConfigurationService.PERMISSIONS,
             persistence: "process-memory",
@@ -500,7 +522,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         if (adminConfigPath === "/admin/config/roles-access" && request.method === "PUT") {
           const body = await readJson(request);
           const roles = workflowConfig.replaceRoles(body.roles);
-          sendJson(response, 200, { roles, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "process-memory", restartPersistence: false });
+          sendJson(request, response, 200, { roles, availablePermissions: WorkflowConfigurationService.PERMISSIONS, persistence: "process-memory", restartPersistence: false });
           return;
         }
         if (adminConfigPath === "/admin/config/access-check" && request.method === "POST") {
@@ -509,7 +531,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
               typeof body.permission !== "string" ||
               !(WorkflowConfigurationService.PERMISSIONS as readonly string[]).includes(body.permission) ||
               (body.workflowId !== undefined && (typeof body.workflowId !== "string" || body.workflowId.length > 128))) {
-            sendJson(response, 400, { error: "principalId_and_supported_permission_required" });
+            sendJson(request, response, 400, { error: "principalId_and_supported_permission_required" });
             return;
           }
           const decision = workflowConfig.checkAccess(
@@ -517,7 +539,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             body.permission as import("../../packages/workflows/workflow-configuration.js").WorkflowPermission,
             body.workflowId as string | undefined,
           );
-          sendJson(response, 200, { ...decision });
+          sendJson(request, response, 200, { ...decision });
           return;
         }
         if (["/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
@@ -526,14 +548,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           return;
         }
         if (adminConfigPath === "/admin/config/price-book" && request.method === "GET") {
-          sendJson(response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
+          sendJson(request, response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
           return;
         }
         if (adminConfigPath === "/admin/config/price-book" && request.method === "PUT") {
           const body = await readJson(request);
           const candidate = body.entry;
           if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-            sendJson(response, 400, { error: "entry_object_required" });
+            sendJson(request, response, 400, { error: "entry_object_required" });
             return;
           }
           const entry = candidate as MarketPriceEntry;
@@ -541,14 +563,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             !(current.productId === entry.productId && current.marketId === entry.marketId &&
               current.priceBookId === entry.priceBookId && current.priceBookVersion === entry.priceBookVersion));
           if (nextEntries.length >= 10_000) {
-            sendJson(response, 503, { error: "MARKET_PRICE_BOOK_CAPACITY_EXCEEDED" });
+            sendJson(request, response, 503, { error: "MARKET_PRICE_BOOK_CAPACITY_EXCEEDED" });
             return;
           }
           nextEntries.push(entry);
           const nextService = new MarketPriceBookService(nextEntries);
           marketPriceEntries = nextEntries;
           marketPriceBook = nextService;
-          sendJson(response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
+          sendJson(request, response, 200, { entries: marketPriceEntries, persistence: "process-memory", restartPersistence: false });
           return;
         }
         if (adminConfigPath === "/admin/config/payment-vendor" && request.method === "GET") {
@@ -565,7 +587,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             : provider === "adyen" ? Boolean(process.env.EPER_ADYEN_HMAC_KEY)
             : false;
           const adapterAvailable = provider === "sandbox";
-          sendJson(response, 200, {
+          sendJson(request, response, 200, {
             provider, mode: paymentVendorConfig.mode, sandboxEnabled: paymentVendorConfig.sandboxEnabled,
             productionEnabled: false, adapterAvailable,
             credentials: { providerKeyConfigured, webhookSecretConfigured },
@@ -579,7 +601,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           const allowedProviders = ["sandbox", "razorpay", "stripe", "adyen"];
           if (typeof body.provider !== "string" || !allowedProviders.includes(body.provider) ||
               body.mode !== "sandbox" || typeof body.sandboxEnabled !== "boolean") {
-            sendJson(response, 400, { error: "provider must be supported; mode must remain sandbox; sandboxEnabled must be boolean" });
+            sendJson(request, response, 400, { error: "provider must be supported; mode must remain sandbox; sandboxEnabled must be boolean" });
             return;
           }
           paymentVendorConfig = {
@@ -588,7 +610,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             sandboxEnabled: body.sandboxEnabled && body.provider === "sandbox" &&
               process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
           };
-          sendJson(response, 200, {
+          sendJson(request, response, 200, {
             provider: paymentVendorConfig.provider,
             mode: paymentVendorConfig.mode,
             sandboxEnabled: paymentVendorConfig.sandboxEnabled,
@@ -616,7 +638,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           // Unknown failures in durable mode are store/operational failures, not client input.
           : durableAdminMode ? 503
           : 422;
-        sendJson(response, status, { error: status === 503 && durableAdminMode ? "admin_config_durable_store_unavailable" : message });
+        sendJson(request, response, status, { error: status === 503 && durableAdminMode ? "admin_config_durable_store_unavailable" : message });
       }
       return;
     }
@@ -625,31 +647,31 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     // market/currency pair must be present in the approved price-book config.
     if (requestUrl.pathname === "/pricing/options" || requestUrl.pathname === "/pricing/quote") {
       if (process.env.EPER_PRICING_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       const durablePricingMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE === "postgres";
       let pricingIdentity: TrustedAdminConfigIdentity | null = null;
       if (durablePricingMode) {
         if (!options.adminConfigurationStore) {
-          sendJson(response, 503, { error: "pricing_durable_store_unconfigured" });
+          sendJson(request, response, 503, { error: "pricing_durable_store_unconfigured" });
           return;
         }
         // In durable mode, price lookup must use the same trusted tenant identity as
         // admin configuration. A shared pricing token cannot safely select a tenant.
         pricingIdentity = resolveAdminConfigIdentity(request);
         if (!pricingIdentity) {
-          sendJson(response, 401, { error: "unauthorized_or_unmapped_pricing_identity" });
+          sendJson(request, response, 401, { error: "unauthorized_or_unmapped_pricing_identity" });
           return;
         }
       } else {
         const pricingToken = process.env.EPER_PRICING_API_TOKEN ?? "";
         if (pricingToken.length < 32) {
-          sendJson(response, 503, { error: "pricing_api_unconfigured" });
+          sendJson(request, response, 503, { error: "pricing_api_unconfigured" });
           return;
         }
         if (!bearerMatches(request, pricingToken)) {
-          sendJson(response, 401, { error: "unauthorized" });
+          sendJson(request, response, 401, { error: "unauthorized" });
           return;
         }
       }
@@ -663,7 +685,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             savedPriceBook = await options.adminConfigurationStore.get(pricingIdentity.tenantId, "price-book");
           } catch {
             // A durable-store outage is an operational failure, not bad client input.
-            sendJson(response, 503, { error: "pricing_durable_store_unavailable" });
+            sendJson(request, response, 503, { error: "pricing_durable_store_unavailable" });
             return;
           }
           const entries = (savedPriceBook?.config ?? marketPriceEntries) as MarketPriceEntry[];
@@ -671,14 +693,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         }
         if (request.method === "GET" && requestUrl.pathname === "/pricing/options") {
           const productId = requestUrl.searchParams.get("productId") ?? "";
-          sendJson(response, 200, { markets: requestPriceBook.listMarkets(productId) });
+          sendJson(request, response, 200, { markets: requestPriceBook.listMarkets(productId) });
           return;
         }
         if (request.method === "POST" && requestUrl.pathname === "/pricing/quote") {
           const body = await readJson(request);
           if (typeof body.productId !== "string" || typeof body.marketId !== "string" ||
               (body.currency !== undefined && typeof body.currency !== "string")) {
-            sendJson(response, 400, { error: "productId and marketId are required; currency must be a string when supplied" });
+            sendJson(request, response, 400, { error: "productId and marketId are required; currency must be a string when supplied" });
             return;
           }
           const quote = requestPriceBook.quote({
@@ -686,7 +708,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             marketId: body.marketId,
             ...(typeof body.currency === "string" ? { currency: body.currency } : {}),
           });
-          sendJson(response, 200, { quote, amountMajor: quote.amountMinor / 100 });
+          sendJson(request, response, 200, { quote, amountMajor: quote.amountMinor / 100 });
           return;
         }
         response.writeHead(405, { allow: "GET, POST", "cache-control": "no-store" });
@@ -700,36 +722,36 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : message === "REQUEST_BODY_TOO_LARGE" ? 413
           : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
           : 422;
-        sendJson(response, status, { error: message });
+        sendJson(request, response, status, { error: message });
       }
       return;
     }
 
 
     if (request.method === "GET" && requestUrl.pathname === "/localization/options") {
-      sendJson(response, 200, { ...localizationService.options() });
+      sendJson(request, response, 200, { ...localizationService.options() });
       return;
     }
 
     if (requestUrl.pathname === "/localization/preferences") {
       if (process.env.EPER_LOCALIZATION_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       const localizationToken = process.env.EPER_LOCALIZATION_API_TOKEN ?? "";
       const localizationTenant = process.env.EPER_LOCALIZATION_TENANT_ID ?? "";
       const localizationPrincipal = process.env.EPER_LOCALIZATION_PRINCIPAL_ID ?? "";
       if (localizationToken.length < 32 || !localizationTenant || !localizationPrincipal) {
-        sendJson(response, 503, { error: "localization_api_unconfigured" });
+        sendJson(request, response, 503, { error: "localization_api_unconfigured" });
         return;
       }
       if (!bearerMatches(request, localizationToken)) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       try {
         if (request.method === "GET") {
-          sendJson(response, 200, { preference: localizationService.getPreference(localizationTenant, localizationPrincipal) });
+          sendJson(request, response, 200, { preference: localizationService.getPreference(localizationTenant, localizationPrincipal) });
           return;
         }
         if (request.method === "PUT") {
@@ -739,7 +761,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             ...(typeof body.currency === "string" ? { currency: body.currency as SupportedCurrency } : {}),
             ...(typeof body.timeZone === "string" ? { timeZone: body.timeZone } : {}),
           });
-          sendJson(response, 200, { preference });
+          sendJson(request, response, 200, { preference });
           return;
         }
         response.writeHead(405, { allow: "GET, PUT", "cache-control": "no-store" });
@@ -752,7 +774,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : message === "REQUEST_BODY_TOO_LARGE" ? 413
           : error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED" ? 400
           : 422;
-        sendJson(response, status, { error: message });
+        sendJson(request, response, status, { error: message });
       }
       return;
     }
@@ -762,7 +784,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const buildId = process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID || "";
       const buildIdIsCommit = /^[a-f0-9]{40}$/i.test(buildId);
 
-      sendJson(response, buildIdIsCommit ? 200 : 503, {
+      sendJson(request, response, buildIdIsCommit ? 200 : 503, {
         status: buildIdIsCommit ? "ok" : "unconfigured",
         service: "eper-api",
         buildId: buildIdIsCommit ? buildId : null,
@@ -821,7 +843,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         blockers.push("production_payment_enablement_requires_authorized_readiness_review");
       }
       const ready = blockers.length === 0;
-      sendJson(response, ready ? 200 : 503, {
+      sendJson(request, response, ready ? 200 : 503, {
         status: ready ? "ready" : "blocked",
         subsystem: "payments",
         blockers,
@@ -834,7 +856,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     try {
       if (await handlePaymentRoute(request, response, requestUrl.pathname, options.invoiceAmountSource, options.paymentStore, options.receiptNumberSource, options.transactionSnapshotSource, options.allowLegacyPaymentLedgerForTests === true)) return;
     } catch {
-      if (!response.headersSent) sendJson(response, 503, { error: "payment_operation_unavailable" });
+      if (!response.headersSent) sendJson(request, response, 503, { error: "payment_operation_unavailable" });
       else response.destroy();
       return;
     }
@@ -846,23 +868,23 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+))?$/.exec(requestUrl.pathname);
     if (ticketPathMatch && (request.method === "GET" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       if (!options.ticketStore) {
-        sendJson(response, 503, { error: "ticketing_unavailable" });
+        sendJson(request, response, 503, { error: "ticketing_unavailable" });
         return;
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       let applicationId: string;
       try { applicationId = decodeURIComponent(ticketPathMatch[1]); }
-      catch { sendJson(response, 400, { error: "invalid_path_encoding" }); return; }
+      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
       if (!applicationId.trim() || applicationId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
-        sendJson(response, 400, { error: "invalid_application_id" });
+        sendJson(request, response, 400, { error: "invalid_application_id" });
         return;
       }
       let assignments: unknown;
@@ -871,7 +893,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!assignments || typeof assignments !== "object" || Array.isArray(assignments) ||
           !Array.isArray((assignments as Record<string, unknown>)[identity.tenantId]) ||
           !((assignments as Record<string, unknown[]>)[identity.tenantId] as unknown[]).includes(applicationId)) {
-        sendJson(response, 403, { error: "application_not_assigned_to_tenant" });
+        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
       }
       const correlationHeader = request.headers["x-correlation-id"];
@@ -882,13 +904,13 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           const body = await readJson(request);
           const validated = validateCreateTicketInput(body);
           if (!validated.valid) {
-            sendJson(response, 400, { error: "invalid_ticket_input", details: validated.errors });
+            sendJson(request, response, 400, { error: "invalid_ticket_input", details: validated.errors });
             return;
           }
           const ticket = await options.ticketStore.create({
             tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId,
           }, validated.value);
-          sendJson(response, 201, { ticket });
+          sendJson(request, response, 201, { ticket });
           return;
         }
         if (request.method === "GET" && !ticketPathMatch[2]) {
@@ -903,7 +925,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
               (type && !(TICKET_TYPES as readonly string[]).includes(type)) ||
               !Number.isInteger(limit) || limit < 1 || limit > 100 ||
               !Number.isInteger(offset) || offset < 0) {
-            sendJson(response, 400, { error: "invalid_ticket_filters" });
+            sendJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
           const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
@@ -911,12 +933,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
             type: type as typeof TICKET_TYPES[number] | undefined, limit, offset,
           });
-          sendJson(response, 200, { tickets, limit, offset });
+          sendJson(request, response, 200, { tickets, limit, offset });
           return;
         }
-        sendJson(response, 405, { error: "method_not_allowed" });
+        sendJson(request, response, 405, { error: "method_not_allowed" });
       } catch {
-        sendJson(response, 503, { error: "ticket_operation_unavailable" });
+        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
       }
       return;
     }
@@ -926,16 +948,16 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment))?$/.exec(requestUrl.pathname);
     if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       if (!options.ticketStore) {
-        sendJson(response, 503, { error: "ticketing_unavailable" });
+        sendJson(request, response, 503, { error: "ticketing_unavailable" });
         return;
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       let allowedRoles: unknown;
@@ -944,7 +966,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!Array.isArray(allowedRoles) || allowedRoles.length === 0 ||
           allowedRoles.some((role) => typeof role !== "string" || !role.trim()) ||
           !allowedRoles.includes(identity.roleKey)) {
-        sendJson(response, 403, { error: "ticket_admin_permission_required" });
+        sendJson(request, response, 403, { error: "ticket_admin_permission_required" });
         return;
       }
       const correlationHeader = request.headers["x-correlation-id"];
@@ -971,7 +993,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
               (applicationId && (!/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId))) ||
               !Number.isInteger(limit) || limit < 1 || limit > 100 ||
               !Number.isInteger(offset) || offset < 0) {
-            sendJson(response, 400, { error: "invalid_ticket_filters" });
+            sendJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
           const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
@@ -979,44 +1001,44 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
             type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit, offset,
           });
-          sendJson(response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
+          sendJson(request, response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
           return;
         }
         if (request.method === "PATCH" && adminTicketMatch[1]) {
           let ticketId: string;
           try { ticketId = decodeURIComponent(adminTicketMatch[1]); }
-          catch { sendJson(response, 400, { error: "invalid_ticket_id_encoding" }); return; }
+          catch { sendJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
           if (!/^[0-9a-f-]{36}$/i.test(ticketId)) {
-            sendJson(response, 400, { error: "invalid_ticket_id" });
+            sendJson(request, response, 400, { error: "invalid_ticket_id" });
             return;
           }
           const body = await readJson(request);
           if (adminTicketMatch[2] === "status") {
             if (typeof body.status !== "string" || !(TICKET_STATUSES as readonly string[]).includes(body.status) ||
                 Object.keys(body).some((key) => key !== "status")) {
-              sendJson(response, 400, { error: "invalid_ticket_status_update" });
+              sendJson(request, response, 400, { error: "invalid_ticket_status_update" });
               return;
             }
             const ticket = await options.ticketStore.changeStatus(trustedIdentity, ticketId, body.status as typeof TICKET_STATUSES[number]);
-            if (!ticket) { sendJson(response, 404, { error: "ticket_not_found" }); return; }
-            sendJson(response, 200, { ticket });
+            if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 200, { ticket });
             return;
           }
           if (adminTicketMatch[2] === "assignment") {
             if (!(body.assignedTo === null || (typeof body.assignedTo === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(body.assignedTo))) ||
                 Object.keys(body).some((key) => key !== "assignedTo")) {
-              sendJson(response, 400, { error: "invalid_ticket_assignment" });
+              sendJson(request, response, 400, { error: "invalid_ticket_assignment" });
               return;
             }
             const ticket = await options.ticketStore.assign(trustedIdentity, ticketId, body.assignedTo as string | null);
-            if (!ticket) { sendJson(response, 404, { error: "ticket_not_found" }); return; }
-            sendJson(response, 200, { ticket });
+            if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 200, { ticket });
             return;
           }
         }
-        sendJson(response, 405, { error: "method_not_allowed" });
+        sendJson(request, response, 405, { error: "method_not_allowed" });
       } catch {
-        sendJson(response, 503, { error: "ticket_operation_unavailable" });
+        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
       }
       return;
     }
@@ -1024,15 +1046,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
     if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
       if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
-      sendJson(response, 200, {
+      sendJson(request, response, 200, {
         tenantId: identity.tenantId,
         actorId: identity.actorId,
         roleKey: identity.roleKey,
@@ -1054,16 +1076,16 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const customerAccessMatch = /^\/customer\/applications\/([^/]+)\/access\/(modules|addons)\/([^/]+)$/.exec(requestUrl.pathname);
     if (request.method === "GET" && customerAccessMatch) {
       if (process.env.EPER_CUSTOMER_ACCESS_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       if (!options.moduleEntitlementService) {
-        sendJson(response, 503, { error: "customer_access_policy_unavailable" });
+        sendJson(request, response, 503, { error: "customer_access_policy_unavailable" });
         return;
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       let applicationId: string;
@@ -1072,13 +1094,13 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         applicationId = decodeURIComponent(customerAccessMatch[1]);
         itemKey = decodeURIComponent(customerAccessMatch[3]);
       } catch {
-        sendJson(response, 400, { error: "invalid_path_encoding" });
+        sendJson(request, response, 400, { error: "invalid_path_encoding" });
         return;
       }
       const permissionKey = requestUrl.searchParams.get("permission") ?? "module.use";
       if (!applicationId.trim() || applicationId.length > 128 || !itemKey.trim() || itemKey.length > 128 ||
           !/^[a-zA-Z0-9._:-]{1,128}$/.test(permissionKey)) {
-        sendJson(response, 400, { error: "invalid_access_query" });
+        sendJson(request, response, 400, { error: "invalid_access_query" });
         return;
       }
       try {
@@ -1091,9 +1113,9 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         const decision = customerAccessMatch[2] === "modules"
           ? await options.moduleEntitlementService.checkModule(context, itemKey)
           : await options.moduleEntitlementService.checkApplicationAddon(context, itemKey);
-        sendJson(response, 200, { applicationId, itemKey, kind: customerAccessMatch[2], ...decision });
+        sendJson(request, response, 200, { applicationId, itemKey, kind: customerAccessMatch[2], ...decision });
       } catch {
-        sendJson(response, 503, { error: "customer_access_check_failed" });
+        sendJson(request, response, 503, { error: "customer_access_check_failed" });
       }
       return;
     }
@@ -1102,16 +1124,16 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const registryMatch = /^\/v1\/requirements(?:\/([^/]+))?$/.exec(requestUrl.pathname);
     if (request.method === "GET" && registryMatch) {
       if (process.env.EPER_REQUIREMENTS_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
       const registryToken = process.env.EPER_REQUIREMENTS_API_TOKEN ?? "";
       if (registryToken.length < 32) {
-        sendJson(response, 503, { error: "requirements_api_unconfigured" });
+        sendJson(request, response, 503, { error: "requirements_api_unconfigured" });
         return;
       }
       if (!bearerMatches(request, registryToken)) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       if (registryMatch[1] !== undefined) {
@@ -1119,15 +1141,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         try {
           requirementId = decodeURIComponent(registryMatch[1]);
         } catch {
-          sendJson(response, 400, { error: "invalid_requirement_id_encoding" });
+          sendJson(request, response, 400, { error: "invalid_requirement_id_encoding" });
           return;
         }
         const requirement = requirementBindings.find((binding) => binding.id === requirementId);
         if (!requirement) {
-          sendJson(response, 404, { error: "requirement_not_found" });
+          sendJson(request, response, 404, { error: "requirement_not_found" });
           return;
         }
-        sendJson(response, 200, { apiVersion: "1.0.0", source: "requirement-registry", requirement });
+        sendJson(request, response, 200, { apiVersion: "1.0.0", source: "requirement-registry", requirement });
         return;
       }
       const query = requestUrl.searchParams;
@@ -1144,7 +1166,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         !Number.isSafeInteger(offset) || offset < 0 ||
         (chapter !== null && (!Number.isSafeInteger(chapter) || chapter < 1))
       ) {
-        sendJson(response, 400, { error: "invalid_query_parameters" });
+        sendJson(request, response, 400, { error: "invalid_query_parameters" });
         return;
       }
       const capability = query.get("capability");
@@ -1152,7 +1174,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const srs = query.get("srs");
       const supportedPatterns = new Set(["XX01", "XX02", "XX03", "XX04", "XX05", "XX06"]);
       if (pattern !== null && !supportedPatterns.has(pattern)) {
-        sendJson(response, 400, { error: "invalid_pattern", supportedPatterns: [...supportedPatterns] });
+        sendJson(request, response, 400, { error: "invalid_pattern", supportedPatterns: [...supportedPatterns] });
         return;
       }
       const needle = q.trim().toLowerCase();
@@ -1166,7 +1188,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           binding.id, binding.brd, binding.srs, binding.capability, binding.service,
           binding.pattern, binding.dataContract, binding.apiContract, binding.eventContract,
         ].some((value) => value.toLowerCase().includes(needle)));
-      sendJson(response, 200, {
+      sendJson(request, response, 200, {
         apiVersion: "1.0.0",
         source: "requirement-registry",
         total: requirements.length,
@@ -1181,7 +1203,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const uatCapabilityMatch = /^\/uat\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
     if (request.method === "POST" && uatCapabilityMatch) {
       if (process.env.EPER_UAT_API_ENABLED !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
 
@@ -1190,11 +1212,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const principalId = process.env.EPER_UAT_PRINCIPAL_ID ?? "";
       const publicAck = process.env.EPER_UAT_PUBLIC_ENDPOINT_ACK ?? "";
       if (token.length < 32 || !tenantId || !principalId || publicAck !== "I_ACCEPT_PUBLIC_BEARER_UAT_RISK") {
-        sendJson(response, 503, { error: "uat_api_unconfigured" });
+        sendJson(request, response, 503, { error: "uat_api_unconfigured" });
         return;
       }
       if (!bearerMatches(request, token)) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
 
@@ -1202,12 +1224,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       try {
         requirementId = decodeURIComponent(uatCapabilityMatch[1]);
       } catch {
-        sendJson(response, 400, { error: "invalid_requirement_id_encoding" });
+        sendJson(request, response, 400, { error: "invalid_requirement_id_encoding" });
         return;
       }
       const requirement = requirementBindings.find((binding) => binding.id === requirementId);
       if (!requirement) {
-        sendJson(response, 404, { error: "requirement_not_found" });
+        sendJson(request, response, 404, { error: "requirement_not_found" });
         return;
       }
 
@@ -1222,7 +1244,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : undefined;
         if (!entitlementService || !applicationId.trim() || !roleKey.trim() ||
             typeof moduleKey !== "string" || !moduleKey.trim()) {
-          sendJson(response, 503, { error: "capability_entitlement_enforcement_unconfigured" });
+          sendJson(request, response, 503, { error: "capability_entitlement_enforcement_unconfigured" });
           return;
         }
         try {
@@ -1230,11 +1252,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             tenantId, applicationId, roleKey, permissionKey: "capability.execute",
           }, moduleKey);
           if (!decision.allowed) {
-            sendJson(response, 403, { error: "capability_entitlement_denied", reason: decision.reason });
+            sendJson(request, response, 403, { error: "capability_entitlement_denied", reason: decision.reason });
             return;
           }
         } catch {
-          sendJson(response, 503, { error: "capability_entitlement_check_failed" });
+          sendJson(request, response, 503, { error: "capability_entitlement_check_failed" });
           return;
         }
       }
@@ -1242,21 +1264,21 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       try {
         const body = await readJson(request);
         if (!Object.prototype.hasOwnProperty.call(body, "payload")) {
-          sendJson(response, 400, { error: "payload_required" });
+          sendJson(request, response, 400, { error: "payload_required" });
           return;
         }
         const result = await executeIntegratedRequirement(requirement, {
           context: { tenantId, principalId, correlationId: randomUUID() },
           payload: body.payload,
         }, services);
-        sendJson(response, 200, { result });
+        sendJson(request, response, 200, { result });
       } catch (error) {
         const message = error instanceof Error ? error.message : "CAPABILITY_EXECUTION_FAILED";
         const status = message === "REQUEST_BODY_TOO_LARGE" ? 413
           : message === "TENANT_CONTEXT_MISMATCH" ? 403
           : error instanceof SyntaxError || message === "CAPABILITY_OPERATION_REQUIRED" || message.endsWith("_UNSUPPORTED") || message === "JSON_OBJECT_REQUIRED" ? 400
           : 422;
-        sendJson(response, status, { error: status === 422 ? "capability_execution_failed" : message });
+        sendJson(request, response, status, { error: status === 422 ? "capability_execution_failed" : message });
       }
       return;
     }
@@ -1264,7 +1286,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const capabilityMatch = /^\/internal\/requirements\/([^/]+)\/execute$/.exec(requestUrl.pathname);
     if (request.method === "POST" && capabilityMatch) {
       if (process.env.EPER_LOCAL_CAPABILITY_API !== "true") {
-        sendJson(response, 404, { error: "not_found" });
+        sendJson(request, response, 404, { error: "not_found" });
         return;
       }
 
@@ -1272,11 +1294,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const tenantId = process.env.EPER_LOCAL_TENANT_ID ?? "";
       const principalId = process.env.EPER_LOCAL_PRINCIPAL_ID ?? "";
       if (token.length < 32 || !tenantId || !principalId) {
-        sendJson(response, 503, { error: "local_capability_api_unconfigured" });
+        sendJson(request, response, 503, { error: "local_capability_api_unconfigured" });
         return;
       }
       if (!bearerMatches(request, token)) {
-        sendJson(response, 401, { error: "unauthorized" });
+        sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
 
@@ -1284,12 +1306,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       try {
         requirementId = decodeURIComponent(capabilityMatch[1]);
       } catch {
-        sendJson(response, 400, { error: "invalid_requirement_id_encoding" });
+        sendJson(request, response, 400, { error: "invalid_requirement_id_encoding" });
         return;
       }
       const requirement = requirementBindings.find((binding) => binding.id === requirementId);
       if (!requirement) {
-        sendJson(response, 404, { error: "requirement_not_found" });
+        sendJson(request, response, 404, { error: "requirement_not_found" });
         return;
       }
 
@@ -1306,7 +1328,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : undefined;
         if (!entitlementService || !applicationId.trim() || !roleKey.trim() ||
             typeof moduleKey !== "string" || !moduleKey.trim()) {
-          sendJson(response, 503, { error: "capability_entitlement_enforcement_unconfigured" });
+          sendJson(request, response, 503, { error: "capability_entitlement_enforcement_unconfigured" });
           return;
         }
         try {
@@ -1314,11 +1336,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             tenantId, applicationId, roleKey, permissionKey: "capability.execute",
           }, moduleKey);
           if (!decision.allowed) {
-            sendJson(response, 403, { error: "capability_entitlement_denied", reason: decision.reason });
+            sendJson(request, response, 403, { error: "capability_entitlement_denied", reason: decision.reason });
             return;
           }
         } catch {
-          sendJson(response, 503, { error: "capability_entitlement_check_failed" });
+          sendJson(request, response, 503, { error: "capability_entitlement_check_failed" });
           return;
         }
       }
@@ -1326,21 +1348,21 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       try {
         const body = await readJson(request);
         if (!Object.prototype.hasOwnProperty.call(body, "payload")) {
-          sendJson(response, 400, { error: "payload_required" });
+          sendJson(request, response, 400, { error: "payload_required" });
           return;
         }
         const result = await executeIntegratedRequirement(requirement, {
           context: { tenantId, principalId, correlationId: randomUUID() },
           payload: body.payload,
         }, services);
-        sendJson(response, 200, { result });
+        sendJson(request, response, 200, { result });
       } catch (error) {
         const message = error instanceof Error ? error.message : "CAPABILITY_EXECUTION_FAILED";
         const status = message === "REQUEST_BODY_TOO_LARGE" ? 413
           : message === "TENANT_CONTEXT_MISMATCH" ? 403
           : error instanceof SyntaxError || message === "CAPABILITY_OPERATION_REQUIRED" || message.endsWith("_UNSUPPORTED") || message === "JSON_OBJECT_REQUIRED" ? 400
           : 422;
-        sendJson(response, status, { error: status === 422 ? "capability_execution_failed" : message });
+        sendJson(request, response, status, { error: status === 422 ? "capability_execution_failed" : message });
       }
       return;
     }
@@ -1359,6 +1381,6 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
 
     if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
 
-    sendJson(response, 404, { error: "not_found" });
+    sendJson(request, response, 404, { error: "not_found" });
   });
 }

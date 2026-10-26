@@ -57,9 +57,39 @@ test("health fails closed when a commit build ID is not configured", async () =>
 });
 
 test("unknown routes return 404 without exposing implementation details", async () => {
-  const response = await fetch(`${await startServer()}/not-a-route`);
+  const response = await fetch(`${await startServer()}/not-a-route`, { headers: { "x-correlation-id": "route-test-404" } });
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.equal(response.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+  assert.equal(response.headers.get("x-request-id"), "route-test-404");
+});
+
+test("unknown routes negotiate standardized v1 error envelopes without changing legacy defaults", async () => {
+  const base = await startServer();
+  const legacy = await fetch(`${base}/missing-legacy-route`);
+  assert.equal(legacy.status, 404);
+  assert.deepEqual(await legacy.json(), { error: "not_found" });
+
+  const standardized = await fetch(`${base}/missing-v1-route`, {
+    headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "v1-error-contract" },
+  });
+  assert.equal(standardized.status, 404);
+  assert.equal(standardized.headers.get("x-request-id"), "v1-error-contract");
+  assert.deepEqual(await standardized.json(), {
+    success: false,
+    error: { code: "NOT_FOUND", message: "The requested resource was not found." },
+    meta: { requestId: "v1-error-contract" },
+  });
+
+  const caseInsensitive = await fetch(`${base}/missing-v1-case-route`, {
+    headers: { accept: "application/vnd.EPER.v1+JSON; charset=utf-8, application/json" },
+  });
+  assert.equal(caseInsensitive.status, 404);
+  assert.deepEqual(await caseInsensitive.json(), {
+    success: false,
+    error: { code: "NOT_FOUND", message: "The requested resource was not found." },
+    meta: { requestId: caseInsensitive.headers.get("x-request-id") },
+  });
 });
 
 test("local capability API is disabled by default", async () => {
@@ -226,6 +256,39 @@ test("public UAT capability API rejects unknown requirement IDs", async () => {
       body: JSON.stringify({ payload: { operation: "validate", input: {} } }),
     });
     assert.equal(response.status, 404);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+
+test("admin configuration route negotiates standardized auth errors while preserving legacy clients", async () => {
+  const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_API_TOKEN"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "process-memory",
+    EPER_ADMIN_CONFIG_API_TOKEN: "admin-auth-test-token-0123456789-0123456789",
+  });
+  try {
+    const base = await startServer();
+    const legacy = await fetch(`${base}/admin/config/roles-access`);
+    assert.equal(legacy.status, 401);
+    assert.deepEqual(await legacy.json(), { error: "unauthorized" });
+
+    const standardized = await fetch(`${base}/admin/config/roles-access`, {
+      headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "admin-auth-contract" },
+    });
+    assert.equal(standardized.status, 401);
+    assert.equal(standardized.headers.get("x-request-id"), "admin-auth-contract");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: { code: "UNAUTHORIZED", message: "Authentication is required." },
+      meta: { requestId: "admin-auth-contract" },
+    });
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
