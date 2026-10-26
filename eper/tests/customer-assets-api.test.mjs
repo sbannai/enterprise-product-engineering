@@ -32,6 +32,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
         { id: "doc-1", name: "Project brief.pdf", type: "document", mimeType: "application/pdf", sizeBytes: 2048, tags: ["brief"], accessReference: "blobref:opaque-1", internalSecret: "must-not-leak" },
         { id: "vid-1", name: "Demo.mp4", type: "video", accessReference: "blobref:opaque-2" },
       ],
+      "app-c": [{ id: "img-1", name: "Brand mark.png", type: "image", accessReference: "blobref:opaque-3" }],
     },
     "tenant-b": { "app-b": [{ id: "private-1", name: "Private.pdf", type: "document", accessReference: "blobref:private" }] },
   });
@@ -49,12 +50,11 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     const response = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.applicationId, "app-a");
     assert.equal(body.total, 3);
     assert.equal(body.nextCursor, null);
     assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
-    assert.ok(body.assets.every((asset) => asset.applicationId === "app-a"));
-    assert.equal(body.applicationCount, 1);
+    assert.deepEqual(body.assets.map((asset) => asset.applicationId), ["app-a", "app-a", "app-c"]);
+    assert.equal(body.applicationCount, 2);
     assert.equal(body.assets[0].accessReference, "blobref:opaque-1");
     assert.equal("internalSecret" in body.assets[0], false);
     assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
