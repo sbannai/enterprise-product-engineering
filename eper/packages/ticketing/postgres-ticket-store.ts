@@ -49,7 +49,7 @@ export class PostgresTicketStore {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      await client.query("SELECT id FROM eper_support_tickets LIMIT 0");
+      await client.query("SELECT id, idempotency_key, request_hash FROM eper_support_tickets LIMIT 0");
     } finally { client.release(); }
   }
 
