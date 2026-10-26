@@ -198,3 +198,37 @@ test("customer workspace modules fail closed for missing and malformed tenant co
     }
   }
 });
+
+
+test("customer identity mapping rejects non-canonical tenant, actor, and role identifiers", async () => {
+  const keys = ["EPER_CUSTOMER_PORTAL_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-identity-canonical-test-token-000000000001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/portal/context";
+    for (const identity of [
+      { tenantId: " tenant-a", actorId: "actor-a", roleKey: "customer" },
+      { tenantId: "tenant-a", actorId: "actor-a ", roleKey: "customer" },
+      { tenantId: "tenant-a", actorId: "actor-a", roleKey: " customer" },
+    ]) {
+      process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [token]: identity });
+      const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { error: "unauthorized" });
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
