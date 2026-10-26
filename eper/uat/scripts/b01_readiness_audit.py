@@ -57,7 +57,6 @@ def audit_records(checklist, gates, capture, gaps):
                for marker in pending_markers)
         or (r.get("measurable_expected_result_approved") or "").strip().upper() not in {"YES", "APPROVED", "PASS"}
     ]
-    missing_sources = sorted(set(unapproved_baselines) | set(incomplete_acceptance_oracles))
     unapproved_cases = [r.get("requirement_id", "") for r in checklist
                         if (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED", "APPROVE_WITH_CHANGES"}
                         or not (r.get("reviewer_identity") or "").strip()
@@ -84,10 +83,14 @@ def audit_records(checklist, gates, capture, gaps):
     if set(capture_ids) != expected_capture_ids:
         integrity_errors.append("228 requirement execution capture does not exactly cover REQ-46301 through REQ-50006")
 
-    if missing_sources:
-        blockers.append({"gate": "E13/source baseline", "count": len(missing_sources),
-                         "detail": "Approved baseline status is unverified and/or requirement-specific acceptance-source binding or measurable expected result remains incomplete.",
-                         "requirement_ids": missing_sources})
+    if unapproved_baselines:
+        blockers.append({"gate": "E13/approved baseline", "count": len(unapproved_baselines),
+                         "detail": "The controlled BRD/SRS baseline approval status is not verified for these requirements.",
+                         "requirement_ids": unapproved_baselines})
+    if incomplete_acceptance_oracles:
+        blockers.append({"gate": "E13/acceptance oracle", "count": len(incomplete_acceptance_oracles),
+                         "detail": "Requirement-specific acceptance-source binding and/or measurable expected result is incomplete.",
+                         "requirement_ids": incomplete_acceptance_oracles})
     if unapproved_cases:
         blockers.append({"gate": "D3/case review", "count": len(unapproved_cases),
                          "detail": "Case reviewer decision, identity, date, or approval reference is incomplete.",
@@ -124,7 +127,7 @@ def audit_records(checklist, gates, capture, gaps):
             "b01Gaps": len(gaps),
             "entryGates": len(gates),
             "requirementsInCaptureRegister": len(capture),
-            "casesWithMissingApprovedSourceOrAcceptanceOracle": len(missing_sources),
+
             "casesWithUnapprovedBaseline": len(unapproved_baselines),
             "casesWithIncompleteAcceptanceOracle": len(incomplete_acceptance_oracles),
             "casesWithoutCompleteReviewApproval": len(unapproved_cases),
