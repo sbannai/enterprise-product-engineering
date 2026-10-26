@@ -34,7 +34,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     for (const ticketContract of ["ticketForm", "ticketApplication", "businessImpact", "/customer/applications/", "Submit ticket", "Load my tickets", "ticketResult"]) {
       assert.ok(html.includes(ticketContract), "customer ticket UI must expose: " + ticketContract);
     }
-    assert.match(html, /method:"POST",body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API");
+    assert.match(html, /method:"POST",headers:\{"idempotency-key":pendingIdempotencyKey\},body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API with a stable idempotency key");
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
     assert.match(html, /moduleByView=\{help:"help-center",growth:"growth-hub",tickets:"tickets-feedback"\}/, "home cards must map to tenant modules");
     assert.match(html, /v\.cards\.filter\(c=>!moduleByView\[c\[3\]\]\|\|enabledModules\.has\(moduleByView\[c\[3\]\]\)\)/, "disabled modules must not appear as home cards");
