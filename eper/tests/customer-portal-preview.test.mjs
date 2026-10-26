@@ -94,6 +94,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
   assert.ok(html.includes('sort==="name-desc"?-comparison:comparison'), "reverse sorting uses a local comparator without another API request");
   assert.ok(html.includes('sort==="type"?a.type:a.name'), "asset sorting runs locally without another API request");
     assert.ok(html.includes("No matching assets"), "empty filtered results explain how to recover");
+  assert.ok(html.includes("No assets available"), "an empty manifest has a distinct actionable empty state");
+  assert.ok(html.includes("share assets with an assigned application"), "empty manifest guidance tells the customer how to resolve missing assets");
   assert.ok(html.includes("refreshClientAssets"), "client assets can be refreshed asynchronously");
   assert.ok(html.includes("Refreshing all client assets"), "asset refresh exposes loading status");
   assert.ok(html.includes("refresh.disabled=true"), "refresh prevents duplicate concurrent manifest requests");
