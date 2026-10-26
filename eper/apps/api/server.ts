@@ -473,7 +473,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // A download is authorized independently of the manifest request. Storage access is
     // delegated to an injected provider adapter; missing provider/audit adapters fail closed.
-    const assetDownloadMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{1,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/download$/.exec(requestUrl.pathname);
+    const assetDownloadMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/download$/.exec(requestUrl.pathname);
     if (assetDownloadMatch) {
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
       if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
