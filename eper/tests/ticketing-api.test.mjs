@@ -264,6 +264,45 @@ test("support admin triage console is feature-gated and calls protected tenant-s
 });
 
 
+
+test("customer ticket creation storage failures use the standardized safe error envelope", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  const ticketStore = {
+    async assertReady() {},
+    async create() { throw new Error("private ticket database exception"); },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        accept: "application/vnd.eper.v1+json",
+        "content-type": "application/json",
+        "idempotency-key": "ticket-storage-failure-001",
+        "x-correlation-id": "customer-ticket-create-failure-1",
+      },
+      body: JSON.stringify({
+        type: "feedback",
+        title: "Unable to submit",
+        description: "The ticket submission failed.",
+        businessImpact: "Need a safe error response.",
+      }),
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("x-request-id"), "customer-ticket-create-failure-1");
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "TICKET_OPERATION_UNAVAILABLE");
+    assert.equal(payload.error.message, "The service could not complete the request.");
+    assert.equal(payload.meta.requestId, "customer-ticket-create-failure-1");
+    assert.equal(JSON.stringify(payload).includes("private ticket database exception"), false);
+  });
+});
+
 test("customer ticket-list storage failures return a stable non-disclosing API envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
