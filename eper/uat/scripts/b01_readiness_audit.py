@@ -71,8 +71,14 @@ def audit_records(checklist, gates, capture, gaps):
             if field in {"approved_brd_version_locator", "approved_srs_version_locator"}:
                 if not value:
                     missing.append(field)
-            elif value.upper() not in {"YES", "APPROVED", "PASS", "VERIFIED", "COMPLETE"}:
-                missing.append(field)
+            else:
+                accepted_values = {"YES", "APPROVED", "PASS", "VERIFIED", "COMPLETE"}
+                if field == "brd_id_status":
+                    accepted_values.add("VERIFIED_ID_AND_SECTION_IN_SOURCE")
+                elif field == "brd_locator_status":
+                    accepted_values.add("SOURCE_REGISTER_CONFIRMED")
+                if value.upper() not in accepted_values:
+                    missing.append(field)
         if missing:
             incomplete_case_preparation.append({
                 "requirement_id": row.get("requirement_id", ""),
