@@ -21,6 +21,16 @@ test("customer portal preview has customer navigation separate from admin wirefr
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.match(html, /customer navigation/i);
+    // Responsive contract: narrow phones, touch-sized controls, keyboard focus, and
+    // contained horizontal navigation must remain part of the served customer preview.
+    assert.match(html, /name="viewport" content="width=device-width,initial-scale=1"/i);
+    assert.match(html, /@media\s*\(max-width:\s*700px\)/i, "tablet/mobile layout breakpoint is required");
+    assert.match(html, /@media\s*\(max-width:\s*380px\)/i, "narrow-phone layout breakpoint is required");
+    assert.match(html, /nav button[^}]*min-height:\s*44px/i, "navigation targets must be touch-friendly");
+    assert.match(html, /:focus-visible/i, "keyboard focus must be visible");
+    assert.match(html, /overflow-x:\s*auto/i, "mobile navigation overflow must be contained");
+    assert.match(html, /\.top\{flex-wrap:\s*wrap/i, "top bar must wrap instead of overflowing on narrow screens");
+    assert.match(html, /\.cards\{grid-template-columns:minmax\(0,1fr\)\}/i, "cards must stack on mobile");
     assert.doesNotMatch(html, /fetch\s*\(/, "customer preview must not make API calls");
     assert.doesNotMatch(html, /XMLHttpRequest|WebSocket/, "customer preview must remain disconnected");
     const adminResponse = await fetch(base + "/wireframes");
