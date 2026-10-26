@@ -36,6 +36,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     }
     assert.match(html, /method:"POST",body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API");
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
+    assert.match(html, /moduleByView=\{help:"help-center",growth:"growth-hub",tickets:"tickets-feedback"\}/, "home cards must map to tenant modules");
+    assert.match(html, /v\.cards\.filter\(c=>!moduleByView\[c\[3\]\]\|\|enabledModules\.has\(moduleByView\[c\[3\]\]\)\)/, "disabled modules must not appear as home cards");
     assert.match(html, /overflow-x:\s*auto/i, "mobile navigation overflow must be contained");
     assert.match(html, /\.top\{flex-wrap:\s*wrap/i, "top bar must wrap instead of overflowing on narrow screens");
     assert.match(html, /\.cards\{grid-template-columns:minmax\(0,1fr\)\}/i, "cards must stack on mobile");
