@@ -26,7 +26,7 @@ function writeEnvelope(response: ServerResponse, statusCode: number, body: Recor
 }
 
 export function sendApiSuccess(request: IncomingMessage, response: ServerResponse, statusCode: number, data: Record<string, unknown>): void {
-  if (!Number.isInteger(statusCode) || statusCode < 200 || statusCode >= 400 || statusCode === 204 && Object.keys(data).length > 0) {
+  if (!Number.isInteger(statusCode) || statusCode < 200 || statusCode >= 300 || statusCode === 204 && Object.keys(data).length > 0) {
     throw new TypeError("API_SUCCESS_STATUS_OR_BODY_INVALID");
   }
   const requestId = resolveApiRequestId(request);
