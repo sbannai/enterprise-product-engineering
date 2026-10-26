@@ -1,3 +1,4 @@
+import { applicationToastMarkup } from "./app-toast.js";
 /**
  * Customer portal navigation prototype.
  * Static design preview only: it is not an authenticated customer session and makes no API calls.
@@ -134,7 +135,7 @@ status.textContent="Download unavailable. Check your access or try again shortly
 }finally{button.disabled=false;}
 });
 })();
-</script></body></html>`;
+</script>${applicationToastMarkup}</body></html>`;
 
 export function isCustomerPortalPreviewRequest(request: { url?: string }): boolean {
   return new URL(request.url ?? "/", "http://localhost").pathname === "/customer-portal-preview";
