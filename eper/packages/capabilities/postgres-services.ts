@@ -43,10 +43,10 @@ export function createPostgresCapabilityServices(pool: Pool): Readonly<Record<Re
   const XX01: CapabilityService = { async execute(req, input) {
     const { context, contracts, payload: p } = prepare(req, input, "XX01", "authoritative-records");
     const tid = tenant(context, (p.record as { tenantId?: unknown } | undefined)?.tenantId ?? p.tenantId);
-    if (p.operation === "create") return result(req, contracts, { operation: "create", record: await records.create({ ...(p.record as object), tenantId: tid } as Parameters<typeof records.create>[0]) });
+    if (p.operation === "create") return result(req, contracts, { operation: "create", record: await records.createGoverned({ ...(p.record as object), tenantId: tid } as Parameters<typeof records.create>[0], { principalId: context.principalId, correlationId: context.correlationId, requirementId: req.id }) });
     if (p.operation === "get") return result(req, contracts, { operation: "get", record: await records.get(tid, String(p.id)) });
-    if (p.operation === "update") return result(req, contracts, { operation: "update", record: await records.update(tid, String(p.id), Number(p.expectedVersion), (p.patch ?? {}) as Parameters<typeof records.update>[3]) });
-    if (p.operation === "delete") { await records.delete(tid, String(p.id), Number(p.expectedVersion)); return result(req, contracts, { operation: "delete", deleted: true }); }
+    if (p.operation === "update") return result(req, contracts, { operation: "update", record: await records.updateGoverned(tid, String(p.id), Number(p.expectedVersion), (p.patch ?? {}) as Parameters<typeof records.update>[3], { principalId: context.principalId, correlationId: context.correlationId, requirementId: req.id }) });
+    if (p.operation === "delete") { await records.deleteGoverned(tid, String(p.id), Number(p.expectedVersion), { principalId: context.principalId, correlationId: context.correlationId, requirementId: req.id }); return result(req, contracts, { operation: "delete", deleted: true }); }
     throw new Error("RECORD_OPERATION_UNSUPPORTED");
   } };
 
