@@ -18,6 +18,12 @@ function objectValue(value: unknown, code: string): JsonObject {
 function jsonValue<T>(value: unknown): T {
   return (typeof value === "string" ? JSON.parse(value) : value) as T;
 }
+function isoTimestamp(value: unknown): string {
+  // node-postgres parses timestamptz into Date objects; Date#toString drops milliseconds.
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (!Number.isFinite(date.getTime())) throw new Error("PERSISTENCE_TIMESTAMP_INVALID");
+  return date.toISOString();
+}
 function tenantScopedId(tenantId: string, value: string): string {
   return `${createHash("sha256").update(tenantId).digest("hex").slice(0, 12)}:${value}`;
 }
@@ -36,7 +42,7 @@ function exceptionFromRow(row: DbRow): VersionedWorkflowException {
     code: String(row.code), message: String(row.message), state: String(row.state) as WorkflowException["state"],
     retryCount: Number(row.retry_count), idempotencyKey: String(row.idempotency_key), version: Number(row.version),
     ...(row.owner == null ? {} : { owner: String(row.owner) }),
-    createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
+    createdAt: isoTimestamp(row.created_at), updatedAt: isoTimestamp(row.updated_at),
   };
 }
 function canonicalJson(value: unknown): string {
@@ -270,7 +276,7 @@ export class PostgresAuditEvidenceStore {
       return row ? {
         id: String(row.evidence_id), tenantId: String(row.tenant_id), requirementId: String(row.requirement_id),
         action: String(row.action), principalId: String(row.principal_id), correlationId: String(row.correlation_id),
-        occurredAt: new Date(String(row.occurred_at)).toISOString(), payload: jsonValue(row.payload), integrityHash: String(row.integrity_hash).trim(),
+        occurredAt: isoTimestamp(row.occurred_at), payload: jsonValue(row.payload), integrityHash: String(row.integrity_hash).trim(),
       } : undefined;
     });
   }
@@ -284,7 +290,7 @@ export class PostgresAuditEvidenceStore {
       return rows.map(row => ({
         id: String(row.evidence_id), tenantId: String(row.tenant_id), requirementId: String(row.requirement_id),
         action: String(row.action), principalId: String(row.principal_id), correlationId: String(row.correlation_id),
-        occurredAt: new Date(String(row.occurred_at)).toISOString(), payload: jsonValue(row.payload), integrityHash: String(row.integrity_hash),
+        occurredAt: isoTimestamp(row.occurred_at), payload: jsonValue(row.payload), integrityHash: String(row.integrity_hash),
       }));
     });
   }
@@ -497,7 +503,7 @@ export class PostgresGovernedReportingStore {
         tenantId: String(row.tenant_id), reportId: String(row.report_id),
         values: jsonValue<JsonObject>(row.values),
         sourceRequirementIds: jsonValue<string[]>(row.source_requirement_ids),
-        generatedAt: new Date(String(row.generated_at)).toISOString(),
+        generatedAt: isoTimestamp(row.generated_at),
       }));
     });
   }
