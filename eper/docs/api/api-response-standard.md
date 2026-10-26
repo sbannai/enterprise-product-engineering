@@ -1,6 +1,6 @@
 # EPER API Response Standard
 
-**Status:** proposed standard for incremental adoption. Existing endpoint payloads are not all migrated yet.
+**Status:** normative target contract for JSON APIs. Legacy compatibility is preserved by default; clients opt into the versioned contract with `Accept: application/vnd.eper.v1+json` while route families complete their explicit migration and tests.
 
 ## 1. Principles
 
@@ -13,7 +13,7 @@
 
 ## 2. Standard success envelope
 
-New endpoints should use:
+All new JSON endpoints MUST use:
 
 ```json
 {
@@ -27,7 +27,7 @@ New endpoints should use:
 
 ## 3. Standard error envelope
 
-New endpoints should use:
+All new JSON endpoints MUST use:
 
 ```json
 {
@@ -66,7 +66,15 @@ Omit `details` when not applicable. Never put sensitive values in messages or va
 
 Choose the most accurate status for each endpoint; don't relabel domain-specific conditions without checking clients and tests.
 
-## 5. Migration rules
+## 5. Content negotiation and compatibility
+
+- The canonical media type is `application/vnd.eper.v1+json`; media-type matching is case-insensitive and ignores parameters and other comma-separated Accept values.
+- On shared `sendJson()` routes, v1 negotiation wraps 2xx bodies as `{ success: true, data, meta: { requestId } }` and maps 4xx/5xx responses to the standard error envelope.
+- Without v1 negotiation, the existing legacy success and error body shapes remain unchanged. This is deliberate compatibility behavior, not standard conformance for legacy clients.
+- Endpoints that write non-JSON responses or bypass `sendJson()` (including HTML pages, specialized health/build probes, and dedicated payment/receipt handlers) require their own documented contract and route-specific regression tests; do not assume the shared bridge covers them.
+- A `204` or `205` response MUST be bodyless. Do not use a success envelope for either status.
+
+## 6. Migration rules
 
 1. Introduce shared response/error helpers and request-ID handling.
 2. Adopt the standard for new endpoints first.
@@ -75,10 +83,10 @@ Choose the most accurate status for each endpoint; don't relabel domain-specific
 5. Treat envelope changes as API-contract changes; don't silently break existing consumers.
 6. Track migrated endpoints and legacy exceptions in an API conformance matrix.
 
-## 6. Shared implementation and first adoption
+## 7. Shared implementation and first adoption
 
-`apps/api/api-response.ts` provides `sendApiSuccess()` and `sendApiError()` for the standard envelope, safe request IDs (`X-Correlation-ID` is accepted only when it matches the character/length policy; otherwise a UUID is generated), and an `X-Request-ID` response header. The standard helpers validate HTTP status ranges and machine-readable error codes, sanitize field-level error details, and emit no body for HTTP 204. The customer session, workspace-module discovery, and Help Center/Growth Hub content endpoints are the first adopters. The shared legacy `sendJson()` path now propagates a validated/generated `X-Request-ID` on JSON responses. For clients that send `Accept: application/vnd.eper.v1+json`, legacy routes negotiate the standardized error envelope while preserving legacy success payloads and default legacy error bodies. Contract tests cover the negotiated and default 404 behavior. This is a compatibility bridge, not proof that all route families have completed client migration.
+`apps/api/api-response.ts` provides `sendApiSuccess()` and `sendApiError()` for the standard envelope, safe request IDs (`X-Correlation-ID` is accepted only when it matches the character/length policy; otherwise a UUID is generated), and an `X-Request-ID` response header. The standard helpers validate HTTP status ranges and machine-readable error codes, sanitize field-level error details, and emit no body for HTTP 204. The customer session, workspace-module discovery, and Help Center/Growth Hub content endpoints are the first adopters. The shared legacy `sendJson()` path now propagates a validated/generated `X-Request-ID` on JSON responses. For clients that send `Accept: application/vnd.eper.v1+json`, shared `sendJson()` routes negotiate both standardized success and error envelopes while preserving legacy success/error bodies for clients that omit the media type. Contract tests cover both success and error negotiation, request IDs, response headers, and legacy compatibility. This shared bridge does not automatically cover handlers that bypass `sendJson()`.
 
-## 7. Current implementation gap
+## 8. Current implementation gap
 
-EPER's current `sendJson()` helper standardizes JSON security/cache headers and request correlation. Error envelopes are available by opt-in media-type negotiation, but default error bodies and success bodies still vary by route. This document is a proposed target contract, not a claim that all existing routes conform. Migrate each route family with its clients and regression tests; do not mass-rewrite successful payloads in a breaking commit.
+EPER's shared `sendJson()` helper standardizes response headers and request correlation and supports opt-in v1 success/error envelopes across routes that use it. Default legacy bodies remain route-specific. Dedicated payment/receipt handlers, health/build probes, HTML responses, and other direct response writers remain separate conformance items until verified by their own tests. The conformance matrix is the evidence register; do not claim universal endpoint conformance from the shared bridge alone. Migrate each route family with its clients and regression tests; do not mass-rewrite successful payloads in a breaking commit.
