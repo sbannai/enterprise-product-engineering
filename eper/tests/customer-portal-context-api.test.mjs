@@ -306,6 +306,8 @@ test("customer application list returns only server-assigned applications for th
       authorization: "Bearer " + tokenA,
       accept: "application/vnd.eper.v1+json",
       "x-tenant-id": "tenant-b",
+      "x-actor-id": "attacker-actor",
+      "x-role-key": "super-admin",
     } });
     assert.equal(versionedA.status, 200);
     const versionedBody = await versionedA.json();
