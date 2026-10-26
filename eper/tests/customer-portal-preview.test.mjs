@@ -115,3 +115,31 @@ test("customer workspace modules require identity and stay tenant-scoped", async
     else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = previousModules;
   }
 });
+
+test("customer help and growth content APIs enforce module entitlement and tenant scope", async () => {
+  const keys = ["EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_HELP_CONTENT_JSON", "EPER_CUSTOMER_GROWTH_CONTENT_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "content-api-test-credential-12345678901234567890";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" } });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["help-center"], "tenant-b": ["growth-hub"] });
+  process.env.EPER_CUSTOMER_HELP_CONTENT_JSON = JSON.stringify({ "tenant-a": [{ title: "Getting started", body: "Setup guide" }], "tenant-b": [{ title: "Other tenant", body: "Must not leak" }] });
+  process.env.EPER_CUSTOMER_GROWTH_CONTENT_JSON = JSON.stringify({ "tenant-a": [{ title: "Campaign", body: "Plan content" }] });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port + "/customer/";
+    const denied = await fetch(base + "help-center/content"); assert.equal(denied.status, 401);
+    const headers = { authorization: "Bearer " + credential };
+    const help = await fetch(base + "help-center/content", { headers });
+    assert.equal(help.status, 200);
+    assert.deepEqual(await help.json(), { module: "help-center", items: [{ title: "Getting started", body: "Setup guide" }] });
+    const growth = await fetch(base + "growth-hub/content", { headers });
+    assert.equal(growth.status, 403);
+    assert.deepEqual(await growth.json(), { error: "module_not_enabled" });
+    assert.equal(help.headers.get("cache-control"), "no-store");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
