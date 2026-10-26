@@ -25,6 +25,26 @@ import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_T
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+  // Opt-in v1 error envelope gives legacy clients a safe migration path without
+  // changing their default payloads. Success payloads stay route-owned until clients migrate.
+  const acceptsStandardErrors = (request.headers.accept ?? "")
+    .split(",")
+    .some((value) => value.trim().split(";")[0] === "application/vnd.eper.v1+json");
+  if (statusCode >= 400 && acceptsStandardErrors) {
+    const legacyCode = typeof body.error === "string" ? body.error : "request_failed";
+    const normalizedCode = legacyCode.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+    const code = /^[A-Z][A-Z0-9_]{1,63}$/.test(normalizedCode) ? normalizedCode : "REQUEST_FAILED";
+    const message = statusCode >= 500 ? "The service could not complete the request."
+      : statusCode === 401 ? "Authentication is required."
+      : statusCode === 403 ? "You are not allowed to perform this action."
+      : statusCode === 404 ? "The requested resource was not found."
+      : statusCode === 409 ? "The request conflicts with the current resource state."
+      : statusCode === 429 ? "Too many requests. Try again later."
+      : "The request could not be completed.";
+    sendApiError(request, response, statusCode, code, message);
+    return;
+  }
+
   const requestId = resolveApiRequestId(request);
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
