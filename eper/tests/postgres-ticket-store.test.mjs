@@ -412,3 +412,48 @@ test("ticket reply cannot cross tenant or application boundaries", async () => {
   assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
   assert.ok(!calls.some((x) => /INSERT INTO eper_support_ticket_replies/.test(x.sql)));
 });
+
+
+test("ticket conversation reads are tenant and application scoped and ordered chronologically", async () => {
+  const calls = [];
+  const replyRows = [
+    { id: "reply-1", tenant_id: "tenant-a", application_id: "app-a", ticket_id: "ticket-1", author_id: "actor-a", author_role: "customer", body: "First", created_at: "2026-10-26T10:00:00.000Z" },
+    { id: "reply-2", tenant_id: "tenant-a", application_id: "app-a", ticket_id: "ticket-1", author_id: "support-a", author_role: "support", body: "Second", created_at: "2026-10-26T10:01:00.000Z" },
+  ];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT id FROM eper_support_tickets/.test(sql)) return { rows: [{ id: "ticket-1" }], rowCount: 1 };
+      if (/SELECT \* FROM eper_support_ticket_replies/.test(sql)) return { rows: replyRows, rowCount: 2 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  const store = new PostgresTicketStore(pool, async () => {});
+  const replies = await store.listReplies(identity, "ticket-1");
+  assert.deepEqual(replies.map(reply => reply.body), ["First", "Second"]);
+  const ticketCheck = calls.find(call => /SELECT id FROM eper_support_tickets/.test(call.sql));
+  assert.match(ticketCheck.sql, /tenant_id = \$1 AND id = \$2 AND \(\$3 = 'eper' OR application_id = \$3\)/);
+  assert.deepEqual(ticketCheck.values, ["tenant-a", "ticket-1", "app-a"]);
+  const threadRead = calls.find(call => /SELECT \* FROM eper_support_ticket_replies/.test(call.sql));
+  assert.match(threadRead.sql, /tenant_id = \$1 AND ticket_id = \$2 ORDER BY created_at ASC, id ASC/);
+  assert.deepEqual(threadRead.values, ["tenant-a", "ticket-1"]);
+});
+
+test("ticket conversation read returns not-found without reading replies for a ticket outside scope", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT id FROM eper_support_tickets/.test(sql)) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 0 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  const store = new PostgresTicketStore(pool, async () => {});
+  assert.equal(await store.listReplies(identity, "ticket-outside-scope"), null);
+  assert.equal(calls.filter(call => /SELECT \* FROM eper_support_ticket_replies/.test(call.sql)).length, 0);
+  assert.deepEqual(calls[0].values, ["tenant-a", "ticket-outside-scope", "app-a"]);
+});
