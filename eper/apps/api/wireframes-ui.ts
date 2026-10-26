@@ -100,13 +100,13 @@ ${enterpriseDesignSystemCss}
 
 <section class="screen" id="screen-support">
 <div class="support-hero"><div><div class="crumb">ADMIN WORKSPACE / SUPPORT OPERATIONS</div><h2>Feedback & Ticketing</h2><p>One focused queue for triage, evidence and customer updates. Keep customer submissions separate from internal operations.</p></div><span class="pill info">PROTOTYPE · SAMPLE DATA</span></div>
-<div class="banner"><span>ⓘ</span><div><strong>Preview only.</strong> Queue, counts, audit activity and actions are not connected to live APIs. Menu visibility is not authorization; enforce RBAC and tenant boundaries server-side.</div></div>
+<div class="banner"><span>ⓘ</span><div><strong>Authenticated API mode.</strong> Enter a short-lived authorized support-admin bearer token to load live tickets. The token stays in this page's memory only. If the API is disabled or the role is not allowlisted, access will be denied.</div></div>
+<div class="card" style="margin-bottom:16px"><h3>Connect to support API</h3><div class="support-filters"><div class="field" style="grid-column:span 3"><label for="supportBearer">Bearer token</label><input id="supportBearer" type="password" autocomplete="off" placeholder="Paste authorized token; not stored"/></div><div class="field"><label for="supportAppId">Application ID (optional)</label><input id="supportAppId" placeholder="app identifier"/></div></div><div class="actions"><button type="button" id="supportConnect">Load live queue</button><button type="button" class="secondary" id="supportDisconnect">Clear token</button></div><p id="supportApiStatus" class="small muted" role="status" aria-live="polite">Not connected. No live data is shown until authenticated.</p></div>
 <div class="support-kpis"><div class="support-kpi"><small>OPEN TICKETS</small><strong>—</strong><span>Live data not connected</span></div><div class="support-kpi"><small>UNTRIAGED FEEDBACK</small><strong>—</strong><span>Live data not connected</span></div><div class="support-kpi"><small>CONFIRMED P1 / TARGET</small><strong>0 / 100</strong><span>Illustrative only</span></div><div class="support-kpi"><small>SLA AT RISK</small><strong>—</strong><span>Live data not connected</span></div></div>
 <div class="support-workspace"><section class="support-card"><h3>Ticket queue</h3><p class="subcopy">Use filters to narrow the queue before triage.</p>
 <div class="support-filters"><div class="field"><label for="supportFilterType">Type</label><select id="supportFilterType"><option value="all">All types</option><option>Defect</option><option>Feedback</option><option>Feature request</option><option>Question</option></select></div><div class="field"><label for="supportFilterSeverity">Severity</label><select id="supportFilterSeverity"><option value="all">All severities</option><option>P1 candidate</option><option>P2</option><option>P3</option><option>P4</option></select></div><div class="field"><label for="supportFilterStatus">Status</label><select id="supportFilterStatus"><option value="all">All statuses</option><option>New</option><option>Triaged</option><option>Assigned</option><option>In Progress</option><option>Resolved</option><option>Closed</option></select></div><div class="field"><label for="supportFilterApp">Tenant / application</label><input id="supportFilterApp" placeholder="Authorized tenant or app"/></div></div>
 <div class="actions"><button type="button" id="supportApply">Apply filters</button><button type="button" class="secondary" id="supportClear">Clear filters</button></div><p id="supportFilterResult" class="small muted" role="status" aria-live="polite">Sample queue · filters are a UI preview only.</p>
-<div class="support-queue-row" data-ticket-type="Defect" data-ticket-severity="P1 candidate" data-ticket-status="Triaged" data-ticket-app="Application A"><div class="support-queue-top"><strong>Receipt download not available</strong><div class="actions"><span class="pill warn">P1 candidate</span><span class="pill">Triaged · Demo</span></div></div><p>Demo tenant · Application A · Evidence pending · Owner unassigned</p><div class="support-actions"><button type="button" class="secondary" data-support-action="Open ticket detail">Open ticket</button><button type="button" class="secondary" data-support-action="Assign owner">Assign</button><button type="button" class="secondary" data-support-action="Change status">Change status</button></div></div>
-<div class="support-queue-row" data-ticket-type="Question" data-ticket-severity="P3" data-ticket-status="New" data-ticket-app="Application B"><div class="support-queue-top"><strong>Notification setup guidance</strong><div class="actions"><span class="pill">Question · Demo</span><span class="pill info">New</span></div></div><p>Demo tenant · Application B · Owner pending</p><div class="support-actions"><button type="button" class="secondary" data-support-action="Open ticket detail">Open ticket</button><button type="button" class="secondary" data-support-action="Assign owner">Assign</button></div></div>
+<div id="supportLiveQueue"><p class="small muted">Live queue is not loaded. Demo rows are intentionally hidden to avoid confusing sample data with real tickets.</p></div>
 </section><aside class="support-side-stack"><div class="support-note"><h3>P1 discovery gate</h3><p>Count only distinct, evidence-backed, triage-confirmed P1 defects. Duplicate reports and feature requests do not count.</p><strong>0 / 100 · Illustrative only</strong><p>At 100, trigger a business review—not automatic development approval.</p></div><div class="support-card"><h3>Evidence required for P1</h3><p class="subcopy">Complete before a ticket contributes to the gate.</p><ul class="small muted"><li>Canonical ticket ID</li><li>Confirmed severity and business impact</li><li>Reproduction steps and evidence reference</li><li>Duplicate disposition</li><li>Triager and confirmation timestamp</li></ul></div><div class="support-card"><h3>Recent audit activity</h3><p class="subcopy">Expected fields · live audit feed not connected</p><div class="support-audit"><span class="support-audit-dot"></span><div><strong>Severity changed</strong><br><span class="muted">Actor · timestamp · old/new value · reason</span></div></div><div class="support-audit"><span class="support-audit-dot"></span><div><strong>Ticket assigned</strong><br><span class="muted">Actor · timestamp · correlation ID</span></div></div><p class="small muted">Internal notes must never appear in customer-facing replies.</p></div></aside></div>
 </section>
 <section class="screen" id="screen-uat">
@@ -138,7 +138,51 @@ var stepCounter=4;document.getElementById("addStep").addEventListener("click",fu
 document.getElementById("accessPreview").addEventListener("click",function(){var role=document.getElementById("accessRole").value;var map={"System admin":"View, act, approve, administer and manage access.","Operations":"View and act; approvals and access management are denied.","Approver":"View and approve; operational changes are not granted.","Auditor":"Read-only view access."};document.getElementById("accessDecision").innerHTML="<strong>"+role+"</strong>"+map[role];});
 document.getElementById("auditSearch").addEventListener("input",function(){var q=this.value.toLowerCase();var visible=0;document.querySelectorAll("#auditRows tr").forEach(function(row){var match=row.getAttribute("data-search").indexOf(q)>=0;row.style.display=match?"":"none";if(match)visible++;});document.getElementById("auditCount").textContent=String(visible);});document.getElementById("clearSearch").addEventListener("click",function(){document.getElementById("auditSearch").value="";document.getElementById("auditSearch").dispatchEvent(new Event("input"));});
 document.getElementById("planUat").addEventListener("click",function(){var owner=document.getElementById("uatOwner").value.trim();var date=document.getElementById("uatDate").value;var scope=document.getElementById("uatScope").value;var out=document.getElementById("uatPlan");if(!owner||!date){out.innerHTML="<strong>More information needed</strong>Enter a tester/owner and proposed date to preview a plan.";return;}out.innerHTML="<strong>Draft session plan</strong>"+scope+"<br>Owner: "+owner.replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];})+"<br>Date: "+date+"<br><br><span class='pill warn'>Not authorized</span><p class='small'>This plan does not grant access or record business acceptance.</p>";});
-updateSummary();
+
+// Authenticated ticket queue: bearer token held only in this page's memory.
+let supportBearerToken = "";
+const supportStatusLabel = {new:"New",triaged:"Triaged",assigned:"Assigned",in_progress:"In progress",resolved:"Resolved",closed:"Closed"};
+function supportNode(tag, text, cls) { const n=document.createElement(tag); if(text!==undefined)n.textContent=String(text); if(cls)n.className=cls; return n; }
+async function supportRequest(path, options) {
+  const response=await fetch(path,{...options,headers:{...(options&&options.headers||{}),authorization:"Bearer "+supportBearerToken,...(options&&options.body?{"content-type":"application/json"}:{})}});
+  let payload={}; try { payload=await response.json(); } catch {}
+  if(!response.ok) throw new Error(payload.error||("HTTP "+response.status));
+  return payload;
+}
+function renderSupportTickets(tickets) {
+  const root=document.getElementById("supportLiveQueue"); root.replaceChildren();
+  if(!tickets.length){root.appendChild(supportNode("p","No tickets found for this filter.","small muted"));return;}
+  tickets.forEach(ticket=>{
+    const row=supportNode("div",undefined,"support-queue-row");
+    const top=supportNode("div",undefined,"support-queue-top");
+    top.appendChild(supportNode("strong",ticket.title||"(untitled ticket)"));
+    const pills=supportNode("div",undefined,"actions");
+    pills.appendChild(supportNode("span",String(ticket.severity||"unknown").replaceAll("_"," ").toUpperCase(),"pill warn"));
+    pills.appendChild(supportNode("span",supportStatusLabel[ticket.status]||ticket.status,"pill info"));
+    top.appendChild(pills); row.appendChild(top);
+    row.appendChild(supportNode("p",(ticket.type||"").replaceAll("_"," ")+" · "+ticket.applicationId+" · Owner: "+(ticket.assignedTo||"Unassigned")+" · ID: "+ticket.id,"small muted"));
+    row.appendChild(supportNode("p",ticket.description||""));
+    const actions=supportNode("div",undefined,"support-actions");
+    const status=supportNode("select"); status.setAttribute("aria-label","Ticket status");
+    Object.entries(supportStatusLabel).forEach(([value,label])=>{const opt=supportNode("option",label);opt.value=value;opt.selected=value===ticket.status;status.appendChild(opt);});
+    const save=supportNode("button","Save status","secondary"); save.type="button";
+    save.addEventListener("click",async()=>{try{await supportRequest("/admin/support/tickets/"+encodeURIComponent(ticket.id)+"/status",{method:"PATCH",body:JSON.stringify({status:status.value})});await loadSupportTickets();document.getElementById("supportApiStatus").textContent="Status updated and audit write acknowledged.";}catch(e){document.getElementById("supportApiStatus").textContent="Update failed: "+e.message;}});
+    const assignee=supportNode("input");assignee.placeholder="Assignee ID (blank = unassign)";assignee.value=ticket.assignedTo||"";assignee.setAttribute("aria-label","Assignee ID");
+    const assign=supportNode("button","Assign","secondary");assign.type="button";
+    assign.addEventListener("click",async()=>{try{await supportRequest("/admin/support/tickets/"+encodeURIComponent(ticket.id)+"/assignment",{method:"PATCH",body:JSON.stringify({assignedTo:assignee.value.trim()||null})});await loadSupportTickets();document.getElementById("supportApiStatus").textContent="Assignment updated and audit write acknowledged.";}catch(e){document.getElementById("supportApiStatus").textContent="Assignment failed: "+e.message;}});
+    actions.append(status,save,assignee,assign);row.appendChild(actions);root.appendChild(row);
+  });
+}
+async function loadSupportTickets(){
+  if(!supportBearerToken){document.getElementById("supportApiStatus").textContent="Enter an authorized token first.";return;}
+  const params=new URLSearchParams();const app=document.getElementById("supportAppId").value.trim();if(app)params.set("applicationId",app);params.set("limit","100");
+  document.getElementById("supportApiStatus").textContent="Loading tenant-scoped ticket queue…";
+  try{const result=await supportRequest("/admin/support/tickets?"+params.toString());renderSupportTickets(result.tickets||[]);document.getElementById("supportApiStatus").textContent="Connected · "+(result.tickets||[]).length+" ticket(s) loaded for the authorized tenant.";document.querySelector("#screen-support .support-kpi strong").textContent=String((result.tickets||[]).filter(t=>!["resolved","closed"].includes(t.status)).length);}
+  catch(e){document.getElementById("supportLiveQueue").replaceChildren(supportNode("p","Live queue unavailable: "+e.message,"small muted"));document.getElementById("supportApiStatus").textContent="Not connected: "+e.message;}
+}
+document.getElementById("supportConnect").addEventListener("click",()=>{supportBearerToken=document.getElementById("supportBearer").value.trim();loadSupportTickets();});
+document.getElementById("supportDisconnect").addEventListener("click",()=>{supportBearerToken="";document.getElementById("supportBearer").value="";document.getElementById("supportLiveQueue").replaceChildren(supportNode("p","Disconnected. Live ticket data cleared.","small muted"));document.getElementById("supportApiStatus").textContent="Token cleared from page memory.";});
+\nupdateSummary();
 })();
 </script>
 </body></html>`;
