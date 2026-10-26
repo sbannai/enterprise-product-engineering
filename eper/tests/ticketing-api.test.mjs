@@ -350,3 +350,40 @@ test("customer ticket API fails closed when Tickets & Feedback is not enabled fo
     if (previous.modules === undefined) delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON; else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = previous.modules;
   }
 });
+
+test("ticket admin APIs fail closed when the admin role allowlist is missing or malformed", async () => {
+  const previous = {
+    enabled: process.env.EPER_TICKETING_API_ENABLED,
+    identities: process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON,
+    roles: process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON,
+  };
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "support_admin" },
+  });
+  let storeCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { storeCalls++; return []; },
+    async changeStatus() { storeCalls++; throw new Error("must not be called"); },
+    async assign() { storeCalls++; throw new Error("must not be called"); },
+  };
+  try {
+    await withServer({ ticketStore }, async (base) => {
+      for (const roles of [undefined, "{malformed", "[]", JSON.stringify([" "]), JSON.stringify(["customer"])]) {
+        if (roles === undefined) delete process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON;
+        else process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = roles;
+        const response = await fetch(base + "/admin/support/tickets", {
+          headers: { authorization: `Bearer ${credential}` },
+        });
+        assert.equal(response.status, 403);
+        assert.deepEqual(await response.json(), { error: "ticket_admin_permission_required" });
+      }
+      assert.equal(storeCalls, 0);
+    });
+  } finally {
+    if (previous.enabled === undefined) delete process.env.EPER_TICKETING_API_ENABLED; else process.env.EPER_TICKETING_API_ENABLED = previous.enabled;
+    if (previous.identities === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON; else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previous.identities;
+    if (previous.roles === undefined) delete process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON; else process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = previous.roles;
+  }
+});
