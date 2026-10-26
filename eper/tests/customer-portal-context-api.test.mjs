@@ -5,10 +5,14 @@ import { createAppServer } from "../dist/apps/api/server.js";
 test("customer portal context requires trusted identity and returns server-mapped navigation", async () => {
   const previousEnabled = process.env.EPER_CUSTOMER_PORTAL_API_ENABLED;
   const previousIdentities = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  const previousModules = process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
   const token = "customer-portal-test-token-00000000000000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-from-server", actorId: "actor-from-server", roleKey: "customer-admin" }
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
+    "tenant-from-server": ["help-center", "growth-hub", "my-applications", "settings"]
   });
   const server = createAppServer();
   try {
@@ -29,12 +33,14 @@ test("customer portal context requires trusted identity and returns server-mappe
     assert.equal(body.roleKey, "customer-admin");
     assert.equal(body.status, "identity_resolved_navigation_only");
     assert.deepEqual(body.navigation.map((item) => item.key), ["home", "help-center", "growth-hub", "applications", "settings"]);
-    assert.match(body.note, /must be implemented before customer UAT/);
+    assert.match(body.note, /routes and data must still enforce authorization independently/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (previousEnabled === undefined) delete process.env.EPER_CUSTOMER_PORTAL_API_ENABLED;
     else process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = previousEnabled;
     if (previousIdentities === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
     else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previousIdentities;
+    if (previousModules === undefined) delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+    else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = previousModules;
   }
 });
