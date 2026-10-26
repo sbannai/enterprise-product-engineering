@@ -7,11 +7,13 @@
 
 ## Current verified state
 
-- Automated B01 technical preflight: 8/8 chapter suites passed; 74/74 tests passed.
-- Automated pilot status: 48 requirements marked `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`.
-- Business UAT: `NOT_EXECUTED`.
-- Readiness audit: blocked in five categories; integrity errors were empty.
-- No production deployment or Business UAT acceptance is implied by the successful CI run.
+- Last previously verified integrated validation: 8/8 chapter suites passed; 74/74 tests passed on commit `e8bdded309edeb365eda856c42b219401e6723b0`. This is historical evidence, not verification of the latest audit commits.
+- Source-register inspection: 48 B01 cases and 48 gap rows; 13 entry gates; 228 requirement-capture rows.
+- Controlled BRD/SRS baseline status is recorded as approved for all 48 cases, but requirement-specific acceptance oracles remain incomplete for all 48.
+- Case preparation remains incomplete; case review is incomplete for all 48; all 48 execution-authorization fields remain `NO`.
+- All 13 entry gates remain pending or without evidence. The 228 requirement capture rows remain unexecuted / not accepted.
+- Latest audit/test commits are on `main`, but CI status for those commits has not been verified.
+- Business UAT: `NOT_EXECUTED`. No production deployment or Business UAT acceptance is implied by the historical successful CI run.
 
 ## Closure worklist
 
