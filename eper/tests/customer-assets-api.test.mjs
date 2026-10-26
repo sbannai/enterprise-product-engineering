@@ -56,6 +56,23 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     assert.deepEqual(body.assets.map((asset) => asset.applicationId), ["app-a", "app-a", "app-c"]);
     assert.equal(body.applicationCount, 2);
+    const versionedResponse = await fetch(endpoint + "?all=true", {
+      headers: { authorization: "Bearer " + tokenA, accept: "application/vnd.eper.v1+json", "x-correlation-id": "assets-contract-001" },
+    });
+    assert.equal(versionedResponse.status, 200);
+    assert.equal(versionedResponse.headers.get("x-request-id"), "assets-contract-001");
+    const versionedBody = await versionedResponse.json();
+    assert.equal(versionedBody.success, true);
+    assert.deepEqual(versionedBody.data.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
+    assert.equal(versionedBody.meta.requestId, "assets-contract-001");
+    const versionedInvalidCursor = await fetch(endpoint + "?cursor=-1", {
+      headers: { authorization: "Bearer " + tokenA, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(versionedInvalidCursor.status, 400);
+    const versionedError = await versionedInvalidCursor.json();
+    assert.equal(versionedError.success, false);
+    assert.equal(versionedError.error.code, "INVALID_CURSOR");
+    assert.equal(typeof versionedError.error.message, "string");
     const fullManifestResponse = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(fullManifestResponse.status, 200);
     const fullManifest = await fullManifestResponse.json();
