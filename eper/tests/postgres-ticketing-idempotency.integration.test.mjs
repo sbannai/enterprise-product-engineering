@@ -99,6 +99,18 @@ test("live PostgreSQL ticket creation idempotency: concurrency, conflict, tenant
       assert.equal(count.rows[0].count, 2);
     });
 
+    await t.test("missing ticket mutations do not append lifecycle audit events", async () => {
+      const missingId = randomUUID();
+      assert.equal(await store.changeStatus(identity, missingId, "resolved"), null);
+      assert.equal(await store.assign(identity, missingId, "support-agent"), null);
+
+      const audits = await pool.query(
+        `SELECT count(*)::int AS count FROM ${auditTable} WHERE tenant_id=$1 AND ticket_id=$2 AND action IN ('ticket.status_changed','ticket.assigned')`,
+        [tenant, missingId],
+      );
+      assert.equal(audits.rows[0].count, 0);
+    });
+
     await t.test("successful status and assignment mutations persist one audit event each", async () => {
       const ticket = await store.create(identity, {
         ...input,
