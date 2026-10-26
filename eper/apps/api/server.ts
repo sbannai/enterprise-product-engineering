@@ -1304,8 +1304,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           }
         }
         sendJson(request, response, 405, { error: "method_not_allowed" });
-      } catch {
-        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+      } catch (error) {
+        if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
+          sendJson(request, response, 400, { error: "invalid_json" });
+        } else if (error instanceof Error && error.message === "REQUEST_BODY_TOO_LARGE") {
+          sendJson(request, response, 413, { error: "request_body_too_large" });
+        } else {
+          sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+        }
       }
       return;
     }
