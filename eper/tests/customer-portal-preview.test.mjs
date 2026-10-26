@@ -45,6 +45,11 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
     assert.match(html, /sequence!==ticketLoadSequence\|\|application\.value\.trim\(\)!==app/, "late ticket responses must not overwrite the selected application history");
     assert.match(html, /let viewLoadSequence=0/, "customer workspace must sequence async view loads");
+    assert.match(html, /let sessionGeneration=0/, "customer session lifecycle must have a generation guard");
+    assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
+    assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
+    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;bearerToken="";enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "disconnect must invalidate in-flight requests and clear customer data");
+    assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
     assert.match(html, /if\(renderSequence!==viewLoadSequence\)return;/, "late view responses must not overwrite the currently selected section");
     assert.match(html, /loadAllClientAssets\(\)\.then\(items=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
     assert.match(html, /application\.addEventListener\("change",loadTickets\)/, "changing the assigned application must reload its ticket history");
