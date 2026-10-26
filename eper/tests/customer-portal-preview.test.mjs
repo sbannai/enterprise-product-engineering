@@ -37,7 +37,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /method:"POST",headers:\{"idempotency-key":pendingIdempotencyKey\},body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API with a stable idempotency key");
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
     assert.match(html, /submitButton\.disabled=application\.disabled\|\|!application\.value/, "ticket submission must remain disabled when no assigned application is available");
-    assert.match(html, /moduleByView=\{help:"help-center",growth:"growth-hub",tickets:"tickets-feedback"\}/, "home cards must map to tenant modules");
+    assert.match(html, /moduleByView=\\{help:"help-center",growth:"growth-hub",assets:"client-assets",tickets:"tickets-feedback"\\}/, "home cards must map all entitled customer modules");
     assert.match(html, /v\.cards\.filter\(c=>!moduleByView\[c\[3\]\]\|\|enabledModules\.has\(moduleByView\[c\[3\]\]\)\)/, "disabled modules must not appear as home cards");
     assert.match(html, /overflow-x:\s*auto/i, "mobile navigation overflow must be contained");
     assert.match(html, /\.top\{flex-wrap:\s*wrap/i, "top bar must wrap instead of overflowing on narrow screens");
