@@ -294,6 +294,35 @@ test("customer ticket-list storage failures return a stable non-disclosing API e
   });
 });
 
+
+test("support admin queue storage failures use the same safe response contract", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  const ticketStore = {
+    async assertReady() {},
+    async list() { throw new Error("sensitive database driver details"); },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets?limit=25&offset=0", {
+      headers: {
+        authorization: `Bearer ${credential}`,
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "admin-ticket-list-failure-1",
+      },
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("x-request-id"), "admin-ticket-list-failure-1");
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "TICKET_OPERATION_UNAVAILABLE");
+    assert.equal(payload.meta.requestId, "admin-ticket-list-failure-1");
+    assert.equal(JSON.stringify(payload).includes("sensitive database driver details"), false);
+  });
+});
+
 test.after(restoreEnv);
 
 
