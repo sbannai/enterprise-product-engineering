@@ -141,7 +141,7 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
 }
 
 export type CustomerAssetDownloadRequest = { tenantId: string; actorId: string; applicationId: string; assetId: string; accessReference: string; fileName: string; mimeType?: string };
-export type CustomerAssetDownloadResolver = (input: CustomerAssetDownloadRequest) => Promise<{ url: string; expiresAt: string } | null>;
+export type CustomerAssetDownloadResolver = (input: CustomerAssetDownloadRequest, requestId: string) => Promise<{ url: string; expiresAt: string } | null>;
 export type CustomerAssetAuditRecord = { tenantId: string; actorId: string; action: "customer.asset.download"; outcome: "success" | "denied" | "failure"; applicationId: string; assetId: string; requestId: string };
 export type CustomerAssetAuditWriter = (record: CustomerAssetAuditRecord) => Promise<void>;
 
@@ -544,7 +544,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (!asset || typeof asset.accessReference !== "string" || !asset.accessReference.trim() || typeof asset.name !== "string") {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
-        const result = await options.assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) });
+        const result = await options.assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) }, requestId);
         if (!result || typeof result.url !== "string" || !result.url || typeof result.expiresAt !== "string") {
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
