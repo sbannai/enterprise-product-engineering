@@ -314,6 +314,23 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
 
+    // Customer session introspection: identity is derived only from the server-side
+    // credential map. This is an API boundary, not a substitute for a browser login UI.
+    if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(response, 401, { authenticated: false, error: "unauthorized" });
+        return;
+      }
+      sendJson(response, 200, {
+        authenticated: true,
+        tenantId: identity.tenantId,
+        actorId: identity.actorId,
+        roleKey: identity.roleKey,
+      });
+      return;
+    }
+
     if (isCustomerPortalPreviewRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
