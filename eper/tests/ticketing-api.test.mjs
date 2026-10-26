@@ -323,6 +323,40 @@ test("support admin queue storage failures use the same safe response contract",
   });
 });
 
+
+test("support admin lifecycle mutations reject malformed and over-posted payloads before storage", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  let mutationCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { return []; },
+    async changeStatus() { mutationCalls++; return null; },
+    async assign() { mutationCalls++; return null; },
+  };
+  const ticketId = "00000000-0000-4000-8000-000000000001";
+  await withServer({ ticketStore }, async (base) => {
+    const invalidRequests = [
+      { path: `/admin/support/tickets/${ticketId}/status`, body: { status: "unknown" } },
+      { path: `/admin/support/tickets/${ticketId}/status`, body: { status: "resolved", tenantId: "tenant-attacker" } },
+      { path: `/admin/support/tickets/${ticketId}/assignment`, body: { assignedTo: "bad assignee" } },
+      { path: `/admin/support/tickets/${ticketId}/assignment`, body: { assignedTo: "support-agent", actorId: "attacker" } },
+    ];
+    for (const item of invalidRequests) {
+      const response = await fetch(base + item.path, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+        body: JSON.stringify(item.body),
+      });
+      assert.equal(response.status, 400, JSON.stringify(item.body));
+    }
+    assert.equal(mutationCalls, 0, "invalid or over-posted lifecycle payloads must never reach persistence");
+  });
+});
+
 test.after(restoreEnv);
 
 
