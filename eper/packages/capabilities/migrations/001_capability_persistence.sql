@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS governed_reports (
   tenant_id text NOT NULL,
   report_id text NOT NULL,
   publication_id text NOT NULL,
-  values jsonb NOT NULL CHECK (jsonb_typeof(values) = 'object'),
+  "values" jsonb NOT NULL CHECK (jsonb_typeof(values) = 'object'),
   source_requirement_ids jsonb NOT NULL
     CHECK (jsonb_typeof(source_requirement_ids) = 'array' AND jsonb_array_length(source_requirement_ids) > 0),
   generated_at timestamptz NOT NULL,
