@@ -13,7 +13,7 @@ export interface TicketAuditEvent {
   applicationId: string;
   actorId: string;
   correlationId: string;
-  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned";
+  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned" | "ticket.replied";
   ticketId: string;
   outcome: "success";
   payload: Record<string, unknown>;
@@ -40,6 +40,26 @@ function mapRecord(row: Record<string, unknown>): TicketRecord {
     status: row.status as TicketStatus, severity: row.severity as TicketSeverity,
     assignedTo: typeof row.assigned_to === "string" ? row.assigned_to : null,
     createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
+  };
+}
+
+export interface TicketReplyRecord {
+  id: string;
+  tenantId: string;
+  applicationId: string;
+  ticketId: string;
+  authorId: string;
+  authorRole: "customer" | "support";
+  body: string;
+  createdAt: string;
+}
+
+function mapReply(row: Record<string, unknown>): TicketReplyRecord {
+  return {
+    id: String(row.id), tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+    ticketId: String(row.ticket_id), authorId: String(row.author_id),
+    authorRole: row.author_role as TicketReplyRecord["authorRole"], body: String(row.body),
+    createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
 
@@ -123,6 +143,57 @@ export class PostgresTicketStore {
       } finally { client.release(); }
     });
     return result.rows.map(mapRecord);
+  }
+
+  /** Lists the thread only when the ticket is inside the trusted tenant/application scope. */
+  async listReplies(identity: TicketIdentity, ticketId: string): Promise<TicketReplyRecord[] | null> {
+    const client = await this.pool.connect();
+    try {
+      const ticket = await client.query<Record<string, unknown>>(
+        "SELECT id FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 AND ($3 = 'eper' OR application_id = $3)",
+        [identity.tenantId, ticketId, identity.applicationId],
+      );
+      if (!ticket.rows[0]) return null;
+      const result = await client.query<Record<string, unknown>>(
+        "SELECT * FROM eper_support_ticket_replies WHERE tenant_id = $1 AND ticket_id = $2 ORDER BY created_at ASC, id ASC",
+        [identity.tenantId, ticketId],
+      );
+      return result.rows.map(mapReply);
+    } finally { client.release(); }
+  }
+
+  /** Persists a reply and its audit event atomically; role and identity are server-derived. */
+  async addReply(
+    identity: TicketIdentity,
+    ticketId: string,
+    body: string,
+    authorRole: "customer" | "support",
+  ): Promise<TicketReplyRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const ticket = await client.query<Record<string, unknown>>(
+        "SELECT application_id FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 AND ($3 = 'eper' OR application_id = $3) FOR UPDATE",
+        [identity.tenantId, ticketId, identity.applicationId],
+      );
+      if (!ticket.rows[0]) { await client.query("ROLLBACK"); return null; }
+      const applicationId = String(ticket.rows[0].application_id);
+      const result = await client.query<Record<string, unknown>>(
+        "INSERT INTO eper_support_ticket_replies (id, tenant_id, application_id, ticket_id, author_id, author_role, body) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        [randomUUID(), identity.tenantId, applicationId, ticketId, identity.actorId, authorRole, body],
+      );
+      if (!result.rows[0]) throw new Error("ticket_reply_insert_returned_no_row");
+      await this.audit({
+        tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.replied", ticketId, outcome: "success",
+        payload: { replyId: String(result.rows[0].id), authorRole },
+      }, client);
+      await client.query("COMMIT");
+      return mapReply(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
   }
 
   async changeStatus(identity: TicketIdentity, ticketId: string, status: TicketStatus): Promise<TicketRecord | null> {
