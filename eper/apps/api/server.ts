@@ -774,6 +774,34 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
 
+    // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
+    if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
+      if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      sendJson(response, 200, {
+        tenantId: identity.tenantId,
+        actorId: identity.actorId,
+        roleKey: identity.roleKey,
+        navigation: [
+          { key: "home", label: "Home", path: "/customer-portal-preview" },
+          { key: "help-center", label: "Help Center", path: "/customer/help" },
+          { key: "growth-hub", label: "Growth Hub", path: "/customer/growth" },
+          { key: "applications", label: "My Applications", path: "/customer/applications" },
+          { key: "settings", label: "Settings", path: "/customer/settings" }
+        ],
+        status: "identity_resolved_navigation_only",
+        note: "Navigation contract only; feature routes and tenant-scoped data must be implemented before customer UAT."
+      });
+      return;
+    }
+
     // Customer-side module/add-on access check. This endpoint is diagnostic; the same
     // policy must also be invoked at protected capability entry points before UAT.
     const customerAccessMatch = /^\/customer\/applications\/([^/]+)\/access\/(modules|addons)\/([^/]+)$/.exec(requestUrl.pathname);
