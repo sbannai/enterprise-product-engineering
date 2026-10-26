@@ -99,6 +99,29 @@ test("live PostgreSQL ticket creation idempotency: concurrency, conflict, tenant
       assert.equal(count.rows[0].count, 2);
     });
 
+    await t.test("status and assignment mutations cannot cross tenant boundaries", async () => {
+      const ownedTicket = await store.create(identity, {
+        ...input,
+        title: "Cross-tenant mutation guard " + randomUUID(),
+      }, "ticket-cross-tenant-key-" + randomUUID());
+      const foreignIdentity = { ...identity, tenantId: tenant + "-other" };
+
+      assert.equal(await store.changeStatus(foreignIdentity, ownedTicket.id, "resolved"), null);
+      assert.equal(await store.assign(foreignIdentity, ownedTicket.id, "foreign-agent"), null);
+
+      const persisted = await pool.query(
+        "SELECT status, assigned_to FROM eper_support_tickets WHERE tenant_id=$1 AND id=$2",
+        [tenant, ownedTicket.id],
+      );
+      assert.equal(persisted.rows[0].status, "new");
+      assert.equal(persisted.rows[0].assigned_to, null);
+      const audits = await pool.query(
+        `SELECT count(*)::int AS count FROM ${auditTable} WHERE tenant_id=$1 AND ticket_id=$2 AND action IN ('ticket.status_changed','ticket.assigned')`,
+        [tenant, ownedTicket.id],
+      );
+      assert.equal(audits.rows[0].count, 0);
+    });
+
     await t.test("status and assignment mutations roll back when audit persistence fails", async () => {
       const mutationTicket = await store.create(identity, {
         ...input,
