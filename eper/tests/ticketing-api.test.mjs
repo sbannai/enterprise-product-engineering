@@ -136,6 +136,30 @@ test("support admin queue and status updates remain scoped to the trusted admin 
   });
 });
 
+
+test("support admin triage console is feature-gated and calls protected tenant-scoped APIs", async () => {
+  delete process.env.EPER_TICKETING_API_ENABLED;
+  await withServer({}, async (base) => {
+    const disabled = await fetch(base + "/admin/support/tickets-ui");
+    assert.equal(disabled.status, 404);
+  });
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  await withServer({}, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets-ui");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-security-policy") ?? "", /connect-src 'self'/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const html = await response.text();
+    for (const marker of [
+      "Support Ticket Queue", "Support admin bearer credential", "/admin/support/tickets?",
+      "filterStatus", "filterType", "filterSeverity", "Update status", "Save assignment",
+      "/status", "/assignment", "authenticated tenant", "NOT CONNECTED",
+    ]) assert.ok(html.includes(marker), "missing support triage contract: " + marker);
+    assert.match(html, /authorization:"Bearer "\+token/, "admin API requests must use the entered in-memory credential");
+    assert.match(html, /cache:"no-store"/, "ticket data must not be cached");
+  });
+});
+
 test.after(restoreEnv);
 
 
