@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Pool } from "pg";
 import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
@@ -133,7 +134,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const server = createAppServer({ capabilityPool: postgresCapabilityMode ? paymentPool ?? undefined : undefined, paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, ticketStore, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
+const server = createAppServer({ capabilityPool: postgresCapabilityMode ? paymentPool as unknown as Pool : undefined, paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, ticketStore, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
