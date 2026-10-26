@@ -431,6 +431,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
       }
       const allAssets: Record<string, unknown>[] = [];
+      const applicationsWithAssets = new Set<string>();
       for (const assignedId of [...new Set(tenantAssignments as string[])]) {
         const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
         if (applicationAssets === undefined) continue;
@@ -444,6 +445,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               typeof asset.name !== "string" || !asset.name.trim() || asset.name.length > 200 ||
               typeof asset.type !== "string" || !["document", "video", "image", "audio", "other"].includes(asset.type) ||
               typeof asset.accessReference !== "string" || !asset.accessReference.trim() || asset.accessReference.length > 2048) continue;
+          applicationsWithAssets.add(assignedId);
           allAssets.push({
             id: asset.id, applicationId: assignedId, name: asset.name, type: asset.type,
             ...(typeof asset.mimeType === "string" && asset.mimeType.length <= 128 ? { mimeType: asset.mimeType } : {}),
@@ -465,7 +467,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const nextOffset = offset + pageSize;
       sendJson(request, response, 200, {
         assets, total: allAssets.length,
-        applicationCount: new Set(tenantAssignments as string[]).size,
+        applicationCount: applicationsWithAssets.size,
         nextCursor: nextOffset < allAssets.length ? String(nextOffset) : null,
       });
       return;
