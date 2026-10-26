@@ -1076,19 +1076,35 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
+      // Navigation is derived from the same server-side tenant module allowlist used by
+      // customer content routes. A missing or malformed configuration fails closed to Home.
+      let tenantModules: unknown;
+      try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { tenantModules = null; }
+      const configured = tenantModules && typeof tenantModules === "object" && !Array.isArray(tenantModules)
+        ? (tenantModules as Record<string, unknown>)[identity.tenantId] : null;
+      const enabledModules = new Set(
+        Array.isArray(configured)
+          ? configured.filter((item): item is string => typeof item === "string")
+          : [],
+      );
+      const availableNavigation = [
+        { key: "home", label: "Home", path: "/customer-portal-preview", module: null },
+        { key: "help-center", label: "Help Center", path: "/customer/help", module: "help-center" },
+        { key: "growth-hub", label: "Growth Hub", path: "/customer/growth", module: "growth-hub" },
+        { key: "applications", label: "My Applications", path: "/customer/applications", module: "my-applications" },
+        { key: "tickets-feedback", label: "Tickets & Feedback", path: "/customer/tickets", module: "tickets-feedback" },
+        { key: "settings", label: "Settings", path: "/customer/settings", module: "settings" },
+      ];
       sendJson(request, response, 200, {
         tenantId: identity.tenantId,
         actorId: identity.actorId,
         roleKey: identity.roleKey,
-        navigation: [
-          { key: "home", label: "Home", path: "/customer-portal-preview" },
-          { key: "help-center", label: "Help Center", path: "/customer/help" },
-          { key: "growth-hub", label: "Growth Hub", path: "/customer/growth" },
-          { key: "applications", label: "My Applications", path: "/customer/applications" },
-          { key: "settings", label: "Settings", path: "/customer/settings" }
-        ],
+        navigation: availableNavigation
+          .filter((item) => item.module === null || enabledModules.has(item.module))
+          .map(({ key, label, path }) => ({ key, label, path })),
         status: "identity_resolved_navigation_only",
-        note: "Navigation contract only; feature routes and tenant-scoped data must be implemented before customer UAT."
+        note: "Navigation is tenant-module scoped; routes and data must still enforce authorization independently."
       });
       return;
     }
