@@ -18,7 +18,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.match(response.headers.get("content-security-policy") ?? "", /connect-src 'self'/, "same-origin API access must be explicitly allowed by CSP");
     const html = await response.text();
-    for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "nextCursor", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content"]) {
+    for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "nextCursor", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.match(html, /customer navigation/i);
@@ -31,6 +31,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /:focus-visible/i, "keyboard focus must be visible");
     assert.match(html, /authorization:\s*"Bearer "\s*\+\s*bearerToken/i, "API calls must carry the in-memory customer credential");
     assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
+    assert.match(html, /\/customer\/applications\/\"\+encodeURIComponent\(applicationId\)\+\"\/assets\//, "asset downloads must use the authenticated application-scoped download API");
+    assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
     for (const ticketContract of ["ticketForm", "ticketApplication", "businessImpact", "/customer/applications/", "Submit ticket", "Load my tickets", "ticketResult"]) {
       assert.ok(html.includes(ticketContract), "customer ticket UI must expose: " + ticketContract);
     }
