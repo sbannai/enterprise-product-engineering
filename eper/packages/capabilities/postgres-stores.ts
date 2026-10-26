@@ -360,6 +360,68 @@ export class PostgresExceptionStore {
   }
 }
 
+export class PostgresGovernedReportingStore {
+  constructor(private readonly pool: Pool) {}
+
+  async publish(row: ReportRow, publicationId: string, principalId: string, correlationId: string): Promise<void> {
+    if (!row.tenantId?.trim() || !row.reportId?.trim() || !publicationId?.trim() ||
+        !principalId?.trim() || !correlationId?.trim()) throw new Error("REPORT_CONTEXT_REQUIRED");
+    if (!Array.isArray(row.sourceRequirementIds) || row.sourceRequirementIds.length === 0 ||
+        !row.sourceRequirementIds.every(value => typeof value === "string" && value.trim())) {
+      throw new Error("REPORT_PROVENANCE_REQUIRED");
+    }
+    objectValue(row.values, "REPORT_VALUES_INVALID");
+    await withTenantTransaction(this.pool, row.tenantId, async ({ client, tenantId }) => {
+      await client.query(
+        `INSERT INTO governed_reports(tenant_id,report_id,publication_id,"values",source_requirement_ids,generated_at)
+         VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::timestamptz)`,
+        [tenantId, row.reportId, publicationId, JSON.stringify(row.values), JSON.stringify(row.sourceRequirementIds), row.generatedAt],
+      );
+      const audit = {
+        id: `report-published:${row.reportId}:${publicationId}`, tenantId,
+        requirementId: row.sourceRequirementIds[0], action: "GOVERNED_REPORT_PUBLISHED",
+        principalId, correlationId, occurredAt: row.generatedAt,
+        payload: { reportId: row.reportId, publicationId, sourceRequirementIds: row.sourceRequirementIds },
+      };
+      const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
+      await client.query(
+        `INSERT INTO audit_evidence
+         (tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash)
+         VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)`,
+        [tenantId, audit.id, audit.requirementId, audit.action, principalId, correlationId, audit.occurredAt, JSON.stringify(audit.payload), integrityHash],
+      );
+      await enqueueOutboxEvent({ tenantId, client }, {
+        eventId: audit.id, tenantId, aggregateType: "governed_report",
+        aggregateId: row.reportId, eventType: "GOVERNED_REPORT_PUBLISHED", correlationId,
+        payload: { reportId: row.reportId, publicationId, sourceRequirementIds: row.sourceRequirementIds },
+      });
+    });
+  }
+
+  async query(request: ReportQuery): Promise<readonly ReportRow[]> {
+    if (!request.tenantId?.trim() || !request.reportId?.trim()) throw new Error("REPORT_QUERY_CONTEXT_REQUIRED");
+    const limit = request.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("REPORT_LIMIT_INVALID");
+    return withTenantTransaction(this.pool, request.tenantId, async ({ client, tenantId }) => {
+      const { rows } = await client.query(
+        `SELECT tenant_id,report_id,"values",source_requirement_ids,generated_at
+         FROM governed_reports WHERE tenant_id=$1 AND report_id=$2
+         ORDER BY generated_at DESC LIMIT $3`,
+        [tenantId, request.reportId, limit],
+      );
+      const filters = request.filters ?? {};
+      return rows
+        .map(row => ({
+          tenantId: String(row.tenant_id), reportId: String(row.report_id),
+          values: jsonValue<JsonObject>(row.values),
+          sourceRequirementIds: jsonValue<string[]>(row.source_requirement_ids),
+          generatedAt: new Date(String(row.generated_at)).toISOString(),
+        }))
+        .filter(row => Object.entries(filters).every(([key, value]) => row.values[key] === value));
+    });
+  }
+}
+
 // Type-level conformance target for the next service refactor; intentionally async.
 export interface AsyncCapabilityPersistence {
   records: Pick<PostgresAuthoritativeRecordStore, "create" | "get" | "update" | "delete">;
