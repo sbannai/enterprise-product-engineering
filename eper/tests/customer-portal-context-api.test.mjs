@@ -324,3 +324,42 @@ test("customer application list fails closed for malformed or non-canonical assi
     }
   }
 });
+
+
+test("customer application list is unavailable unless explicitly enabled and configured", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-app-list-gate-token-00000000000000000001";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications";
+    process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "false";
+    const disabled = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    assert.equal(disabled.status, 404);
+    assert.deepEqual(await disabled.json(), { error: "not_found" });
+    process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+    delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+    const unconfigured = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    assert.equal(unconfigured.status, 503);
+    assert.deepEqual(await unconfigured.json(), { error: "customer_applications_unavailable" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
