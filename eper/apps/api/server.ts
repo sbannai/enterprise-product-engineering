@@ -29,7 +29,7 @@ function sendJson(request: IncomingMessage, response: ServerResponse, statusCode
   // changing their default payloads. Success payloads stay route-owned until clients migrate.
   const acceptsStandardErrors = (request.headers.accept ?? "")
     .split(",")
-    .some((value) => value.trim().split(";")[0] === "application/vnd.eper.v1+json");
+    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
   if (statusCode >= 400 && acceptsStandardErrors) {
     const legacyCode = typeof body.error === "string" ? body.error : "request_failed";
     const normalizedCode = legacyCode.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
