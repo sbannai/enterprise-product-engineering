@@ -158,3 +158,42 @@ test("asset download records failure when no storage provider is configured", as
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+test("asset download rejects unsafe or overlong provider URLs and audits the failure", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "client-assets-invalid-provider-token-123456789";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" } });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({ "tenant-a": { "app-a": [{ id: "doc-1", name: "Project brief.pdf", type: "document", accessReference: "blobref:private-a" }] } });
+  try {
+    for (const descriptor of [
+      { url: "http://storage.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      { url: "https://storage.example.test/file", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() },
+    ]) {
+      const audit = [];
+      const server = createAppServer({
+        assetDownloadResolver: async () => descriptor,
+        assetAuditWriter: async (record) => { audit.push(record); },
+      });
+      try {
+        await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+        const address = server.address();
+        assert.ok(address && typeof address === "object");
+        const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications/app-a/assets/doc-1/download", {
+          headers: { authorization: "Bearer " + credential },
+        });
+        assert.equal(response.status, 503);
+        assert.deepEqual(await response.json(), { error: "asset_storage_provider_unavailable" });
+        assert.equal(audit.length, 1);
+        assert.equal(audit[0].outcome, "failure");
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }
+  } finally {
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
