@@ -10,7 +10,7 @@ test("API success envelope standardizes headers and request correlation", async 
     const address = server.address(); assert.ok(address && typeof address === "object");
     const response = await fetch("http://127.0.0.1:" + address.port, { headers: { "x-correlation-id": "contract-test-123" } });
     assert.equal(response.status, 200);
-    assert.match(response.headers.get("content-type") ?? "", /application\\/json; charset=utf-8/);
+    assert.match(response.headers.get("content-type") ?? "", new RegExp("application/json; charset=utf-8"));
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("x-request-id"), "contract-test-123");
     assert.deepEqual(await response.json(), { success: true, data: { items: [1, 2] }, meta: { requestId: "contract-test-123" } });
