@@ -118,6 +118,16 @@ class B01ReadinessAuditTests(unittest.TestCase):
                 self.assertEqual(blockers["E13/case preparation completeness"]["count"], 1)
                 self.assertIn(field, blockers["E13/case preparation completeness"]["cases"][0]["missing_fields"])
 
+
+    def test_approve_with_changes_does_not_clear_case_review_gate(self):
+        cases = [case(i, decision="APPROVE_WITH_CHANGES", reviewer="Reviewer A",
+                      date="2026-10-06", approval=f"DEC-{i:03d}")
+                 for i in range(1, 49)]
+        report = audit.audit_records(
+            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+        self.assertEqual(report["counts"]["casesWithoutCompleteReviewApproval"], 48)
+        self.assertIn("D3/case review", {b["gate"] for b in report["blockers"]})
+
     def test_pending_records_are_reported_blocked_not_approved(self):
         report = audit.audit_records(
             [case()], [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
