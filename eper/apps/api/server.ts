@@ -857,6 +857,106 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
+
+    // Tenant-scoped support-admin ticket queue and controlled lifecycle mutations.
+    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment))?$/.exec(requestUrl.pathname);
+    if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH")) {
+      if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.ticketStore) {
+        sendJson(response, 503, { error: "ticketing_unavailable" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      let allowedRoles: unknown;
+      try { allowedRoles = JSON.parse(process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON ?? ""); }
+      catch { allowedRoles = null; }
+      if (!Array.isArray(allowedRoles) || allowedRoles.length === 0 ||
+          allowedRoles.some((role) => typeof role !== "string" || !role.trim()) ||
+          !allowedRoles.includes(identity.roleKey)) {
+        sendJson(response, 403, { error: "ticket_admin_permission_required" });
+        return;
+      }
+      const correlationHeader = request.headers["x-correlation-id"];
+      const correlationId = typeof correlationHeader === "string" &&
+        /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      const trustedIdentity = {
+        tenantId: identity.tenantId,
+        applicationId: "eper",
+        actorId: identity.actorId,
+        correlationId,
+      };
+      try {
+        if (request.method === "GET" && !adminTicketMatch[1]) {
+          const query = requestUrl.searchParams;
+          const status = query.get("status") ?? undefined;
+          const severity = query.get("severity") ?? undefined;
+          const type = query.get("type") ?? undefined;
+          const applicationId = query.get("applicationId") ?? undefined;
+          const limit = query.has("limit") ? Number(query.get("limit")) : 50;
+          const offset = query.has("offset") ? Number(query.get("offset")) : 0;
+          if ((status && !(TICKET_STATUSES as readonly string[]).includes(status)) ||
+              (severity && !(TICKET_SEVERITIES as readonly string[]).includes(severity)) ||
+              (type && !(TICKET_TYPES as readonly string[]).includes(type)) ||
+              (applicationId && (!/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId))) ||
+              !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+              !Number.isInteger(offset) || offset < 0) {
+            sendJson(response, 400, { error: "invalid_ticket_filters" });
+            return;
+          }
+          const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
+            status: status as typeof TICKET_STATUSES[number] | undefined,
+            severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
+            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit, offset,
+          });
+          sendJson(response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
+          return;
+        }
+        if (request.method === "PATCH" && adminTicketMatch[1]) {
+          let ticketId: string;
+          try { ticketId = decodeURIComponent(adminTicketMatch[1]); }
+          catch { sendJson(response, 400, { error: "invalid_ticket_id_encoding" }); return; }
+          if (!/^[0-9a-f-]{36}$/i.test(ticketId)) {
+            sendJson(response, 400, { error: "invalid_ticket_id" });
+            return;
+          }
+          const body = await readJson(request);
+          if (adminTicketMatch[2] === "status") {
+            if (typeof body.status !== "string" || !(TICKET_STATUSES as readonly string[]).includes(body.status) ||
+                Object.keys(body).some((key) => key !== "status")) {
+              sendJson(response, 400, { error: "invalid_ticket_status_update" });
+              return;
+            }
+            const ticket = await options.ticketStore.changeStatus(trustedIdentity, ticketId, body.status as typeof TICKET_STATUSES[number]);
+            if (!ticket) { sendJson(response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(response, 200, { ticket });
+            return;
+          }
+          if (adminTicketMatch[2] === "assignment") {
+            if (!(body.assignedTo === null || (typeof body.assignedTo === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(body.assignedTo))) ||
+                Object.keys(body).some((key) => key !== "assignedTo")) {
+              sendJson(response, 400, { error: "invalid_ticket_assignment" });
+              return;
+            }
+            const ticket = await options.ticketStore.assign(trustedIdentity, ticketId, body.assignedTo as string | null);
+            if (!ticket) { sendJson(response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(response, 200, { ticket });
+            return;
+          }
+        }
+        sendJson(response, 405, { error: "method_not_allowed" });
+      } catch {
+        sendJson(response, 503, { error: "ticket_operation_unavailable" });
+      }
+      return;
+    }
+
     // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
     if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
       if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
