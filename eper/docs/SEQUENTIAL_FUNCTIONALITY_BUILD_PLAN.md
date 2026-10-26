@@ -6,6 +6,7 @@
 - Keep work in the existing consolidated pull request/release stream. Do not open a PR per functionality.
 - Implement in small commits inside the owning module, with API/domain/persistence/UI responsibilities separated.
 - Run focused tests after each change and the regression suite on the release candidate. CI success is engineering evidence only.
+- Shared API response contract: see [`API_RESPONSE_CONTRACT.md`](./API_RESPONSE_CONTRACT.md). Versioned envelopes are opt-in through `Accept: application/vnd.eper.v1+json` until each consumer has migrated; every route family needs current-commit contract evidence.
 - Ship related, complete functionality as a release group; run Business UAT against the integrated release candidate only after the formal entry gates are satisfied and explicitly authorized.
 - Preserve the 228 requirements, 38 chapters (463–500), six capability families XX01–XX06, and the single execution routing layer.
 - Local development and CI only. Do not provision chargeable cloud resources.
