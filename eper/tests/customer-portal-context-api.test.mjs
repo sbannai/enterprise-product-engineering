@@ -373,7 +373,7 @@ test("customer application settings expose only safe preferences for assigned ap
     "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
     "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON",
   ];
-  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]));
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const tokenA = "customer-settings-tenant-a-token-000000000001";
   const tokenB = "customer-settings-tenant-b-token-000000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
