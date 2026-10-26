@@ -393,7 +393,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     // Single-call client asset manifest. Returns safe metadata and opaque storage references only;
     // binary content is fetched separately through a provider-specific, authorized download flow.
     const customerAssetsMatch = /^\\/customer\\/applications\\/([^/]+)\\/assets$/.exec(requestUrl.pathname);
-    if (customerAssetsMatch && (request.method === "GET" || request.method !== "GET")) {
+    if (customerAssetsMatch) {
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
         return;
