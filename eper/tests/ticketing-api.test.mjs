@@ -62,6 +62,15 @@ test("ticket API is disabled by default", async () => {
     assert.equal(payload.error.code, "NOT_FOUND");
     assert.equal(payload.meta.requestId, "ticket-disabled-1");
     assert.equal(response.headers.get("x-request-id"), "ticket-disabled-1");
+
+    const invalidCorrelation = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "invalid correlation id with spaces" },
+    });
+    assert.equal(invalidCorrelation.status, 404);
+    const invalidPayload = await invalidCorrelation.json();
+    assert.match(invalidPayload.meta.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.equal(invalidCorrelation.headers.get("x-request-id"), invalidPayload.meta.requestId);
+    assert.notEqual(invalidPayload.meta.requestId, "invalid correlation id with spaces");
   });
 });
 
