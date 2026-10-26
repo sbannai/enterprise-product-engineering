@@ -422,9 +422,10 @@ test("customer ticketing disabled response supports v1 errors without changing l
 
 
 test("localization method-not-allowed response negotiates standard v1 error without breaking legacy body", async () => {
-  const keys = ["EPER_LOCALIZATION_API_TOKEN", "EPER_LOCALIZATION_TENANT_ID", "EPER_LOCALIZATION_PRINCIPAL_ID"];
+  const keys = ["EPER_LOCALIZATION_API_ENABLED", "EPER_LOCALIZATION_API_TOKEN", "EPER_LOCALIZATION_TENANT_ID", "EPER_LOCALIZATION_PRINCIPAL_ID"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
+    EPER_LOCALIZATION_API_ENABLED: "true",
     EPER_LOCALIZATION_API_TOKEN: "localization-contract-test-token-0123456789-0123456789",
     EPER_LOCALIZATION_TENANT_ID: "localization-contract-tenant",
     EPER_LOCALIZATION_PRINCIPAL_ID: "localization-contract-actor",
