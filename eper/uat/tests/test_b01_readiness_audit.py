@@ -129,6 +129,19 @@ class B01ReadinessAuditTests(unittest.TestCase):
                 self.assertIn(field, blockers["E13/case preparation completeness"]["cases"][0]["missing_fields"])
 
 
+    def test_invalid_business_acceptance_date_does_not_count_as_accepted(self):
+        cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
+                      baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
+                      approval=f"DEC-{i:03d}") for i in range(1, 49)]
+        gates = [gate(i, status="PASS", evidence=f"EVID-{i}") for i in range(1, 14)]
+        captures = [capture(i, outcome="PASS", accepted=True) for i in range(1, 229)]
+        captures[0]["approval_date"] = "2026-02-30"
+        gaps = [{"requirement_id": f"REQ-{463 + (i-1)//6}{(i-1)%6+1:02d}"} for i in range(1, 49)]
+        report = audit.audit_records(cases, gates, captures, gaps)
+        self.assertEqual(report["counts"]["requirementsWithCompleteBusinessAcceptance"], 227)
+        self.assertFalse(report["businessUatExecuted"])
+        self.assertIn("requirement-level business acceptance", {b["gate"] for b in report["blockers"]})
+
     def test_invalid_calendar_date_does_not_clear_case_review_gate(self):
         cases = [case(i, decision="APPROVED", reviewer="Reviewer A",
                       date="2026-02-30", approval=f"DEC-{i:03d}")
