@@ -29,8 +29,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /@media\s*\(max-width:\s*380px\)/i, "narrow-phone layout breakpoint is required");
     assert.match(html, /nav button[^}]*min-height:\s*44px/i, "navigation targets must be touch-friendly");
     assert.match(html, /:focus-visible/i, "keyboard focus must be visible");
-    assert.match(html, /authorization:\\s*"Bearer "\\s*\\+\\s*bearerToken/i, "API calls must carry the in-memory customer credential");
-    assert.match(html, /cache:\\s*"no-store"/i, "customer API responses must not be cached");
+    assert.match(html, /authorization:\s*"Bearer "\s*\+\s*bearerToken/i, "API calls must carry the in-memory customer credential");
+    assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
     assert.match(html, /overflow-x:\s*auto/i, "mobile navigation overflow must be contained");
     assert.match(html, /\.top\{flex-wrap:\s*wrap/i, "top bar must wrap instead of overflowing on narrow screens");
     assert.match(html, /\.cards\{grid-template-columns:minmax\(0,1fr\)\}/i, "cards must stack on mobile");
