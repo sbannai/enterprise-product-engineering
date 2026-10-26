@@ -350,6 +350,33 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       sendJson(response, 200, { modules });
       return;
     }
+    // Customer-facing read-only content is configured per tenant; no admin settings or secrets are exposed.
+    const customerContentRoute = /^\/customer\/(help-center|growth-hub)\/content$/.exec(requestUrl.pathname);
+    if (customerContentRoute && request.method === "GET") {
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendJson(response, 401, { error: "unauthorized" }); return; }
+      const moduleKey = customerContentRoute[1] === "help-center" ? "help-center" : "growth-hub";
+      let tenantModules: unknown;
+      try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { tenantModules = null; }
+      const configuredModules = tenantModules && typeof tenantModules === "object" && !Array.isArray(tenantModules)
+        ? (tenantModules as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(configuredModules) || !configuredModules.includes(moduleKey)) {
+        sendJson(response, 403, { error: "module_not_enabled" }); return;
+      }
+      const contentEnv = moduleKey === "help-center" ? "EPER_CUSTOMER_HELP_CONTENT_JSON" : "EPER_CUSTOMER_GROWTH_CONTENT_JSON";
+      let tenantContent: unknown;
+      try { tenantContent = JSON.parse(process.env[contentEnv] ?? ""); }
+      catch { tenantContent = null; }
+      const content = tenantContent && typeof tenantContent === "object" && !Array.isArray(tenantContent)
+        ? (tenantContent as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(content)) { sendJson(response, 200, { module: moduleKey, items: [] }); return; }
+      const items = content.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item))
+        .filter((item) => typeof item.title === "string" && item.title.length <= 200 && typeof item.body === "string" && item.body.length <= 10000)
+        .slice(0, 100).map((item) => ({ title: item.title, body: item.body }));
+      sendJson(response, 200, { module: moduleKey, items });
+      return;
+    }
     if (isCustomerPortalPreviewRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
