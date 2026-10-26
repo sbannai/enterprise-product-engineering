@@ -19,6 +19,10 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(response.headers.get("content-security-policy") ?? "", /connect-src 'self'/, "same-origin API access must be explicitly allowed by CSP");
     const html = await response.text();
     assert.match(html, /function customerErrorMessage\(error\)/, "customer UI must map internal API failures to safe user-facing messages");
+    assert.ok(html.includes("applicationToastMarkup"), "customer portal includes the shared toast center");
+    assert.ok(html.includes("window.EPERToast"), "customer portal wires notifications to the shared toast API");
+    assert.ok(html.includes("Ticket submitted"), "ticket submission success is surfaced to the customer");
+    assert.ok(html.includes("Submission needs retry"), "uncertain ticket submissions surface a warning notification");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
     for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "nextCursor", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
