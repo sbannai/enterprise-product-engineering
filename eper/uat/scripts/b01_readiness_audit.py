@@ -60,6 +60,12 @@ def audit_records(checklist, gates, capture, gaps):
     unapproved_baselines = [r.get("requirement_id", "") for r in checklist
                             if not (r.get("brd_baseline_approval_status") or "").strip().upper().startswith("APPROVED")
                             and (r.get("brd_baseline_approval_status") or "").strip().upper() not in {"BASELINE_APPROVED"}]
+    # A status string and a document filename do not prove the approval itself.
+    # Require a separately addressable controlled approval artifact for each case.
+    missing_baseline_approval_artifacts = [
+        r.get("requirement_id", "") for r in checklist
+        if not (r.get("baseline_approval_evidence_locator") or "").strip()
+    ]
     pending_markers = ("remain pending", "pending", "tbd", "to be defined", "not yet approved")
     incomplete_acceptance_oracles = [
         r.get("requirement_id", "") for r in checklist
@@ -137,6 +143,11 @@ def audit_records(checklist, gates, capture, gaps):
         blockers.append({"gate": "E13/approved baseline", "count": len(unapproved_baselines),
                          "detail": "The controlled BRD/SRS baseline approval status is not verified for these requirements.",
                          "requirement_ids": unapproved_baselines})
+    if missing_baseline_approval_artifacts:
+        blockers.append({"gate": "E13/baseline approval evidence integrity",
+                         "count": len(missing_baseline_approval_artifacts),
+                         "detail": "A controlled approval artifact locator (record ID or repository path, exact approved versions, approver, scope, and effective date) is missing; a status label alone is insufficient.",
+                         "requirement_ids": missing_baseline_approval_artifacts})
     if incomplete_acceptance_oracles:
         blockers.append({"gate": "E13/acceptance oracle", "count": len(incomplete_acceptance_oracles),
                          "detail": "Requirement-specific acceptance-source binding and/or measurable expected result is incomplete.",
@@ -183,6 +194,7 @@ def audit_records(checklist, gates, capture, gaps):
             "entryGates": len(gates),
             "requirementsInCaptureRegister": len(capture),
             "casesWithUnapprovedBaseline": len(unapproved_baselines),
+            "casesWithoutControlledBaselineApprovalArtifact": len(missing_baseline_approval_artifacts),
             "casesWithIncompleteAcceptanceOracle": len(incomplete_acceptance_oracles),
             "casesWithIncompletePreparation": len(incomplete_case_preparation),
             "preparationFieldGapCounts": preparation_field_gap_counts,
