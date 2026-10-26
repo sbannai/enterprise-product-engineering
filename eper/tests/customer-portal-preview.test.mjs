@@ -83,3 +83,35 @@ test("customer session endpoint returns only server-mapped identity", async () =
     else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previous;
   }
 });
+
+test("customer workspace modules require identity and stay tenant-scoped", async () => {
+  const previousIdentity = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  const previousModules = process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+  const credential = "workspace-module-test-credential-12345678901234567890";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" }
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
+    "tenant-a": ["help-center", "growth-hub", "admin-config", "growth-hub"],
+    "tenant-b": ["settings"]
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port + "/customer/workspace/modules";
+    const denied = await fetch(base);
+    assert.equal(denied.status, 401);
+    const response = await fetch(base, { headers: { authorization: "Bearer " + credential } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { modules: ["help-center", "growth-hub"] });
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    if (previousIdentity === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+    else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previousIdentity;
+    if (previousModules === undefined) delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+    else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = previousModules;
+  }
+});
