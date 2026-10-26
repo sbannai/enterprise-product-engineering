@@ -49,12 +49,14 @@ export class PostgresCustomerApplicationSettingsStore {
       const result = await client.query<{
         customer_settings: string | null;
         application_settings: string | null;
+        credential_references: string | null;
       }>(`
         SELECT
           to_regclass('public.eper_customer_setting')::text AS customer_settings,
-          to_regclass('public.eper_application_setting')::text AS application_settings
+          to_regclass('public.eper_application_setting')::text AS application_settings,
+          to_regclass('public.eper_integration_credential_reference')::text AS credential_references
       `);
-      if (!result.rows[0]?.customer_settings || !result.rows[0]?.application_settings) {
+      if (!result.rows[0]?.customer_settings || !result.rows[0]?.application_settings || !result.rows[0]?.credential_references) {
         throw new Error("EPER_CUSTOMER_APPLICATION_SETTINGS_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
@@ -189,6 +191,120 @@ export class PostgresCustomerApplicationSettingsStore {
       return stored;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve the original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+
+  async getCredentialReference(
+    tenantId: string,
+    applicationId: string,
+    integrationKey: string,
+    environment: AuditEnvironment,
+  ): Promise<{ configured: boolean; secretReference: string | null; rotatedAt: string | null; updatedAt: string; updatedBy: string } | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(integrationKey, "integrationKey");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        configured: boolean; secret_reference: string; rotated_at: string | Date | null;
+        updated_at: string | Date; updated_by: string;
+      }>(
+        "SELECT configured, secret_reference, rotated_at, updated_at, updated_by FROM eper_integration_credential_reference WHERE tenant_id = $1 AND application_id = $2 AND integration_key = $3 AND environment = $4",
+        [tenantId, applicationId, integrationKey, environment],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      return {
+        configured: row.configured,
+        // This is a vault locator, never the credential value itself.
+        secretReference: row.secret_reference,
+        rotatedAt: row.rotated_at ? new Date(row.rotated_at).toISOString() : null,
+        updatedAt: new Date(row.updated_at).toISOString(),
+        updatedBy: row.updated_by,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async replaceCredentialReference(input: {
+    tenantId: string;
+    applicationId: string;
+    actorId: string;
+    integrationKey: string;
+    environment: AuditEnvironment;
+    secretReference: string;
+    correlationId: string;
+    serviceVersion?: string;
+  }): Promise<{ configured: boolean; rotatedAt: string; updatedAt: string; updatedBy: string }> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.integrationKey, "integrationKey");
+    if (typeof input.secretReference !== "string" || !input.secretReference.trim() || input.secretReference.length > 512 ||
+        /^(sk_|rk_|pk_|whsec_|Bearer\s)/i.test(input.secretReference)) {
+      throw new Error("INTEGRATION_SECRET_REFERENCE_INVALID");
+    }
+    if (!input.correlationId?.trim() || input.correlationId.length > 128) {
+      throw new Error("INTEGRATION_CREDENTIAL_CORRELATION_ID_REQUIRED");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        [`eper-credential:${input.tenantId}:${input.applicationId}:${input.integrationKey}:${input.environment}`],
+      );
+      const prior = await client.query<{ secret_reference: string }>(
+        "SELECT secret_reference FROM eper_integration_credential_reference WHERE tenant_id = $1 AND application_id = $2 AND integration_key = $3 AND environment = $4 FOR UPDATE",
+        [input.tenantId, input.applicationId, input.integrationKey, input.environment],
+      );
+      const now = new Date().toISOString();
+      const saved = await client.query<{
+        configured: boolean; rotated_at: string | Date | null; updated_at: string | Date; updated_by: string;
+      }>(
+        `INSERT INTO eper_integration_credential_reference
+          (tenant_id, application_id, integration_key, environment, secret_reference, configured, rotated_at, updated_at, updated_by)
+         VALUES ($1, $2, $3, $4, $5, TRUE, $6, NOW(), $7)
+         ON CONFLICT (tenant_id, application_id, integration_key, environment) DO UPDATE SET
+          secret_reference = EXCLUDED.secret_reference, configured = TRUE, rotated_at = EXCLUDED.rotated_at,
+          updated_at = NOW(), updated_by = EXCLUDED.updated_by
+         RETURNING configured, rotated_at, updated_at, updated_by`,
+        [input.tenantId, input.applicationId, input.integrationKey, input.environment, input.secretReference, now, input.actorId],
+      );
+      const row = saved.rows[0];
+      if (!row) throw new Error("INTEGRATION_CREDENTIAL_REFERENCE_WRITE_RETURNED_NO_ROW");
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+        environment: input.environment,
+        actorType: "human",
+        actorId: input.actorId,
+        action: "integration.credential_reference.replace",
+        outcome: "success",
+        resourceType: "integration-credential-reference",
+        resourceId: input.integrationKey,
+        correlationId: input.correlationId,
+        source: "api",
+        operationName: "PUT /customer/applications/:applicationId/integrations/:integrationKey/credentials",
+        serviceVersion: input.serviceVersion,
+        beforeHash: prior.rows[0] ? digest(prior.rows[0].secret_reference) : undefined,
+        afterHash: digest(input.secretReference),
+        payload: { integrationKey: input.integrationKey, environment: input.environment, rotated: Boolean(prior.rows[0]) },
+      });
+      await client.query("COMMIT");
+      return {
+        configured: row.configured,
+        rotatedAt: row.rotated_at ? new Date(row.rotated_at).toISOString() : now,
+        updatedAt: new Date(row.updated_at).toISOString(),
+        updatedBy: row.updated_by,
+      };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
     } finally {
       client.release();
