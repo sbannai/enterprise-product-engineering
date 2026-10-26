@@ -445,7 +445,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             ...(typeof asset.sizeBytes === "number" && Number.isSafeInteger(asset.sizeBytes) && asset.sizeBytes >= 0 ? { sizeBytes: asset.sizeBytes } : {}),
             ...(typeof asset.updatedAt === "string" && asset.updatedAt.length <= 40 ? { updatedAt: asset.updatedAt } : {}),
             ...(Array.isArray(asset.tags) ? { tags: asset.tags.filter((tag): tag is string => typeof tag === "string" && tag.length <= 64).slice(0, 20) } : {}),
-            accessReference: asset.accessReference,
+            // Storage references stay server-side until an authorized download endpoint exists.
           });
         }
       }
