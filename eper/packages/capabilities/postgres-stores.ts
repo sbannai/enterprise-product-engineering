@@ -48,6 +48,49 @@ function stableAuditMaterial(input: Omit<AuditEvidence, "integrityHash">): strin
 export class PostgresAuthoritativeRecordStore {
   constructor(private readonly pool: Pool) {}
 
+  async createGoverned(record: AuthoritativeRecord, context: { principalId: string; correlationId: string; requirementId: string }): Promise<AuthoritativeRecord> {
+    const data = objectValue(record.data, "RECORD_DATA_INVALID");
+    return withTenantTransaction(this.pool, record.tenantId, async ({ client, tenantId }) => {
+      const { rows } = await client.query(
+        "INSERT INTO authoritative_records(tenant_id,record_id,version,state,data) VALUES($1,$2,$3,$4,$5::jsonb) RETURNING tenant_id,record_id,version,state,data",
+        [tenantId, record.id, record.version, record.state, JSON.stringify(data)],
+      );
+      const saved = recordFromRow(rows[0]);
+      const audit = { id: `record-created:${saved.id}:v${saved.version}`, tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_CREATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: saved.id, version: saved.version, state: saved.state } };
+      const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
+      await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
+      await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authoritative_record", aggregateId: saved.id, eventType: "AUTHORITATIVE_RECORD_CREATED", correlationId: context.correlationId, payload: { recordId: saved.id, version: saved.version } });
+      return saved;
+    });
+  }
+
+  async updateGoverned(tenantId: string, id: string, expectedVersion: number, patch: Partial<Pick<AuthoritativeRecord, "state" | "data">>, context: { principalId: string; correlationId: string; requirementId: string }): Promise<AuthoritativeRecord> {
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error("RECORD_EXPECTED_VERSION_INVALID");
+    if (patch.data !== undefined) objectValue(patch.data, "RECORD_DATA_INVALID");
+    return withTenantTransaction(this.pool, tenantId, async ({ client }) => {
+      const { rows } = await client.query("UPDATE authoritative_records SET state=COALESCE($4,state),data=COALESCE($5::jsonb,data),version=version+1,updated_at=now() WHERE tenant_id=$1 AND record_id=$2 AND version=$3 RETURNING tenant_id,record_id,version,state,data", [tenantId,id,expectedVersion,patch.state ?? null,patch.data === undefined ? null : JSON.stringify(patch.data)]);
+      if (!rows[0]) throw new Error("RECORD_VERSION_CONFLICT");
+      const saved = recordFromRow(rows[0]);
+      const audit = { id: `record-updated:${saved.id}:v${saved.version}`, tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_UPDATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: saved.id, version: saved.version, state: saved.state } };
+      const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
+      await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
+      await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authoritative_record", aggregateId: saved.id, eventType: "AUTHORITATIVE_RECORD_UPDATED", correlationId: context.correlationId, payload: { recordId: saved.id, version: saved.version } });
+      return saved;
+    });
+  }
+
+  async deleteGoverned(tenantId: string, id: string, expectedVersion: number, context: { principalId: string; correlationId: string; requirementId: string }): Promise<void> {
+    await withTenantTransaction(this.pool, tenantId, async ({ client }) => {
+      const existing = await client.query("SELECT state FROM authoritative_records WHERE tenant_id=$1 AND record_id=$2 AND version=$3 FOR UPDATE", [tenantId,id,expectedVersion]);
+      if (!existing.rows[0]) throw new Error("RECORD_VERSION_CONFLICT");
+      await client.query("DELETE FROM authoritative_records WHERE tenant_id=$1 AND record_id=$2 AND version=$3", [tenantId,id,expectedVersion]);
+      const audit = { id: `record-deleted:${id}:v${expectedVersion}`, tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_DELETED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: id, version: expectedVersion } };
+      const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
+      await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
+      await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authoritative_record", aggregateId: id, eventType: "AUTHORITATIVE_RECORD_DELETED", correlationId: context.correlationId, payload: { recordId: id, version: expectedVersion } });
+    });
+  }
+
   async create(record: AuthoritativeRecord): Promise<AuthoritativeRecord> {
     const data = objectValue(record.data, "RECORD_DATA_INVALID");
     return withTenantTransaction(this.pool, record.tenantId, async ({ client, tenantId }) => {
