@@ -26,6 +26,8 @@ import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
+import type { IntegrationPort } from "../../packages/integration/index.js";
+import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -357,7 +359,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; assetDownloadResolver?: CustomerAssetDownloadResolver; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
   const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -375,6 +377,20 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     sandboxEnabled: process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
   };
   const workflowConfig = new WorkflowConfigurationService();
+  let configuredAssetStorageHosts: string[] = [];
+  try {
+    const parsedHosts: unknown = JSON.parse(process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON ?? "null");
+    if (Array.isArray(parsedHosts) && parsedHosts.every((host) => typeof host === "string" && host.trim() === host && host.length > 0)) {
+      configuredAssetStorageHosts = parsedHosts;
+    }
+  } catch {
+    configuredAssetStorageHosts = [];
+  }
+  const assetDownloadResolver: CustomerAssetDownloadResolver | undefined = options.assetDownloadResolver ?? (
+    options.assetStoragePort && configuredAssetStorageHosts.length > 0
+      ? createStorageDownloadAdapter(options.assetStoragePort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
   const assetAuditWriter: CustomerAssetAuditWriter | undefined = options.assetAuditWriter ?? (
     process.env.EPER_AUDIT_PERSISTENCE === "postgres" && options.capabilityPool
       ? async (record) => {
@@ -521,7 +537,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           // Downloads are high-risk reads: never issue a URL when audit persistence is unavailable.
           sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" }); return;
         }
-        if (!options.assetDownloadResolver) {
+        if (!assetDownloadResolver) {
           // Preserve the failed attempt in the audit trail even when no provider is configured.
           await audit("failure");
           sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
@@ -544,7 +560,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (!asset || typeof asset.accessReference !== "string" || !asset.accessReference.trim() || typeof asset.name !== "string") {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
-        const result = await options.assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) }, requestId);
+        const result = await assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) }, requestId);
         if (!result || typeof result.url !== "string" || !result.url || typeof result.expiresAt !== "string") {
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
