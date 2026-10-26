@@ -338,9 +338,18 @@ export class PostgresExceptionStore {
         `INSERT INTO workflow_exceptions
          (tenant_id,exception_id,requirement_id,code,message,state,retry_count,idempotency_key,request_fingerprint,owner,version,created_at,updated_at)
          VALUES($1,$2,$3,$4,$5,'OPEN',0,$6,$7,$8,1,$9::timestamptz,$9::timestamptz)
+         ON CONFLICT (tenant_id,idempotency_key) DO NOTHING
          RETURNING *`,
         [tenantId, input.id, input.requirementId, input.code, input.message, input.idempotencyKey, fingerprint, input.owner ?? null, input.createdAt],
       );
+      if (!rows[0]) {
+        const replay = await client.query("SELECT * FROM workflow_exceptions WHERE tenant_id=$1 AND idempotency_key=$2", [tenantId, input.idempotencyKey]);
+        if (replay.rows[0]) {
+          if (replay.rows[0].request_fingerprint !== fingerprint) throw new Error("IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST");
+          return exceptionFromRow(replay.rows[0]);
+        }
+        throw new Error("EXCEPTION_ALREADY_EXISTS");
+      }
       const created = exceptionFromRow(rows[0]);
       const auditInput = {
         id: tenantScopedId(tenantId, `exception-created:${created.id}`), tenantId, requirementId: created.requirementId,
