@@ -99,6 +99,33 @@ test("live PostgreSQL ticket creation idempotency: concurrency, conflict, tenant
       assert.equal(count.rows[0].count, 2);
     });
 
+    await t.test("successful status and assignment mutations persist one audit event each", async () => {
+      const ticket = await store.create(identity, {
+        ...input,
+        title: "Successful lifecycle audit test " + randomUUID(),
+      }, "ticket-lifecycle-key-" + randomUUID());
+
+      const statusUpdated = await store.changeStatus(identity, ticket.id, "triaged");
+      assert.equal(statusUpdated?.status, "triaged");
+      const assigned = await store.assign(identity, ticket.id, "support-agent");
+      assert.equal(assigned?.assignedTo, "support-agent");
+
+      const persisted = await pool.query(
+        "SELECT status, assigned_to FROM eper_support_tickets WHERE tenant_id=$1 AND id=$2",
+        [tenant, ticket.id],
+      );
+      assert.equal(persisted.rows[0].status, "triaged");
+      assert.equal(persisted.rows[0].assigned_to, "support-agent");
+
+      const audits = await pool.query(
+        `SELECT action, actor_id, application_id FROM ${auditTable} WHERE tenant_id=$1 AND ticket_id=$2 AND action IN ('ticket.status_changed','ticket.assigned') ORDER BY action`,
+        [tenant, ticket.id],
+      );
+      assert.deepEqual(audits.rows.map(row => row.action), ["ticket.assigned", "ticket.status_changed"]);
+      assert.ok(audits.rows.every(row => row.actor_id === actor));
+      assert.ok(audits.rows.every(row => row.application_id === app));
+    });
+
     await t.test("status and assignment mutations cannot cross tenant boundaries", async () => {
       const ownedTicket = await store.create(identity, {
         ...input,
