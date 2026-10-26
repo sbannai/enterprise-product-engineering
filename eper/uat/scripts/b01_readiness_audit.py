@@ -71,7 +71,9 @@ def audit_records(checklist, gates, capture, gaps):
             value = (row.get(field) or "").strip()
             if field in {"approved_brd_version_locator", "approved_srs_version_locator"}:
                 # A non-empty locator is insufficient: it must carry the controlled baseline approval reference.
-                if not value or "B01-BASELINE-APPROVAL-001" not in value:
+                has_controlled_approval = "B01-BASELINE-APPROVAL-001" in value
+                has_source_document = ".docx" in value.lower() or ".pdf" in value.lower()
+                if not value or not has_controlled_approval or not has_source_document:
                     missing.append(field)
             else:
                 accepted_values = {"YES", "APPROVED", "PASS", "VERIFIED", "COMPLETE"}
