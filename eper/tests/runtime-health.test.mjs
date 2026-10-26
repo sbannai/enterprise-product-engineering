@@ -253,3 +253,30 @@ test("public UAT capability API rejects unknown requirement IDs", async () => {
     }
   }
 });
+
+
+test("admin configuration route negotiates standardized auth errors while preserving legacy clients", async () => {
+  const key = "EPER_ADMIN_CONFIG_API_ENABLED";
+  const previous = process.env[key];
+  process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
+  try {
+    const base = await startServer();
+    const legacy = await fetch(`${base}/admin/config/roles-access`);
+    assert.equal(legacy.status, 401);
+    assert.deepEqual(await legacy.json(), { error: "unauthorized" });
+
+    const standardized = await fetch(`${base}/admin/config/roles-access`, {
+      headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "admin-auth-contract" },
+    });
+    assert.equal(standardized.status, 401);
+    assert.equal(standardized.headers.get("x-request-id"), "admin-auth-contract");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: { code: "UNAUTHORIZED", message: "Authentication is required." },
+      meta: { requestId: "admin-auth-contract" },
+    });
+  } finally {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+});
