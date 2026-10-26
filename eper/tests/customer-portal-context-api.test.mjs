@@ -300,6 +300,17 @@ test("customer application list returns only server-assigned applications for th
     const responseA = await fetch(url, { headers: { authorization: "Bearer " + tokenA, "x-tenant-id": "tenant-b" } });
     assert.equal(responseA.status, 200);
     assert.deepEqual(await responseA.json(), { applications: [{ applicationId: "app-a" }, { applicationId: "app-a-2" }] });
+    const versionedA = await fetch(url, { headers: {
+      authorization: "Bearer " + tokenA,
+      accept: "application/vnd.eper.v1+json",
+      "x-tenant-id": "tenant-b",
+    } });
+    assert.equal(versionedA.status, 200);
+    const versionedBody = await versionedA.json();
+    assert.equal(versionedBody.success, true);
+    assert.deepEqual(versionedBody.data.applications, [{ applicationId: "app-a" }, { applicationId: "app-a-2" }]);
+    assert.ok(versionedBody.meta.requestId);
+    assert.equal(versionedA.headers.get("x-request-id"), versionedBody.meta.requestId);
     const responseB = await fetch(url, { headers: { authorization: "Bearer " + tokenB } });
     assert.equal(responseB.status, 200);
     assert.deepEqual(await responseB.json(), { applications: [{ applicationId: "app-b" }] });
