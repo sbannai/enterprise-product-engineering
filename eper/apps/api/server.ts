@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { sendApiSuccess, sendApiError } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
@@ -319,10 +320,10 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(response, 401, { authenticated: false, error: "unauthorized" });
+        sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required.");
         return;
       }
-      sendJson(response, 200, {
+      sendApiSuccess(request, response, 200, {
         authenticated: true,
         tenantId: identity.tenantId,
         actorId: identity.actorId,
@@ -334,12 +335,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.
     if (requestUrl.pathname === "/customer/workspace/modules" && request.method === "GET") {
       const identity = resolveCustomerAccessIdentity(request);
-      if (!identity) { sendJson(response, 401, { error: "unauthorized" }); return; }
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
       let tenantModules: unknown;
       try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
       catch { tenantModules = null; }
       if (!tenantModules || typeof tenantModules !== "object" || Array.isArray(tenantModules)) {
-        sendJson(response, 200, { modules: [] }); return;
+        sendApiSuccess(request, response, 200, { modules: [] }); return;
       }
       const configured = (tenantModules as Record<string, unknown>)[identity.tenantId];
       const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings"]);
@@ -347,7 +348,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(response, 200, { modules: [] }); return;
       }
       const modules = [...new Set(configured.filter((item): item is string => allowed.has(item)))];
-      sendJson(response, 200, { modules });
+      sendApiSuccess(request, response, 200, { modules });
       return;
     }
     // Customer-facing read-only content is configured per tenant; no admin settings or secrets are exposed.
@@ -362,7 +363,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const configuredModules = tenantModules && typeof tenantModules === "object" && !Array.isArray(tenantModules)
         ? (tenantModules as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(configuredModules) || !configuredModules.includes(moduleKey)) {
-        sendJson(response, 403, { error: "module_not_enabled" }); return;
+        sendApiError(request, response, 403, "FORBIDDEN", "This customer module is not enabled."); return;
       }
       const contentEnv = moduleKey === "help-center" ? "EPER_CUSTOMER_HELP_CONTENT_JSON" : "EPER_CUSTOMER_GROWTH_CONTENT_JSON";
       let tenantContent: unknown;
@@ -370,11 +371,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       catch { tenantContent = null; }
       const content = tenantContent && typeof tenantContent === "object" && !Array.isArray(tenantContent)
         ? (tenantContent as Record<string, unknown>)[identity.tenantId] : null;
-      if (!Array.isArray(content)) { sendJson(response, 200, { module: moduleKey, items: [] }); return; }
+      if (!Array.isArray(content)) { sendApiSuccess(request, response, 200, { module: moduleKey, items: [] }); return; }
       const items = content.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item))
         .filter((item) => typeof item.title === "string" && item.title.length <= 200 && typeof item.body === "string" && item.body.length <= 10000)
         .slice(0, 100).map((item) => ({ title: item.title, body: item.body }));
-      sendJson(response, 200, { module: moduleKey, items });
+      sendApiSuccess(request, response, 200, { module: moduleKey, items });
       return;
     }
     if (isCustomerPortalPreviewRequest(request)) {
