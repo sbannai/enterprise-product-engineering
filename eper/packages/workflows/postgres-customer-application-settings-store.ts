@@ -226,5 +226,5 @@ function toStored(row: SettingRow | ApplicationSettingRow): StoredSetting {
 }
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return createHash("sha256").update(JSON.stringify(value) ?? "null").digest("hex");
 }
