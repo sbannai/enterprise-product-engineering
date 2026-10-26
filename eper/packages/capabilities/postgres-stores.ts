@@ -18,6 +18,9 @@ function objectValue(value: unknown, code: string): JsonObject {
 function jsonValue<T>(value: unknown): T {
   return (typeof value === "string" ? JSON.parse(value) : value) as T;
 }
+function tenantScopedId(tenantId: string, value: string): string {
+  return `${createHash("sha256").update(tenantId).digest("hex").slice(0, 12)}:${value}`;
+}
 function hash(value: unknown): string {
   const serialized = JSON.stringify(value);
   if (serialized === undefined) throw new Error("PERSISTENCE_VALUE_NOT_SERIALIZABLE");
@@ -62,7 +65,7 @@ export class PostgresAuthoritativeRecordStore {
         [tenantId, record.id, record.version, record.state, JSON.stringify(data)],
       );
       const saved = recordFromRow(rows[0]);
-      const audit = { id: `record-created:${saved.id}:v${saved.version}`, tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_CREATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: saved.id, version: saved.version, state: saved.state } };
+      const audit = { id: tenantScopedId(tenantId, `record-created:${saved.id}:v${saved.version}`), tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_CREATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: saved.id, version: saved.version, state: saved.state } };
       const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
       await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
       await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authoritative_record", aggregateId: saved.id, eventType: "AUTHORITATIVE_RECORD_CREATED", correlationId: context.correlationId, payload: { recordId: saved.id, version: saved.version } });
@@ -77,7 +80,7 @@ export class PostgresAuthoritativeRecordStore {
       const { rows } = await client.query("UPDATE authoritative_records SET state=COALESCE($4,state),data=COALESCE($5::jsonb,data),version=version+1,updated_at=now() WHERE tenant_id=$1 AND record_id=$2 AND version=$3 RETURNING tenant_id,record_id,version,state,data", [tenantId,id,expectedVersion,patch.state ?? null,patch.data === undefined ? null : JSON.stringify(patch.data)]);
       if (!rows[0]) throw new Error("RECORD_VERSION_CONFLICT");
       const saved = recordFromRow(rows[0]);
-      const audit = { id: `record-updated:${saved.id}:v${saved.version}`, tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_UPDATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: saved.id, version: saved.version, state: saved.state } };
+      const audit = { id: tenantScopedId(tenantId, `record-updated:${saved.id}:v${saved.version}`), tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_UPDATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: saved.id, version: saved.version, state: saved.state } };
       const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
       await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
       await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authoritative_record", aggregateId: saved.id, eventType: "AUTHORITATIVE_RECORD_UPDATED", correlationId: context.correlationId, payload: { recordId: saved.id, version: saved.version } });
@@ -90,7 +93,7 @@ export class PostgresAuthoritativeRecordStore {
       const existing = await client.query("SELECT state FROM authoritative_records WHERE tenant_id=$1 AND record_id=$2 AND version=$3 FOR UPDATE", [tenantId,id,expectedVersion]);
       if (!existing.rows[0]) throw new Error("RECORD_VERSION_CONFLICT");
       await client.query("DELETE FROM authoritative_records WHERE tenant_id=$1 AND record_id=$2 AND version=$3", [tenantId,id,expectedVersion]);
-      const audit = { id: `record-deleted:${id}:v${expectedVersion}`, tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_DELETED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: id, version: expectedVersion } };
+      const audit = { id: tenantScopedId(tenantId, `record-deleted:${id}:v${expectedVersion}`), tenantId, requirementId: context.requirementId, action: "AUTHORITATIVE_RECORD_DELETED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { recordId: id, version: expectedVersion } };
       const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
       await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
       await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authoritative_record", aggregateId: id, eventType: "AUTHORITATIVE_RECORD_DELETED", correlationId: context.correlationId, payload: { recordId: id, version: expectedVersion } });
@@ -170,7 +173,7 @@ export class PostgresAuthorizationPolicyStore {
     const policyId = policy.id ?? hash(policy).slice(0, 32);
     await withTenantTransaction(this.pool, policy.tenantId, async ({ client, tenantId }) => {
       await client.query("INSERT INTO authorization_policies(tenant_id,policy_id,principal_id,actions,resources,effect) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6)", [tenantId,policyId,policy.principalId ?? null,JSON.stringify(policy.actions),JSON.stringify(policy.resources),policy.effect]);
-      const audit = { id: `policy-created:${policyId}`, tenantId, requirementId: context.requirementId, action: "AUTHORIZATION_POLICY_CREATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { policyId, effect: policy.effect, actions: policy.actions, resources: policy.resources } };
+      const audit = { id: tenantScopedId(tenantId, `policy-created:${policyId}`), tenantId, requirementId: context.requirementId, action: "AUTHORIZATION_POLICY_CREATED", principalId: context.principalId, correlationId: context.correlationId, occurredAt: new Date().toISOString(), payload: { policyId, effect: policy.effect, actions: policy.actions, resources: policy.resources } };
       const integrityHash = createHash("sha256").update(stableAuditMaterial(audit)).digest("hex");
       await client.query("INSERT INTO audit_evidence(tenant_id,evidence_id,requirement_id,action,principal_id,correlation_id,occurred_at,payload,canonicalization_version,integrity_hash) VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,1,$9)", [tenantId,audit.id,audit.requirementId,audit.action,audit.principalId,audit.correlationId,audit.occurredAt,JSON.stringify(audit.payload),integrityHash]);
       await enqueueOutboxEvent({ tenantId, client }, { eventId: audit.id, tenantId, aggregateType: "authorization_policy", aggregateId: policyId, eventType: "AUTHORIZATION_POLICY_CREATED", correlationId: context.correlationId, payload: { policyId, effect: policy.effect } });
@@ -340,7 +343,7 @@ export class PostgresExceptionStore {
       );
       const created = exceptionFromRow(rows[0]);
       const auditInput = {
-        id: `exception-created:${created.id}`, tenantId, requirementId: created.requirementId,
+        id: tenantScopedId(tenantId, `exception-created:${created.id}`), tenantId, requirementId: created.requirementId,
         action: "EXCEPTION_CREATED", principalId, correlationId,
         occurredAt: created.createdAt, payload: { exceptionId: created.id, state: created.state, version: created.version },
       };
@@ -348,7 +351,7 @@ export class PostgresExceptionStore {
       await enqueueOutboxEvent({
         tenantId, client,
       }, {
-        eventId: `exception-created:${created.id}`, tenantId, aggregateType: "workflow_exception",
+        eventId: tenantScopedId(tenantId, `exception-created:${created.id}`), tenantId, aggregateType: "workflow_exception",
         aggregateId: created.id, eventType: "EXCEPTION_CREATED", correlationId,
         payload: { exceptionId: created.id, state: created.state, requirementId: created.requirementId },
       });
@@ -444,7 +447,7 @@ export class PostgresGovernedReportingStore {
         [tenantId, row.reportId, publicationId, JSON.stringify(row.values), JSON.stringify(row.sourceRequirementIds), row.generatedAt],
       );
       const audit = {
-        id: `report-published:${row.reportId}:${publicationId}`, tenantId,
+        id: tenantScopedId(tenantId, `report-published:${row.reportId}:${publicationId}`), tenantId,
         requirementId: row.sourceRequirementIds[0], action: "GOVERNED_REPORT_PUBLISHED",
         principalId, correlationId, occurredAt: row.generatedAt,
         payload: { reportId: row.reportId, publicationId, sourceRequirementIds: row.sourceRequirementIds },
