@@ -34,11 +34,13 @@ test("customer portal context requires trusted identity and returns server-mappe
     assert.equal(body.status, "identity_resolved_navigation_only");
     assert.deepEqual(body.navigation.map((item) => item.key), ["home", "help-center", "growth-hub", "applications", "settings"]);
     assert.match(body.note, /routes and data must still enforce authorization independently/);
-    const versioned = await fetch(url, { headers: { authorization: "Bearer " + token, accept: "application/vnd.eper.v1+json" } });
+    const versioned = await fetch(url, { headers: { authorization: "Bearer " + token, accept: "application/vnd.eper.v1+json", "x-tenant-id": "attacker-tenant", "x-actor-id": "attacker-actor", "x-role-key": "super-admin" } });
     assert.equal(versioned.status, 200);
     const versionedBody = await versioned.json();
     assert.equal(versionedBody.success, true);
     assert.equal(versionedBody.data.tenantId, "tenant-from-server");
+    assert.equal(versionedBody.data.actorId, "actor-from-server", "caller headers must not override the mapped actor");
+    assert.equal(versionedBody.data.roleKey, "customer-admin", "caller headers must not override the mapped role");
     assert.deepEqual(versionedBody.data.navigation.map((item) => item.key), ["home", "help-center", "growth-hub", "applications", "settings"]);
     assert.ok(versionedBody.meta.requestId);
     assert.equal(versioned.headers.get("x-request-id"), versionedBody.meta.requestId);
