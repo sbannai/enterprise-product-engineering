@@ -126,7 +126,8 @@ test("live PostgreSQL ticket creation idempotency: concurrency, conflict, tenant
         "SELECT status, assigned_to FROM eper_support_tickets WHERE tenant_id=$1 AND id=$2",
         [tenant, ticket.id],
       );
-      assert.equal(persisted.rows[0].status, "triaged");
+      // Assignment intentionally advances a ticket into the assigned lifecycle state.
+      assert.equal(persisted.rows[0].status, "assigned");
       assert.equal(persisted.rows[0].assigned_to, "support-agent");
 
       const audits = await pool.query(
