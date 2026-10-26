@@ -96,6 +96,10 @@ test("asset download rechecks tenant/application access and requires an audited 
   });
   const audit = [];
   const expectedCorrelationId = "asset-download-regression-001";
+  let markAuditStarted;
+  const auditStarted = new Promise((resolve) => { markAuditStarted = resolve; });
+  let releaseAudit;
+  const auditGate = new Promise((resolve) => { releaseAudit = resolve; });
   const server = createAppServer({
     assetStoragePort: {
       invoke: async (input, correlationId) => {
@@ -105,14 +109,23 @@ test("asset download rechecks tenant/application access and requires an audited 
         return { success: true, value: { url: "https://storage.example.test/signed?token=short-lived", expiresAt: new Date(Date.now() + 60_000).toISOString() } };
       },
     },
-    assetAuditWriter: async (record) => { audit.push(record); },
+    assetAuditWriter: async (record) => {
+      if (record.outcome === "success") { markAuditStarted(); await auditGate; }
+      audit.push(record);
+    },
   });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address();
     assert.ok(address && typeof address === "object");
     const base = "http://127.0.0.1:" + address.port;
-    const ok = await fetch(base + "/customer/applications/app-a/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA, "x-correlation-id": expectedCorrelationId } });
+    let responseSettled = false;
+    const pendingResponse = fetch(base + "/customer/applications/app-a/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA, "x-correlation-id": expectedCorrelationId } });
+    pendingResponse.then(() => { responseSettled = true; });
+    await auditStarted;
+    assert.equal(responseSettled, false, "download response must wait for durable audit completion");
+    releaseAudit();
+    const ok = await pendingResponse;
     assert.equal(ok.status, 200);
     const body = await ok.json();
     assert.equal(body.downloadUrl, "https://storage.example.test/signed?token=short-lived");
