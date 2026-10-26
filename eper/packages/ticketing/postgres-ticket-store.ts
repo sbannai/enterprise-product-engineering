@@ -26,6 +26,7 @@ export interface TicketListFilter {
   severity?: TicketSeverity;
   type?: TicketRecord["type"];
   applicationId?: string;
+  search?: string;
   limit?: number;
   offset?: number;
 }
@@ -108,6 +109,11 @@ export class PostgresTicketStore {
     if (filter.severity) add("severity", filter.severity);
     if (filter.type) add("type", filter.type);
     if (filter.applicationId) add("application_id", filter.applicationId);
+    if (filter.search?.trim()) {
+      values.push(filter.search.trim());
+      const searchParam = "$" + values.length;
+      clauses.push("(position(lower(" + searchParam + ") in lower(id::text)) > 0 OR position(lower(" + searchParam + ") in lower(title)) > 0 OR position(lower(" + searchParam + ") in lower(description)) > 0 OR position(lower(" + searchParam + ") in lower(business_impact)) > 0 OR position(lower(" + searchParam + ") in lower(application_id)) > 0 OR position(lower(" + searchParam + ") in lower(coalesce(assigned_to, ''))) > 0)");
+    }
     values.push(limit, offset);
     const result = await this.pool.connect().then(async client => {
       try {
