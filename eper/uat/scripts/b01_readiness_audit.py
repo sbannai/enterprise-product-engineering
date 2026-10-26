@@ -46,9 +46,18 @@ def audit_records(checklist, gates, capture, gaps):
     if set(req_ids) != expected_b01_ids:
         integrity_errors.append("B01 case checklist requirement IDs do not exactly cover REQ-46301 through REQ-47006")
 
-    missing_sources = [r.get("requirement_id", "") for r in checklist
-                       if not (r.get("requirement_specific_acceptance_source") or "").strip()
-                       or (r.get("brd_baseline_approval_status") or "").strip() not in {"APPROVED", "BASELINE_APPROVED"}]
+    unapproved_baselines = [r.get("requirement_id", "") for r in checklist
+                            if not (r.get("brd_baseline_approval_status") or "").strip().upper().startswith("APPROVED")
+                            and (r.get("brd_baseline_approval_status") or "").strip().upper() not in {"BASELINE_APPROVED"}]
+    pending_markers = ("remain pending", "pending", "tbd", "to be defined", "not yet approved")
+    incomplete_acceptance_oracles = [
+        r.get("requirement_id", "") for r in checklist
+        if not (r.get("requirement_specific_acceptance_source") or "").strip()
+        or any(marker in (r.get("requirement_specific_acceptance_source") or "").strip().lower()
+               for marker in pending_markers)
+        or (r.get("measurable_expected_result_approved") or "").strip().upper() not in {"YES", "APPROVED", "PASS"}
+    ]
+    missing_sources = sorted(set(unapproved_baselines) | set(incomplete_acceptance_oracles))
     unapproved_cases = [r.get("requirement_id", "") for r in checklist
                         if (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED", "APPROVE_WITH_CHANGES"}
                         or not (r.get("reviewer_identity") or "").strip()
@@ -77,7 +86,7 @@ def audit_records(checklist, gates, capture, gaps):
 
     if missing_sources:
         blockers.append({"gate": "E13/source baseline", "count": len(missing_sources),
-                         "detail": "Requirement-specific approved acceptance source or approved BRD baseline is missing.",
+                         "detail": "Approved baseline status is unverified and/or requirement-specific acceptance-source binding or measurable expected result remains incomplete.",
                          "requirement_ids": missing_sources})
     if unapproved_cases:
         blockers.append({"gate": "D3/case review", "count": len(unapproved_cases),
@@ -115,7 +124,9 @@ def audit_records(checklist, gates, capture, gaps):
             "b01Gaps": len(gaps),
             "entryGates": len(gates),
             "requirementsInCaptureRegister": len(capture),
-            "casesWithMissingApprovedSource": len(missing_sources),
+            "casesWithMissingApprovedSourceOrAcceptanceOracle": len(missing_sources),
+            "casesWithUnapprovedBaseline": len(unapproved_baselines),
+            "casesWithIncompleteAcceptanceOracle": len(incomplete_acceptance_oracles),
             "casesWithoutCompleteReviewApproval": len(unapproved_cases),
             "casesNotExplicitlyAuthorized": len(unauthorized_cases),
             "entryGatesPendingOrWithoutEvidence": len(pending_gates),
