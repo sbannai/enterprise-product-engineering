@@ -34,6 +34,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
     assert.match(html, /\/customer\/applications\/\"\+encodeURIComponent\(applicationId\)\+\"\/assets\//, "asset downloads must use the authenticated application-scoped download API");
     assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
+    assert.ok(html.includes("Tickets for selected application"), "customer ticket history must be clearly labeled as application-level");
+    assert.ok(html.includes("only tickets for the application selected above are shown here"), "customer UI must explain application-level ticket visibility");
     for (const ticketContract of ["ticketForm", "ticketApplication", "businessImpact", "/customer/applications/", "Submit ticket", "Load my tickets", "ticketResult"]) {
       assert.ok(html.includes(ticketContract), "customer ticket UI must expose: " + ticketContract);
     }
