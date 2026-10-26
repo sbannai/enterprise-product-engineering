@@ -1303,7 +1303,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 200, { tickets, limit, offset, hasMore, tenantId: identity.tenantId });
           return;
         }
-        if (request.method === "PATCH" && adminTicketMatch[1]) {
+        if ((request.method === "PATCH" || request.method === "POST" || request.method === "GET") && adminTicketMatch[1]) {
           let ticketId: string;
           try { ticketId = decodeURIComponent(adminTicketMatch[1]); }
           catch { sendJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
