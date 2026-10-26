@@ -296,3 +296,54 @@ test("admin configuration route negotiates standardized auth errors while preser
     }
   }
 });
+
+test("admin access-check validation negotiates standardized 400 errors without changing legacy clients", async () => {
+  const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_API_TOKEN"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "process-memory",
+    EPER_ADMIN_CONFIG_API_TOKEN: "admin-validation-test-token-0123456789-0123456789",
+  });
+  try {
+    const base = await startServer();
+    const payload = { principalId: "", permission: "not-a-supported-permission" };
+    const legacy = await fetch(`${base}/admin/config/access-check`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer admin-validation-test-token-0123456789-0123456789",
+      },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(legacy.status, 400);
+    assert.deepEqual(await legacy.json(), { error: "principalId_and_supported_permission_required" });
+
+    const standardized = await fetch(`${base}/admin/config/access-check`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer admin-validation-test-token-0123456789-0123456789",
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "admin-validation-contract",
+      },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(standardized.status, 400);
+    assert.equal(standardized.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+    assert.equal(standardized.headers.get("x-request-id"), "admin-validation-contract");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: {
+        code: "PRINCIPALID_AND_SUPPORTED_PERMISSION_REQUIRED",
+        message: "The request could not be completed.",
+      },
+      meta: { requestId: "admin-validation-contract" },
+    });
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
