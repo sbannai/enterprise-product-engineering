@@ -21,8 +21,8 @@ def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL
         "brd_baseline_approval_status": baseline,
         "measurable_expected_result_approved": expected,
         "brd_id_status": "VERIFIED_ID_AND_SECTION_IN_SOURCE", "brd_locator_status": "SOURCE_REGISTER_CONFIRMED",
-        "approved_brd_version_locator": "BRD-v1 §1; B01-BASELINE-APPROVAL-001",
-        "approved_srs_version_locator": "SRS-v1 §1; B01-BASELINE-APPROVAL-001",
+        "approved_brd_version_locator": "EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx; §1; B01-BASELINE-APPROVAL-001",
+        "approved_srs_version_locator": "EM-SRS-001_Consolidated_SRS_Chapters_463-500_v1.0.docx; §1; B01-BASELINE-APPROVAL-001",
         "actor_role_tenant_confirmed": "YES",
         "preconditions_and_test_data_approved": "YES",
         "positive_steps_reviewed": "YES", "negative_path_reviewed": "YES",
@@ -96,6 +96,16 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertEqual(report["counts"]["casesWithUnapprovedBaseline"], 1)
         self.assertIn("E13/approved baseline", blockers)
         self.assertEqual(blockers["E13/approved baseline"]["count"], 1)
+
+    def test_approval_reference_without_source_document_does_not_clear_locator(self):
+        cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
+                      baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
+                 for i in range(1, 49)]
+        cases[0]["approved_brd_version_locator"] = "§463.21; B01-BASELINE-APPROVAL-001"
+        report = audit.audit_records(
+            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+        self.assertEqual(report["counts"]["preparationFieldGapCounts"]["approved_brd_version_locator"], 1)
+        self.assertEqual(report["counts"]["casesWithIncompletePreparation"], 1)
 
     def test_each_case_preparation_field_is_audited(self):
         fields = [
