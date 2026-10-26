@@ -95,12 +95,13 @@ test("asset download rechecks tenant/application access and requires an audited 
     "tenant-b": { "app-b": [{ id: "doc-1", name: "Other tenant.pdf", type: "document", accessReference: "blobref:private-b" }] },
   });
   const audit = [];
+  const expectedCorrelationId = "asset-download-regression-001";
   const server = createAppServer({
     assetStoragePort: {
       invoke: async (input, correlationId) => {
         assert.equal(input.tenantId, "tenant-a");
         assert.equal(input.accessReference, "blobref:private-a");
-        assert.ok(correlationId.length > 0);
+        assert.equal(correlationId, expectedCorrelationId);
         return { success: true, value: { url: "https://storage.example.test/signed?token=short-lived", expiresAt: new Date(Date.now() + 60_000).toISOString() } };
       },
     },
@@ -111,7 +112,7 @@ test("asset download rechecks tenant/application access and requires an audited 
     const address = server.address();
     assert.ok(address && typeof address === "object");
     const base = "http://127.0.0.1:" + address.port;
-    const ok = await fetch(base + "/customer/applications/app-a/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA } });
+    const ok = await fetch(base + "/customer/applications/app-a/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA, "x-correlation-id": expectedCorrelationId } });
     assert.equal(ok.status, 200);
     const body = await ok.json();
     assert.equal(body.downloadUrl, "https://storage.example.test/signed?token=short-lived");
@@ -119,10 +120,13 @@ test("asset download rechecks tenant/application access and requires an audited 
     assert.equal("accessReference" in body, false);
     assert.equal(audit[0].outcome, "success");
     assert.equal(audit[0].tenantId, "tenant-a");
-    const denied = await fetch(base + "/customer/applications/app-b/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(audit[0].requestId, expectedCorrelationId);
+    assert.equal(ok.headers.get("x-request-id"), expectedCorrelationId);
+    const denied = await fetch(base + "/customer/applications/app-b/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA, "x-correlation-id": "asset-download-denied-002" } });
     assert.equal(denied.status, 404);
     assert.equal(audit[1].outcome, "denied");
     assert.equal(audit[1].tenantId, "tenant-a");
+    assert.equal(audit[1].requestId, "asset-download-denied-002");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
