@@ -23,6 +23,7 @@ def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL
         "brd_id_status": "VERIFIED_ID_AND_SECTION_IN_SOURCE", "brd_locator_status": "SOURCE_REGISTER_CONFIRMED",
         "approved_brd_version_locator": "EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx; §1; B01-BASELINE-APPROVAL-001",
         "approved_srs_version_locator": "EM-SRS-001_Consolidated_SRS_Chapters_463-500_v1.0.docx; §1; B01-BASELINE-APPROVAL-001",
+        "baseline_approval_evidence_locator": "controlled/approvals/B01-BASELINE-APPROVAL-001.md",
         "actor_role_tenant_confirmed": "YES",
         "preconditions_and_test_data_approved": "YES",
         "positive_steps_reviewed": "YES", "negative_path_reviewed": "YES",
@@ -74,6 +75,18 @@ class B01ReadinessAuditTests(unittest.TestCase):
             cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
         self.assertEqual(report["counts"]["casesWithUnapprovedBaseline"], 0)
         self.assertNotIn("E13/approved baseline", {b["gate"] for b in report["blockers"]})
+
+    def test_baseline_status_string_without_controlled_artifact_is_blocked(self):
+        cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
+                      baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
+                 for i in range(1, 49)]
+        cases[0]["baseline_approval_evidence_locator"] = ""
+        report = audit.audit_records(
+            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+        blockers = {b["gate"]: b for b in report["blockers"]}
+        self.assertEqual(report["counts"]["casesWithoutControlledBaselineApprovalArtifact"], 1)
+        self.assertEqual(blockers["E13/baseline approval evidence integrity"]["count"], 1)
+        self.assertNotIn("E13/approved baseline", blockers)
 
     def test_acceptance_oracle_gap_is_reported_separately_from_baseline(self):
         cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
