@@ -80,10 +80,12 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
   assert.ok(html.includes("clearAssetSearch"), "client asset search can be cleared without another API request");
   assert.ok(html.includes("clearAssetFilters"), "client asset filters can be reset together");
-  assert.ok(html.includes('search.value="";filter.value="all";sortOrder.value="name";search.focus();drawAssets();'), "resetting filters restores default search, type, and sort locally");
+  assert.ok(html.includes('search.value="";filter.value="all";applicationFilter.value="all";sortOrder.value="name";search.focus();drawAssets();'), "resetting filters restores default search, type, application, and sort locally");
   assert.ok(html.includes('search.value="";search.focus();drawAssets();'), "clearing search resets the local filter and returns focus to the search field");
   assert.ok(html.includes('event.key==="Escape"&&search.value'), "Escape clears a non-empty asset search without changing file-type filtering");
-    assert.ok(html.includes("assetTypeFilter"), "client asset view provides file-type filtering");
+    assert.ok(html.includes("assetApplicationFilter"), "client assets can be filtered by application");
+  assert.ok(html.includes('appFilter==="all"||String(asset.applicationId||"")===appFilter'), "application filtering is applied locally to the loaded manifest");
+  assert.ok(html.includes("assetTypeFilter"), "client asset view provides file-type filtering");
   assert.ok(html.includes("assetSortOrder"), "client assets can be sorted by name or file type");
   assert.ok(html.includes('<option value="name-desc">Name (Z–A)</option>'), "client assets support reverse alphabetical sorting");
   assert.ok(html.includes('<option value="size-desc">Largest files first</option>'), "client assets can be sorted by size");
