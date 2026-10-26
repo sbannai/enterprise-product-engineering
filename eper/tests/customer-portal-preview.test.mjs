@@ -30,7 +30,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
-    for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "nextCursor", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
+    for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.match(html, /customer navigation/i);
@@ -76,6 +76,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(submissionSessionGeneration===sessionGeneration\)\{form\.dataset\.submitting="false";submitButton\.disabled=application\.disabled\|\|!application\.value;\}/, "late ticket completion must not mutate stale form controls");
     assert.match(html, /if\(renderSequence!==viewLoadSequence\)return;/, "late view responses must not overwrite the currently selected section");
     assert.match(html, /loadAllClientAssets\(\)\.then\(items=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
+    assert.match(html, /api\("\/customer\/assets\?all=true"\)/, "all client assets are fetched with one API request");
     assert.match(html, /application\.addEventListener\("change",loadTickets\)/, "changing the assigned application must reload its ticket history");
     assert.match(html, /else if\(assigned\.length===1\)\{application\.value=assigned\[0\]\.applicationId;loadTickets\(\);\}/, "ticket history should load automatically when exactly one assigned application removes ambiguity");
     assert.match(html, /submitButton\.disabled=application\.disabled\|\|!application\.value/, "ticket submission must remain disabled when no assigned application is available");
