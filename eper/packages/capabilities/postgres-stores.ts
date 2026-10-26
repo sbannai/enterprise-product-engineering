@@ -19,7 +19,9 @@ function jsonValue<T>(value: unknown): T {
   return (typeof value === "string" ? JSON.parse(value) : value) as T;
 }
 function hash(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error("PERSISTENCE_VALUE_NOT_SERIALIZABLE");
+  return createHash("sha256").update(serialized).digest("hex");
 }
 function recordFromRow(row: DbRow): AuthoritativeRecord {
   return { id: String(row.record_id), tenantId: String(row.tenant_id), version: Number(row.version), state: String(row.state), data: jsonValue<JsonObject>(row.data) };
