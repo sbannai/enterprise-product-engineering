@@ -10,6 +10,7 @@ import {
   PostgresAuthoritativeRecordStore,
   PostgresAuthorizationPolicyStore,
   PostgresAuditEvidenceStore,
+  PostgresExceptionStore,
 } from "../dist/packages/capabilities/postgres-stores.js";
 
 function fakePool({ onQuery } = {}) {
@@ -123,4 +124,49 @@ test("PostgreSQL audit store writes tenant-scoped append-only evidence with inte
   assert.equal(entry.integrityHash.length, 64);
   assert.equal(store.verify(entry), true);
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO audit_evidence") && call.params[0] === "tenant-a"));
+});
+
+
+test("exception state, lifecycle audit and outbox share one transaction", async () => {
+  const { calls, pool } = fakePool({ onQuery: async (sql, params) => {
+    if (sql.includes("SELECT * FROM workflow_exceptions")) return { rowCount: 0, rows: [] };
+    if (sql.includes("INSERT INTO workflow_exceptions")) return { rowCount: 1, rows: [{
+      tenant_id: params[0], exception_id: params[1], requirement_id: params[2], code: params[3],
+      message: params[4], state: "OPEN", retry_count: 0, idempotency_key: params[5],
+      request_fingerprint: params[6], owner: params[7], version: 1, created_at: params[8], updated_at: params[8],
+    }] };
+    return { rowCount: 1, rows: [] };
+  }});
+  const store = new PostgresExceptionStore(pool);
+  const created = await store.create({
+    id: "ex-1", tenantId: "tenant-a", requirementId: "REQ-1", code: "E-1",
+    message: "needs review", idempotencyKey: "idem-1", createdAt: "2026-10-26T08:00:00.000Z",
+  }, "corr-1", "user-1");
+  assert.equal(created.state, "OPEN");
+  assert.ok(calls.findIndex(call => call.sql.includes("INSERT INTO workflow_exceptions")) <
+    calls.findIndex(call => call.sql.includes("INSERT INTO audit_evidence")));
+  assert.ok(calls.findIndex(call => call.sql.includes("INSERT INTO audit_evidence")) <
+    calls.findIndex(call => call.sql.includes("INSERT INTO transactional_outbox")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("outbox failure rolls back exception and audit writes", async () => {
+  const { calls, pool } = fakePool({ onQuery: async (sql, params) => {
+    if (sql.includes("INSERT INTO transactional_outbox")) throw new Error("INJECTED_OUTBOX_FAILURE");
+    if (sql.includes("SELECT * FROM workflow_exceptions")) return { rowCount: 0, rows: [] };
+    if (sql.includes("INSERT INTO workflow_exceptions")) return { rowCount: 1, rows: [{
+      tenant_id: params[0], exception_id: params[1], requirement_id: params[2], code: params[3],
+      message: params[4], state: "OPEN", retry_count: 0, idempotency_key: params[5],
+      request_fingerprint: params[6], owner: params[7], version: 1, created_at: params[8], updated_at: params[8],
+    }] };
+    return { rowCount: 1, rows: [] };
+  }});
+  const store = new PostgresExceptionStore(pool);
+  await assert.rejects(store.create({
+    id: "ex-2", tenantId: "tenant-a", requirementId: "REQ-1", code: "E-2",
+    message: "failure injection", idempotencyKey: "idem-2", createdAt: "2026-10-26T08:00:00.000Z",
+  }, "corr-2", "user-1"), /INJECTED_OUTBOX_FAILURE/);
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO workflow_exceptions")));
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO audit_evidence")));
+  assert.equal(calls.at(-2).sql, "ROLLBACK");
 });
