@@ -64,6 +64,7 @@ def audit_records(checklist, gates, capture, gaps):
         "negative_path_reviewed", "evidence_capture_plan_approved",
     )
     incomplete_case_preparation = []
+    preparation_field_gap_counts = {field: 0 for field in preparation_fields}
     for row in checklist:
         missing = []
         for field in preparation_fields:
@@ -79,6 +80,8 @@ def audit_records(checklist, gates, capture, gaps):
                     accepted_values.add("SOURCE_REGISTER_CONFIRMED")
                 if value.upper() not in accepted_values:
                     missing.append(field)
+            if field in missing:
+                preparation_field_gap_counts[field] += 1
         if missing:
             incomplete_case_preparation.append({
                 "requirement_id": row.get("requirement_id", ""),
@@ -162,6 +165,7 @@ def audit_records(checklist, gates, capture, gaps):
             "casesWithUnapprovedBaseline": len(unapproved_baselines),
             "casesWithIncompleteAcceptanceOracle": len(incomplete_acceptance_oracles),
             "casesWithIncompletePreparation": len(incomplete_case_preparation),
+            "preparationFieldGapCounts": preparation_field_gap_counts,
             "casesWithoutCompleteReviewApproval": len(unapproved_cases),
             "casesNotExplicitlyAuthorized": len(unauthorized_cases),
             "entryGatesPendingOrWithoutEvidence": len(pending_gates),
