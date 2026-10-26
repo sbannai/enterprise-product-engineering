@@ -6,7 +6,7 @@
 
 ## What was reconciled
 
-Each requirement row maps its ID, chapter, sequence, capability and service to the corresponding `requirement-acceptance-wave-NN.test.mjs` source file. The controlled acceptance register was joined by exact requirement ID to preserve the distinction between historical pilot evidence and approved acceptance evidence.
+Each requirement row maps its ID, chapter, sequence, capability and service to both (a) the pilot test file used by the historical execution workflow (`chapter-<chapter>-pilot-v0.1.0/test/chapter<chapter>.test.js`) and (b) the separate `requirement-acceptance-wave-NN.test.mjs` source-mapping file. These are distinct fields: the source-mapping file is not represented as the file that produced the historical PASS. The controlled acceptance register was joined by exact requirement ID to preserve the distinction between historical pilot evidence and approved acceptance evidence.
 
 ## Reconciled counts
 
@@ -24,7 +24,7 @@ Each requirement row maps its ID, chapter, sequence, capability and service to t
 
 ## Interpretation
 
-The 38 test files each contain six requirement IDs and six test declarations; the available pilot evidence records a historical passing execution against commit `1142a5ccf34538a77089c3b6a0592a359a03101d` (run `37188613347`). That is useful traceability and capability-pilot evidence.
+The 38 `requirement-acceptance-wave-NN.test.mjs` source-mapping files each contain six requirement IDs and six test declarations. The historical pilot workflow's executed files are recorded separately in `pilot_test_file`; the available pilot evidence records a historical passing execution against commit `1142a5ccf34538a77089c3b6a0592a359a03101d` (run `37188613347`). That is useful traceability and capability-pilot evidence.
 
 It is not proof that each requirement's business oracle is approved, that a controlled acceptance case has been executed, or that Business UAT has passed. The CSV intentionally leaves the requirement-level acceptance and closure fields unpromoted.
 
