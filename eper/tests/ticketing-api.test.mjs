@@ -121,7 +121,11 @@ test("ticket creation returns a stable conflict when an idempotency key is reuse
       body: JSON.stringify({ type: "feedback", title: "UI", description: "Issue", businessImpact: "Impact" }),
     });
     assert.equal(response.status, 409);
-    assert.deepEqual(await response.json(), { error: "idempotency_key_conflict" });
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "IDEMPOTENCY_KEY_CONFLICT");
+    assert.ok(payload.meta.requestId);
+    assert.equal(response.headers.get("x-request-id"), payload.meta.requestId);
   });
 });
 
@@ -163,7 +167,10 @@ test("support admin queue and status updates remain scoped to the trusted admin 
     });
     assert.equal(queue.status, 200);
     const queueBody = await queue.json();
-    assert.equal(queueBody.tenantId, "tenant-support-a");
+    assert.equal(queueBody.success, true);
+    assert.equal(queueBody.data.tenantId, "tenant-support-a");
+    assert.ok(queueBody.meta.requestId);
+    assert.equal(queue.headers.get("x-request-id"), queueBody.meta.requestId);
     assert.equal(calls[0].identity.tenantId, "tenant-support-a");
     assert.equal(calls[0].filter.applicationId, "app-a");
 
@@ -228,7 +235,10 @@ test("ticket admin endpoints reject customer roles before calling the store", as
       headers: { authorization: `Bearer ${credential}` },
     });
     assert.equal(queue.status, 403);
-    assert.deepEqual(await queue.json(), { error: "ticket_admin_permission_required" });
+    const queuePayload = await queue.json();
+    assert.equal(queuePayload.success, false);
+    assert.equal(queuePayload.error.code, "TICKET_ADMIN_PERMISSION_REQUIRED");
+    assert.ok(queuePayload.meta.requestId);
     const mutation = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
       method: "PATCH",
       headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
@@ -266,13 +276,19 @@ test("support admin cannot mutate a ticket outside its tenant and receives non-d
       method: "PATCH", headers, body: JSON.stringify({ status: "resolved" }),
     });
     assert.equal(status.status, 404);
-    assert.deepEqual(await status.json(), { error: "ticket_not_found" });
+    const statusPayload = await status.json();
+    assert.equal(statusPayload.success, false);
+    assert.equal(statusPayload.error.code, "TICKET_NOT_FOUND");
+    assert.ok(statusPayload.meta.requestId);
 
     const assignment = await fetch(base + "/admin/support/tickets/" + ticketId + "/assignment", {
       method: "PATCH", headers, body: JSON.stringify({ assignedTo: "agent-a" }),
     });
     assert.equal(assignment.status, 404);
-    assert.deepEqual(await assignment.json(), { error: "ticket_not_found" });
+    const assignmentPayload = await assignment.json();
+    assert.equal(assignmentPayload.success, false);
+    assert.equal(assignmentPayload.error.code, "TICKET_NOT_FOUND");
+    assert.ok(assignmentPayload.meta.requestId);
 
     assert.equal(calls.length, 2);
     for (const call of calls) {
