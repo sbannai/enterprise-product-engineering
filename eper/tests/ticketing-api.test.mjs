@@ -238,3 +238,47 @@ test("ticket admin endpoints reject customer roles before calling the store", as
     assert.equal(storeCalls, 0);
   });
 });
+
+
+test("support admin cannot mutate a ticket outside its tenant and receives non-disclosing not-found", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-admin-a", actorId: "support-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
+  const calls = [];
+  const ticketStore = {
+    async assertReady() {},
+    async changeStatus(identity, ticketId, status) {
+      calls.push({ operation: "status", identity, ticketId, status });
+      return null;
+    },
+    async assign(identity, ticketId, assignedTo) {
+      calls.push({ operation: "assignment", identity, ticketId, assignedTo });
+      return null;
+    },
+    async list() { return []; },
+  };
+  const ticketId = "00000000-0000-4000-8000-000000000099";
+  await withServer({ ticketStore }, async (base) => {
+    const headers = { authorization: `Bearer ${credential}`, "content-type": "application/json" };
+    const status = await fetch(base + "/admin/support/tickets/" + ticketId + "/status", {
+      method: "PATCH", headers, body: JSON.stringify({ status: "resolved" }),
+    });
+    assert.equal(status.status, 404);
+    assert.deepEqual(await status.json(), { error: "ticket_not_found" });
+
+    const assignment = await fetch(base + "/admin/support/tickets/" + ticketId + "/assignment", {
+      method: "PATCH", headers, body: JSON.stringify({ assignedTo: "agent-a" }),
+    });
+    assert.equal(assignment.status, 404);
+    assert.deepEqual(await assignment.json(), { error: "ticket_not_found" });
+
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.equal(call.identity.tenantId, "tenant-admin-a");
+      assert.equal(call.identity.actorId, "support-a");
+      assert.equal(call.ticketId, ticketId);
+    }
+  });
+});
