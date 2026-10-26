@@ -20,7 +20,7 @@ def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL
         "requirement_specific_acceptance_source": source,
         "brd_baseline_approval_status": baseline,
         "measurable_expected_result_approved": expected,
-        "brd_id_status": "YES", "brd_locator_status": "YES",
+        "brd_id_status": "VERIFIED_ID_AND_SECTION_IN_SOURCE", "brd_locator_status": "SOURCE_REGISTER_CONFIRMED",
         "approved_brd_version_locator": "BRD-v1 §1",
         "approved_srs_version_locator": "SRS-v1 §1",
         "actor_role_tenant_confirmed": "YES",
