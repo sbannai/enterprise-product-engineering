@@ -182,3 +182,59 @@ test("customer content APIs expose only bounded title/body fields", async () => 
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+test("customer portal context exposes only tenant-enabled navigation modules", async () => {
+  const keys = ["EPER_CUSTOMER_PORTAL_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "portal-context-test-credential-12345678901234567890";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
+    "tenant-a": ["help-center", "tickets-feedback", "admin-config", "help-center"],
+    "tenant-b": ["growth-hub", "settings"],
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/portal/context", {
+      headers: { authorization: "Bearer " + credential },
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload.navigation.map((item) => item.key), ["home", "help-center", "tickets-feedback"]);
+    assert.equal(payload.navigation.some((item) => item.key === "growth-hub"), false);
+    assert.equal(payload.navigation.some((item) => item.key === "settings"), false);
+    assert.equal(payload.note.includes("enforce authorization independently"), true);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
+test("customer portal context fails closed to Home when tenant module configuration is absent", async () => {
+  const keys = ["EPER_CUSTOMER_PORTAL_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "portal-context-empty-config-credential-1234567890";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/portal/context", {
+      headers: { authorization: "Bearer " + credential },
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload.navigation.map((item) => item.key), ["home"]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
