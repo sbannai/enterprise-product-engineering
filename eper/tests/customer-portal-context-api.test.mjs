@@ -425,6 +425,16 @@ test("customer application settings expose only safe preferences for assigned ap
     assert.equal(standardizedError.success, false);
     assert.equal(standardizedError.error.code, "APPLICATION_NOT_ASSIGNED_TO_TENANT");
     assert.ok(standardizedForbidden.headers.get("x-request-id"));
+    const anonymous = await fetch(url + "app-a");
+    assert.equal(anonymous.status, 401);
+    assert.deepEqual(await anonymous.json(), { error: "unauthorized" });
+    const invalidApplication = await fetch(url + "%20bad", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(invalidApplication.status, 400);
+    assert.deepEqual(await invalidApplication.json(), { error: "invalid_application_id" });
+    process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": [], "tenant-b": ["settings"] });
+    const disabledForTenant = await fetch(url + "app-a", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(disabledForTenant.status, 403);
+    assert.deepEqual(await disabledForTenant.json(), { error: "customer_settings_not_enabled" });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
