@@ -33,3 +33,53 @@ test("customer portal preview has customer navigation separate from admin wirefr
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("customer session endpoint rejects missing and unknown credentials", async () => {
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    for (const headers of [{}, { authorization: "Bearer unknown-credential" }]) {
+      const response = await fetch(base + "/customer/session", { headers });
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { authenticated: false, error: "unauthorized" });
+      assert.equal(response.headers.get("cache-control"), "no-store");
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("customer session endpoint returns only server-mapped identity", async () => {
+  const previous = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  const credential = "customer-test-credential-that-is-long-enough-123456";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer" }
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/session", {
+      headers: { authorization: "Bearer " + credential }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      authenticated: true, tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer"
+    });
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    if (previous === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+    else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previous;
+  }
+});
