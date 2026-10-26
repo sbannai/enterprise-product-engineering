@@ -428,6 +428,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const allAssets: Record<string, unknown>[] = [];
       for (const assignedId of [...new Set(tenantAssignments as string[])]) {
         const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
+        if (applicationAssets === undefined) continue;
         if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
           sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
         }
