@@ -51,8 +51,14 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
         run: npm run migrate:audit
+      - name: Apply capability persistence migrations to ephemeral CI database
+        run: npm run migrate:capabilities
       - name: Test
         run: npm test
+      - name: Live PostgreSQL capability conformance (RLS, audit immutability, rollback)
+        env:
+          EPER_CAPABILITY_LIVE_TESTS: "1"
+        run: node --test tests/postgres-capability-live.integration.test.mjs
       - name: Payment gateway contract tests
         run: node --test tests/payment-gateway.test.mjs
       - name: Trusted invoice amount authority tests
