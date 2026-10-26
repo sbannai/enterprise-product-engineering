@@ -411,6 +411,40 @@ test("malformed customer ticket JSON returns a safe versioned error without pers
   });
 });
 
+test("oversized customer ticket JSON is rejected with the standardized 413 envelope", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  let storeCalled = false;
+  const ticketStore = {
+    async assertReady() {},
+    async create() { storeCalled = true; },
+    async list() { return []; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "customer-oversized-json-1",
+      },
+      body: JSON.stringify({ description: "x".repeat(1024 * 1024) }),
+    });
+    assert.equal(response.status, 413);
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "REQUEST_BODY_TOO_LARGE");
+    assert.equal(payload.meta.requestId, "customer-oversized-json-1");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(storeCalled, false);
+  });
+});
+
 test("customer ticket creation storage failures use the standardized safe error envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
