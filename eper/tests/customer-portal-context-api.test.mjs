@@ -363,3 +363,57 @@ test("customer application list is unavailable unless explicitly enabled and con
     }
   }
 });
+
+
+test("customer application settings expose only safe preferences for assigned applications", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]));
+  const tokenA = "customer-settings-tenant-a-token-000000000001";
+  const tokenB = "customer-settings-tenant-b-token-000000000001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
+    "tenant-a": ["settings"], "tenant-b": ["settings"],
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
+    "tenant-a": ["app-a"], "tenant-b": ["app-b"],
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": { displayName: "Admissions", locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", theme: "light", apiSecret: "never-expose-this" } },
+    "tenant-b": { "app-b": { displayName: "Billing", currency: "USD", apiSecret: "tenant-b-secret" } },
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/settings?applicationId=";
+    const own = await fetch(url + "app-a", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(own.status, 200);
+    assert.deepEqual(await own.json(), { applicationId: "app-a", settings: { displayName: "Admissions", locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", theme: "light" } });
+    const foreign = await fetch(url + "app-b", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(foreign.status, 403);
+    assert.deepEqual(await foreign.json(), { error: "application_not_assigned_to_tenant" });
+    const tenantB = await fetch(url + "app-b", { headers: { authorization: "Bearer " + tokenB } });
+    assert.equal(tenantB.status, 200);
+    assert.deepEqual(await tenantB.json(), { applicationId: "app-b", settings: { displayName: "Billing", currency: "USD" } });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
