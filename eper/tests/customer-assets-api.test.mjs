@@ -64,6 +64,15 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(fullManifest.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     const conflictingPagination = await fetch(endpoint + "?all=true&cursor=0", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(conflictingPagination.status, 400, "full-manifest mode cannot silently mix with pagination");
+    process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
+    process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
+      "tenant-a": { "app-a": Array.from({ length: 10001 }, (_, index) => ({
+        id: "asset-" + index, name: "Asset " + index, type: "document", accessReference: "blobref:" + index,
+      })) },
+      "tenant-b": { "app-b": [] },
+    });
+    const oversizedManifest = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(oversizedManifest.status, 413, "oversized full manifests fail safely instead of returning an unbounded response");
     assert.equal("accessReference" in body.assets[0], false, "storage references must remain server-side until authorized download is implemented");
     assert.equal("internalSecret" in body.assets[0], false);
     assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
