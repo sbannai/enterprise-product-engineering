@@ -23,7 +23,7 @@ function prepare(req: unknown, input: unknown, pattern: RequirementPattern, capa
   if (!context?.tenantId?.trim() || !context.principalId?.trim() || !context.correlationId?.trim()) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
   const payload = value.payload;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("CAPABILITY_OPERATION_REQUIRED");
-  return { context, contracts, payload: payload as Payload };
+  return { requirement, context, contracts, payload: payload as Payload };
 }
 function tenant(context: Context, supplied: unknown): string {
   if (supplied !== undefined && supplied !== context.tenantId) throw new Error("TENANT_CONTEXT_MISMATCH");
@@ -44,25 +44,25 @@ export function createPostgresCapabilityServices(pool: Pool): Readonly<Record<Re
   const validation = new BusinessValidationEngine<unknown>();
 
   const XX01: CapabilityService = { async execute(req, input) {
-    const { context, contracts, payload: p } = prepare(req, input, "XX01", "authoritative-records");
+    const { requirement, context, contracts, payload: p } = prepare(req, input, "XX01", "authoritative-records");
     const tid = tenant(context, (p.record as { tenantId?: unknown } | undefined)?.tenantId ?? p.tenantId);
-    if (p.operation === "create") return result(req, contracts, { operation: "create", record: await records.createGoverned({ ...(p.record as object), tenantId: tid } as Parameters<typeof records.create>[0], { principalId: context.principalId, correlationId: context.correlationId, requirementId: (req as RequirementBinding).id }) });
+    if (p.operation === "create") return result(req, contracts, { operation: "create", record: await records.createGoverned({ ...(p.record as object), tenantId: tid } as Parameters<typeof records.create>[0], { principalId: context.principalId, correlationId: context.correlationId, requirementId: requirement.id }) });
     if (p.operation === "get") return result(req, contracts, { operation: "get", record: await records.get(tid, String(p.id)) });
-    if (p.operation === "update") return result(req, contracts, { operation: "update", record: await records.updateGoverned(tid, String(p.id), Number(p.expectedVersion), (p.patch ?? {}) as Parameters<typeof records.update>[3], { principalId: context.principalId, correlationId: context.correlationId, requirementId: (req as RequirementBinding).id }) });
-    if (p.operation === "delete") { await records.deleteGoverned(tid, String(p.id), Number(p.expectedVersion), { principalId: context.principalId, correlationId: context.correlationId, requirementId: (req as RequirementBinding).id }); return result(req, contracts, { operation: "delete", deleted: true }); }
+    if (p.operation === "update") return result(req, contracts, { operation: "update", record: await records.updateGoverned(tid, String(p.id), Number(p.expectedVersion), (p.patch ?? {}) as Parameters<typeof records.update>[3], { principalId: context.principalId, correlationId: context.correlationId, requirementId: requirement.id }) });
+    if (p.operation === "delete") { await records.deleteGoverned(tid, String(p.id), Number(p.expectedVersion), { principalId: context.principalId, correlationId: context.correlationId, requirementId: requirement.id }); return result(req, contracts, { operation: "delete", deleted: true }); }
     throw new Error("RECORD_OPERATION_UNSUPPORTED");
   } };
 
   const XX02: CapabilityService = { async execute(req, input) {
     const { context, contracts, payload: p } = prepare(req, input, "XX02", "authorization");
-    if (p.operation === "addPolicy") { const policy = p.policy as AuthorizationPolicy & { id?: string }; await policies.addPolicyGoverned({ ...policy, tenantId: tenant(context, policy?.tenantId) }, { principalId: context.principalId, correlationId: context.correlationId, requirementId: (req as RequirementBinding).id }); return result(req, contracts, { operation: "addPolicy", added: true }); }
+    if (p.operation === "addPolicy") { const policy = p.policy as AuthorizationPolicy & { id?: string }; await policies.addPolicyGoverned({ ...policy, tenantId: tenant(context, policy?.tenantId) }, { principalId: context.principalId, correlationId: context.correlationId, requirementId: requirement.id }); return result(req, contracts, { operation: "addPolicy", added: true }); }
     if (p.operation === "decide") { const request = p.request as AuthorizationRequest; tenant(context, request?.tenantId); if (request?.principalId !== context.principalId) throw new Error("AUTHORIZATION_PRINCIPAL_MISMATCH"); return result(req, contracts, { operation: "decide", decision: await policies.decide(request) }); }
     if (p.operation === "snapshot") return result(req, contracts, { operation: "snapshot", policies: await policies.snapshot(context.tenantId) });
     throw new Error("AUTHORIZATION_OPERATION_UNSUPPORTED");
   } };
 
   const XX03: CapabilityService = { async execute(req, input) {
-    const { contracts, payload: p } = prepare(req, input, "XX03", "business-validation");
+    const { requirement, contracts, payload: p } = prepare(req, input, "XX03", "business-validation");
     if (p.operation !== "validate") throw new Error("VALIDATION_OPERATION_UNSUPPORTED");
     return result(req, contracts, { operation: "validate", validation: validation.validate(p.input) });
   } };
