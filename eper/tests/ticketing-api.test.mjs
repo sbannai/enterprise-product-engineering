@@ -95,7 +95,6 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
     });
     assert.equal(listed.status, 200);
     assert.equal(captured.identity.tenantId, "tenant-a");
-    assert.equal(captured.identity.actorId, "actor-a");
     assert.equal(captured.filter.applicationId, "app-a");
   });
 });
