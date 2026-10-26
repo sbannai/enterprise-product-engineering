@@ -5,7 +5,7 @@ import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-s
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
-import { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
+import { PostgresTicketStore, createCanonicalTicketAuditWriter } from "../../packages/ticketing/postgres-ticket-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -117,24 +117,13 @@ if (ticketingEnabled && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("TICKETING_API_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
 const ticketStore = ticketingEnabled && paymentPool
-  ? new PostgresTicketStore(paymentPool, async (event, client) => {
-      await appendAuditEventInTransaction(client, {
-        tenantId: event.tenantId,
-        applicationId: event.applicationId,
-        environment: auditEnvironment as "production" | "uat" | "sandbox",
-        actorType: "human",
-        actorId: event.actorId,
-        action: event.action,
-        outcome: event.outcome,
-        resourceType: "support_ticket",
-        resourceId: event.ticketId,
-        correlationId: event.correlationId,
-        source: "api",
-        operationName: event.action,
-        serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-        payload: event.payload,
-      });
-    })
+  ? new PostgresTicketStore(
+      paymentPool,
+      createCanonicalTicketAuditWriter(
+        auditEnvironment as "production" | "uat" | "sandbox",
+        process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+      ),
+    )
   : undefined;
 if (ticketStore) await ticketStore.assertReady();
 
