@@ -270,7 +270,7 @@ export class PostgresAuditEvidenceStore {
       return row ? {
         id: String(row.evidence_id), tenantId: String(row.tenant_id), requirementId: String(row.requirement_id),
         action: String(row.action), principalId: String(row.principal_id), correlationId: String(row.correlation_id),
-        occurredAt: new Date(String(row.occurred_at)).toISOString(), payload: jsonValue(row.payload), integrityHash: String(row.integrity_hash),
+        occurredAt: new Date(String(row.occurred_at)).toISOString(), payload: jsonValue(row.payload), integrityHash: String(row.integrity_hash).trim(),
       } : undefined;
     });
   }
