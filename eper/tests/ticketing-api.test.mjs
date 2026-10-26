@@ -375,6 +375,50 @@ test("customer ticket-list storage failures return a stable non-disclosing API e
 });
 
 
+
+test("support admin queue returns the versioned success envelope with trusted tenant metadata", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
+  const ticket = {
+    id: "00000000-0000-4000-8000-000000000002", tenantId: "tenant-support-a",
+    applicationId: "app-a", createdBy: "actor-a", type: "feedback", title: "UI",
+    description: "Issue", businessImpact: "Impact", status: "triaged", severity: "p3",
+    assignedTo: null, createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z",
+  };
+  let receivedIdentity;
+  let receivedFilter;
+  const ticketStore = {
+    async assertReady() {},
+    async list(identity, filter) { receivedIdentity = identity; receivedFilter = filter; return [ticket]; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets?limit=10&offset=30", {
+      headers: {
+        authorization: `Bearer ${credential}`,
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "admin-ticket-list-success-1",
+        "x-tenant-id": "tenant-attacker",
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-request-id"), "admin-ticket-list-success-1");
+    const payload = await response.json();
+    assert.equal(payload.success, true);
+    assert.deepEqual(payload.data.tickets, [ticket]);
+    assert.equal(payload.data.tenantId, "tenant-support-a");
+    assert.equal(payload.data.limit, 10);
+    assert.equal(payload.data.offset, 30);
+    assert.equal(payload.data.hasMore, false);
+    assert.equal(payload.meta.requestId, "admin-ticket-list-success-1");
+    assert.equal(receivedIdentity.tenantId, "tenant-support-a");
+    assert.equal(receivedFilter.limit, 11);
+    assert.equal(receivedFilter.offset, 30);
+  });
+});
+
 test("support admin queue storage failures use the same safe response contract", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
