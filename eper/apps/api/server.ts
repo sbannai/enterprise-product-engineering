@@ -930,6 +930,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
+      // Global ticketing enablement is insufficient: the tenant must have the
+      // customer-facing Tickets & Feedback module enabled as well.
+      let workspaceModules: unknown;
+      try { workspaceModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { workspaceModules = null; }
+      const tenantModules = workspaceModules && typeof workspaceModules === "object" && !Array.isArray(workspaceModules)
+        ? (workspaceModules as Record<string, unknown>)[identity.tenantId]
+        : undefined;
+      if (!Array.isArray(tenantModules) || !tenantModules.includes("tickets-feedback")) {
+        sendJson(request, response, 403, { error: "customer_ticketing_not_enabled" });
+        return;
+      }
       let applicationId: string;
       try { applicationId = decodeURIComponent(ticketPathMatch[1]); }
       catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
