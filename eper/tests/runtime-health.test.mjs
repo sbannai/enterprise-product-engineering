@@ -421,6 +421,46 @@ test("customer ticketing disabled response supports v1 errors without changing l
 });
 
 
+test("localization method-not-allowed response negotiates standard v1 error without breaking legacy body", async () => {
+  const keys = ["EPER_LOCALIZATION_API_TOKEN", "EPER_LOCALIZATION_TENANT_ID", "EPER_LOCALIZATION_PRINCIPAL_ID"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_LOCALIZATION_API_TOKEN: "localization-contract-test-token-0123456789-0123456789",
+    EPER_LOCALIZATION_TENANT_ID: "localization-contract-tenant",
+    EPER_LOCALIZATION_PRINCIPAL_ID: "localization-contract-actor",
+  });
+  try {
+    const base = await startServer();
+    const headers = {
+      authorization: "Bearer localization-contract-test-token-0123456789-0123456789",
+      "x-correlation-id": "localization-method-contract",
+    };
+    const legacy = await fetch(`${base}/localization/preference`, { method: "POST", headers });
+    assert.equal(legacy.status, 405);
+    assert.equal(await legacy.text(), "");
+    assert.equal(legacy.headers.get("allow"), "GET, PUT");
+    assert.equal(legacy.headers.get("x-request-id"), "localization-method-contract");
+
+    const standardized = await fetch(`${base}/localization/preference`, {
+      method: "POST",
+      headers: { ...headers, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(standardized.status, 405);
+    assert.equal(standardized.headers.get("x-request-id"), "localization-method-contract");
+    assert.equal(standardized.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: { code: "METHOD_NOT_ALLOWED", message: "The request could not be completed." },
+      meta: { requestId: "localization-method-contract" },
+    });
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
 test("requirements endpoint negotiates the standard v1 success envelope while preserving legacy payloads", async () => {
   const keys = ["EPER_REQUIREMENTS_API_ENABLED", "EPER_REQUIREMENTS_API_TOKEN"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
