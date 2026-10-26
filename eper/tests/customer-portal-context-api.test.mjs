@@ -388,7 +388,7 @@ test("customer application settings expose only safe preferences for assigned ap
     "tenant-a": ["app-a"], "tenant-b": ["app-b"],
   });
   process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = JSON.stringify({
-    "tenant-a": { "app-a": { displayName: "Admissions", locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", theme: "light", apiSecret: "never-expose-this" } },
+    "tenant-a": { "app-a": { displayName: "Admissions", locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", theme: "light", apiSecret: "never-expose-this" }, "app-invalid": { displayName: " ", locale: "not_a_locale", currency: "usd", timeZone: "Mars/Olympus", theme: "auto", apiSecret: "never-expose-this" } },
     "tenant-b": { "app-b": { displayName: "Billing", currency: "USD", apiSecret: "tenant-b-secret" } },
   });
   const server = createAppServer();
@@ -435,6 +435,10 @@ test("customer application settings expose only safe preferences for assigned ap
     const disabledForTenant = await fetch(url + "app-a", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(disabledForTenant.status, 403);
     assert.deepEqual(await disabledForTenant.json(), { error: "customer_settings_not_enabled" });
+    process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-invalid"], "tenant-b": ["app-b"] });
+    const invalidPreferences = await fetch(url + "app-invalid", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(invalidPreferences.status, 200);
+    assert.deepEqual(await invalidPreferences.json(), { applicationId: "app-invalid", settings: {} });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
