@@ -33,8 +33,8 @@ test("single-call client assets API returns tenant/application-scoped asset meta
         { id: "vid-1", name: "Demo.mp4", type: "video", accessReference: "blobref:opaque-2" },
       ],
       "app-c": [{ id: "img-1", name: "Brand mark.png", type: "image", accessReference: "blobref:opaque-3" }],
+      "app-empty": [],
     },
-    "tenant-a": { "app-empty": [] },
     "tenant-b": { "app-b": [{ id: "private-1", name: "Private.pdf", type: "document", accessReference: "blobref:private" }] },
   });
   const server = createAppServer();
