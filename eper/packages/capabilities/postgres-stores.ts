@@ -427,4 +427,6 @@ export interface AsyncCapabilityPersistence {
   records: Pick<PostgresAuthoritativeRecordStore, "create" | "get" | "update" | "delete">;
   policies: Pick<PostgresAuthorizationPolicyStore, "addPolicy" | "decide" | "snapshot">;
   audit: Pick<PostgresAuditEvidenceStore, "append" | "get" | "listByRequirement" | "verify">;
+  exceptions: Pick<PostgresExceptionStore, "create" | "get" | "transition">;
+  reports: Pick<PostgresGovernedReportingStore, "publish" | "query">;
 }
