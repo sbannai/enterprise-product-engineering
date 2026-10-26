@@ -30,6 +30,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /nav button[^}]*min-height:\s*44px/i, "navigation targets must be touch-friendly");
     assert.match(html, /:focus-visible/i, "keyboard focus must be visible");
     assert.match(html, /authorization:\s*"Bearer "\s*\+\s*bearerToken/i, "API calls must carry the in-memory customer credential");
+    assert.match(html, /Promise\.all\(\[api\("\/customer\/session"\),api\("\/customer\/portal\/context"\),api\("\/customer\/workspace\/modules"\)\]\)/, "independent workspace bootstrap requests must run concurrently");
     assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
     assert.match(html, /\/customer\/applications\/\"\+encodeURIComponent\(applicationId\)\+\"\/assets\//, "asset downloads must use the authenticated application-scoped download API");
     assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
