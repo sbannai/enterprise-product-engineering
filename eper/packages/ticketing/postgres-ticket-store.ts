@@ -98,7 +98,7 @@ export class PostgresTicketStore {
   async list(identity: Pick<TicketIdentity, "tenantId">, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 101 || !Number.isInteger(offset) || offset < 0) {
       throw new Error("invalid_ticket_pagination");
     }
     const values: unknown[] = [identity.tenantId];
