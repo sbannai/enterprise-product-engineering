@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { PostgresTicketStore } from "../dist/packages/ticketing/postgres-ticket-store.js";
 
 const ticketRow = {
@@ -273,6 +274,56 @@ test("ticket assignment cannot mutate or audit a ticket outside the trusted tena
   const update = calls.find((x) => /UPDATE eper_support_tickets/.test(x.sql));
   assert.match(update.sql, /WHERE tenant_id = \$1 AND id = \$2/);
   assert.deepEqual(update.values, ["tenant-a", "ticket-from-other-tenant", "support-2"]);
+  assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
+  assert.ok(!calls.some((x) => x.sql === "COMMIT"));
+});
+
+
+function ticketRequestHash(value = input) {
+  return createHash("sha256").update(JSON.stringify({
+    type: value.type, title: value.title, description: value.description,
+    businessImpact: value.businessImpact, evidenceReference: value.evidenceReference ?? null,
+  })).digest("hex");
+}
+
+function idempotencyConflictPool(existingHash) {
+  const calls = [];
+  const existing = { ...ticketRow, request_hash: existingHash };
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/INSERT INTO eper_support_tickets/.test(sql)) return { rows: [], rowCount: 0 };
+      if (/SELECT \*, request_hash FROM eper_support_tickets/.test(sql)) return { rows: [existing], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  return { calls, pool: { async connect() { return client; } } };
+}
+
+test("idempotent ticket replay returns the original ticket without writing a second audit event", async () => {
+  const { calls, pool } = idempotencyConflictPool(ticketRequestHash());
+  let auditCalls = 0;
+  const store = new PostgresTicketStore(pool, async () => { auditCalls++; });
+  const replay = await store.create(identity, input, "stable-key-1234567890");
+  assert.equal(replay.id, "ticket-1");
+  assert.equal(replay.tenantId, "tenant-a");
+  assert.equal(auditCalls, 0, "replaying a committed ticket must not emit a second creation audit event");
+  assert.ok(calls.some((x) => /ON CONFLICT/.test(x.sql)));
+  assert.ok(calls.some((x) => /FOR UPDATE/.test(x.sql)));
+  assert.ok(calls.some((x) => x.sql === "COMMIT"));
+  assert.ok(!calls.some((x) => x.sql === "ROLLBACK"));
+});
+
+test("idempotency key replay with changed payload fails closed and rolls back", async () => {
+  const { calls, pool } = idempotencyConflictPool(ticketRequestHash());
+  let auditCalls = 0;
+  const store = new PostgresTicketStore(pool, async () => { auditCalls++; });
+  await assert.rejects(
+    () => store.create(identity, { ...input, title: "Changed title" }, "stable-key-1234567890"),
+    /IDEMPOTENCY_KEY_CONFLICT/,
+  );
+  assert.equal(auditCalls, 0);
   assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
   assert.ok(!calls.some((x) => x.sql === "COMMIT"));
 });
