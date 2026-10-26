@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { appendAuditEventInTransaction, type AuditEnvironment } from "../audit/audit-event-store.js";
 import type { TicketIdentity, TicketRecord, CreateTicketInput, TicketStatus, TicketSeverity } from "./ticketing-contract.js";
 
 export interface TicketSqlResult<Row = Record<string, unknown>> { rows: Row[]; rowCount: number | null; }
@@ -146,4 +147,35 @@ export class PostgresTicketStore {
       throw error;
     } finally { client.release(); }
   }
+}
+
+
+/**
+ * Adapts ticket lifecycle events to EPER's canonical append-only audit chain.
+ * It deliberately uses the caller's active SQL client so ticket changes and
+ * audit evidence remain atomic. Audit schema readiness/migrations are managed
+ * by the deployment gate, not by this adapter.
+ */
+export function createCanonicalTicketAuditWriter(
+  environment: AuditEnvironment,
+  serviceVersion?: string,
+): TicketAuditWriter {
+  return async (event, client) => {
+    await appendAuditEventInTransaction(client, {
+      tenantId: event.tenantId,
+      applicationId: event.applicationId,
+      environment,
+      actorType: "human",
+      actorId: event.actorId,
+      action: event.action,
+      outcome: event.outcome,
+      resourceType: "support_ticket",
+      resourceId: event.ticketId,
+      correlationId: event.correlationId,
+      source: "api",
+      operationName: event.action,
+      serviceVersion,
+      payload: event.payload,
+    });
+  };
 }
