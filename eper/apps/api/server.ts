@@ -27,24 +27,6 @@ import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_T
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 
 
-function sendTicketJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
-  if (statusCode >= 400) {
-    const rawCode = typeof body.error === "string" ? body.error : "ticket_operation_unavailable";
-    const normalized = rawCode.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
-    const code = /^[A-Z][A-Z0-9_]{1,63}$/.test(normalized) ? normalized : "TICKET_REQUEST_FAILED";
-    const message = statusCode >= 500 ? "The ticket service could not complete the request."
-      : statusCode === 401 ? "Authentication is required."
-      : statusCode === 403 ? "You are not allowed to perform this action."
-      : statusCode === 404 ? "The requested ticket resource was not found."
-      : statusCode === 409 ? "The request conflicts with the current ticket state."
-      : statusCode === 429 ? "Too many requests. Try again later."
-      : "The ticket request could not be completed.";
-    sendApiError(request, response, statusCode, code, message);
-    return;
-  }
-  sendApiSuccess(request, response, statusCode, body);
-}
-
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
   // Without it, legacy bodies stay byte-shape compatible for existing consumers.
