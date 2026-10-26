@@ -409,6 +409,22 @@ test("customer application settings expose only safe preferences for assigned ap
     const tenantB = await fetch(url + "app-b", { headers: { authorization: "Bearer " + tokenB } });
     assert.equal(tenantB.status, 200);
     assert.deepEqual(await tenantB.json(), { applicationId: "app-b", settings: { displayName: "Billing", currency: "USD" } });
+    const standardized = await fetch(url + "app-a", {
+      headers: { authorization: "Bearer " + tokenA, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(standardized.status, 200);
+    const standardizedBody = await standardized.json();
+    assert.equal(standardizedBody.success, true);
+    assert.deepEqual(standardizedBody.data, { applicationId: "app-a", settings: { displayName: "Admissions", locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", theme: "light" } });
+    assert.ok(standardized.headers.get("x-request-id"));
+    const standardizedForbidden = await fetch(url + "app-b", {
+      headers: { authorization: "Bearer " + tokenA, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(standardizedForbidden.status, 403);
+    const standardizedError = await standardizedForbidden.json();
+    assert.equal(standardizedError.success, false);
+    assert.equal(standardizedError.error.code, "APPLICATION_NOT_ASSIGNED_TO_TENANT");
+    assert.ok(standardizedForbidden.headers.get("x-request-id"));
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
