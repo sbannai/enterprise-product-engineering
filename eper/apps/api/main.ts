@@ -3,6 +3,7 @@ import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
+import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { appendAuditEvent, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
@@ -27,6 +28,42 @@ if (adminConfigMode === "postgres" && (!paymentPool || process.env.EPER_AUDIT_PE
 const adminConfigurationStore = adminConfigMode === "postgres" && paymentPool
   ? new PostgresAdminConfigurationStore(paymentPool)
   : undefined;
+
+const moduleEntitlementMode = process.env.EPER_MODULE_ENTITLEMENT_PERSISTENCE ?? "disabled";
+if (moduleEntitlementMode !== "disabled" && moduleEntitlementMode !== "postgres") {
+  throw new Error("EPER_MODULE_ENTITLEMENT_PERSISTENCE_UNSUPPORTED");
+}
+if (moduleEntitlementMode === "postgres" && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
+  throw new Error("EPER_MODULE_ENTITLEMENT_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+function readApplicationAssignments(): Record<string, string[]> {
+  let value: unknown;
+  try { value = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+  catch { throw new Error("EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON_INVALID"); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON_REQUIRED");
+  }
+  const assignments: Record<string, string[]> = {};
+  for (const [tenantId, applicationIds] of Object.entries(value as Record<string, unknown>)) {
+    if (!tenantId.trim() || tenantId.length > 128 || !Array.isArray(applicationIds) ||
+        applicationIds.some((applicationId) => typeof applicationId !== "string" || !applicationId.trim() || applicationId.length > 128)) {
+      throw new Error("EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON_INVALID");
+    }
+    assignments[tenantId] = [...new Set(applicationIds as string[])];
+  }
+  return assignments;
+}
+const moduleEntitlementService = moduleEntitlementMode === "postgres" && paymentPool
+  ? new PostgresModuleEntitlementService(paymentPool, {
+      async isAssignedToTenant(tenantId, applicationId) {
+        const assignments = readApplicationAssignments();
+        return assignments[tenantId]?.includes(applicationId) === true;
+      },
+    })
+  : undefined;
+if (moduleEntitlementMode === "postgres" && moduleEntitlementService) {
+  await moduleEntitlementService.assertReady();
+}
 // Receipt numbering is an explicit operator/business configuration. Never silently
 // choose a receipt-numbering policy; capture routes fail closed when the prefix is absent.
 const receiptPrefix = process.env.EPER_PAYMENT_RECEIPT_NUMBER_PREFIX?.trim();
@@ -77,7 +114,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, adminConfigurationStore, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
+const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
