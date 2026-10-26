@@ -19,7 +19,8 @@ test("static wireframes POC is served without requiring API configuration", asyn
     for (const label of ["Product overview", "Capability families", "Payment desk", "Receipt preview", "Workflow studio", "Roles & access", "Reports & audit", "Business UAT readiness"]) {
       assert.ok(html.includes(label), "missing wireframe: " + label);
     }
-    assert.match(html, /Authenticated API mode/);\n    assert.match(html, /supportConnect/);
+    assert.match(html, /Authenticated API mode/);
+    assert.match(html, /supportConnect/);
     assert.match(html, /no payment is processed/i);
     assert.match(html, /data-screen="payments"/);
     assert.match(html, /addEventListener/);
