@@ -31,6 +31,11 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /:focus-visible/i, "keyboard focus must be visible");
     assert.match(html, /authorization:\s*"Bearer "\s*\+\s*bearerToken/i, "API calls must carry the in-memory customer credential");
     assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
+    for (const ticketContract of ["ticketForm", "ticketApplication", "businessImpact", "/customer/applications/", "Submit ticket", "Load my tickets", "ticketResult"]) {
+      assert.ok(html.includes(ticketContract), "customer ticket UI must expose: " + ticketContract);
+    }
+    assert.match(html, /method:"POST",body:JSON\.stringify\(body\)/, "ticket submission must use the authenticated API");
+    assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
     assert.match(html, /overflow-x:\s*auto/i, "mobile navigation overflow must be contained");
     assert.match(html, /\.top\{flex-wrap:\s*wrap/i, "top bar must wrap instead of overflowing on narrow screens");
     assert.match(html, /\.cards\{grid-template-columns:minmax\(0,1fr\)\}/i, "cards must stack on mobile");
