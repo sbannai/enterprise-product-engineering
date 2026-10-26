@@ -117,7 +117,7 @@ test("ticket creation returns a stable conflict when an idempotency key is reuse
   await withServer({ ticketStore }, async (base) => {
     const response = await fetch(base + "/customer/applications/app-a/tickets", {
       method: "POST",
-      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-reuse-key-001" },
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-reuse-key-001", accept: "application/vnd.eper.v1+json" },
       body: JSON.stringify({ type: "feedback", title: "UI", description: "Issue", businessImpact: "Impact" }),
     });
     assert.equal(response.status, 409);
@@ -163,7 +163,7 @@ test("support admin queue and status updates remain scoped to the trusted admin 
   };
   await withServer({ ticketStore }, async (base) => {
     const queue = await fetch(base + "/admin/support/tickets?tenantId=tenant-attacker&applicationId=app-a", {
-      headers: { authorization: `Bearer ${credential}`, "x-correlation-id": "ticket-admin-test-1" },
+      headers: { authorization: `Bearer ${credential}`, "x-correlation-id": "ticket-admin-test-1", accept: "application/vnd.eper.v1+json" },
     });
     assert.equal(queue.status, 200);
     const queueBody = await queue.json();
@@ -232,7 +232,7 @@ test("ticket admin endpoints reject customer roles before calling the store", as
   };
   await withServer({ ticketStore }, async (base) => {
     const queue = await fetch(base + "/admin/support/tickets", {
-      headers: { authorization: `Bearer ${credential}` },
+      headers: { authorization: `Bearer ${credential}`, accept: "application/vnd.eper.v1+json" },
     });
     assert.equal(queue.status, 403);
     const queuePayload = await queue.json();
@@ -271,7 +271,7 @@ test("support admin cannot mutate a ticket outside its tenant and receives non-d
   };
   const ticketId = "00000000-0000-4000-8000-000000000099";
   await withServer({ ticketStore }, async (base) => {
-    const headers = { authorization: `Bearer ${credential}`, "content-type": "application/json" };
+    const headers = { authorization: `Bearer ${credential}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json" };
     const status = await fetch(base + "/admin/support/tickets/" + ticketId + "/status", {
       method: "PATCH", headers, body: JSON.stringify({ status: "resolved" }),
     });
