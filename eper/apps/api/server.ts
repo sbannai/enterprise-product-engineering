@@ -1004,6 +1004,36 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         return;
       }
 
+      // If entitlement enforcement is globally enabled, the local execution path must
+      // fail closed too; it must not become a bypass around the UAT route's policy gate.
+      if (process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED === "true") {
+        const entitlementService = options.moduleEntitlementService;
+        const applicationId = process.env.EPER_LOCAL_APPLICATION_ID ?? "";
+        const roleKey = process.env.EPER_LOCAL_ROLE_KEY ?? "";
+        let moduleMap: unknown;
+        try { moduleMap = JSON.parse(process.env.EPER_REQUIREMENT_MODULE_MAP_JSON ?? ""); } catch { moduleMap = null; }
+        const moduleKey = moduleMap && typeof moduleMap === "object" && !Array.isArray(moduleMap)
+          ? (moduleMap as Record<string, unknown>)[requirement.id]
+          : undefined;
+        if (!entitlementService || !applicationId.trim() || !roleKey.trim() ||
+            typeof moduleKey !== "string" || !moduleKey.trim()) {
+          sendJson(response, 503, { error: "capability_entitlement_enforcement_unconfigured" });
+          return;
+        }
+        try {
+          const decision = await entitlementService.checkModule({
+            tenantId, applicationId, roleKey, permissionKey: "capability.execute",
+          }, moduleKey);
+          if (!decision.allowed) {
+            sendJson(response, 403, { error: "capability_entitlement_denied", reason: decision.reason });
+            return;
+          }
+        } catch {
+          sendJson(response, 503, { error: "capability_entitlement_check_failed" });
+          return;
+        }
+      }
+
       try {
         const body = await readJson(request);
         if (!Object.prototype.hasOwnProperty.call(body, "payload")) {
