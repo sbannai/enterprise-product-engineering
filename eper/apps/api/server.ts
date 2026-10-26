@@ -519,6 +519,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         await audit("success");
         sendJson(request, response, 200, { downloadUrl: url.toString(), expiresAt: new Date(expiresAt).toISOString(), fileName: asset.name });
       } catch {
+        try { await audit("failure"); } catch { /* Audit failure is intentionally fail-closed. */ }
         sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" });
       }
       return;
