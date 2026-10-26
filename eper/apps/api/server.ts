@@ -1134,6 +1134,66 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    // Read-only, tenant- and application-scoped customer settings. Only explicitly safe
+    // presentation preferences are returned; secrets and administrative configuration never leave the server.
+    if (request.method === "GET" && requestUrl.pathname === "/customer/settings") {
+      if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(request, response, 401, { error: "unauthorized" });
+        return;
+      }
+      let modulesConfig: unknown;
+      try { modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { modulesConfig = null; }
+      const tenantModules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+        ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantModules) || !tenantModules.includes("settings")) {
+        sendJson(request, response, 403, { error: "customer_settings_not_enabled" });
+        return;
+      }
+      const applicationId = requestUrl.searchParams.get("applicationId") ?? "";
+      if (!applicationId || applicationId !== applicationId.trim() || applicationId.length > 128 ||
+          !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" });
+        return;
+      }
+      let assignmentsConfig: unknown;
+      try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+      catch { assignmentsConfig = null; }
+      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      let settingsConfig: unknown;
+      try { settingsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON ?? ""); }
+      catch { settingsConfig = null; }
+      if (!settingsConfig || typeof settingsConfig !== "object" || Array.isArray(settingsConfig)) {
+        sendJson(request, response, 503, { error: "customer_settings_unavailable" });
+        return;
+      }
+      const tenantSettings = (settingsConfig as Record<string, unknown>)[identity.tenantId];
+      const applicationSettings = tenantSettings && typeof tenantSettings === "object" && !Array.isArray(tenantSettings)
+        ? (tenantSettings as Record<string, unknown>)[applicationId] : null;
+      if (!applicationSettings || typeof applicationSettings !== "object" || Array.isArray(applicationSettings)) {
+        sendJson(request, response, 503, { error: "customer_settings_unavailable" });
+        return;
+      }
+      const source = applicationSettings as Record<string, unknown>;
+      const safeSettings: Record<string, string> = {};
+      for (const key of ["displayName", "locale", "currency", "timeZone", "theme"] as const) {
+        const value = source[key];
+        if (typeof value === "string" && value.length <= 100 && value === value.trim()) safeSettings[key] = value;
+      }
+      sendJson(request, response, 200, { applicationId, settings: safeSettings });
+      return;
+    }
+
     // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
     if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
       if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
