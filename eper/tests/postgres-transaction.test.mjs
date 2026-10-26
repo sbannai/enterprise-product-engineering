@@ -11,6 +11,7 @@ import {
   PostgresAuthorizationPolicyStore,
   PostgresAuditEvidenceStore,
   PostgresExceptionStore,
+  PostgresGovernedReportingStore,
 } from "../dist/packages/capabilities/postgres-stores.js";
 
 function fakePool({ onQuery } = {}) {
@@ -169,4 +170,29 @@ test("outbox failure rolls back exception and audit writes", async () => {
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO workflow_exceptions")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO audit_evidence")));
   assert.equal(calls.at(-2).sql, "ROLLBACK");
+});
+
+
+test("governed report publication writes snapshot, audit and outbox before commit", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresGovernedReportingStore(pool);
+  await store.publish({
+    tenantId: "tenant-a", reportId: "rpt-1", values: { count: 4 },
+    sourceRequirementIds: ["REQ-1"], generatedAt: "2026-10-26T08:00:00.000Z",
+  }, "pub-1", "user-1", "corr-1");
+  const snapshot = calls.findIndex(call => call.sql.includes("INSERT INTO governed_reports"));
+  const audit = calls.findIndex(call => call.sql.includes("INSERT INTO audit_evidence"));
+  const outbox = calls.findIndex(call => call.sql.includes("INSERT INTO transactional_outbox"));
+  assert.ok(snapshot >= 0 && snapshot < audit && audit < outbox);
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("governed report publication rejects missing provenance before opening a transaction", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresGovernedReportingStore(pool);
+  await assert.rejects(store.publish({
+    tenantId: "tenant-a", reportId: "rpt-1", values: {},
+    sourceRequirementIds: [], generatedAt: "2026-10-26T08:00:00.000Z",
+  }, "pub-1", "user-1", "corr-1"), /REPORT_PROVENANCE_REQUIRED/);
+  assert.equal(calls.length, 0);
 });
