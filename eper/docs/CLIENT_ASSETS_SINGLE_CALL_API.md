@@ -25,7 +25,6 @@ The customer workspace loads the authorized asset manifest for all applications 
       "type": "document",
       "mimeType": "application/pdf",
       "sizeBytes": 2048,
-      "tags": ["brief"],
       "tags": ["brief"]
     }
   ],
