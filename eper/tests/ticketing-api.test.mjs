@@ -98,6 +98,44 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
   });
 });
 
+
+test("support admin queue and status updates remain scoped to the trusted admin tenant", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
+  const calls = [];
+  const ticket = { id: "00000000-0000-4000-8000-000000000001", tenantId: "tenant-support-a", applicationId: "app-a", createdBy: "actor-a", type: "feedback", title: "UI", description: "Issue", businessImpact: "Impact", status: "triaged", severity: "p3", assignedTo: null, createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z" };
+  const ticketStore = {
+    async assertReady() {},
+    async list(identity, filter) { calls.push({ operation: "list", identity, filter }); return [ticket]; },
+    async changeStatus(identity, ticketId, status) { calls.push({ operation: "changeStatus", identity, ticketId, status }); return { ...ticket, status }; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const queue = await fetch(base + "/admin/support/tickets?tenantId=tenant-attacker&applicationId=app-a", {
+      headers: { authorization: `Bearer ${credential}`, "x-correlation-id": "ticket-admin-test-1" },
+    });
+    assert.equal(queue.status, 200);
+    const queueBody = await queue.json();
+    assert.equal(queueBody.tenantId, "tenant-support-a");
+    assert.equal(calls[0].identity.tenantId, "tenant-support-a");
+    assert.equal(calls[0].filter.applicationId, "app-a");
+
+    const update = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "x-correlation-id": "ticket-admin-test-2" },
+      body: JSON.stringify({ status: "in_progress" }),
+    });
+    assert.equal(update.status, 200);
+    assert.equal(calls[1].identity.tenantId, "tenant-support-a");
+    assert.equal(calls[1].identity.actorId, "support-actor-a");
+    assert.equal(calls[1].identity.correlationId, "ticket-admin-test-2");
+    assert.equal(calls[1].ticketId, ticket.id);
+    assert.equal(calls[1].status, "in_progress");
+  });
+});
+
 test.after(restoreEnv);
 
 
