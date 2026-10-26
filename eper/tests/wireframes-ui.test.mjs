@@ -19,12 +19,12 @@ test("static wireframes POC is served without requiring API configuration", asyn
     for (const label of ["Product overview", "Capability families", "Payment desk", "Receipt preview", "Workflow studio", "Roles & access", "Reports & audit", "Business UAT readiness"]) {
       assert.ok(html.includes(label), "missing wireframe: " + label);
     }
-    assert.match(html, /Static wireframe POC — no API integration/);
+    assert.match(html, /Authenticated API mode/);\n    assert.match(html, /supportConnect/);
     assert.match(html, /no payment is processed/i);
     assert.match(html, /data-screen="payments"/);
     assert.match(html, /addEventListener/);
-    assert.doesNotMatch(html, /fetch\s*\(/, "wireframes must not call APIs");
-    assert.doesNotMatch(html, /XMLHttpRequest|WebSocket/, "wireframes must remain disconnected");
+    assert.match(html, /fetch\s*\(/, "support queue calls the protected API only after explicit token entry");
+    assert.doesNotMatch(html, /XMLHttpRequest|WebSocket/, "wireframes must not use unapproved transport APIs");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
