@@ -74,7 +74,12 @@ test("customer application access check uses only server-mapped tenant and role 
       "/customer/applications/application-from-path/access/modules/records?tenantId=attacker-tenant&permission=capability.execute";
     const denied = await fetch(url);
     assert.equal(denied.status, 401);
-    const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    const response = await fetch(url, { headers: {
+      authorization: "Bearer " + token,
+      "x-tenant-id": "attacker-tenant",
+      "x-actor-id": "attacker-actor",
+      "x-role-key": "super-admin",
+    } });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       applicationId: "application-from-path",
