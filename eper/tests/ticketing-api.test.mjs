@@ -6,6 +6,7 @@ const original = {
   enabled: process.env.EPER_TICKETING_API_ENABLED,
   identities: process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON,
   assignments: process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON,
+  adminRoles: process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON,
 };
 const credential = "a".repeat(48);
 const otherCredential = "b".repeat(48);
@@ -15,6 +16,7 @@ function restoreEnv() {
     ["EPER_TICKETING_API_ENABLED", original.enabled],
     ["EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", original.identities],
     ["EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", original.assignments],
+    ["EPER_TICKETING_ADMIN_ROLE_KEYS_JSON", original.adminRoles],
   ]) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -97,3 +99,34 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
 });
 
 test.after(restoreEnv);
+
+
+test("ticket admin endpoints reject customer roles before calling the store", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
+  let storeCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { storeCalls++; return []; },
+    async changeStatus() { storeCalls++; throw new Error("must not be called"); },
+    async assign() { storeCalls++; throw new Error("must not be called"); },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const queue = await fetch(base + "/admin/support/tickets", {
+      headers: { authorization: `Bearer ${credential}` },
+    });
+    assert.equal(queue.status, 403);
+    assert.deepEqual(await queue.json(), { error: "ticket_admin_permission_required" });
+    const mutation = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+      body: JSON.stringify({ status: "triaged" }),
+    });
+    assert.equal(mutation.status, 403);
+    assert.equal(storeCalls, 0);
+  });
+});
