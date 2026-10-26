@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import type { Pool } from "pg";
 import { sendApiSuccess, sendApiError, resolveApiRequestId } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
@@ -327,10 +328,17 @@ async function handleDurableAdminConfig(
  * The local route is disabled by default and is not a production identity system.
  * Do not enable it on a publicly reachable deployment.
  */
-function createConfiguredCapabilityServices() {
+function createConfiguredCapabilityServices(postgresPool?: Pool) {
   const persistence = process.env.EPER_CAPABILITY_PERSISTENCE;
   if (persistence === undefined || persistence === "memory") {
     return createCapabilityServices();
+  }
+  if (persistence === "postgres") {
+    if (!postgresPool) throw new Error("EPER_CAPABILITY_POSTGRES_POOL_REQUIRED");
+    if (process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+      throw new Error("EPER_CAPABILITY_POSTGRES_REQUIRES_DURABLE_AUDIT");
+    }
+    return createCapabilityServices({ persistence: "postgres", postgresPool });
   }
   if (persistence !== "json-file") {
     throw new Error("EPER_CAPABILITY_PERSISTENCE_UNSUPPORTED");
@@ -342,8 +350,8 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
-  const services = createConfiguredCapabilityServices();
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+  const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
   let marketPriceEntries: MarketPriceEntry[] = [];
