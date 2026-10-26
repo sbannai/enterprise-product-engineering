@@ -46,6 +46,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /sequence!==ticketLoadSequence\|\|application\.value\.trim\(\)!==app/, "late ticket responses must not overwrite the selected application history");
     assert.match(html, /let viewLoadSequence=0/, "customer workspace must sequence async view loads");
     assert.match(html, /let sessionGeneration=0/, "customer session lifecycle must have a generation guard");
+    assert.match(html, /const requestGeneration=sessionGeneration;const requestToken=bearerToken/, "each API call must capture its initiating customer session");
+    assert.match(html, /if\(requestGeneration!==sessionGeneration\|\|requestToken!==bearerToken\)throw new Error\("customer_session_changed"\)/, "API responses must be rejected after disconnect or reconnect");
+    assert.match(html, /if\(!requestToken\)throw new Error\("customer_session_disconnected"\)/, "API calls must fail closed without an active customer credential");
     assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
     assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;bearerToken="";enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "disconnect must invalidate in-flight requests and clear customer data");
