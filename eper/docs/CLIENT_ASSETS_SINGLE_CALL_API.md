@@ -26,7 +26,7 @@ The customer workspace loads the authorized asset manifest for all applications 
       "mimeType": "application/pdf",
       "sizeBytes": 2048,
       "tags": ["brief"],
-      "accessReference": "opaque-provider-reference"
+      "tags": ["brief"]
     }
   ],
   "total": 1,
@@ -35,10 +35,10 @@ The customer workspace loads the authorized asset manifest for all applications 
 }
 ```
 
-Supported types: `document`, `video`, `image`, `audio`, `other`. Only explicit safe metadata fields are returned. Provider credentials, arbitrary configuration fields, and binary data must never be included in this response.
+Supported types: `document`, `video`, `image`, `audio`, `other`. Only explicit safe metadata fields are returned. Provider credentials, arbitrary configuration fields, storage references, and binary data must never be included in this response.
 
 ## Download boundary
-`accessReference` is an opaque reference, not a public URL and not a download authorization. Actual file access must use a separate provider-specific endpoint that rechecks tenant, application, asset, and user permissions before issuing a short-lived signed URL or streaming content. Do not render the reference as a clickable link.
+Storage references are kept server-side and are not returned by the manifest. Actual file access must use a separate provider-specific endpoint that rechecks tenant, application, asset, and user permissions before issuing a short-lived signed URL or streaming content.
 
 ## UI behavior
 The Client Assets view calls `GET /customer/assets` once when opened and renders all returned metadata. It is tenant-module gated and stays separate from admin configuration. Pagination is only needed when the returned `nextCursor` is non-null. Mobile layout and keyboard focus follow the shared customer workspace rules.
