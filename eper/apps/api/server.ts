@@ -131,9 +131,9 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
     if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
     if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
     const record = identity as Record<string, unknown>;
-    if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId.length > 128 ||
-        typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId.length > 128 ||
-        typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey.length > 128) return null;
+    if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId !== record.tenantId.trim() || record.tenantId.length > 128 ||
+        typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId !== record.actorId.trim() || record.actorId.length > 128 ||
+        typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey !== record.roleKey.trim() || record.roleKey.length > 128) return null;
     return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey };
   }
   return null;
