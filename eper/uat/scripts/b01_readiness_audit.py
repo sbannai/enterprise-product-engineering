@@ -57,6 +57,27 @@ def audit_records(checklist, gates, capture, gaps):
                for marker in pending_markers)
         or (r.get("measurable_expected_result_approved") or "").strip().upper() not in {"YES", "APPROVED", "PASS"}
     ]
+    preparation_fields = (
+        "brd_id_status", "brd_locator_status", "approved_brd_version_locator",
+        "approved_srs_version_locator", "actor_role_tenant_confirmed",
+        "preconditions_and_test_data_approved", "positive_steps_reviewed",
+        "negative_path_reviewed", "evidence_capture_plan_approved",
+    )
+    incomplete_case_preparation = []
+    for row in checklist:
+        missing = []
+        for field in preparation_fields:
+            value = (row.get(field) or "").strip()
+            if field in {"approved_brd_version_locator", "approved_srs_version_locator"}:
+                if not value:
+                    missing.append(field)
+            elif value.upper() not in {"YES", "APPROVED", "PASS", "VERIFIED", "COMPLETE"}:
+                missing.append(field)
+        if missing:
+            incomplete_case_preparation.append({
+                "requirement_id": row.get("requirement_id", ""),
+                "missing_fields": missing,
+            })
     unapproved_cases = [r.get("requirement_id", "") for r in checklist
                         if (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED", "APPROVE_WITH_CHANGES"}
                         or not (r.get("reviewer_identity") or "").strip()
@@ -91,6 +112,11 @@ def audit_records(checklist, gates, capture, gaps):
         blockers.append({"gate": "E13/acceptance oracle", "count": len(incomplete_acceptance_oracles),
                          "detail": "Requirement-specific acceptance-source binding and/or measurable expected result is incomplete.",
                          "requirement_ids": incomplete_acceptance_oracles})
+    if incomplete_case_preparation:
+        blockers.append({"gate": "E13/case preparation completeness",
+                         "count": len(incomplete_case_preparation),
+                         "detail": "Approved BRD/SRS locators, actor/tenant scope, test data, positive/negative steps, and evidence-capture planning must be complete for each case.",
+                         "cases": incomplete_case_preparation})
     if unapproved_cases:
         blockers.append({"gate": "D3/case review", "count": len(unapproved_cases),
                          "detail": "Case reviewer decision, identity, date, or approval reference is incomplete.",
@@ -129,6 +155,7 @@ def audit_records(checklist, gates, capture, gaps):
             "requirementsInCaptureRegister": len(capture),
             "casesWithUnapprovedBaseline": len(unapproved_baselines),
             "casesWithIncompleteAcceptanceOracle": len(incomplete_acceptance_oracles),
+            "casesWithIncompletePreparation": len(incomplete_case_preparation),
             "casesWithoutCompleteReviewApproval": len(unapproved_cases),
             "casesNotExplicitlyAuthorized": len(unauthorized_cases),
             "entryGatesPendingOrWithoutEvidence": len(pending_gates),
