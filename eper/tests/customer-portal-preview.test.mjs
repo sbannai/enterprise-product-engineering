@@ -47,7 +47,7 @@ test("customer session endpoint rejects missing and unknown credentials", async 
     for (const headers of [{}, { authorization: "Bearer unknown-credential" }]) {
       const response = await fetch(base + "/customer/session", { headers });
       assert.equal(response.status, 401);
-      assert.deepEqual(await response.json(), { authenticated: false, error: "unauthorized" });
+      assert.deepEqual((await response.json()).error, { code: "UNAUTHENTICATED", message: "Authentication is required." });
       assert.equal(response.headers.get("cache-control"), "no-store");
     }
   } finally {
@@ -73,7 +73,7 @@ test("customer session endpoint returns only server-mapped identity", async () =
       headers: { authorization: "Bearer " + credential }
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
+    assert.deepEqual((await response.json()).data, {
       authenticated: true, tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer"
     });
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -105,7 +105,7 @@ test("customer workspace modules require identity and stay tenant-scoped", async
     assert.equal(denied.status, 401);
     const response = await fetch(base, { headers: { authorization: "Bearer " + credential } });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { modules: ["help-center", "growth-hub"] });
+    assert.deepEqual((await response.json()).data, { modules: ["help-center", "growth-hub"] });
     assert.equal(response.headers.get("cache-control"), "no-store");
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -133,10 +133,10 @@ test("customer help and growth content APIs enforce module entitlement and tenan
     const headers = { authorization: "Bearer " + credential };
     const help = await fetch(base + "help-center/content", { headers });
     assert.equal(help.status, 200);
-    assert.deepEqual(await help.json(), { module: "help-center", items: [{ title: "Getting started", body: "Setup guide" }] });
+    assert.deepEqual((await help.json()).data, { module: "help-center", items: [{ title: "Getting started", body: "Setup guide" }] });
     const growth = await fetch(base + "growth-hub/content", { headers });
     assert.equal(growth.status, 403);
-    assert.deepEqual(await growth.json(), { error: "module_not_enabled" });
+    assert.deepEqual((await growth.json()).error, { code: "FORBIDDEN", message: "This customer module is not enabled." });
     assert.equal(help.headers.get("cache-control"), "no-store");
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -163,7 +163,7 @@ test("customer content APIs expose only bounded title/body fields", async () => 
     const address = server.address(); assert.ok(address && typeof address === "object");
     const response = await fetch("http://127.0.0.1:" + address.port + "/customer/help-center/content", { headers: { authorization: "Bearer " + credential } });
     assert.equal(response.status, 200);
-    const payload = await response.json();
+    const payload = (await response.json()).data;
     assert.equal(payload.items.length, 100);
     assert.deepEqual(payload.items[0], { title: "Safe article", body: "Visible text" });
     assert.equal("internalSecret" in payload.items[0], false);
