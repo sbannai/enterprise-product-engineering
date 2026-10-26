@@ -110,7 +110,13 @@ def audit_records(checklist, gates, capture, gaps):
                           if (r.get("execution_authorized") or "").strip().upper() != "YES"]
     pending_gates = [r.get("gate_id", "") for r in gates
                      if (r.get("status") or "").strip().upper() not in {"PASS", "VERIFIED", "COMPLETE"}
-                     or not (r.get("evidence_reference") or "").strip()]
+                     or not (r.get("evidence_reference") or "").strip()
+                     or not valid_iso_date(r.get("evidence_date"))
+                     or not (r.get("named_owner") or "").strip()
+                     or not (r.get("verified_by") or "").strip()
+                     or not valid_iso_date(r.get("verification_date"))
+                     or (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED"}
+                     or not (r.get("approval_reference") or "").strip()]
     not_run = [r.get("requirement_id", "") for r in capture
                if (r.get("outcome") or "").strip().upper() in
                {"", "NOT_RUN", "NOT RUN", "NOT_EXECUTED", "NOT EXECUTED", "BLOCKED"}]
