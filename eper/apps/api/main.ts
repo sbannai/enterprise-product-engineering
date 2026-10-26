@@ -17,8 +17,10 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
-const paymentPool = postgresPaymentMode ? createPostgresPaymentPool() : null;
-const paymentStore = paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
+const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode;
+const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
+const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
 const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
 if (adminConfigMode !== "memory" && adminConfigMode !== "postgres") {
   throw new Error("EPER_ADMIN_CONFIG_PERSISTENCE_UNSUPPORTED");
@@ -131,7 +133,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, ticketStore, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
+const server = createAppServer({ capabilityPool: postgresCapabilityMode ? paymentPool ?? undefined : undefined, paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, ticketStore, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
