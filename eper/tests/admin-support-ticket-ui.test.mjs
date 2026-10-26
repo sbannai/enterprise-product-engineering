@@ -18,3 +18,16 @@ test("support ticket CSV export neutralizes formula cells and keeps the download
   assert.ok(html.includes('setTimeout(()=>URL.revokeObjectURL(url),1000)'), "download URL revocation is deferred");
   assert.ok(html.includes('Exported "+tickets.length+" tickets from the current authorized page.'));
 });
+
+
+test("support admin queue renders a safe, accessible reply thread and composer", () => {
+  const html = adminSupportTicketUiHtml;
+  assert.ok(html.includes('id="replyThread"'), "conversation thread is present");
+  assert.ok(html.includes('id="replyBody"'), "reply composer is present");
+  assert.ok(html.includes('id="sendReply"'), "reply action is present");
+  assert.ok(html.includes('async function loadReplies(ticketId)'), "thread loads through the protected API");
+  assert.ok(html.includes('async function sendReply()'), "reply submission is asynchronous");
+  assert.ok(html.includes('"/admin/support/tickets/"+encodeURIComponent(ticketId)+"/replies"'), "ticket ID is encoded in the thread endpoint");
+  assert.ok(html.includes('esc(r.body)'), "reply text is HTML-escaped before rendering");
+  assert.ok(html.includes('body:JSON.stringify({body})'), "reply text is submitted as JSON");
+});
