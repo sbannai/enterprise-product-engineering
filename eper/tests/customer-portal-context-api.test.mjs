@@ -46,7 +46,7 @@ test("customer portal context requires trusted identity and returns server-mappe
     assert.equal(versionedDenied.status, 401);
     const deniedBody = await versionedDenied.json();
     assert.equal(deniedBody.success, false);
-    assert.equal(deniedBody.error.code, "UNAUTHENTICATED");
+    assert.equal(deniedBody.error.code, "UNAUTHORIZED", "portal-context legacy auth errors retain their existing code in the versioned envelope");
     assert.ok(deniedBody.meta.requestId);
     assert.equal(versionedDenied.headers.get("x-request-id"), deniedBody.meta.requestId);
   } finally {
