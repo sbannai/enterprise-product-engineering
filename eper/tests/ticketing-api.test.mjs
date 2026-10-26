@@ -81,7 +81,7 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
     });
     assert.equal(bad.status, 400);
     const created = await fetch(base + "/customer/applications/app-a/tickets", {
-      method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-submit-key-001" },
+      method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-submit-key-001", "x-tenant-id": "tenant-b", "x-actor-id": "actor-b", "x-role-key": "super-admin" },
       body: JSON.stringify({ type: "feedback", title: " UI ", description: " Issue ", businessImpact: " Impact " }),
     });
     assert.equal(created.status, 201);
