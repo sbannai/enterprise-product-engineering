@@ -6,6 +6,7 @@ import { LocalizationService, type SupportedLocale, type SupportedCurrency } fro
 import { MarketPriceBookService, type MarketPriceEntry } from "../../packages/pricing/market-price-book.js";
 import { WorkflowConfigurationService, WorkflowConfigurationError } from "../../packages/workflows/workflow-configuration.js";
 import { AdminConfigurationConflictError, PostgresAdminConfigurationStore, type AdminConfigurationResource } from "../../packages/workflows/postgres-admin-configuration-store.js";
+import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
@@ -53,6 +54,34 @@ function bearerMatches(request: IncomingMessage, expected: string): boolean {
   return provided.length === secret.length && timingSafeEqual(provided, secret);
 }
 
+
+
+interface TrustedCustomerAccessIdentity {
+  tenantId: string;
+  actorId: string;
+  roleKey: string;
+}
+
+/** Resolve customer identity only from server-side credential mapping; never from request JSON. */
+function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustomerAccessIdentity | null {
+  const match = /^Bearer (.+)$/i.exec(request.headers.authorization ?? "");
+  if (!match) return null;
+  const supplied = Buffer.from(match[1], "utf8");
+  let mapping: unknown;
+  try { mapping = JSON.parse(process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON ?? ""); } catch { return null; }
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) return null;
+  for (const [credential, identity] of Object.entries(mapping as Record<string, unknown>)) {
+    const expected = Buffer.from(credential, "utf8");
+    if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
+    if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
+    const record = identity as Record<string, unknown>;
+    if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId.length > 128 ||
+        typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId.length > 128 ||
+        typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey.length > 128) return null;
+    return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey };
+  }
+  return null;
+}
 
 interface TrustedAdminConfigIdentity {
   tenantId: string;
@@ -260,7 +289,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; adminConfigurationStore?: PostgresAdminConfigurationStore; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -727,6 +756,56 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     } catch {
       if (!response.headersSent) sendJson(response, 503, { error: "payment_operation_unavailable" });
       else response.destroy();
+      return;
+    }
+
+
+    // Customer-side module/add-on access check. This endpoint is diagnostic; the same
+    // policy must also be invoked at protected capability entry points before UAT.
+    const customerAccessMatch = /^\\/customer\\/applications\\/([^/]+)\\/access\\/(modules|addons)\\/([^/]+)$/.exec(requestUrl.pathname);
+    if (request.method === "GET" && customerAccessMatch) {
+      if (process.env.EPER_CUSTOMER_ACCESS_API_ENABLED !== "true") {
+        sendJson(response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.moduleEntitlementService) {
+        sendJson(response, 503, { error: "customer_access_policy_unavailable" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+      let applicationId: string;
+      let itemKey: string;
+      try {
+        applicationId = decodeURIComponent(customerAccessMatch[1]);
+        itemKey = decodeURIComponent(customerAccessMatch[3]);
+      } catch {
+        sendJson(response, 400, { error: "invalid_path_encoding" });
+        return;
+      }
+      const permissionKey = requestUrl.searchParams.get("permission") ?? "module.use";
+      if (!applicationId.trim() || applicationId.length > 128 || !itemKey.trim() || itemKey.length > 128 ||
+          !/^[a-zA-Z0-9._:-]{1,128}$/.test(permissionKey)) {
+        sendJson(response, 400, { error: "invalid_access_query" });
+        return;
+      }
+      try {
+        const context = {
+          tenantId: identity.tenantId,
+          applicationId,
+          roleKey: identity.roleKey,
+          permissionKey,
+        };
+        const decision = customerAccessMatch[2] === "modules"
+          ? await options.moduleEntitlementService.checkModule(context, itemKey)
+          : await options.moduleEntitlementService.checkApplicationAddon(context, itemKey);
+        sendJson(response, 200, { applicationId, itemKey, kind: customerAccessMatch[2], ...decision });
+      } catch {
+        sendJson(response, 503, { error: "customer_access_check_failed" });
+      }
       return;
     }
 
