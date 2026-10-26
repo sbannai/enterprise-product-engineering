@@ -59,6 +59,18 @@ test("ticket mutation rolls back when the canonical audit write fails", async ()
   assert.ok(!sql.includes("COMMIT"));
 });
 
+test("ticket listing searches title, description, business impact, ID, application and assignee using a bound value", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresTicketStore(pool, async () => {});
+  await store.list({ tenantId: "tenant-a" }, { search: "payment timeout", limit: 10, offset: 0 });
+  const query = calls.find((x) => /SELECT \* FROM eper_support_tickets/.test(x.sql));
+  assert.ok(query);
+  assert.match(query.sql, /position\(lower\(\$2\) in lower\(id::text\)\) > 0/);
+  assert.match(query.sql, /lower\(business_impact\)/);
+  assert.match(query.sql, /lower\(coalesce\(assigned_to, ''\)\)/);
+  assert.deepEqual(query.values, ["tenant-a", "payment timeout", 10, 0]);
+});
+
 test("ticket listing always scopes by trusted tenant and selected application", async () => {
   const { calls, pool } = fakePool();
   const store = new PostgresTicketStore(pool, async () => {});
