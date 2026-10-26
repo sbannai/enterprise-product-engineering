@@ -118,7 +118,7 @@ def audit_records(checklist, gates, capture, gaps):
                 if (r.get("outcome") or "").strip().upper() in {"PASS", "ACCEPTED"}
                 and (r.get("business_decision") or "").strip().upper() in {"ACCEPT", "ACCEPTED", "APPROVED"}
                 and (r.get("business_approver") or "").strip()
-                and (r.get("approval_date") or "").strip()
+                and valid_iso_date(r.get("approval_date"))
                 and (r.get("evidence_archive_reference") or "").strip()]
     capture_ids = [r.get("requirement_id", "").strip() for r in capture]
     if len(set(capture_ids)) != len(capture_ids) or any(not item for item in capture_ids):
