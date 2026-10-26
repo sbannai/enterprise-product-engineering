@@ -28,6 +28,13 @@ test("admin wireframe exposes authenticated feedback and ticketing API mode", as
     assert.match(html, /id="supportBearer"/);
     assert.match(html, /admin\/support\/tickets/);
     assert.match(html, /supportBearerToken/);
+    assert.match(html, /params\.set\("type",type\)/);
+    assert.match(html, /params\.set\("severity",severity\)/);
+    assert.match(html, /params\.set\("status",status\)/);
+    assert.match(html, /params\.set\("applicationId",app\)/);
+    assert.match(html, /value="feature_request"/);
+    assert.match(html, /value="p1_candidate"/);
+    assert.match(html, /value="in_progress"/);
     assert.match(html, /token cleared from page memory|Token cleared from page memory/i);
     const scripts = html.split("<script>").slice(1).map((chunk) => chunk.split("</script>")[0]);
     assert.ok(scripts.length > 0, "wireframe should include its UI controller");
