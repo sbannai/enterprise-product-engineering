@@ -433,7 +433,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
         "referrer-policy": "no-referrer",
-        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
       });
       response.end(customerPortalPreviewHtml);
       return;
