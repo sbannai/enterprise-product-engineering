@@ -1296,7 +1296,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const page = await options.ticketStore.list({ tenantId: identity.tenantId }, {
             status: status as typeof TICKET_STATUSES[number] | undefined,
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
-            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, search, limit: limit + 1, offset,
+            type: type as typeof TICKET_TYPES[number] | undefined, applicationId,
+            ...(search !== undefined ? { search } : {}), limit: limit + 1, offset,
           });
           const hasMore = page.length > limit;
           const tickets = hasMore ? page.slice(0, limit) : page;
