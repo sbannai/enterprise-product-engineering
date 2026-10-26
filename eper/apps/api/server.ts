@@ -21,6 +21,7 @@ import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 import { handleAgentRoute, type AgentAuditWriter } from "../../packages/agents/agent-workflows.js";
+import { appendAuditEvent, type AuditSqlPool } from "../../packages/audit/audit-event-store.js";
 import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
@@ -374,6 +375,32 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     sandboxEnabled: process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
   };
   const workflowConfig = new WorkflowConfigurationService();
+  const assetAuditWriter: CustomerAssetAuditWriter | undefined = options.assetAuditWriter ?? (
+    process.env.EPER_AUDIT_PERSISTENCE === "postgres" && options.capabilityPool
+      ? async (record) => {
+          const configuredEnvironment = process.env.EPER_AUDIT_ENVIRONMENT;
+          const environment = configuredEnvironment === "production" || configuredEnvironment === "uat" ? configuredEnvironment : "sandbox";
+          await appendAuditEvent(options.capabilityPool as unknown as AuditSqlPool, {
+            tenantId: record.tenantId,
+            applicationId: record.applicationId ?? "customer-workspace",
+            environment,
+            actorType: "human",
+            actorId: record.actorId,
+            action: record.action,
+            outcome: record.outcome,
+            reasonCode: record.outcome === "denied" ? "ASSET_ACCESS_DENIED" : record.outcome === "failure" ? "ASSET_DOWNLOAD_FAILED" : undefined,
+            resourceType: "client-asset",
+            resourceId: record.assetId,
+            operationId: record.requestId,
+            requestId: record.requestId,
+            source: "api",
+            operationName: "customer.asset.download",
+            serviceVersion: process.env.EPER_BUILD_ID,
+            payload: { applicationId: record.applicationId },
+          });
+        }
+      : undefined
+  );
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
@@ -484,11 +511,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const [applicationId, assetId] = [assetDownloadMatch[1], assetDownloadMatch[2]];
       const requestId = resolveApiRequestId(request);
       const audit = async (outcome: CustomerAssetAuditRecord["outcome"]) => {
-        if (!options.assetAuditWriter) throw new Error("ASSET_AUDIT_UNAVAILABLE");
-        await options.assetAuditWriter({ tenantId: identity.tenantId, actorId: identity.actorId, action: "customer.asset.download", outcome, applicationId, assetId, requestId });
+        if (!assetAuditWriter) throw new Error("ASSET_AUDIT_UNAVAILABLE");
+        await assetAuditWriter({ tenantId: identity.tenantId, actorId: identity.actorId, action: "customer.asset.download", outcome, applicationId, assetId, requestId });
       };
       try {
-        if (!options.assetAuditWriter) {
+        if (!assetAuditWriter) {
           // Downloads are high-risk reads: never issue a URL when audit persistence is unavailable.
           sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" }); return;
         }
