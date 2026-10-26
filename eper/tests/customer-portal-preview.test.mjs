@@ -75,7 +75,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(submissionSessionGeneration!==sessionGeneration\)return;result\.textContent="Ticket submitted\./, "late ticket success must not update the UI after a session change");
     assert.match(html, /if\(submissionSessionGeneration===sessionGeneration\)\{form\.dataset\.submitting="false";submitButton\.disabled=application\.disabled\|\|!application\.value;\}/, "late ticket completion must not mutate stale form controls");
     assert.match(html, /if\(renderSequence!==viewLoadSequence\)return;/, "late view responses must not overwrite the currently selected section");
-    assert.match(html, /loadAllClientAssets\(\)\.then\(items=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
+    assert.match(html, /loadAllClientAssets\(\)\.then\(initialItems=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
     assert.match(html, /api\("\/customer\/assets\?all=true"\)/, "all client assets are fetched with one API request");
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
     assert.ok(html.includes("assetTypeFilter"), "client asset view provides file-type filtering");
