@@ -125,6 +125,78 @@ test("live PostgreSQL capability conformance: RLS, append-only audit, rollback",
       assert.deepEqual(counts, { domain: 1, audit: 1, outbox: 1 });
     });
 
+    await t.test("outbox insert failure rolls back exception and audit state", async () => {
+      const exceptions = new PostgresExceptionStore(app);
+      const id = `outbox-fail-${randomUUID()}`;
+      const suffix = randomUUID().replaceAll("-", "");
+      const functionName = `eper_test_outbox_fail_${suffix}`;
+      const triggerName = `eper_test_outbox_trigger_${suffix}`;
+      await admin.query(`
+        CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $inject$
+        BEGIN
+          IF NEW.aggregate_id = '${id}' THEN
+            RAISE EXCEPTION 'INJECTED_OUTBOX_FAILURE' USING ERRCODE = 'P0001';
+          END IF;
+          RETURN NEW;
+        END
+        $inject$;
+      `);
+      await admin.query(`CREATE TRIGGER ${triggerName} BEFORE INSERT ON transactional_outbox FOR EACH ROW EXECUTE FUNCTION ${functionName}()`);
+      try {
+        await assert.rejects(exceptions.create({
+          id, tenantId: tenantA, requirementId: "LIVE-POSTGRES-TEST", code: "OUTBOX-FAIL",
+          message: "outbox failure injection", idempotencyKey: `idem-${randomUUID()}`,
+          createdAt: new Date().toISOString(),
+        }, "corr-live-outbox-failure", "ci-test"), /INJECTED_OUTBOX_FAILURE/);
+        const counts = await withTenantTransaction(app, tenantA, async ({ client }) => {
+          const domain = await client.query("SELECT count(*)::int AS count FROM workflow_exceptions WHERE tenant_id=$1 AND exception_id=$2", [tenantA, id]);
+          const auditRows = await client.query("SELECT count(*)::int AS count FROM audit_evidence WHERE tenant_id=$1 AND action='EXCEPTION_CREATED' AND payload @> $2::jsonb", [tenantA, JSON.stringify({ exceptionId: id })]);
+          const outboxRows = await client.query("SELECT count(*)::int AS count FROM transactional_outbox WHERE tenant_id=$1 AND aggregate_id=$2", [tenantA, id]);
+          return { domain: domain.rows[0].count, audit: auditRows.rows[0].count, outbox: outboxRows.rows[0].count };
+        });
+        assert.deepEqual(counts, { domain: 0, audit: 0, outbox: 0 });
+      } finally {
+        await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON transactional_outbox`);
+        await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+      }
+    });
+
+    await t.test("audit insert failure rolls back exception state before outbox publication", async () => {
+      const exceptions = new PostgresExceptionStore(app);
+      const id = `audit-fail-${randomUUID()}`;
+      const suffix = randomUUID().replaceAll("-", "");
+      const functionName = `eper_test_audit_fail_${suffix}`;
+      const triggerName = `eper_test_audit_trigger_${suffix}`;
+      await admin.query(`
+        CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $inject$
+        BEGIN
+          IF NEW.payload->>'exceptionId' = '${id}' THEN
+            RAISE EXCEPTION 'INJECTED_AUDIT_FAILURE' USING ERRCODE = 'P0001';
+          END IF;
+          RETURN NEW;
+        END
+        $inject$;
+      `);
+      await admin.query(`CREATE TRIGGER ${triggerName} BEFORE INSERT ON audit_evidence FOR EACH ROW EXECUTE FUNCTION ${functionName}()`);
+      try {
+        await assert.rejects(exceptions.create({
+          id, tenantId: tenantA, requirementId: "LIVE-POSTGRES-TEST", code: "AUDIT-FAIL",
+          message: "audit failure injection", idempotencyKey: `idem-${randomUUID()}`,
+          createdAt: new Date().toISOString(),
+        }, "corr-live-audit-failure", "ci-test"), /INJECTED_AUDIT_FAILURE/);
+        const counts = await withTenantTransaction(app, tenantA, async ({ client }) => {
+          const domain = await client.query("SELECT count(*)::int AS count FROM workflow_exceptions WHERE tenant_id=$1 AND exception_id=$2", [tenantA, id]);
+          const auditRows = await client.query("SELECT count(*)::int AS count FROM audit_evidence WHERE tenant_id=$1 AND action='EXCEPTION_CREATED' AND payload @> $2::jsonb", [tenantA, JSON.stringify({ exceptionId: id })]);
+          const outboxRows = await client.query("SELECT count(*)::int AS count FROM transactional_outbox WHERE tenant_id=$1 AND aggregate_id=$2", [tenantA, id]);
+          return { domain: domain.rows[0].count, audit: auditRows.rows[0].count, outbox: outboxRows.rows[0].count };
+        });
+        assert.deepEqual(counts, { domain: 0, audit: 0, outbox: 0 });
+      } finally {
+        await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_evidence`);
+        await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+      }
+    });
+
     await t.test("a failed unit of work rolls back its database writes", async () => {
       const rollbackId = `rollback-${randomUUID()}`;
       await assert.rejects(
