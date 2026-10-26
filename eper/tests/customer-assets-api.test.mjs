@@ -23,7 +23,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     "tenant-b": [],
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
-    "tenant-a": ["app-a"],
+    "tenant-a": ["app-a", "app-c"],
     "tenant-b": ["app-b"],
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
@@ -50,9 +50,9 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.applicationId, "app-a");
-    assert.equal(body.total, 2);
+    assert.equal(body.total, 3);
     assert.equal(body.nextCursor, null);
-    assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1"]);
+    assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     assert.ok(body.assets.every((asset) => asset.applicationId === "app-a"));
     assert.equal(body.applicationCount, 1);
     assert.equal(body.assets[0].accessReference, "blobref:opaque-1");
