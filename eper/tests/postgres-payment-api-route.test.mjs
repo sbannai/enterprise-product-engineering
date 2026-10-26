@@ -241,6 +241,25 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     });
     assert.equal(crossTenantOrder.status, 403);
     assert.equal((await crossTenantOrder.json()).error, "tenant_scope_mismatch");
+
+    const crossTenantOrderV1 = await nativeFetch(`${base}/api/payments/orders`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "payment-tenant-denial-v1",
+        "idempotency-key": "cross-tenant-order-v1-001",
+      },
+      body: JSON.stringify({ tenantId: "tenant-route-other", reference: "invoice-route-test" }),
+    });
+    assert.equal(crossTenantOrderV1.status, 403);
+    assert.equal(crossTenantOrderV1.headers.get("x-request-id"), "payment-tenant-denial-v1");
+    assert.equal(crossTenantOrderV1.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+    assert.deepEqual(await crossTenantOrderV1.json(), {
+      success: false,
+      error: { code: "TENANT_SCOPE_MISMATCH", message: "You are not allowed to perform this action." },
+      meta: { requestId: "payment-tenant-denial-v1" },
+    });
     assert.equal(transactionSourceCalls, 0, "cross-tenant order must be rejected before authority lookups");
 
     // A caller cannot use x-tenant-id to switch the principal for verification or receipt access.
