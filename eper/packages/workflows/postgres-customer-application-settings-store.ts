@@ -203,7 +203,7 @@ export class PostgresCustomerApplicationSettingsStore {
     applicationId: string,
     integrationKey: string,
     environment: AuditEnvironment,
-  ): Promise<{ configured: boolean; secretReference: string | null; rotatedAt: string | null; updatedAt: string; updatedBy: string } | null> {
+  ): Promise<{ configured: boolean; rotatedAt: string | null; updatedAt: string; updatedBy: string } | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
     this.validateId(integrationKey, "integrationKey");
@@ -220,8 +220,7 @@ export class PostgresCustomerApplicationSettingsStore {
       if (!row) return null;
       return {
         configured: row.configured,
-        // This is a vault locator, never the credential value itself.
-        secretReference: row.secret_reference,
+        // Never expose the secret-store locator to dashboard/API consumers.
         rotatedAt: row.rotated_at ? new Date(row.rotated_at).toISOString() : null,
         updatedAt: new Date(row.updated_at).toISOString(),
         updatedBy: row.updated_by,
