@@ -1,0 +1,148 @@
+import { randomUUID } from "node:crypto";
+import type { TicketIdentity, TicketRecord, CreateTicketInput, TicketStatus, TicketSeverity } from "./ticketing-contract.js";
+
+export interface TicketSqlResult<Row = Record<string, unknown>> { rows: Row[]; rowCount: number | null; }
+export interface TicketSqlClient {
+  query<Row = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<TicketSqlResult<Row>>;
+  release(): void;
+}
+export interface TicketSqlPool { connect(): Promise<TicketSqlClient>; }
+export interface TicketAuditEvent {
+  tenantId: string;
+  applicationId: string;
+  actorId: string;
+  correlationId: string;
+  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned";
+  ticketId: string;
+  outcome: "success";
+  payload: Record<string, unknown>;
+}
+export type TicketAuditWriter = (event: TicketAuditEvent) => Promise<void>;
+
+export interface TicketListFilter {
+  status?: TicketStatus;
+  severity?: TicketSeverity;
+  type?: TicketRecord["type"];
+  applicationId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+function mapRecord(row: Record<string, unknown>): TicketRecord {
+  return {
+    id: String(row.id), tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+    createdBy: String(row.created_by), type: row.type as TicketRecord["type"], title: String(row.title),
+    description: String(row.description), businessImpact: String(row.business_impact),
+    ...(typeof row.evidence_reference === "string" ? { evidenceReference: row.evidence_reference } : {}),
+    status: row.status as TicketStatus, severity: row.severity as TicketSeverity,
+    assignedTo: typeof row.assigned_to === "string" ? row.assigned_to : null,
+    createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
+  };
+}
+
+/** PostgreSQL persistence. All reads and mutations are scoped by trusted tenant identity. */
+export class PostgresTicketStore {
+  constructor(private readonly pool: TicketSqlPool, private readonly audit: TicketAuditWriter) {}
+
+  async assertReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("SELECT id FROM eper_support_tickets LIMIT 0");
+    } finally { client.release(); }
+  }
+
+  async create(identity: TicketIdentity, input: CreateTicketInput): Promise<TicketRecord> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const id = randomUUID();
+      const result = await client.query<Record<string, unknown>>(
+        `INSERT INTO eper_support_tickets
+          (id, tenant_id, application_id, created_by, type, title, description, business_impact, evidence_reference, status, severity, assigned_to)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'new','p3',NULL)
+         RETURNING *`,
+        [id, identity.tenantId, identity.applicationId, identity.actorId, input.type, input.title, input.description,
+          input.businessImpact, input.evidenceReference ?? null],
+      );
+      if (!result.rows[0]) throw new Error("ticket_insert_returned_no_row");
+      await this.audit({
+        tenantId: identity.tenantId, applicationId: identity.applicationId, actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.created", ticketId: id, outcome: "success",
+        payload: { type: input.type, initialStatus: "new", initialSeverity: "p3" },
+      });
+      await client.query("COMMIT");
+      return mapRecord(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve the original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async list(identity: Pick<TicketIdentity, "tenantId">, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
+    const limit = filter.limit ?? 50;
+    const offset = filter.offset ?? 0;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) {
+      throw new Error("invalid_ticket_pagination");
+    }
+    const values: unknown[] = [identity.tenantId];
+    const clauses = ["tenant_id = $1"];
+    const add = (column: string, value: unknown) => { values.push(value); clauses.push(column + " = $" + values.length); };
+    if (filter.status) add("status", filter.status);
+    if (filter.severity) add("severity", filter.severity);
+    if (filter.type) add("type", filter.type);
+    if (filter.applicationId) add("application_id", filter.applicationId);
+    values.push(limit, offset);
+    const result = await this.pool.connect().then(async client => {
+      try {
+        return await client.query<Record<string, unknown>>(
+          `SELECT * FROM eper_support_tickets WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`, values,
+        );
+      } finally { client.release(); }
+    });
+    return result.rows.map(mapRecord);
+  }
+
+  async changeStatus(identity: TicketIdentity, ticketId: string, status: TicketStatus): Promise<TicketRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<Record<string, unknown>>(
+        "UPDATE eper_support_tickets SET status = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *",
+        [identity.tenantId, ticketId, status],
+      );
+      if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
+      await this.audit({
+        tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.status_changed", ticketId, outcome: "success",
+        payload: { newStatus: status },
+      });
+      await client.query("COMMIT");
+      return mapRecord(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async assign(identity: TicketIdentity, ticketId: string, assignedTo: string | null): Promise<TicketRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<Record<string, unknown>>(
+        "UPDATE eper_support_tickets SET assigned_to = $3, status = CASE WHEN $3 IS NULL THEN status ELSE 'assigned' END, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *",
+        [identity.tenantId, ticketId, assignedTo],
+      );
+      if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
+      await this.audit({
+        tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.assigned", ticketId, outcome: "success",
+        payload: { assignedTo },
+      });
+      await client.query("COMMIT");
+      return mapRecord(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+}
