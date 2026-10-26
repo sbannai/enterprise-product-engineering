@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { createAppServer } from "../dist/apps/api/server.js";
 
-test("admin wireframe exposes feedback and ticketing with explicit demo-only behavior", async () => {
+test("admin wireframe exposes authenticated feedback and ticketing API mode", async () => {
   const server = createAppServer();
   try {
     await new Promise((resolve, reject) => {
@@ -20,7 +20,7 @@ test("admin wireframe exposes feedback and ticketing with explicit demo-only beh
     assert.match(html, /id="screen-support"/);
     assert.match(html, /Feedback &amp; Ticketing|Feedback & Ticketing/);
     assert.match(html, /P1 discovery gate/);
-    assert.match(html, /live APIs|live API/i);
+    assert.match(html, /Authenticated API mode|authenticated API/i);
     assert.match(html, /server-side/i);
     assert.match(html, /supportApply/);
     assert.match(html, /supportClear/);
