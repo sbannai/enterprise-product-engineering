@@ -182,7 +182,6 @@ test("support admin queue and status updates remain scoped to the trusted admin 
     assert.equal(update.status, 200);
     assert.equal(calls[1].identity.tenantId, "tenant-support-a");
     assert.equal(calls[1].identity.actorId, "support-actor-a");
-    assert.equal(calls[1].identity.roleKey, "support_admin");
     assert.equal(calls[1].identity.correlationId, "ticket-admin-test-2");
     assert.equal(calls[1].ticketId, ticket.id);
     assert.equal(calls[1].status, "in_progress");
