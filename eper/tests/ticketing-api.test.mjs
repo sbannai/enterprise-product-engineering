@@ -1057,3 +1057,95 @@ test("support admin can read and post ticket replies through the tenant-scoped A
     assert.equal(calls[1].body, "We are investigating");
   });
 });
+
+
+test("customer can read and post replies only for an assigned application's ticket", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-customer-a", actorId: "customer-actor-a", roleKey: "customer" },
+    [otherCredential]: { tenantId: "tenant-customer-b", actorId: "customer-actor-b", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
+    "tenant-customer-a": ["app-a"],
+    "tenant-customer-b": ["app-b"],
+  });
+  const ticketId = "00000000-0000-4000-8000-000000000011";
+  const calls = [];
+  const reply = {
+    id: "00000000-0000-4000-8000-000000000012",
+    tenantId: "tenant-customer-a", applicationId: "app-a", ticketId,
+    authorId: "customer-actor-a", authorRole: "customer", body: "Still seeing the issue",
+    createdAt: "2026-10-26T10:00:00.000Z",
+  };
+  const ticketStore = {
+    async assertReady() {},
+    async list() { return []; },
+    async listReplies(identity, id) { calls.push({ operation: "listReplies", identity, id }); return [reply]; },
+    async addReply(identity, id, body, role) { calls.push({ operation: "addReply", identity, id, body, role }); return reply; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const headers = {
+      authorization: `Bearer ${credential}`,
+      accept: "application/vnd.eper.v1+json",
+      "content-type": "application/json",
+      "x-correlation-id": "customer-ticket-reply-1",
+    };
+    const listed = await fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", { headers });
+    assert.equal(listed.status, 200);
+    const listedPayload = await listed.json();
+    assert.equal(listedPayload.success, true);
+    assert.deepEqual(listedPayload.data.replies, [reply]);
+
+    const posted = await fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
+      method: "POST", headers, body: JSON.stringify({ body: "Still seeing the issue" }),
+    });
+    assert.equal(posted.status, 201);
+    const postedPayload = await posted.json();
+    assert.equal(postedPayload.success, true);
+    assert.deepEqual(postedPayload.data.reply, reply);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].identity.tenantId, "tenant-customer-a");
+    assert.equal(calls[0].identity.applicationId, "app-a");
+    assert.equal(calls[1].identity.actorId, "customer-actor-a");
+    assert.equal(calls[1].role, "customer");
+    assert.equal(calls[1].body, "Still seeing the issue");
+
+    const otherTenant = await fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
+      headers: { ...headers, authorization: `Bearer ${otherCredential}` },
+    });
+    assert.equal(otherTenant.status, 403);
+    assert.equal(calls.length, 2, "a tenant without the application assignment must not reach the reply store");
+  });
+});
+
+test("customer ticket reply endpoint rejects empty, oversized, and over-posted bodies", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-customer-a", actorId: "customer-actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-customer-a": ["app-a"] });
+  let storeCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { return []; },
+    async addReply() { storeCalls++; return {}; },
+    async listReplies() { storeCalls++; return []; },
+  };
+  const ticketId = "00000000-0000-4000-8000-000000000013";
+  await withServer({ ticketStore }, async (base) => {
+    const invalid = [
+      { body: "   " },
+      { body: "x".repeat(8001) },
+      { body: "valid reply", tenantId: "tenant-attacker" },
+    ];
+    for (const body of invalid) {
+      const response = await fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
+        method: "POST",
+        headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 400);
+    }
+    assert.equal(storeCalls, 0);
+  });
+});
