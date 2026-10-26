@@ -358,6 +358,38 @@ test("support admin lifecycle mutations reject malformed and over-posted payload
   });
 });
 
+
+test("support admin queue trims its lookahead row and reports hasMore accurately", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  let receivedFilter;
+  const rows = Array.from({ length: 3 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    tenantId: "tenant-support-a", applicationId: "app-a", createdBy: "actor-a",
+    type: "feedback", title: `Ticket ${index + 1}`, description: "Description",
+    businessImpact: "Impact", status: "new", severity: "p3", assignedTo: null,
+    createdAt: "2026-10-26T00:00:00.000Z", updatedAt: "2026-10-26T00:00:00.000Z",
+  }));
+  const ticketStore = {
+    async assertReady() {},
+    async list(_identity, filter) { receivedFilter = filter; return rows.slice(0, filter.limit); },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets?limit=2&offset=0", {
+      headers: { authorization: `Bearer ${credential}`, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(receivedFilter.limit, 3);
+    assert.equal(payload.data.tickets.length, 2);
+    assert.equal(payload.data.hasMore, true);
+    assert.equal(payload.data.limit, 2);
+  });
+});
+
 test.after(restoreEnv);
 
 
