@@ -10,7 +10,7 @@ SPEC.loader.exec_module(audit)
 
 
 def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL_PENDING",
-         reviewer="", date="", approval=""):
+         reviewer="", date="", approval="", expected="YES"):
     chapter = 463 + (i - 1) // 6
     seq = (i - 1) % 6 + 1
     req = f"REQ-{chapter}{seq:02d}"
@@ -19,6 +19,7 @@ def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL
         "execution_authorized": authorized, "review_decision": decision,
         "requirement_specific_acceptance_source": source,
         "brd_baseline_approval_status": baseline,
+        "measurable_expected_result_approved": expected,
         "reviewer_identity": reviewer, "decision_date": date,
         "approval_reference": approval,
     }
@@ -52,6 +53,42 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertEqual(report["readiness"], "BLOCKED")
         self.assertFalse(report["businessUatExecuted"])
         self.assertEqual(report["integrityErrors"], [])
+
+    def test_approved_baseline_is_not_misreported_as_missing(self):
+        cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
+                      baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
+                 for i in range(1, 49)]
+        report = audit.audit_records(
+            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+        self.assertEqual(report["counts"]["casesWithUnapprovedBaseline"], 0)
+        self.assertNotIn("E13/approved baseline", {b["gate"] for b in report["blockers"]})
+
+    def test_acceptance_oracle_gap_is_reported_separately_from_baseline(self):
+        cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
+                      baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
+                 for i in range(1, 49)]
+        cases[0]["requirement_specific_acceptance_source"] = (
+            "Controlled BRD/SRS baseline approved; requirement-level binding remains pending")
+        cases[0]["measurable_expected_result_approved"] = "PENDING"
+        report = audit.audit_records(
+            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+        blockers = {b["gate"]: b for b in report["blockers"]}
+        self.assertEqual(report["counts"]["casesWithUnapprovedBaseline"], 0)
+        self.assertEqual(report["counts"]["casesWithIncompleteAcceptanceOracle"], 1)
+        self.assertNotIn("E13/approved baseline", blockers)
+        self.assertEqual(blockers["E13/acceptance oracle"]["count"], 1)
+
+    def test_unapproved_baseline_is_reported_independently(self):
+        cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
+                      baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
+                 for i in range(1, 49)]
+        cases[0]["brd_baseline_approval_status"] = "PENDING"
+        report = audit.audit_records(
+            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+        blockers = {b["gate"]: b for b in report["blockers"]}
+        self.assertEqual(report["counts"]["casesWithUnapprovedBaseline"], 1)
+        self.assertIn("E13/approved baseline", blockers)
+        self.assertEqual(blockers["E13/approved baseline"]["count"], 1)
 
     def test_pending_records_are_reported_blocked_not_approved(self):
         report = audit.audit_records(
