@@ -190,3 +190,7 @@ The UAT capability route can additionally enforce module entitlements when `EPER
 **Not yet complete:** customer/admin UI integration, a canonical database-backed application assignment source, enforcement on every capability and background-job entry point, add-on activation workflow (approval/payment), billing reconciliation, migrations against a real database, and build/test/CI verification. Do not authorize Business UAT based on the policy/service commits alone.
 
 The same global entitlement-enforcement switch also protects the local capability execution route `POST /internal/requirements/:id/execute`. When `EPER_CAPABILITY_ENTITLEMENTS_REQUIRED=true`, that route requires `EPER_LOCAL_APPLICATION_ID`, `EPER_LOCAL_ROLE_KEY`, the entitlement service, and the same `EPER_REQUIREMENT_MODULE_MAP_JSON` mapping. Missing policy configuration returns a service-unavailable response; a denied policy returns forbidden. This closes the local-route bypass, but does not replace the outstanding review of all other capability entry points and background jobs.
+
+### Route-level entitlement regression coverage (2026-10-26)
+
+Added `eper/tests/capability-entitlement-route.test.mjs` and `eper/tests/uat-capability-entitlement-route.test.mjs` to exercise the local and UAT HTTP execution paths for missing policy configuration, denied access, and allowed policy decisions. These are committed tests, not evidence of a passing run. Execute `npm test` from `eper/` in CI or a repository environment and resolve any failures before treating the gate as verified.
