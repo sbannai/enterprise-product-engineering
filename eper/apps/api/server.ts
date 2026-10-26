@@ -771,8 +771,21 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           sendJson(request, response, 200, { preference });
           return;
         }
-        response.writeHead(405, { allow: "GET, PUT", "cache-control": "no-store" });
-        response.end();
+        const acceptsV1 = (request.headers.accept ?? "")
+          .split(",")
+          .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+        if (acceptsV1) {
+          sendJson(request, response, 405, { error: "method_not_allowed" });
+        } else {
+          // Preserve the legacy empty 405 body while still correlating the response.
+          response.writeHead(405, {
+            allow: "GET, PUT",
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+            "x-request-id": resolveApiRequestId(request),
+          });
+          response.end();
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "LOCALIZATION_OPERATION_FAILED";
         const status = message === "LOCALIZATION_STORE_CAPACITY_REACHED" ? 503
