@@ -97,24 +97,26 @@ class B01ReadinessAuditTests(unittest.TestCase):
         self.assertIn("E13/approved baseline", blockers)
         self.assertEqual(blockers["E13/approved baseline"]["count"], 1)
 
-    def test_case_preparation_gaps_are_reported_explicitly(self):
-        cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
-                      baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
-                 for i in range(1, 49)]
-        cases[0]["negative_path_reviewed"] = "PENDING"
-        cases[0]["approved_srs_version_locator"] = ""
-        report = audit.audit_records(
-            cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
-        blockers = {b["gate"]: b for b in report["blockers"]}
-        self.assertEqual(report["counts"]["casesWithIncompletePreparation"], 1)
-        self.assertEqual(
-            report["counts"]["preparationFieldGapCounts"]["negative_path_reviewed"], 1)
-        self.assertEqual(
-            report["counts"]["preparationFieldGapCounts"]["approved_srs_version_locator"], 1)
-        self.assertEqual(blockers["E13/case preparation completeness"]["count"], 1)
-        self.assertEqual(
-            blockers["E13/case preparation completeness"]["cases"][0]["missing_fields"],
-            ["approved_srs_version_locator", "negative_path_reviewed"])
+    def test_each_case_preparation_field_is_audited(self):
+        fields = [
+            "brd_id_status", "brd_locator_status", "approved_brd_version_locator",
+            "approved_srs_version_locator", "actor_role_tenant_confirmed",
+            "preconditions_and_test_data_approved", "positive_steps_reviewed",
+            "negative_path_reviewed", "evidence_capture_plan_approved",
+        ]
+        for field in fields:
+            with self.subTest(field=field):
+                cases = [case(i, source=f"BRD §{i}; SRS §{i}; EM-LLD-001 §{i}",
+                              baseline="APPROVED_B01-BASELINE-APPROVAL-001", expected="YES")
+                         for i in range(1, 49)]
+                cases[0][field] = "" if "locator" in field else "PENDING"
+                report = audit.audit_records(
+                    cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
+                blockers = {b["gate"]: b for b in report["blockers"]}
+                self.assertEqual(report["counts"]["casesWithIncompletePreparation"], 1)
+                self.assertEqual(report["counts"]["preparationFieldGapCounts"][field], 1)
+                self.assertEqual(blockers["E13/case preparation completeness"]["count"], 1)
+                self.assertIn(field, blockers["E13/case preparation completeness"]["cases"][0]["missing_fields"])
 
     def test_pending_records_are_reported_blocked_not_approved(self):
         report = audit.audit_records(
