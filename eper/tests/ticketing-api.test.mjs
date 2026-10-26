@@ -209,6 +209,34 @@ test("support admin queue and status updates remain scoped to the trusted admin 
 });
 
 
+test("support admin queue rejects invalid filters and pagination before querying the store", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  let storeCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { storeCalls++; return []; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    for (const query of [
+      "limit=101&offset=0",
+      "limit=10&offset=-1",
+      "status=not-a-status&limit=10&offset=0",
+      "applicationId=bad%20application&limit=10&offset=0",
+    ]) {
+      const response = await fetch(base + "/admin/support/tickets?" + query, {
+        headers: { authorization: `Bearer ${credential}` },
+      });
+      assert.equal(response.status, 400, query);
+    }
+    assert.equal(storeCalls, 0, "invalid queue requests must not query ticket storage");
+  });
+});
+
+
 test("support admin triage console is feature-gated and calls protected tenant-scoped APIs", async () => {
   delete process.env.EPER_TICKETING_API_ENABLED;
   await withServer({}, async (base) => {
