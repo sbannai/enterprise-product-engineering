@@ -62,6 +62,26 @@ function sendJson(request: IncomingMessage, response: ServerResponse, statusCode
   response.end(JSON.stringify(body));
 }
 
+
+
+function sendMethodNotAllowed(request: IncomingMessage, response: ServerResponse, allow: string): void {
+  const acceptsV1 = (request.headers.accept ?? "")
+    .split(",")
+    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  if (acceptsV1) {
+    response.setHeader("allow", allow);
+    sendJson(request, response, 405, { error: "method_not_allowed" });
+    return;
+  }
+  response.writeHead(405, {
+    allow,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-request-id": resolveApiRequestId(request),
+  });
+  response.end();
+}
+
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -298,8 +318,7 @@ async function handleDurableAdminConfig(
     sendJson(request, response, 200, { ...config, version: saved.version, productionEnabled: false, adapterAvailable: config.provider === "sandbox", persistence: "postgres", message: config.provider === "sandbox" ? "Sandbox configuration updated; server-side sandbox opt-in and tenant settings are still required." : "Provider selection is planning-only; no live adapter is enabled." });
     return;
   }
-  response.writeHead(405, { allow: path === "/admin/config/access-check" ? "POST" : "GET, PUT", "cache-control": "no-store" });
-  response.end();
+  sendMethodNotAllowed(request, response, path === "/admin/config/access-check" ? "POST" : "GET, PUT");
 }
 
 /**
@@ -550,8 +569,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           return;
         }
         if (["/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
-          response.writeHead(405, { allow: adminConfigPath === "/admin/config/access-check" ? "POST" : "GET, PUT", "cache-control": "no-store" });
-          response.end();
+          sendMethodNotAllowed(request, response, adminConfigPath === "/admin/config/access-check" ? "POST" : "GET, PUT");
           return;
         }
         if (adminConfigPath === "/admin/config/price-book" && request.method === "GET") {
@@ -630,8 +648,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           });
           return;
         }
-        response.writeHead(405, { allow: "GET, PUT", "cache-control": "no-store" });
-        response.end();
+        sendMethodNotAllowed(request, response, "GET, PUT");
       } catch (error) {
         const message = error instanceof Error ? error.message : "ADMIN_CONFIG_OPERATION_FAILED";
         const status = error instanceof WorkflowConfigurationError ? error.statusCode
@@ -718,8 +735,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           sendJson(request, response, 200, { quote, amountMajor: quote.amountMinor / 100 });
           return;
         }
-        response.writeHead(405, { allow: "GET, POST", "cache-control": "no-store" });
-        response.end();
+        sendMethodNotAllowed(request, response, "GET, POST");
       } catch (error) {
         const message = error instanceof Error ? error.message : "MARKET_PRICING_OPERATION_FAILED";
         const status = message === "APPROVED_MARKET_PRICE_NOT_FOUND" ? 404
@@ -771,21 +787,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           sendJson(request, response, 200, { preference });
           return;
         }
-        const acceptsV1 = (request.headers.accept ?? "")
-          .split(",")
-          .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
-        if (acceptsV1) {
-          sendJson(request, response, 405, { error: "method_not_allowed" });
-        } else {
-          // Preserve the legacy empty 405 body while still correlating the response.
-          response.writeHead(405, {
-            allow: "GET, PUT",
-            "cache-control": "no-store",
-            "x-content-type-options": "nosniff",
-            "x-request-id": resolveApiRequestId(request),
-          });
-          response.end();
-        }
+        sendMethodNotAllowed(request, response, "GET, PUT");
       } catch (error) {
         const message = error instanceof Error ? error.message : "LOCALIZATION_OPERATION_FAILED";
         const status = message === "LOCALIZATION_STORE_CAPACITY_REACHED" ? 503
