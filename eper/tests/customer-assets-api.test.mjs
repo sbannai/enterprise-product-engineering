@@ -78,11 +78,12 @@ test("single-call client assets API returns tenant/application-scoped asset meta
 
 
 test("asset download rechecks tenant/application access and requires an audited short-lived HTTPS URL", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const tokenA = "client-assets-download-tenant-a-token-000000000000";
   const tokenB = "client-assets-download-tenant-b-token-000000000000";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
     [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
@@ -95,10 +96,13 @@ test("asset download rechecks tenant/application access and requires an audited 
   });
   const audit = [];
   const server = createAppServer({
-    assetDownloadResolver: async (input) => {
-      assert.equal(input.tenantId, "tenant-a");
-      assert.equal(input.accessReference, "blobref:private-a");
-      return { url: "https://storage.example.test/signed?token=short-lived", expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    assetStoragePort: {
+      invoke: async (input, correlationId) => {
+        assert.equal(input.tenantId, "tenant-a");
+        assert.equal(input.accessReference, "blobref:private-a");
+        assert.ok(correlationId.length > 0);
+        return { success: true, value: { url: "https://storage.example.test/signed?token=short-lived", expiresAt: new Date(Date.now() + 60_000).toISOString() } };
+      },
     },
     assetAuditWriter: async (record) => { audit.push(record); },
   });
