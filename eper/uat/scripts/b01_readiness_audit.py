@@ -89,7 +89,7 @@ def audit_records(checklist, gates, capture, gaps):
                 "missing_fields": missing,
             })
     unapproved_cases = [r.get("requirement_id", "") for r in checklist
-                        if (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED", "APPROVE_WITH_CHANGES"}
+                        if (r.get("review_decision") or "").strip().upper() not in {"APPROVE", "APPROVED"}
                         or not (r.get("reviewer_identity") or "").strip()
                         or not (r.get("decision_date") or "").strip()
                         or not (r.get("approval_reference") or "").strip()]
