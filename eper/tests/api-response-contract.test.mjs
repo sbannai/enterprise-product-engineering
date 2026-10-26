@@ -37,3 +37,23 @@ test("request ID rejects unsafe caller values and generates a replacement", () =
   const generated = resolveApiRequestId({ headers: { "x-correlation-id": "bad value" } });
   assert.match(generated, /^[0-9a-f-]{36}$/i);
 });
+
+
+test("API 204 success has no body while retaining standard headers", async () => {
+  const server = createServer((request, response) => sendApiSuccess(request, response, 204, {}));
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port);
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get("x-request-id")?.length > 0, true);
+    assert.equal(await response.text(), "");
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test("API error helper rejects invalid HTTP status and machine code", () => {
+  const request = { headers: {} };
+  const response = {};
+  assert.throws(() => sendApiError(request, response, 200, "BAD_REQUEST", "Invalid."), /API_ERROR_STATUS_INVALID/);
+  assert.throws(() => sendApiError(request, response, 400, "bad request", "Invalid."), /API_ERROR_CODE_INVALID/);
+});
