@@ -12,10 +12,12 @@ type Context = { tenantId: string; principalId: string; correlationId: string };
 type Input = { context?: Context; payload?: unknown };
 type Payload = Record<string, unknown>;
 
-function prepare(req: RequirementBinding, input: unknown, pattern: RequirementPattern, capability: string) {
-  if (req.pattern !== pattern) throw new Error("CAPABILITY_PATTERN_MISMATCH");
-  if (req.capability !== capability) throw new Error("CAPABILITY_BINDING_MISMATCH");
-  const contracts = validateRequirementContracts(req);
+function prepare(req: unknown, input: unknown, pattern: RequirementPattern, capability: string) {
+  const requirement = req as RequirementBinding;
+  if (!requirement || typeof requirement !== "object") throw new Error("CAPABILITY_REQUIREMENT_REQUIRED");
+  if (requirement.pattern !== pattern) throw new Error("CAPABILITY_PATTERN_MISMATCH");
+  if (requirement.capability !== capability) throw new Error("CAPABILITY_BINDING_MISMATCH");
+  const contracts = validateRequirementContracts(requirement);
   const value = (input ?? {}) as Input;
   const context = value.context;
   if (!context?.tenantId?.trim() || !context.principalId?.trim() || !context.correlationId?.trim()) throw new Error("CAPABILITY_CONTEXT_REQUIRED");
@@ -27,8 +29,9 @@ function tenant(context: Context, supplied: unknown): string {
   if (supplied !== undefined && supplied !== context.tenantId) throw new Error("TENANT_CONTEXT_MISMATCH");
   return context.tenantId;
 }
-function result(req: RequirementBinding, contracts: ReturnType<typeof validateRequirementContracts>, payload: unknown): CapabilityResult {
-  return { requirementId: req.id, pattern: req.pattern, status: "EXECUTED", data: { payload, contracts } };
+function result(req: unknown, contracts: ReturnType<typeof validateRequirementContracts>, payload: unknown): CapabilityResult {
+  const requirement = req as RequirementBinding;
+  return { requirementId: requirement.id, pattern: requirement.pattern, status: "EXECUTED", data: { payload, contracts } };
 }
 
 /** Async capability services backed by PostgreSQL. Use local/integration pools only in this phase. */
