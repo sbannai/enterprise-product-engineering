@@ -23,6 +23,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("window.EPERToast"), "customer portal wires notifications to the shared toast API");
     assert.ok(html.includes("Ticket submitted"), "ticket submission success is surfaced to the customer");
     assert.ok(html.includes("Submission needs retry"), "uncertain ticket submissions surface a warning notification");
+    assert.ok(html.includes("Ticket history unavailable"), "ticket history failures trigger a toast");
+    assert.ok(html.includes("Assets unavailable"), "asset loading failures trigger a toast");
+    assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
     for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "nextCursor", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
