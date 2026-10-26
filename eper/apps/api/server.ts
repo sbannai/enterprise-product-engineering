@@ -139,6 +139,11 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
   return null;
 }
 
+export type CustomerAssetDownloadRequest = { tenantId: string; actorId: string; applicationId: string; assetId: string; accessReference: string; fileName: string; mimeType?: string };
+export type CustomerAssetDownloadResolver = (input: CustomerAssetDownloadRequest) => Promise<{ url: string; expiresAt: string } | null>;
+export type CustomerAssetAuditRecord = { tenantId: string; actorId: string; action: "customer.asset.download"; outcome: "success" | "denied" | "failure"; applicationId?: string; assetId?: string; requestId: string };
+export type CustomerAssetAuditWriter = (record: CustomerAssetAuditRecord) => Promise<void>;
+
 interface TrustedAdminConfigIdentity {
   tenantId: string;
   actorId: string;
@@ -351,7 +356,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; assetDownloadResolver?: CustomerAssetDownloadResolver; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
   const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -463,6 +468,59 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         applicationCount: new Set(tenantAssignments as string[]).size,
         nextCursor: nextOffset < allAssets.length ? String(nextOffset) : null,
       });
+      return;
+    }
+
+    // A download is authorized independently of the manifest request. Storage access is
+    // delegated to an injected provider adapter; missing provider/audit adapters fail closed.
+    const assetDownloadMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{1,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/download$/.exec(requestUrl.pathname);
+    if (assetDownloadMatch) {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      const [applicationId, assetId] = [assetDownloadMatch[1], assetDownloadMatch[2]];
+      const requestId = resolveApiRequestId(request);
+      const audit = async (outcome: CustomerAssetAuditRecord["outcome"]) => {
+        if (!options.assetAuditWriter) throw new Error("ASSET_AUDIT_UNAVAILABLE");
+        await options.assetAuditWriter({ tenantId: identity.tenantId, actorId: identity.actorId, action: "customer.asset.download", outcome, applicationId, assetId, requestId });
+      };
+      try {
+        if (!options.assetDownloadResolver || !options.assetAuditWriter) {
+          sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
+        try {
+          modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+          assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+          assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+        } catch { sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return; }
+        const objectRecord = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+        const modules = objectRecord(modulesConfig)?.[identity.tenantId];
+        const assignments = objectRecord(assignmentsConfig)?.[identity.tenantId];
+        const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
+        if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) || !assignments.includes(applicationId) || !tenantAssets) {
+          await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
+        }
+        const applicationAssets = tenantAssets[applicationId];
+        const asset = Array.isArray(applicationAssets) ? applicationAssets.find((item) => item && typeof item === "object" && !Array.isArray(item) && (item as Record<string, unknown>).id === assetId) as Record<string, unknown> | undefined : undefined;
+        if (!asset || typeof asset.accessReference !== "string" || !asset.accessReference.trim() || typeof asset.name !== "string") {
+          await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
+        }
+        const result = await options.assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) });
+        if (!result || typeof result.url !== "string" || !result.url || typeof result.expiresAt !== "string") {
+          await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        let url: URL; const expiresAt = Date.parse(result.expiresAt); const now = Date.now();
+        try { url = new URL(result.url); } catch { url = new URL("about:blank"); }
+        if (url.protocol !== "https:" || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
+          await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        await audit("success");
+        sendJson(request, response, 200, { downloadUrl: url.toString(), expiresAt: new Date(expiresAt).toISOString(), fileName: asset.name });
+      } catch {
+        sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" });
+      }
       return;
     }
 
