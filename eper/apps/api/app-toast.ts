@@ -18,7 +18,6 @@ export const applicationToastMarkup = String.raw`
     var dedupeKey=kind+"\\u0000"+String(message||"");var previous=recent.get(dedupeKey);var now=Date.now();
     if(previous&&region.contains(previous.item)&&now-previous.at<1800)return previous.item;
     var item=document.createElement('section');recent.set(dedupeKey,{item:item,at:now});
-    var itemPlaceholder_unused;
     item.className='eper-toast';item.dataset.kind=kind;item.setAttribute('role',kind==='error'?'alert':'status');
     var icon=document.createElement('div');icon.className='eper-toast-icon';icon.setAttribute('aria-hidden','true');icon.textContent=icons[kind];
     var body=document.createElement('div');var heading=document.createElement('div');heading.className='eper-toast-title';heading.textContent=title||({success:'Saved',error:'Something went wrong',warning:'Attention needed',info:'Notice'}[kind]);
