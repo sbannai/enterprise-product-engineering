@@ -58,3 +58,20 @@ test("API error helper rejects invalid HTTP status and machine code", () => {
   assert.throws(() => sendApiError(request, response, 400, "bad request", "Invalid."), /API_ERROR_CODE_INVALID/);
   assert.throws(() => sendApiSuccess(request, response, 302, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
 });
+
+
+test("API 205 success has no body and rejects payload data", async () => {
+  const server = createServer((request, response) => sendApiSuccess(request, response, 205, {}));
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port);
+    assert.equal(response.status, 205);
+    assert.equal(response.headers.get("x-request-id")?.length > 0, true);
+    assert.equal(await response.text(), "");
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test("API success helper rejects a 205 response with content", () => {
+  assert.throws(() => sendApiSuccess({ headers: {} }, {}, 205, { changed: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
+});
