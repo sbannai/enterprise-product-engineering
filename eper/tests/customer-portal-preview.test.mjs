@@ -17,7 +17,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
     assert.equal(response.headers.get("cache-control"), "no-store");
     const html = await response.text();
-    for (const label of ["Help Center", "Growth Hub", "My Applications", "NOT SIGNED IN", "not connected yet"]) {
+    for (const label of ["Help Center", "Growth Hub", "My Applications", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content"]) {
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.match(html, /customer navigation/i);
