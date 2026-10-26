@@ -108,6 +108,7 @@ export class PostgresCustomerApplicationSettingsStore {
   }
 
   private async replace(input: ReplaceSettingInput, applicationScoped: boolean): Promise<StoredSetting> {
+    assertNoSecretMaterial(input.config);
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.actorId, "actorId");
     this.validateId(input.settingKey, "settingKey");
@@ -338,6 +339,28 @@ function toStored(row: SettingRow | ApplicationSettingRow): StoredSetting {
   };
   if ("application_id" in row) stored.applicationId = row.application_id;
   return stored;
+}
+
+const forbiddenSettingKey = /(password|passwd|token|secret|authorization|cookie|api[_-]?key|client[_-]?secret|private[_-]?key|webhook[_-]?secret|card[_-]?(number|pan|cvv)|cvv|bank[_-]?(account|credential))/i;
+
+/**
+ * Application/customer configuration stores references to credentials, never raw
+ * credential material. Reject sensitive key names recursively before any DB write.
+ */
+function assertNoSecretMaterial(value: unknown, depth = 0): void {
+  if (depth > 8) throw new Error("CUSTOMER_APPLICATION_SETTING_CONFIG_TOO_DEEP");
+  if (Array.isArray(value)) {
+    if (value.length > 500) throw new Error("CUSTOMER_APPLICATION_SETTING_CONFIG_TOO_LARGE");
+    for (const item of value) assertNoSecretMaterial(item, depth + 1);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > 200) throw new Error("CUSTOMER_APPLICATION_SETTING_CONFIG_TOO_LARGE");
+  for (const [key, item] of entries) {
+    if (forbiddenSettingKey.test(key)) throw new Error("CUSTOMER_APPLICATION_SETTING_SECRET_FIELD_FORBIDDEN");
+    assertNoSecretMaterial(item, depth + 1);
+  }
 }
 
 function digest(value: unknown): string {
