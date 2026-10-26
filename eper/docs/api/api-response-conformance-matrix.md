@@ -12,6 +12,7 @@
 - Use real HTTP error status codes. A `204` response must have an empty body.
 - Do not expose stack traces, SQL, credentials, internal exception messages, or tenant secrets.
 - Existing successful legacy payloads are not silently wrapped; migrate each family with its clients and tests in the same change.
+- Legacy routes can opt into standardized error bodies by sending `Accept: application/vnd.eper.v1+json`; without this header, existing legacy error bodies remain unchanged.
 
 ## Endpoint-family status
 
@@ -19,6 +20,7 @@
 |---|---|---:|---|
 | Customer session / workspace modules / Help Center / Growth Hub | Shared success/error envelope adopted | P0 | Contract tests for status, content type, envelope and correlation ID |
 | API response helper itself | Shared helper exists; this change hardens status/code validation and 204 semantics | P0 | `api-response-contract.test.mjs` passes in CI |
+| Cross-route error migration bridge | Opt-in standardized errors for legacy routes via `Accept: application/vnd.eper.v1+json`; legacy default payloads preserved | P0 | Runtime test verifies both legacy and negotiated 404 contracts |
 | Admin workflow / role / access APIs | Legacy `sendJson` payloads | P0 | Migrate error bodies first; retain legacy success shape until coordinated client migration |
 | Admin pricing / market-price APIs | Legacy `sendJson` payloads | P0 | Status + error-code matrix, authorization and tenant-isolation regression tests |
 | Localization APIs | Legacy `sendJson` payloads | P1 | Client-compatible envelope migration and locale/currency regression tests |
@@ -31,10 +33,11 @@
 
 1. Keep shared helper tests as the executable contract; include 204 no-body and invalid status/error-code checks.
 2. Migrate one route family at a time. Preserve successful payloads until the caller is migrated in the same commit.
-3. Replace raw error strings with stable uppercase codes and safe messages; include request ID on all JSON responses.
-4. Add negative tests for 400/401/403/404/409/413/415/422/429/500/503 where applicable.
-5. Run the complete EPER test suite and integrated six-capability HTTP smoke on the same commit.
-6. Update this matrix only from observed test evidence. API standardization does not imply Business UAT acceptance.
+3. Let clients opt into the standardized error envelope with `Accept: application/vnd.eper.v1+json`; migrate clients family-by-family before changing defaults.
+4. Replace raw error strings with stable uppercase codes and safe messages; include request ID on all JSON responses.
+5. Add negative tests for 400/401/403/404/409/413/415/422/429/500/503 where applicable.
+6. Run the complete EPER test suite and integrated six-capability HTTP smoke on the same commit.
+7. Update this matrix only from observed test evidence. API standardization does not imply Business UAT acceptance.
 
 ## Explicit non-claim
 
