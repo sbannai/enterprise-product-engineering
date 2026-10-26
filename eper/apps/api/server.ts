@@ -390,6 +390,84 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    // Single-call client asset manifest. Returns safe metadata and opaque storage references only;
+    // binary content is fetched separately through a provider-specific, authorized download flow.
+    const customerAssetsMatch = /^\\/customer\\/applications\\/([^/]+)\\/assets$/.exec(requestUrl.pathname);
+    if (customerAssetsMatch && (request.method === "GET" || request.method !== "GET")) {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      let applicationId: string;
+      try { applicationId = decodeURIComponent(customerAssetsMatch[1]); }
+      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
+      if (!applicationId || applicationId !== applicationId.trim() || applicationId.length > 128 ||
+          !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" }); return;
+      }
+      let modulesConfig: unknown;
+      let assignmentsConfig: unknown;
+      let assetsConfig: unknown;
+      try {
+        modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+        assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+        assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+      } catch {
+        sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+      }
+      const tenantModules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+        ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantModules) || !tenantModules.includes("client-assets")) {
+        sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
+      }
+      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" }); return;
+      }
+      const tenantAssets = assetsConfig && typeof assetsConfig === "object" && !Array.isArray(assetsConfig)
+        ? (assetsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationAssets = tenantAssets && typeof tenantAssets === "object" && !Array.isArray(tenantAssets)
+        ? (tenantAssets as Record<string, unknown>)[applicationId] : null;
+      if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
+        sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+      }
+      const pageSize = 100;
+      const rawCursor = requestUrl.searchParams.get("cursor") ?? "0";
+      if (!/^(0|[1-9][0-9]{0,5})$/.test(rawCursor)) {
+        sendJson(request, response, 400, { error: "invalid_cursor" }); return;
+      }
+      const offset = Number(rawCursor);
+      if (offset > applicationAssets.length) {
+        sendJson(request, response, 400, { error: "invalid_cursor" }); return;
+      }
+      const assets = applicationAssets.slice(offset, offset + pageSize).flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const asset = item as Record<string, unknown>;
+        if (typeof asset.id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(asset.id) ||
+            typeof asset.name !== "string" || !asset.name.trim() || asset.name.length > 200 ||
+            typeof asset.type !== "string" || !["document", "video", "image", "audio", "other"].includes(asset.type) ||
+            typeof asset.accessReference !== "string" || !asset.accessReference.trim() || asset.accessReference.length > 2048) return [];
+        return [{
+          id: asset.id, name: asset.name, type: asset.type,
+          ...(typeof asset.mimeType === "string" && asset.mimeType.length <= 128 ? { mimeType: asset.mimeType } : {}),
+          ...(typeof asset.sizeBytes === "number" && Number.isSafeInteger(asset.sizeBytes) && asset.sizeBytes >= 0 ? { sizeBytes: asset.sizeBytes } : {}),
+          ...(typeof asset.updatedAt === "string" && asset.updatedAt.length <= 40 ? { updatedAt: asset.updatedAt } : {}),
+          ...(Array.isArray(asset.tags) ? { tags: asset.tags.filter((tag): tag is string => typeof tag === "string" && tag.length <= 64).slice(0, 20) } : {}),
+          accessReference: asset.accessReference,
+        }];
+      });
+      const nextOffset = offset + pageSize;
+      sendJson(request, response, 200, {
+        applicationId, assets, total: applicationAssets.length,
+        nextCursor: nextOffset < applicationAssets.length ? String(nextOffset) : null,
+      });
+      return;
+    }
+
     // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.
     if (requestUrl.pathname === "/customer/workspace/modules" && request.method === "GET") {
       const identity = resolveCustomerAccessIdentity(request);
@@ -401,7 +479,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendApiSuccess(request, response, 200, { modules: [] }); return;
       }
       const configured = (tenantModules as Record<string, unknown>)[identity.tenantId];
-      const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings"]);
+      const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings", "client-assets"]);
       if (!Array.isArray(configured) || configured.some((item) => typeof item !== "string")) {
         sendApiSuccess(request, response, 200, { modules: [] }); return;
       }
