@@ -56,4 +56,5 @@ test("API error helper rejects invalid HTTP status and machine code", () => {
   const response = {};
   assert.throws(() => sendApiError(request, response, 200, "BAD_REQUEST", "Invalid."), /API_ERROR_STATUS_INVALID/);
   assert.throws(() => sendApiError(request, response, 400, "bad request", "Invalid."), /API_ERROR_CODE_INVALID/);
+  assert.throws(() => sendApiSuccess(request, response, 302, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
 });
