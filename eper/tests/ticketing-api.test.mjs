@@ -53,8 +53,15 @@ async function withServer(options, run) {
 test("ticket API is disabled by default", async () => {
   delete process.env.EPER_TICKETING_API_ENABLED;
   await withServer({}, async (base) => {
-    const response = await fetch(base + "/customer/applications/app-a/tickets");
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "ticket-disabled-1" },
+    });
     assert.equal(response.status, 404);
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "NOT_FOUND");
+    assert.equal(payload.meta.requestId, "ticket-disabled-1");
+    assert.equal(response.headers.get("x-request-id"), "ticket-disabled-1");
   });
 });
 
@@ -67,10 +74,28 @@ test("ticket API rejects untrusted identity and cross-tenant application assignm
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const ticketStore = { async assertReady() {}, async list() { return []; }, async create() { throw new Error("must not be called"); } };
   await withServer({ ticketStore }, async (base) => {
-    const noAuth = await fetch(base + "/customer/applications/app-a/tickets");
+    const noAuth = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "ticket-auth-missing-1" },
+    });
     assert.equal(noAuth.status, 401);
-    const wrongApp = await fetch(base + "/customer/applications/app-a/tickets", { headers: { authorization: `Bearer ${otherCredential}` } });
+    const noAuthBody = await noAuth.json();
+    assert.equal(noAuthBody.success, false);
+    assert.equal(noAuthBody.error.code, "UNAUTHORIZED");
+    assert.equal(noAuthBody.meta.requestId, "ticket-auth-missing-1");
+    assert.equal(noAuth.headers.get("cache-control"), "no-store");
+    const wrongApp = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: {
+        authorization: `Bearer ${otherCredential}`,
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "ticket-auth-scope-1",
+      },
+    });
     assert.equal(wrongApp.status, 403);
+    const wrongAppBody = await wrongApp.json();
+    assert.equal(wrongAppBody.success, false);
+    assert.equal(wrongAppBody.error.code, "APPLICATION_NOT_ASSIGNED_TO_TENANT");
+    assert.equal(wrongAppBody.meta.requestId, "ticket-auth-scope-1");
+    assert.equal(wrongApp.headers.get("x-content-type-options"), "nosniff");
   });
 });
 
