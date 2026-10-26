@@ -353,3 +353,62 @@ test("idempotency key replay with changed payload fails closed and rolls back", 
   assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
   assert.ok(!calls.some((x) => x.sql === "COMMIT"));
 });
+
+
+test("ticket reply is tenant-scoped and commits with its audit event", async () => {
+  const calls = [];
+  const ticket = { application_id: "app-a" };
+  const replyRow = {
+    id: "reply-1", tenant_id: "tenant-a", application_id: "app-a", ticket_id: "ticket-1",
+    author_id: "support-2", author_role: "support", body: "We are investigating",
+    created_at: "2026-10-26T10:00:00.000Z",
+  };
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT application_id FROM eper_support_tickets/.test(sql)) return { rows: [ticket], rowCount: 1 };
+      if (/INSERT INTO eper_support_ticket_replies/.test(sql)) return { rows: [replyRow], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  const auditEvents = [];
+  const store = new PostgresTicketStore(pool, async (event, txClient) => {
+    auditEvents.push(event);
+    await txClient.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-test')");
+  });
+  const reply = await store.addReply(identity, "ticket-1", "We are investigating", "support");
+  assert.equal(reply.ticketId, "ticket-1");
+  assert.equal(reply.authorRole, "support");
+  assert.equal(reply.body, "We are investigating");
+  const insert = calls.find((x) => /INSERT INTO eper_support_ticket_replies/.test(x.sql));
+  assert.deepEqual(insert.values.slice(1), ["tenant-a", "app-a", "ticket-1", "actor-a", "support", "We are investigating"]);
+  assert.equal(auditEvents.length, 1);
+  assert.equal(auditEvents[0].action, "ticket.replied");
+  assert.deepEqual(auditEvents[0].payload, { replyId: "reply-1", authorRole: "support" });
+  assert.ok(calls.some((x) => x.sql === "COMMIT"));
+  assert.ok(!calls.some((x) => x.sql === "ROLLBACK"));
+});
+
+test("ticket reply cannot cross tenant or application boundaries", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT application_id FROM eper_support_tickets/.test(sql)) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  let auditCalls = 0;
+  const store = new PostgresTicketStore(pool, async () => { auditCalls++; });
+  assert.equal(await store.addReply(identity, "ticket-outside-scope", "hello", "customer"), null);
+  const select = calls.find((x) => /SELECT application_id FROM eper_support_tickets/.test(x.sql));
+  assert.match(select.sql, /tenant_id = \$1 AND id = \$2 AND \(\$3 = 'eper' OR application_id = \$3\)/);
+  assert.deepEqual(select.values, ["tenant-a", "ticket-outside-scope", "app-a"]);
+  assert.equal(auditCalls, 0);
+  assert.ok(calls.some((x) => x.sql === "ROLLBACK"));
+  assert.ok(!calls.some((x) => /INSERT INTO eper_support_ticket_replies/.test(x.sql)));
+});
