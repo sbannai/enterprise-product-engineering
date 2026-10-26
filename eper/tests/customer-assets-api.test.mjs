@@ -64,11 +64,14 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(fullManifest.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     const conflictingPagination = await fetch(endpoint + "?all=true&cursor=0", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(conflictingPagination.status, 400, "full-manifest mode cannot silently mix with pagination");
-    process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
+    process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-c"], "tenant-b": ["app-b"] });
     process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
-      "tenant-a": { "app-a": Array.from({ length: 10001 }, (_, index) => ({
-        id: "asset-" + index, name: "Asset " + index, type: "document", accessReference: "blobref:" + index,
-      })) },
+      "tenant-a": {
+        "app-a": Array.from({ length: 10000 }, (_, index) => ({
+          id: "asset-" + index, name: "Asset " + index, type: "document", accessReference: "blobref:" + index,
+        })),
+        "app-c": [{ id: "asset-overflow", name: "Overflow asset", type: "document", accessReference: "blobref:overflow" }],
+      },
       "tenant-b": { "app-b": [] },
     });
     const oversizedManifest = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenA } });
