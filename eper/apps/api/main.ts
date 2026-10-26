@@ -4,7 +4,8 @@ import { createPostgresPaymentPool } from "../../packages/payments/postgres-paym
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
-import { appendAuditEvent, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
+import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
+import { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -110,11 +111,38 @@ const auditWriter = auditMode === "postgres" && paymentPool
 if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
+
+const ticketingEnabled = process.env.EPER_TICKETING_API_ENABLED === "true";
+if (ticketingEnabled && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("TICKETING_API_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+const ticketStore = ticketingEnabled && paymentPool
+  ? new PostgresTicketStore(paymentPool, async (event, client) => {
+      await appendAuditEventInTransaction(client, {
+        tenantId: event.tenantId,
+        applicationId: event.applicationId,
+        environment: auditEnvironment as "production" | "uat" | "sandbox",
+        actorType: "human",
+        actorId: event.actorId,
+        action: event.action,
+        outcome: event.outcome,
+        resourceType: "support_ticket",
+        resourceId: event.ticketId,
+        correlationId: event.correlationId,
+        source: "api",
+        operationName: event.action,
+        serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+        payload: event.payload,
+      });
+    })
+  : undefined;
+if (ticketStore) await ticketStore.assertReady();
+
 if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
+const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, ticketStore, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
