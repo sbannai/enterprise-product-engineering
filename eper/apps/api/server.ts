@@ -1256,12 +1256,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const severity = query.get("severity") ?? undefined;
           const type = query.get("type") ?? undefined;
           const applicationId = query.get("applicationId") ?? undefined;
+          const search = query.get("search")?.trim() || undefined;
           const limit = query.has("limit") ? Number(query.get("limit")) : 50;
           const offset = query.has("offset") ? Number(query.get("offset")) : 0;
           if ((status && !(TICKET_STATUSES as readonly string[]).includes(status)) ||
               (severity && !(TICKET_SEVERITIES as readonly string[]).includes(severity)) ||
               (type && !(TICKET_TYPES as readonly string[]).includes(type)) ||
               (applicationId && (!/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId))) ||
+              (search !== undefined && search.length > 200) ||
               !Number.isInteger(limit) || limit < 1 || limit > 100 ||
               !Number.isInteger(offset) || offset < 0) {
             sendJson(request, response, 400, { error: "invalid_ticket_filters" });
@@ -1271,7 +1273,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const page = await options.ticketStore.list({ tenantId: identity.tenantId }, {
             status: status as typeof TICKET_STATUSES[number] | undefined,
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
-            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit: limit + 1, offset,
+            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, search, limit: limit + 1, offset,
           });
           const hasMore = page.length > limit;
           const tickets = hasMore ? page.slice(0, limit) : page;
