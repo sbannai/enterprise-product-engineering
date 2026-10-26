@@ -447,8 +447,13 @@ test("customer application settings expose only safe preferences for assigned ap
     const own = await fetch(url + "app-a", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(own.status, 200);
     assert.deepEqual(await own.json(), { applicationId: "app-a", settings: { displayName: "Admissions", locale: "en-IN", currency: "INR", timeZone: "Asia/Kolkata", theme: "light" } });
-    const foreign = await fetch(url + "app-b", { headers: { authorization: "Bearer " + tokenA } });
-    assert.equal(foreign.status, 403);
+    const foreign = await fetch(url + "app-b", { headers: {
+      authorization: "Bearer " + tokenA,
+      "x-tenant-id": "tenant-b",
+      "x-actor-id": "actor-b",
+      "x-role-key": "super-admin",
+    } });
+    assert.equal(foreign.status, 403, "caller-supplied identity headers must not grant access to another tenant's application");
     assert.deepEqual(await foreign.json(), { error: "application_not_assigned_to_tenant" });
     const tenantB = await fetch(url + "app-b", { headers: { authorization: "Bearer " + tokenB } });
     assert.equal(tenantB.status, 200);
