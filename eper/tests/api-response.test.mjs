@@ -1,0 +1,79 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { sendApiError, sendApiSuccess, resolveApiRequestId } from "../dist/apps/api/api-response.js";
+
+function responseRecorder() {
+  const headers = new Map();
+  return {
+    headers,
+    statusCode: undefined,
+    body: undefined,
+    ended: false,
+    setHeader(name, value) { headers.set(name.toLowerCase(), value); },
+    writeHead(statusCode) { this.statusCode = statusCode; },
+    end(body) { this.body = body; this.ended = true; },
+    json() { return this.body ? JSON.parse(this.body) : undefined; },
+  };
+}
+
+function request(headers = {}) {
+  return { headers };
+}
+
+test("versioned success envelope standardizes body, request id, and secure headers", () => {
+  const req = request({ "x-correlation-id": "response-contract-test-1" });
+  const res = responseRecorder();
+  sendApiSuccess(req, res, 200, { tickets: [], limit: 25, offset: 0 });
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), {
+    success: true,
+    data: { tickets: [], limit: 25, offset: 0 },
+    meta: { requestId: "response-contract-test-1" },
+  });
+  assert.equal(res.headers.get("x-request-id"), "response-contract-test-1");
+  assert.equal(res.headers.get("content-type"), "application/json; charset=utf-8");
+  assert.equal(res.headers.get("cache-control"), "no-store");
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+});
+
+test("versioned error envelope normalizes details and never accepts an invalid error code", () => {
+  const res = responseRecorder();
+  sendApiError(request({ "x-correlation-id": "response-contract-test-2" }), res, 400,
+    "INVALID_TICKET_INPUT", "Ticket input is invalid.", [
+      { field: "title", code: "REQUIRED" },
+      { field: "description", code: "contains spaces" },
+    ]);
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.json(), {
+    success: false,
+    error: {
+      code: "INVALID_TICKET_INPUT",
+      message: "Ticket input is invalid.",
+      details: [
+        { field: "title", code: "REQUIRED" },
+        { field: "description", code: "INVALID_DETAIL" },
+      ],
+    },
+    meta: { requestId: "response-contract-test-2" },
+  });
+  assert.equal(res.headers.get("x-request-id"), "response-contract-test-2");
+  assert.throws(() => sendApiError(request(), responseRecorder(), 400, "invalid-code", "bad"), /API_ERROR_CODE_INVALID/);
+  assert.throws(() => sendApiError(request(), responseRecorder(), 200, "INVALID", "bad"), /API_ERROR_STATUS_INVALID/);
+});
+
+test("invalid correlation IDs are replaced with safe generated request IDs", () => {
+  const resolved = resolveApiRequestId(request({ "x-correlation-id": "bad correlation id" }));
+  assert.match(resolved, /^[0-9a-f-]{36}$/i);
+
+  const res = responseRecorder();
+  sendApiSuccess(request({ "x-correlation-id": "bad correlation id" }), res, 200, { ok: true });
+  assert.equal(res.headers.get("x-request-id"), res.json().meta.requestId);
+  assert.match(res.headers.get("x-request-id"), /^[0-9a-f-]{36}$/i);
+});
+
+test("success responses reject non-success status codes and invalid no-content bodies", () => {
+  assert.throws(() => sendApiSuccess(request(), responseRecorder(), 400, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
+  assert.throws(() => sendApiSuccess(request(), responseRecorder(), 204, { unexpected: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
+});
