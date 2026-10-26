@@ -75,3 +75,52 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     }
   }
 });
+
+
+test("asset download rechecks tenant/application access and requires an audited short-lived HTTPS URL", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const tokenA = "client-assets-download-tenant-a-token-000000000000";
+  const tokenB = "client-assets-download-tenant-b-token-000000000000";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"], "tenant-b": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": [{ id: "doc-1", name: "Project brief.pdf", type: "document", mimeType: "application/pdf", accessReference: "blobref:private-a" }] },
+    "tenant-b": { "app-b": [{ id: "doc-1", name: "Other tenant.pdf", type: "document", accessReference: "blobref:private-b" }] },
+  });
+  const audit = [];
+  const server = createAppServer({
+    assetDownloadResolver: async (input) => {
+      assert.equal(input.tenantId, "tenant-a");
+      assert.equal(input.accessReference, "blobref:private-a");
+      return { url: "https://storage.example.test/signed?token=short-lived", expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    },
+    assetAuditWriter: async (record) => { audit.push(record); },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const ok = await fetch(base + "/customer/applications/app-a/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(ok.status, 200);
+    const body = await ok.json();
+    assert.equal(body.downloadUrl, "https://storage.example.test/signed?token=short-lived");
+    assert.equal(body.fileName, "Project brief.pdf");
+    assert.equal("accessReference" in body, false);
+    assert.equal(audit[0].outcome, "success");
+    assert.equal(audit[0].tenantId, "tenant-a");
+    const denied = await fetch(base + "/customer/applications/app-b/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(denied.status, 404);
+    assert.equal(audit[1].outcome, "denied");
+    assert.equal(audit[1].tenantId, "tenant-a");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
