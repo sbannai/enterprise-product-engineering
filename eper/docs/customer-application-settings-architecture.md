@@ -174,3 +174,17 @@ Marketing, Sales, and AI are optional, separately priced add-ons selected by the
 ## Current implementation boundary
 
 The repository already has a tenant-scoped PostgreSQL admin configuration store with version checks and transactional audit logging. That store currently defines the resource types `workflows`, `roles-access`, `price-book`, and `payment-vendor`. The customer/application scope and explicit customer authorization described here must be implemented before treating the feature as complete.
+
+
+## Entitlement enforcement implementation status (2026-10-26)
+
+The repository now contains a policy evaluator, a PostgreSQL-backed entitlement lookup service, and an opt-in customer access-check endpoint.
+
+- `GET /customer/applications/:applicationId/access/modules/:moduleKey`
+- `GET /customer/applications/:applicationId/access/addons/:addonKey`
+
+These routes require `EPER_CUSTOMER_ACCESS_API_ENABLED=true`, a configured `EPER_MODULE_ENTITLEMENT_PERSISTENCE=postgres` service, and a bearer credential mapped by `EPER_CUSTOMER_ACCESS_IDENTITIES_JSON` to trusted `tenantId`, `actorId`, and `roleKey`. Permission can be supplied as a validated `permission` query parameter; the default is `module.use`. Application assignments are currently resolved from the server-side `EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON` map. Missing or invalid assignment data fails closed. Replace this environment-backed assignment map with the canonical durable application/tenant membership service before production rollout.
+
+The UAT capability route can additionally enforce module entitlements when `EPER_CAPABILITY_ENTITLEMENTS_REQUIRED=true`. This requires the entitlement service, `EPER_UAT_APPLICATION_ID`, `EPER_UAT_ROLE_KEY`, and `EPER_REQUIREMENT_MODULE_MAP_JSON` mapping each enabled requirement ID to its module catalogue key. The customer tenant and principal continue to come from the existing trusted UAT server configuration, never the request body. A missing mapping or unavailable policy service blocks execution rather than bypassing authorization.
+
+**Not yet complete:** customer/admin UI integration, a canonical database-backed application assignment source, enforcement on every capability and background-job entry point, add-on activation workflow (approval/payment), billing reconciliation, migrations against a real database, and build/test/CI verification. Do not authorize Business UAT based on the policy/service commits alone.
