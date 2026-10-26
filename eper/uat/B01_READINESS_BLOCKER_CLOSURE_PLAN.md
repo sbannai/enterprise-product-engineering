@@ -26,6 +26,11 @@ These records cannot both be treated as authoritative approval evidence without 
 
 ## Closure worklist
 
+### Approval-record search result (2026-10-26)
+
+A Library search for `B01-BASELINE-APPROVAL-001` found the identifier referenced in B01 readiness workbooks, but did not surface a standalone controlled approval record with independently verifiable approver, approved document versions, scope and effective date. The source package also explicitly describes the SRS/source baseline as working draft / approval pending. This is **not proof that no approval exists anywhere**; it means the approval record has not yet been located and verified in the searched materials. Required action: the baseline owner must provide the controlled approval artifact or authoritative repository location, then reconcile the checklist and source-package status without overwriting history.
+
+
 | Priority | Gate / control | Current blocker | Required closure evidence | Accountable role | Exit condition |
 |---:|---|---|---|---|---|
 | 1 | Baseline approval integrity + E13 — source baseline | GitHub checklist says approved, while controlled source package copies state approval pending; additionally, 48 cases lack complete requirement-specific acceptance-source binding / measurable acceptance oracle / design binding | Exact approved BRD/SRS and EM-LLD-001 locators per requirement; measurable expected result; controlled review record | Requirements owner + business owner + test lead | All 48 case rows link to approved sources and measurable expected results |
