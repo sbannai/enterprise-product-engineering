@@ -64,6 +64,24 @@ test("unknown routes return 404 without exposing implementation details", async 
   assert.equal(response.headers.get("x-request-id"), "route-test-404");
 });
 
+test("unknown routes negotiate standardized v1 error envelopes without changing legacy defaults", async () => {
+  const base = await startServer();
+  const legacy = await fetch(`${base}/missing-legacy-route`);
+  assert.equal(legacy.status, 404);
+  assert.deepEqual(await legacy.json(), { error: "not_found" });
+
+  const standardized = await fetch(`${base}/missing-v1-route`, {
+    headers: { accept: "application/vnd.eper.v1+json", "x-correlation-id": "v1-error-contract" },
+  });
+  assert.equal(standardized.status, 404);
+  assert.equal(standardized.headers.get("x-request-id"), "v1-error-contract");
+  assert.deepEqual(await standardized.json(), {
+    success: false,
+    error: { code: "NOT_FOUND", message: "The requested resource was not found." },
+    meta: { requestId: "v1-error-contract" },
+  });
+});
+
 test("local capability API is disabled by default", async () => {
   const previous = process.env.EPER_LOCAL_CAPABILITY_API;
   delete process.env.EPER_LOCAL_CAPABILITY_API;
