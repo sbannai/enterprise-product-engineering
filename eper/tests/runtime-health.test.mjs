@@ -419,3 +419,45 @@ test("customer ticketing disabled response supports v1 errors without changing l
     else process.env.EPER_TICKETING_API_ENABLED = previous;
   }
 });
+
+
+test("requirements endpoint negotiates the standard v1 success envelope while preserving legacy payloads", async () => {
+  const keys = ["EPER_REQUIREMENTS_API_ENABLED", "EPER_REQUIREMENTS_API_TOKEN"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_REQUIREMENTS_API_ENABLED: "true",
+    EPER_REQUIREMENTS_API_TOKEN: "requirements-v1-test-token-0123456789-0123456789",
+  });
+  try {
+    const base = await startServer();
+    const headers = {
+      authorization: "Bearer requirements-v1-test-token-0123456789-0123456789",
+      "x-correlation-id": "requirements-v1-success",
+    };
+    const legacy = await fetch(`${base}/v1/requirements?limit=1`, { headers });
+    assert.equal(legacy.status, 200);
+    const legacyBody = await legacy.json();
+    assert.equal(legacyBody.source, "requirement-registry");
+    assert.equal(legacyBody.limit, 1);
+    assert.equal(legacyBody.success, undefined);
+
+    const standardized = await fetch(`${base}/v1/requirements?limit=1`, {
+      headers: { ...headers, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(standardized.status, 200);
+    assert.equal(standardized.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+    assert.equal(standardized.headers.get("cache-control"), "no-store");
+    assert.equal(standardized.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(standardized.headers.get("x-request-id"), "requirements-v1-success");
+    assert.deepEqual(await standardized.json(), {
+      success: true,
+      data: legacyBody,
+      meta: { requestId: "requirements-v1-success" },
+    });
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
