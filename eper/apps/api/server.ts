@@ -385,7 +385,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           await appendAuditEvent(options.capabilityPool as unknown as AuditSqlPool, {
             tenantId: record.tenantId,
             applicationId: record.applicationId,
-            environment,
+            environment: configuredEnvironment,
             actorType: "human",
             actorId: record.actorId,
             action: record.action,
