@@ -82,6 +82,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("No matching assets"), "empty filtered results explain how to recover");
   assert.ok(html.includes("refreshClientAssets"), "client assets can be refreshed asynchronously");
   assert.ok(html.includes("Refreshing all client assets"), "asset refresh exposes loading status");
+  assert.ok(html.includes("refresh.disabled=true"), "refresh prevents duplicate concurrent manifest requests");
+  assert.ok(html.includes("Refresh failed. Existing results are retained."), "failed refresh preserves the last successful asset list");
+  assert.ok(html.includes("Refreshed "+items.length+" assets."), "successful refresh reports the updated asset count");
     assert.match(html, /application\.addEventListener\("change",loadTickets\)/, "changing the assigned application must reload its ticket history");
     assert.match(html, /else if\(assigned\.length===1\)\{application\.value=assigned\[0\]\.applicationId;loadTickets\(\);\}/, "ticket history should load automatically when exactly one assigned application removes ambiguity");
     assert.match(html, /submitButton\.disabled=application\.disabled\|\|!application\.value/, "ticket submission must remain disabled when no assigned application is available");
