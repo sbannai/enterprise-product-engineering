@@ -25,7 +25,7 @@
 | Admin pricing / market-price APIs | v1 success/error envelope available via shared negotiation; legacy default retained | P0 | Add route-specific status, authorization, tenant isolation, currency and market-price contract tests |
 | Localization APIs | v1 success/error envelope available via shared negotiation where `sendJson()` is used | P1 | Verify locale/currency behavior and identify any direct response writers |
 | Ticketing / feedback APIs | v1 success/error envelope available via shared negotiation where `sendJson()` is used | P0 | Validate success/error shapes, auth, tenant isolation, pagination and durable audit events |
-| Payment / receipt APIs | Dedicated handlers; not covered by shared `sendJson()` bridge unless route delegates to it | P0 | Explicit per-route status/envelope/header contract, idempotency, amount authority, receipt integrity, tenant isolation and sandbox-only regression suite |
+| Payment JSON APIs | Dedicated handler now negotiates v1 success/error envelopes and preserves legacy bodies; PDF receipt downloads remain binary | P0 | Negotiated tenant-denial contract test plus existing idempotency, amount authority, receipt integrity, tenant isolation and sandbox-only regression suite; verify PDF response headers separately |
 | Health / readiness / build metadata | Specialized operational payloads; documented exceptions pending route-by-route verification | P1 | Preserve probes; assert status, content type, correlation/header policy, and explicit exception rationale |
 | Unmatched routes / uncaught exceptions | Must be normalized centrally without leaking exception detail | P0 | 404/500 status and safe-body integration tests |
 
