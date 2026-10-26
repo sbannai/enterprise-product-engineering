@@ -64,6 +64,13 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(fullManifest.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     const conflictingPagination = await fetch(endpoint + "?all=true&cursor=0", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(conflictingPagination.status, 400, "full-manifest mode cannot silently mix with pagination");
+    assert.equal("accessReference" in body.assets[0], false, "storage references must remain server-side until authorized download is implemented");
+    assert.equal("internalSecret" in body.assets[0], false);
+    assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
+    const otherTenant = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenB } });
+    assert.equal(otherTenant.status, 403);
+    const invalidCursor = await fetch(endpoint + "?cursor=-1", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(invalidCursor.status, 400);
     process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-c"], "tenant-b": ["app-b"] });
     process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
       "tenant-a": {
@@ -76,13 +83,6 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     });
     const oversizedManifest = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(oversizedManifest.status, 413, "oversized full manifests fail safely instead of returning an unbounded response");
-    assert.equal("accessReference" in body.assets[0], false, "storage references must remain server-side until authorized download is implemented");
-    assert.equal("internalSecret" in body.assets[0], false);
-    assert.equal(body.assets.some((asset) => asset.id === "private-1"), false, "assets from other tenants must never be included");
-    const otherTenant = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenB } });
-    assert.equal(otherTenant.status, 403);
-    const invalidCursor = await fetch(endpoint + "?cursor=-1", { headers: { authorization: "Bearer " + tokenA } });
-    assert.equal(invalidCursor.status, 400);
     process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["help-center"] });
     const disabled = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(disabled.status, 403);
