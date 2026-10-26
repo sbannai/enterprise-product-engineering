@@ -280,3 +280,16 @@ test("generated lifecycle event IDs differ across tenants with identical domain 
   })();
   assert.notEqual(first, second);
 });
+
+
+test("audit integrity verification normalizes offset timestamps before hashing", async () => {
+  const { pool } = fakePool();
+  const store = new PostgresAuditEvidenceStore(pool);
+  const entry = await store.append({
+    id: "a3", tenantId: "tenant-a", requirementId: "REQ-3", action: "TEST",
+    principalId: "user-1", correlationId: "corr-5", occurredAt: "2026-10-26T13:30:00+05:30",
+    payload: { ok: true },
+  });
+  assert.equal(store.verify(entry), true);
+  assert.equal(store.verify({ ...entry, occurredAt: "2026-10-26T08:00:00.000Z" }), true);
+});
