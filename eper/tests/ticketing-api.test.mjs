@@ -305,6 +305,43 @@ test("customer ticket list uses the versioned success envelope and preserves pag
   });
 });
 
+
+test("customer ticket validation errors use the versioned envelope and secure response headers", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  let storeCalled = false;
+  const ticketStore = {
+    async assertReady() {},
+    async create() { storeCalled = true; },
+    async list() { return []; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "customer-validation-error-1",
+      },
+      body: JSON.stringify({ type: "unknown", title: "", description: "", businessImpact: "" }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("x-request-id"), "customer-validation-error-1");
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "INVALID_TICKET_INPUT");
+    assert.equal(payload.meta.requestId, "customer-validation-error-1");
+    assert.equal(storeCalled, false, "invalid ticket payload must be rejected before persistence");
+  });
+});
+
 test("customer ticket creation storage failures use the standardized safe error envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
