@@ -502,3 +502,45 @@ test("requirements endpoint negotiates the standard v1 success envelope while pr
     }
   }
 });
+
+
+test("pricing method-not-allowed response negotiates standard v1 error and preserves legacy empty body", async () => {
+  const keys = ["EPER_PRICING_API_ENABLED", "EPER_PRICING_API_TOKEN", "EPER_ADMIN_CONFIG_PERSISTENCE"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_PRICING_API_ENABLED: "true",
+    EPER_PRICING_API_TOKEN: "pricing-method-contract-test-token-0123456789-0123456789",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "process-memory",
+  });
+  try {
+    const base = await startServer();
+    const headers = {
+      authorization: "Bearer pricing-method-contract-test-token-0123456789-0123456789",
+      "x-correlation-id": "pricing-method-contract",
+    };
+    const legacy = await fetch(`${base}/pricing/options`, { method: "POST", headers });
+    assert.equal(legacy.status, 405);
+    assert.equal(await legacy.text(), "");
+    assert.equal(legacy.headers.get("allow"), "GET, POST");
+    assert.equal(legacy.headers.get("x-request-id"), "pricing-method-contract");
+
+    const standardized = await fetch(`${base}/pricing/options`, {
+      method: "POST",
+      headers: { ...headers, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(standardized.status, 405);
+    assert.equal(standardized.headers.get("allow"), "GET, POST");
+    assert.equal(standardized.headers.get("x-request-id"), "pricing-method-contract");
+    assert.equal(standardized.headers.get("content-type")?.toLowerCase(), "application/json; charset=utf-8");
+    assert.deepEqual(await standardized.json(), {
+      success: false,
+      error: { code: "METHOD_NOT_ALLOWED", message: "The request could not be completed." },
+      meta: { requestId: "pricing-method-contract" },
+    });
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
