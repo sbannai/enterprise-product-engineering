@@ -26,6 +26,25 @@ import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 
+
+function sendTicketJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+  if (statusCode >= 400) {
+    const rawCode = typeof body.error === "string" ? body.error : "ticket_operation_unavailable";
+    const normalized = rawCode.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+    const code = /^[A-Z][A-Z0-9_]{1,63}$/.test(normalized) ? normalized : "TICKET_REQUEST_FAILED";
+    const message = statusCode >= 500 ? "The ticket service could not complete the request."
+      : statusCode === 401 ? "Authentication is required."
+      : statusCode === 403 ? "You are not allowed to perform this action."
+      : statusCode === 404 ? "The requested ticket resource was not found."
+      : statusCode === 409 ? "The request conflicts with the current ticket state."
+      : statusCode === 429 ? "Too many requests. Try again later."
+      : "The ticket request could not be completed.";
+    sendApiError(request, response, statusCode, code, message);
+    return;
+  }
+  sendApiSuccess(request, response, statusCode, body);
+}
+
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
   // Without it, legacy bodies stay byte-shape compatible for existing consumers.
@@ -917,23 +936,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+))?$/.exec(requestUrl.pathname);
     if (ticketPathMatch && (request.method === "GET" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
-        sendJson(request, response, 404, { error: "not_found" });
+        sendTicketJson(request, response, 404, { error: "not_found" });
         return;
       }
       if (!options.ticketStore) {
-        sendJson(request, response, 503, { error: "ticketing_unavailable" });
+        sendTicketJson(request, response, 503, { error: "ticketing_unavailable" });
         return;
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(request, response, 401, { error: "unauthorized" });
+        sendTicketJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       let applicationId: string;
       try { applicationId = decodeURIComponent(ticketPathMatch[1]); }
-      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
+      catch { sendTicketJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
       if (!applicationId.trim() || applicationId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
-        sendJson(request, response, 400, { error: "invalid_application_id" });
+        sendTicketJson(request, response, 400, { error: "invalid_application_id" });
         return;
       }
       let assignments: unknown;
@@ -942,7 +961,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!assignments || typeof assignments !== "object" || Array.isArray(assignments) ||
           !Array.isArray((assignments as Record<string, unknown>)[identity.tenantId]) ||
           !((assignments as Record<string, unknown[]>)[identity.tenantId] as unknown[]).includes(applicationId)) {
-        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        sendTicketJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
       }
       const correlationHeader = request.headers["x-correlation-id"];
@@ -953,19 +972,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const body = await readJson(request);
           const validated = validateCreateTicketInput(body);
           if (!validated.valid) {
-            sendJson(request, response, 400, { error: "invalid_ticket_input", details: validated.errors });
+            sendTicketJson(request, response, 400, { error: "invalid_ticket_input", details: validated.errors });
             return;
           }
           const idempotencyHeader = request.headers["idempotency-key"];
           const idempotencyKey = typeof idempotencyHeader === "string" ? idempotencyHeader : undefined;
           if (idempotencyKey !== undefined && !/^[a-zA-Z0-9._:-]{8,128}$/.test(idempotencyKey)) {
-            sendJson(request, response, 400, { error: "invalid_idempotency_key" });
+            sendTicketJson(request, response, 400, { error: "invalid_idempotency_key" });
             return;
           }
           const ticket = await options.ticketStore.create({
             tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId,
           }, validated.value, idempotencyKey);
-          sendJson(request, response, 201, { ticket });
+          sendTicketJson(request, response, 201, { ticket });
           return;
         }
         if (request.method === "GET" && !ticketPathMatch[2]) {
@@ -980,7 +999,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               (type && !(TICKET_TYPES as readonly string[]).includes(type)) ||
               !Number.isInteger(limit) || limit < 1 || limit > 100 ||
               !Number.isInteger(offset) || offset < 0) {
-            sendJson(request, response, 400, { error: "invalid_ticket_filters" });
+            sendTicketJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
           const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
@@ -988,15 +1007,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
             type: type as typeof TICKET_TYPES[number] | undefined, limit, offset,
           });
-          sendJson(request, response, 200, { tickets, limit, offset });
+          sendTicketJson(request, response, 200, { tickets, limit, offset });
           return;
         }
-        sendJson(request, response, 405, { error: "method_not_allowed" });
+        sendTicketJson(request, response, 405, { error: "method_not_allowed" });
       } catch (error) {
         if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
-          sendJson(request, response, 409, { error: "idempotency_key_conflict" });
+          sendTicketJson(request, response, 409, { error: "idempotency_key_conflict" });
         } else {
-          sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+          sendTicketJson(request, response, 503, { error: "ticket_operation_unavailable" });
         }
       }
       return;
@@ -1007,16 +1026,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment))?$/.exec(requestUrl.pathname);
     if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
-        sendJson(request, response, 404, { error: "not_found" });
+        sendTicketJson(request, response, 404, { error: "not_found" });
         return;
       }
       if (!options.ticketStore) {
-        sendJson(request, response, 503, { error: "ticketing_unavailable" });
+        sendTicketJson(request, response, 503, { error: "ticketing_unavailable" });
         return;
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
-        sendJson(request, response, 401, { error: "unauthorized" });
+        sendTicketJson(request, response, 401, { error: "unauthorized" });
         return;
       }
       let allowedRoles: unknown;
@@ -1025,7 +1044,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!Array.isArray(allowedRoles) || allowedRoles.length === 0 ||
           allowedRoles.some((role) => typeof role !== "string" || !role.trim()) ||
           !allowedRoles.includes(identity.roleKey)) {
-        sendJson(request, response, 403, { error: "ticket_admin_permission_required" });
+        sendTicketJson(request, response, 403, { error: "ticket_admin_permission_required" });
         return;
       }
       const correlationHeader = request.headers["x-correlation-id"];
@@ -1052,7 +1071,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               (applicationId && (!/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId))) ||
               !Number.isInteger(limit) || limit < 1 || limit > 100 ||
               !Number.isInteger(offset) || offset < 0) {
-            sendJson(request, response, 400, { error: "invalid_ticket_filters" });
+            sendTicketJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
           const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
@@ -1060,44 +1079,44 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
             type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit, offset,
           });
-          sendJson(request, response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
+          sendTicketJson(request, response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
           return;
         }
         if (request.method === "PATCH" && adminTicketMatch[1]) {
           let ticketId: string;
           try { ticketId = decodeURIComponent(adminTicketMatch[1]); }
-          catch { sendJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
+          catch { sendTicketJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
           if (!/^[0-9a-f-]{36}$/i.test(ticketId)) {
-            sendJson(request, response, 400, { error: "invalid_ticket_id" });
+            sendTicketJson(request, response, 400, { error: "invalid_ticket_id" });
             return;
           }
           const body = await readJson(request);
           if (adminTicketMatch[2] === "status") {
             if (typeof body.status !== "string" || !(TICKET_STATUSES as readonly string[]).includes(body.status) ||
                 Object.keys(body).some((key) => key !== "status")) {
-              sendJson(request, response, 400, { error: "invalid_ticket_status_update" });
+              sendTicketJson(request, response, 400, { error: "invalid_ticket_status_update" });
               return;
             }
             const ticket = await options.ticketStore.changeStatus(trustedIdentity, ticketId, body.status as typeof TICKET_STATUSES[number]);
-            if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
-            sendJson(request, response, 200, { ticket });
+            if (!ticket) { sendTicketJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendTicketJson(request, response, 200, { ticket });
             return;
           }
           if (adminTicketMatch[2] === "assignment") {
             if (!(body.assignedTo === null || (typeof body.assignedTo === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(body.assignedTo))) ||
                 Object.keys(body).some((key) => key !== "assignedTo")) {
-              sendJson(request, response, 400, { error: "invalid_ticket_assignment" });
+              sendTicketJson(request, response, 400, { error: "invalid_ticket_assignment" });
               return;
             }
             const ticket = await options.ticketStore.assign(trustedIdentity, ticketId, body.assignedTo as string | null);
-            if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
-            sendJson(request, response, 200, { ticket });
+            if (!ticket) { sendTicketJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendTicketJson(request, response, 200, { ticket });
             return;
           }
         }
-        sendJson(request, response, 405, { error: "method_not_allowed" });
+        sendTicketJson(request, response, 405, { error: "method_not_allowed" });
       } catch {
-        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+        sendTicketJson(request, response, 503, { error: "ticket_operation_unavailable" });
       }
       return;
     }
