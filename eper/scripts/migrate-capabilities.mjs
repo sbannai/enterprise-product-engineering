@@ -1,22 +1,27 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const { Pool } = pg;
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationPath = resolve(here, "../packages/capabilities/migrations/001_capability_persistence.sql");
+const migrationsDirectory = resolve(here, "../packages/capabilities/migrations");
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  console.error("DATABASE_URL is required. This migration is intended for local development/integration databases only.");
+  console.error("DATABASE_URL is required. Migrations are intended for local development/integration databases only.");
   process.exitCode = 1;
 } else {
   const pool = new Pool({ connectionString, max: 2, connectionTimeoutMillis: 5000 });
   try {
-    const sql = await readFile(migrationPath, "utf8");
-    await pool.query(sql);
-    console.log("Applied EPER capability persistence migration 001_capability_persistence.");
+    const files = (await readdir(migrationsDirectory))
+      .filter(name => /^\d{3}_[a-z0-9_]+\.sql$/.test(name))
+      .sort();
+    if (files.length === 0) throw new Error("CAPABILITY_MIGRATIONS_NOT_FOUND");
+    for (const file of files) {
+      await pool.query(await readFile(resolve(migrationsDirectory, file), "utf8"));
+      console.log(`Applied EPER capability persistence migration ${file}.`);
+    }
   } catch (error) {
     console.error("Capability persistence migration failed:", error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
