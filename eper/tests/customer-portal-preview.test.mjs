@@ -21,6 +21,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /function customerErrorMessage\(error\)/, "customer UI must map internal API failures to safe user-facing messages");
     assert.ok(html.includes("eper-toast-region"), "customer portal includes the rendered shared toast center");
     assert.ok(html.includes("window.EPERToast"), "customer portal wires notifications to the shared toast API");
+    assert.ok(html.includes("var recent=new Map()"), "shared toast center tracks recent notifications to avoid duplicates");
+    assert.ok(html.includes("now-previous.at<1800"), "identical toast notifications are deduplicated in a short burst");
     assert.ok(html.includes("Ticket submitted"), "ticket submission success is surfaced to the customer");
     assert.ok(html.includes("Submission needs retry"), "uncertain ticket submissions surface a warning notification");
     assert.ok(html.includes("Ticket history unavailable"), "ticket history failures trigger a toast");
