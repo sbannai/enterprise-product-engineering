@@ -448,3 +448,45 @@ test("customer application settings expose only safe preferences for assigned ap
     }
   }
 });
+
+
+test("customer application settings fail closed when settings configuration is missing or malformed", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-settings-config-fail-closed-token-0001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/settings?applicationId=app-a";
+    for (const config of [undefined, "{malformed", JSON.stringify({ "tenant-a": "not-an-object" })]) {
+      if (config === undefined) delete process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON;
+      else process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = config;
+      const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "customer_settings_unavailable" });
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
