@@ -47,6 +47,11 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /\/customer\/applications\/\"\+encodeURIComponent\(applicationId\)\+\"\/assets\//, "asset downloads must use the authenticated application-scoped download API");
     assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
     assert.ok(html.includes("Tickets for selected application"), "customer ticket history must be clearly labeled as application-level");
+    for (const replyContract of ["View conversation", "data-open-ticket-conversation", "data-ticket-reply-form", "Send reply", "/tickets/\"+encodeURIComponent(ticketId)+\"/replies", "Reply sent.", "Reply not sent", "authorRole===\"support\"?\"Support\":\"You\""]) {
+      assert.ok(html.includes(replyContract), "customer ticket conversation must expose: " + replyContract);
+    }
+    assert.match(html, /if\(generation!==sessionGeneration\|\|application\.value\.trim\(\)!==app\|\|!form\.isConnected\)return;/, "late reply responses must not mutate a disconnected or different application view");
+
     assert.ok(html.includes("only tickets for the application selected above are shown here"), "customer UI must explain application-level ticket visibility");
     for (const ticketContract of ["ticketForm", "ticketApplication", "businessImpact", "/customer/applications/", "Submit ticket", "Load my tickets", "ticketResult"]) {
       assert.ok(html.includes(ticketContract), "customer ticket UI must expose: " + ticketContract);
