@@ -706,6 +706,9 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
     assert.equal(download.status, 200);
     assert.match(download.headers.get("content-type") ?? "", /application\/pdf/);
     assert.match(download.headers.get("content-disposition") ?? "", new RegExp(receiptPublicId.replaceAll("-", "\\-") + "\\.pdf"));
+    assert.equal(download.headers.get("cache-control"), "no-store");
+    assert.equal(download.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(download.headers.get("x-request-id"), null, "server generates a request ID when no valid correlation ID is supplied");
     const bytes = Buffer.from(await download.arrayBuffer());
     const pdfText = bytes.toString("ascii");
     assert.ok(pdfText.startsWith("%PDF-1.4\n"), "PDF header must terminate with a real newline");
