@@ -23,7 +23,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     "tenant-b": [],
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
-    "tenant-a": ["app-a", "app-c"],
+    "tenant-a": ["app-a", "app-c", "app-empty"],
     "tenant-b": ["app-b"],
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
@@ -34,6 +34,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
       ],
       "app-c": [{ id: "img-1", name: "Brand mark.png", type: "image", accessReference: "blobref:opaque-3" }],
     },
+    "tenant-a": { "app-empty": [] },
     "tenant-b": { "app-b": [{ id: "private-1", name: "Private.pdf", type: "document", accessReference: "blobref:private" }] },
   });
   const server = createAppServer();
