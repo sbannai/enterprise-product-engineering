@@ -142,7 +142,7 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
 
 export type CustomerAssetDownloadRequest = { tenantId: string; actorId: string; applicationId: string; assetId: string; accessReference: string; fileName: string; mimeType?: string };
 export type CustomerAssetDownloadResolver = (input: CustomerAssetDownloadRequest) => Promise<{ url: string; expiresAt: string } | null>;
-export type CustomerAssetAuditRecord = { tenantId: string; actorId: string; action: "customer.asset.download"; outcome: "success" | "denied" | "failure"; applicationId?: string; assetId?: string; requestId: string };
+export type CustomerAssetAuditRecord = { tenantId: string; actorId: string; action: "customer.asset.download"; outcome: "success" | "denied" | "failure"; applicationId: string; assetId: string; requestId: string };
 export type CustomerAssetAuditWriter = (record: CustomerAssetAuditRecord) => Promise<void>;
 
 interface TrustedAdminConfigIdentity {
@@ -379,10 +379,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     process.env.EPER_AUDIT_PERSISTENCE === "postgres" && options.capabilityPool
       ? async (record) => {
           const configuredEnvironment = process.env.EPER_AUDIT_ENVIRONMENT;
-          const environment = configuredEnvironment === "production" || configuredEnvironment === "uat" ? configuredEnvironment : "sandbox";
+          if (configuredEnvironment !== "production" && configuredEnvironment !== "uat" && configuredEnvironment !== "sandbox") {
+            throw new Error("EPER_AUDIT_ENVIRONMENT_REQUIRED");
+          }
           await appendAuditEvent(options.capabilityPool as unknown as AuditSqlPool, {
             tenantId: record.tenantId,
-            applicationId: record.applicationId ?? "customer-workspace",
+            applicationId: record.applicationId,
             environment,
             actorType: "human",
             actorId: record.actorId,
