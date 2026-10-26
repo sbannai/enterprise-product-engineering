@@ -6,15 +6,22 @@ import {
   claimPendingOutboxEvents,
   markOutboxDelivered,
 } from "../dist/packages/capabilities/postgres-transaction.js";
+import {
+  PostgresAuthoritativeRecordStore,
+  PostgresAuthorizationPolicyStore,
+  PostgresAuditEvidenceStore,
+} from "../dist/packages/capabilities/postgres-stores.js";
 
-function fakePool({ failAt } = {}) {
+function fakePool({ onQuery } = {}) {
   const calls = [];
   const client = {
     async query(sql, params = []) {
-      calls.push({ sql: String(sql).replace(/\s+/g, " ").trim(), params });
-      if (failAt && String(sql).includes(failAt)) throw new Error("INJECTED_DATABASE_FAILURE");
-      if (/UPDATE transactional_outbox/.test(String(sql))) return { rowCount: 1, rows: [] };
-      if (/SELECT event_id/.test(String(sql))) return { rowCount: 0, rows: [] };
+      const normalized = String(sql).replace(/\s+/g, " ").trim();
+      calls.push({ sql: normalized, params });
+      if (onQuery) return onQuery(normalized, params, calls);
+      if (/UPDATE transactional_outbox/.test(normalized)) return { rowCount: 1, rows: [] };
+      if (/SELECT event_id/.test(normalized)) return { rowCount: 0, rows: [] };
+      if (/SELECT 1 FROM authoritative_records/.test(normalized)) return { rowCount: 1, rows: [{}] };
       return { rowCount: null, rows: [] };
     },
     release() { calls.push({ sql: "RELEASE", params: [] }); },
@@ -81,4 +88,39 @@ test("outbox claim limit is bounded", async () => {
   await withTenantTransaction(pool, "tenant-a", async tx => {
     await assert.rejects(claimPendingOutboxEvents(tx, 1001), /OUTBOX_LIMIT_INVALID/);
   });
+});
+
+test("PostgreSQL record store scopes all access by tenant and uses compare-and-swap version", async () => {
+  const { calls, pool } = fakePool({ onQuery: async (sql, params) => {
+    if (sql.includes("INSERT INTO authoritative_records")) return { rowCount: 1, rows: [{ tenant_id: params[0], record_id: params[1], version: params[2], state: params[3], data: JSON.parse(params[4]) }] };
+    if (sql.includes("UPDATE authoritative_records")) return { rowCount: 1, rows: [{ tenant_id: params[0], record_id: params[1], version: params[2] + 1, state: params[3] ?? "OPEN", data: params[4] ? JSON.parse(params[4]) : { ok: true } }] };
+    return { rowCount: null, rows: [] };
+  }});
+  const store = new PostgresAuthoritativeRecordStore(pool);
+  const created = await store.create({ id: "r1", tenantId: "tenant-a", version: 1, state: "OPEN", data: { ok: true } });
+  assert.equal(created.tenantId, "tenant-a");
+  const updated = await store.update("tenant-a", "r1", 1, { state: "CLOSED" });
+  assert.equal(updated.version, 2);
+  assert.ok(calls.some(call => call.sql.includes("WHERE tenant_id=$1 AND record_id=$2 AND version=$3")));
+});
+
+test("PostgreSQL policy decision defaults to deny and reads only tenant policies", async () => {
+  const { calls, pool } = fakePool({ onQuery: async () => ({ rowCount: 0, rows: [] }) });
+  const store = new PostgresAuthorizationPolicyStore(pool);
+  const decision = await store.decide({ tenantId: "tenant-a", principalId: "user-1", action: "read", resource: "record" });
+  assert.equal(decision.effect, "DENY");
+  assert.equal(decision.reason, "NO_ALLOW_POLICY");
+  assert.ok(calls.some(call => call.sql.includes("WHERE tenant_id=$1") && call.params[0] === "tenant-a"));
+});
+
+test("PostgreSQL audit store writes tenant-scoped append-only evidence with integrity hash", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresAuditEvidenceStore(pool);
+  const entry = await store.append({
+    id: "a1", tenantId: "tenant-a", requirementId: "REQ-1", action: "RECORD_CREATED",
+    principalId: "user-1", correlationId: "corr-1", occurredAt: "2026-10-26T08:00:00.000Z", payload: { id: "r1" },
+  });
+  assert.equal(entry.integrityHash.length, 64);
+  assert.equal(store.verify(entry), true);
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO audit_evidence") && call.params[0] === "tenant-a"));
 });
