@@ -345,7 +345,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const configured = (tenantModules as Record<string, unknown>)[identity.tenantId];
       const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings"]);
       if (!Array.isArray(configured) || configured.some((item) => typeof item !== "string")) {
-        sendJson(response, 200, { modules: [] }); return;
+        sendApiSuccess(request, response, 200, { modules: [] }); return;
       }
       const modules = [...new Set(configured.filter((item): item is string => allowed.has(item)))];
       sendApiSuccess(request, response, 200, { modules });
@@ -355,7 +355,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     const customerContentRoute = /^\/customer\/(help-center|growth-hub)\/content$/.exec(requestUrl.pathname);
     if (customerContentRoute && request.method === "GET") {
       const identity = resolveCustomerAccessIdentity(request);
-      if (!identity) { sendJson(response, 401, { error: "unauthorized" }); return; }
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
       const moduleKey = customerContentRoute[1] === "help-center" ? "help-center" : "growth-hub";
       let tenantModules: unknown;
       try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
