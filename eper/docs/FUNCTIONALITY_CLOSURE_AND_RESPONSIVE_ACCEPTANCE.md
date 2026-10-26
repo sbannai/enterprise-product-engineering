@@ -17,6 +17,14 @@
 7. UI changes pass desktop, tablet, and mobile viewport checks and keyboard/accessibility checks before feature closure.
 8. Documentation, support/help content, and configuration are updated with the feature rather than deferred to a later UAT-only phase.
 
+## Ticket visibility acceptance contract
+
+- Customer ticket history is application-scoped: only tickets for the selected application assigned to the authenticated customer identity may be returned.
+- Admin ticket triage is tenant-scoped: authorized admins may see and filter client-submitted tickets across applications in their authenticated tenant, but not tickets from other tenants.
+- The server derives tenant, actor, role, and application authorization from trusted identity. Caller-controlled tenant IDs, actor IDs, role headers, and query filters must not broaden access.
+- Admin assignment/status changes must enforce allowed transitions and persist durable audit evidence. UI copy and hidden controls are not authorization controls.
+- Test both allowed access and explicit cross-application/cross-tenant denials. Do not label this workstream PASS until focused tests and current-commit CI results are recorded. No platform-wide admin access is implied; that needs a separately approved authorization contract.
+
 ## Responsive UI acceptance
 
 Test at minimum at 320px, 375px, 390px, 768px, 1024px, and 1440px viewport widths.
