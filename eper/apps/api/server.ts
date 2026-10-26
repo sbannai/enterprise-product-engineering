@@ -1186,10 +1186,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const source = applicationSettings as Record<string, unknown>;
       const safeSettings: Record<string, string> = {};
-      for (const key of ["displayName", "locale", "currency", "timeZone", "theme"] as const) {
-        const value = source[key];
-        if (typeof value === "string" && value.length <= 100 && value === value.trim()) safeSettings[key] = value;
+      const displayName = source.displayName;
+      if (typeof displayName === "string" && displayName.length >= 1 && displayName.length <= 80 && displayName === displayName.trim()) {
+        safeSettings.displayName = displayName;
       }
+      const locale = source.locale;
+      if (typeof locale === "string" && /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(locale)) safeSettings.locale = locale;
+      const currency = source.currency;
+      if (typeof currency === "string" && /^[A-Z]{3}$/.test(currency)) safeSettings.currency = currency;
+      const timeZone = source.timeZone;
+      if (typeof timeZone === "string" && timeZone.length <= 100 && timeZone === timeZone.trim()) {
+        try {
+          new Intl.DateTimeFormat("en", { timeZone }).format(0);
+          safeSettings.timeZone = timeZone;
+        } catch { /* Invalid time zones are omitted rather than exposed as usable preferences. */ }
+      }
+      const theme = source.theme;
+      if (theme === "light" || theme === "dark" || theme === "system") safeSettings.theme = theme;
       sendJson(request, response, 200, { applicationId, settings: safeSettings });
       return;
     }
