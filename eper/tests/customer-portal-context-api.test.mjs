@@ -237,3 +237,48 @@ test("customer identity mapping rejects non-canonical tenant, actor, and role id
     }
   }
 });
+
+
+test("customer application list returns only server-assigned applications for the authenticated tenant", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const tokenA = "customer-app-list-a-token-00000000000000000001";
+  const tokenB = "customer-app-list-b-token-00000000000000000001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
+    "tenant-a": ["app-a", "app-a", "app-a-2"],
+    "tenant-b": ["app-b"],
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications?tenantId=tenant-b";
+    const anonymous = await fetch(url);
+    assert.equal(anonymous.status, 401);
+    const responseA = await fetch(url, { headers: { authorization: "Bearer " + tokenA, "x-tenant-id": "tenant-b" } });
+    assert.equal(responseA.status, 200);
+    assert.deepEqual(await responseA.json(), { applications: [{ applicationId: "app-a" }, { applicationId: "app-a-2" }] });
+    const responseB = await fetch(url, { headers: { authorization: "Bearer " + tokenB } });
+    assert.equal(responseB.status, 200);
+    assert.deepEqual(await responseB.json(), { applications: [{ applicationId: "app-b" }] });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
