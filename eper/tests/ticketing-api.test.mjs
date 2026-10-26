@@ -216,7 +216,7 @@ test("support admin triage console is feature-gated and calls protected tenant-s
     assert.equal(response.headers.get("cache-control"), "no-store");
     const html = await response.text();
     for (const marker of [
-      "Support Ticket Queue", "Support admin bearer credential", "/admin/support/tickets?",
+      "Client-Submitted Ticket Queue", "Support admin bearer credential", "all client-submitted tickets within your authorized tenant", "Customer users see only tickets for the application they select", "/admin/support/tickets?",
       "filterStatus", "filterType", "filterSeverity", "Update status", "Save assignment",
       "authenticated tenant", "NOT CONNECTED",
     ]) assert.ok(html.includes(marker), "missing support triage contract: " + marker);
