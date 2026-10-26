@@ -146,7 +146,7 @@ export class PostgresTicketStore {
     try {
       await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
-        "UPDATE eper_support_tickets SET assigned_to = $3, status = CASE WHEN $3 IS NULL THEN status ELSE 'assigned' END, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *",
+        "UPDATE eper_support_tickets SET assigned_to = $3::text, status = CASE WHEN $3::text IS NULL THEN status ELSE 'assigned' END, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *",
         [identity.tenantId, ticketId, assignedTo],
       );
       if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
