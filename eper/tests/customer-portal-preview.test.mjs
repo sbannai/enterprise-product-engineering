@@ -41,6 +41,9 @@ test("customer portal preview has customer navigation separate from admin wirefr
     }
     assert.match(html, /method:"POST",headers:\{"idempotency-key":pendingIdempotencyKey\},body:JSON\.stringify\(pendingTicketPayload\)/, "ticket submission must retry the original payload with a stable idempotency key");
     assert.match(html, /JSON\.stringify\(body\)!==JSON\.stringify\(pendingTicketPayload\)/, "edited form data must not silently reuse an idempotency key after an uncertain outcome");
+    assert.match(html, /let pendingTicketApplication=""/, "uncertain ticket retries must remember their original application");
+    assert.match(html, /app!==pendingTicketApplication\|\|JSON\.stringify\(body\)!==JSON\.stringify\(pendingTicketPayload\)/, "retry must not move an uncertain submission to another application");
+    assert.match(html, /pendingTicketApplication=app/, "the application must be captured when a ticket submission begins");
     assert.match(html, /pendingTicketPayload=null/, "successful ticket submission must clear the pending retry snapshot");
     assert.match(html, /payload\.tickets/, "ticket history must be loaded from the tenant-scoped API");
     assert.match(html, /sequence!==ticketLoadSequence\|\|application\.value\.trim\(\)!==app/, "late ticket responses must not overwrite the selected application history");
