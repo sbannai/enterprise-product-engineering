@@ -262,6 +262,38 @@ test("support admin triage console is feature-gated and calls protected tenant-s
   });
 });
 
+
+test("customer ticket-list storage failures return a stable non-disclosing API envelope", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  const ticketStore = {
+    async assertReady() {},
+    async list() { throw new Error("postgres://secret-user:secret-password@private-db/internal"); },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: {
+        authorization: `Bearer ${credential}`,
+        accept: "application/vnd.eper.v1+json",
+        "x-correlation-id": "customer-ticket-list-failure-1",
+      },
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-request-id"), "customer-ticket-list-failure-1");
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "TICKET_OPERATION_UNAVAILABLE");
+    assert.equal(payload.error.message, "The service could not complete the request.");
+    assert.equal(payload.meta.requestId, "customer-ticket-list-failure-1");
+    assert.equal(JSON.stringify(payload).includes("secret-password"), false);
+    assert.equal(JSON.stringify(payload).includes("private-db"), false);
+  });
+});
+
 test.after(restoreEnv);
 
 
