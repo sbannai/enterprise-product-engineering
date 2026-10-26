@@ -75,6 +75,21 @@ function validSignature(expected: string, supplied: string): boolean {
   const a = Buffer.from(expected, "hex"); const b = Buffer.from(supplied, "hex");
   return a.length === 32 && b.length === 32 && timingSafeEqual(a, b);
 }
+
+function sendReceiptPdf(req: IncomingMessage, res: ServerResponse, pdf: Buffer, receiptId: string): void {
+  // PDF downloads are binary, not JSON envelopes, but still carry the shared correlation/security headers.
+  const safeReceiptId = receiptId.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 128) || "receipt";
+  res.writeHead(200, {
+    "content-type": "application/pdf",
+    "content-disposition": `attachment; filename="${safeReceiptId}.pdf"`,
+    "content-length": pdf.length,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-request-id": resolveApiRequestId(req),
+  });
+  res.end(pdf);
+}
+
 function pdfEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "?");
 }
@@ -696,8 +711,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
         actualDigest !== receipt.documentSha256.toLowerCase()) {
       json(req, res, 503, { error: "receipt_document_integrity_failed" }); return true;
     }
-    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + receipt.receiptPublicId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
-    res.end(pdf); return true;
+    sendReceiptPdf(req, res, pdf, receipt.receiptPublicId); return true;
   }
 
   if (req.method === "GET" && publicReceiptMatch) {
@@ -707,8 +721,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (principalTenantId !== record.tenantId) { json(req, res, 403, { error: "tenant_scope_mismatch" }); return true; }
     if (record.status !== "PAID") { json(req, res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     const pdf = receiptPdf(record);
-    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
-    res.end(pdf); return true;
+    sendReceiptPdf(req, res, pdf, record.receiptId); return true;
   }
 
   const receiptMatch = /^\/api\/payments\/([^/]+)\/receipt\.pdf$/.exec(pathname);
@@ -724,8 +737,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
     if (record.status !== "PAID") { json(req, res, 409, { error: "receipt_available_only_after_verified_payment" }); return true; }
     if (!record.receiptId) { record.receiptId = randomUUID(); await saveLedger(cfg.ledgerFile, ledger); }
     const pdf = receiptPdf(record);
-    res.writeHead(200, { "content-type": "application/pdf", "content-disposition": 'attachment; filename="' + record.receiptId + '.pdf"', "content-length": pdf.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
-    res.end(pdf); return true;
+    sendReceiptPdf(req, res, pdf, record.receiptId); return true;
   }
 
   json(req, res, 404, { error: "payment_route_not_found" }); return true;
