@@ -127,7 +127,6 @@ def audit_records(checklist, gates, capture, gaps):
             "b01Gaps": len(gaps),
             "entryGates": len(gates),
             "requirementsInCaptureRegister": len(capture),
-
             "casesWithUnapprovedBaseline": len(unapproved_baselines),
             "casesWithIncompleteAcceptanceOracle": len(incomplete_acceptance_oracles),
             "casesWithoutCompleteReviewApproval": len(unapproved_cases),
