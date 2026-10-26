@@ -488,7 +488,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         await options.assetAuditWriter({ tenantId: identity.tenantId, actorId: identity.actorId, action: "customer.asset.download", outcome, applicationId, assetId, requestId });
       };
       try {
-        if (!options.assetDownloadResolver || !options.assetAuditWriter) {
+        if (!options.assetAuditWriter) {
+          // Downloads are high-risk reads: never issue a URL when audit persistence is unavailable.
+          sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" }); return;
+        }
+        if (!options.assetDownloadResolver) {
+          // Preserve the failed attempt in the audit trail even when no provider is configured.
+          await audit("failure");
           sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
         let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
