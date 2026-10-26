@@ -762,7 +762,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
 
     // Customer-side module/add-on access check. This endpoint is diagnostic; the same
     // policy must also be invoked at protected capability entry points before UAT.
-    const customerAccessMatch = /^\\/customer\\/applications\\/([^/]+)\\/access\\/(modules|addons)\\/([^/]+)$/.exec(requestUrl.pathname);
+    const customerAccessMatch = /^\/customer\/applications\/([^/]+)\/access\/(modules|addons)\/([^/]+)$/.exec(requestUrl.pathname);
     if (request.method === "GET" && customerAccessMatch) {
       if (process.env.EPER_CUSTOMER_ACCESS_API_ENABLED !== "true") {
         sendJson(response, 404, { error: "not_found" });
