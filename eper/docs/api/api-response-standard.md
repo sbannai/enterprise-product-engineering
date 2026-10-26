@@ -71,7 +71,7 @@ Choose the most accurate status for each endpoint; don't relabel domain-specific
 - The canonical media type is `application/vnd.eper.v1+json`; media-type matching is case-insensitive and ignores parameters and other comma-separated Accept values.
 - On shared `sendJson()` routes, v1 negotiation wraps 2xx bodies as `{ success: true, data, meta: { requestId } }` and maps 4xx/5xx responses to the standard error envelope.
 - Without v1 negotiation, the existing legacy success and error body shapes remain unchanged. This is deliberate compatibility behavior, not standard conformance for legacy clients.
-- Endpoints that write non-JSON responses or bypass `sendJson()` (including HTML pages, specialized health/build probes, and dedicated payment/receipt handlers) require their own documented contract and route-specific regression tests; do not assume the shared bridge covers them.
+- Endpoints that write non-JSON responses or bypass `sendJson()` (including HTML pages, specialized health/build probes, and non-JSON PDF receipt downloads) require their own documented contract and route-specific regression tests; do not assume the shared bridge covers them.
 - A `204` or `205` response MUST be bodyless. Do not use a success envelope for either status.
 
 ## 6. Migration rules
@@ -89,4 +89,4 @@ Choose the most accurate status for each endpoint; don't relabel domain-specific
 
 ## 8. Current implementation gap
 
-EPER's shared `sendJson()` helper standardizes response headers and request correlation and supports opt-in v1 success/error envelopes across routes that use it. Default legacy bodies remain route-specific. Dedicated payment/receipt handlers, health/build probes, HTML responses, and other direct response writers remain separate conformance items until verified by their own tests. The conformance matrix is the evidence register; do not claim universal endpoint conformance from the shared bridge alone. Migrate each route family with its clients and regression tests; do not mass-rewrite successful payloads in a breaking commit.
+EPER's shared `sendJson()` helper standardizes response headers and request correlation and supports opt-in v1 success/error envelopes across routes that use it. Default legacy bodies remain route-specific. Dedicated payment JSON responses now use the same negotiated v1 envelope helper and have a tenant-denial regression test. PDF receipt downloads, health/build probes, HTML responses, and other direct response writers remain separate conformance items until verified by their own tests. The conformance matrix is the evidence register; do not claim universal endpoint conformance from the shared bridge alone. Migrate each route family with its clients and regression tests; do not mass-rewrite successful payloads in a breaking commit.
