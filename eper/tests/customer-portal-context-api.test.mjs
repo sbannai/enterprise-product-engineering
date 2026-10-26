@@ -34,6 +34,21 @@ test("customer portal context requires trusted identity and returns server-mappe
     assert.equal(body.status, "identity_resolved_navigation_only");
     assert.deepEqual(body.navigation.map((item) => item.key), ["home", "help-center", "growth-hub", "applications", "settings"]);
     assert.match(body.note, /routes and data must still enforce authorization independently/);
+    const versioned = await fetch(url, { headers: { authorization: "Bearer " + token, accept: "application/vnd.eper.v1+json" } });
+    assert.equal(versioned.status, 200);
+    const versionedBody = await versioned.json();
+    assert.equal(versionedBody.success, true);
+    assert.equal(versionedBody.data.tenantId, "tenant-from-server");
+    assert.deepEqual(versionedBody.data.navigation.map((item) => item.key), ["home", "help-center", "growth-hub", "applications", "settings"]);
+    assert.ok(versionedBody.meta.requestId);
+    assert.equal(versioned.headers.get("x-request-id"), versionedBody.meta.requestId);
+    const versionedDenied = await fetch(url, { headers: { accept: "application/vnd.eper.v1+json" } });
+    assert.equal(versionedDenied.status, 401);
+    const deniedBody = await versionedDenied.json();
+    assert.equal(deniedBody.success, false);
+    assert.equal(deniedBody.error.code, "UNAUTHENTICATED");
+    assert.ok(deniedBody.meta.requestId);
+    assert.equal(versionedDenied.headers.get("x-request-id"), deniedBody.meta.requestId);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (previousEnabled === undefined) delete process.env.EPER_CUSTOMER_PORTAL_API_ENABLED;
