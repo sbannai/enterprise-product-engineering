@@ -30,9 +30,9 @@ async function mutate(kind){const t=selectedTicket();if(!t)return;const endpoint
 el("connect").addEventListener("click",()=>{queueOffset=0;connect()});el("refresh").addEventListener("click",load);el("applyFilters").addEventListener("click",()=>{queueOffset=0;load()});el("previousPage").addEventListener("click",()=>{if(queueOffset>=100){queueOffset-=100;load()}});el("nextPage").addEventListener("click",()=>{if(queueHasNext){queueOffset+=100;load()}});el("exportTicketPage").addEventListener("click",()=>{
 if(!tickets.length)return;
 const columns=["id","title","type","severity","status","applicationId","createdBy","assignedTo","createdAt","updatedAt"];
-const csvCell=value=>{const text=String(value??"");const safe=/^[\\s]*[=+\\-@]/.test(text)?"'"+text:text;return '"'+safe.replace(/"/g,'""')+'"';};
-const csv=[columns.join(","),...tickets.map(ticket=>columns.map(column=>csvCell(ticket[column])).join(","))].join("\\r\\n");
-const url=URL.createObjectURL(new Blob(["\\uFEFF",csv],{type:"text/csv;charset=utf-8"}));
+const csvCell=value=>{const text=String(value??"");const safe=/^[\s]*[=+\-@]/.test(text)?"'"+text:text;return '"'+safe.replace(/"/g,'""')+'"';};
+const csv=[columns.join(","),...tickets.map(ticket=>columns.map(column=>csvCell(ticket[column])).join(","))].join("\r\n");
+const url=URL.createObjectURL(new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"}));
 const link=document.createElement("a");link.href=url;link.download="eper-support-tickets-page-"+(Math.floor(queueOffset/100)+1)+".csv";link.hidden=true;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 el("queueStatus").textContent="Exported "+tickets.length+" tickets from the current authorized page.";});
 el("saveStatus").addEventListener("click",()=>mutate("status"));el("saveAssignment").addEventListener("click",()=>mutate("assignment"));el("ticketRows").addEventListener("click",e=>{const row=e.target.closest("tr[data-id]");if(!row)return;selected=row.dataset.id;renderRows();renderDetail()});el("disconnect").addEventListener("click",()=>{queueLoadSequence++;token="";tickets=[];selected=null;queueOffset=0;queueHasNext=false;el("adminToken").value="";el("connectionBadge").textContent="NOT CONNECTED";el("connectionStatus").textContent="Disconnected.";el("queueStatus").textContent="";renderRows();renderDetail()});
