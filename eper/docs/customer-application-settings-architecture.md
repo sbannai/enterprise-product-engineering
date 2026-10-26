@@ -138,6 +138,39 @@ EPER is a modular platform: each module must be independently entitled, permissi
 15. The computed invoice uses the contracted currency and amount, independent of the user's display-currency preference.
 16. Module enable/disable and price/permission changes have correlated audit events and cannot be made by unauthorized customer roles.
 
+## Optional application add-ons: Marketing, Sales, and AI
+
+Marketing, Sales, and AI are optional, separately priced add-ons selected by the customer for each application. They are part of that application's customer-specific settings and must not be automatically bundled with the core application or enabled by enabling another module.
+
+### Customer experience
+- In each application dashboard, show a dedicated Add-ons section for Marketing, Sales, and AI.
+- For each add-on show its description, available capabilities, current status, price/billing model/currency, usage limits where applicable, and any prerequisites.
+- Let an authorized customer admin request or select an add-on and confirm the displayed price and terms before activation. If the platform's commercial policy requires approval or payment first, keep the add-on pending until that condition is satisfied.
+- Allow customers to configure credentials and provider settings only after the add-on is entitled and activated. Store secrets only through the approved secret-store adapter.
+- Let customers view usage, limits, renewal/effective dates, and cancellation or disablement options without exposing secrets.
+
+### Admin controls
+- Maintain separate catalogue entries and versioned prices for Marketing, Sales, and AI, with explicit currency, billing interval, pricing model, effective dates, and optional per-application or usage-based pricing.
+- Configure availability, prerequisites, quotas, and whether an add-on requires manual approval or a confirmed subscription/payment.
+- Assign or approve entitlements at the tenant + application + add-on scope, preserving the agreed price snapshot and effective date.
+- Admins may configure customer-specific commercial terms; every override, approval, activation, suspension, and cancellation must be audited.
+
+### Authorization and billing rules
+- Model add-ons as independently entitled capabilities attached to an application; do not use UI visibility as authorization.
+- Effective add-on access requires an active customer entitlement, an active add-on catalogue entry, the required customer-role permission, and a valid application assignment. Enforce this on every relevant API and background job.
+- Marketing, Sales, and AI may have separate prices and usage meters. Do not assume that selecting one grants access to the others.
+- AI usage charges, if applicable, must be metered and reconciled according to the accepted pricing terms. Marketing and Sales integration usage must follow their own configured limits and pricing rules.
+- A catalogue price change must not silently alter an existing accepted price snapshot. Currency display settings must never silently alter the amount or currency actually contracted or charged.
+- Add-on selection, price confirmation, payment/subscription state changes, usage, configuration updates, credential rotation, and cancellation must produce correlated audit events without logging secrets.
+
+### Add-on acceptance tests
+17. A customer can independently select Marketing, Sales, AI, any combination, or none for each application.
+18. An add-on remains inaccessible until its entitlement and any required approval/payment conditions are satisfied.
+19. Enabling an add-on for Application A does not enable it for Application B or another tenant.
+20. Each add-on uses its own accepted price snapshot, billing terms, permissions, and usage limits.
+21. Customer users cannot change prices or grant add-on entitlements to themselves through API calls.
+22. Disabling/cancelling one add-on does not disable unrelated add-ons or the core application.
+
 ## Current implementation boundary
 
 The repository already has a tenant-scoped PostgreSQL admin configuration store with version checks and transactional audit logging. That store currently defines the resource types `workflows`, `roles-access`, `price-book`, and `payment-vendor`. The customer/application scope and explicit customer authorization described here must be implemented before treating the feature as complete.
