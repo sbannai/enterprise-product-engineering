@@ -324,7 +324,6 @@ test("customer ticket API fails closed when Tickets & Feedback is not enabled fo
     [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
-  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["help-center"] });
   let storeCalled = false;
   const ticketStore = {
     async assertReady() {},
@@ -333,11 +332,15 @@ test("customer ticket API fails closed when Tickets & Feedback is not enabled fo
   };
   try {
     await withServer({ ticketStore }, async (base) => {
-      const response = await fetch(base + "/customer/applications/app-a/tickets", {
-        headers: { authorization: `Bearer ${credential}` },
-      });
-      assert.equal(response.status, 403);
-      assert.deepEqual(await response.json(), { error: "customer_ticketing_not_enabled" });
+      for (const modulesConfig of [undefined, "{malformed", JSON.stringify({ "tenant-a": ["help-center"] })]) {
+        if (modulesConfig === undefined) delete process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON;
+        else process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = modulesConfig;
+        const response = await fetch(base + "/customer/applications/app-a/tickets", {
+          headers: { authorization: `Bearer ${credential}` },
+        });
+        assert.equal(response.status, 403);
+        assert.deepEqual(await response.json(), { error: "customer_ticketing_not_enabled" });
+      }
       assert.equal(storeCalled, false);
     });
   } finally {
