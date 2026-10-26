@@ -81,7 +81,7 @@ test("ticket store accepts the bounded pagination lookahead row and binds it as 
   assert.deepEqual(query.values, ["tenant-a", 101, 200]);
   await assert.rejects(
     () => store.list({ tenantId: "tenant-a" }, { limit: 102, offset: 200 }),
-    /invalid ticket list pagination/i,
+    /invalid_ticket_pagination/,
   );
 });
 
