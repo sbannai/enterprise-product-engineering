@@ -266,9 +266,13 @@ test("public UAT capability API rejects unknown requirement IDs", async () => {
 
 
 test("admin configuration route negotiates standardized auth errors while preserving legacy clients", async () => {
-  const key = "EPER_ADMIN_CONFIG_API_ENABLED";
-  const previous = process.env[key];
-  process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
+  const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_API_TOKEN"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "process-memory",
+    EPER_ADMIN_CONFIG_API_TOKEN: "admin-auth-test-token-0123456789-0123456789",
+  });
   try {
     const base = await startServer();
     const legacy = await fetch(`${base}/admin/config/roles-access`);
@@ -286,7 +290,9 @@ test("admin configuration route negotiates standardized auth errors while preser
       meta: { requestId: "admin-auth-contract" },
     });
   } finally {
-    if (previous === undefined) delete process.env[key];
-    else process.env[key] = previous;
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
   }
 });
