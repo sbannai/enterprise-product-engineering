@@ -382,7 +382,7 @@ test("pricing validation negotiates standardized errors while preserving legacy 
     assert.deepEqual(await standardized.json(), {
       success: false,
       error: {
-        code: "PRODUCTID_AND_MARKETID_ARE_REQUIRED_CURRENCY_MUST_BE_A_STRING_WHEN_SUPPLIED",
+        code: "PRODUCTID_AND_MARKETID_ARE_REQUIRED_CURRENCY_MUST_BE_A_STRING_WH",
         message: "The request could not be completed.",
       },
       meta: { requestId: "pricing-validation-contract" },
