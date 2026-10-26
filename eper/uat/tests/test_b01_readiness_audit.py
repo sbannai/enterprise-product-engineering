@@ -33,7 +33,12 @@ def case(i=1, authorized="NO", decision="PENDING", source="", baseline="APPROVAL
 
 
 def gate(i=1, status="PENDING", evidence=""):
-    return {"gate_id": f"E{i}", "status": status, "evidence_reference": evidence}
+    return {
+        "gate_id": f"E{i}", "status": status, "evidence_reference": evidence,
+        "named_owner": "Gate Owner", "evidence_date": "2026-10-06",
+        "verified_by": "Verifier A", "verification_date": "2026-10-06",
+        "review_decision": "APPROVED", "approval_reference": f"GATE-APPROVAL-{i:02d}",
+    }
 
 
 def capture(i=1, outcome="NOT_RUN", accepted=False):
@@ -128,6 +133,19 @@ class B01ReadinessAuditTests(unittest.TestCase):
                 self.assertEqual(blockers["E13/case preparation completeness"]["count"], 1)
                 self.assertIn(field, blockers["E13/case preparation completeness"]["cases"][0]["missing_fields"])
 
+
+    def test_gate_with_missing_verification_metadata_remains_pending(self):
+        cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
+                      baseline="APPROVED", reviewer="Reviewer A", date="2026-10-06",
+                      approval=f"DEC-{i:03d}") for i in range(1, 49)]
+        gates = [gate(i, status="PASS", evidence=f"EVID-{i}") for i in range(1, 14)]
+        gates[0]["verification_date"] = "2026-02-30"
+        captures = [capture(i, outcome="PASS", accepted=True) for i in range(1, 229)]
+        gaps = [{"requirement_id": f"REQ-{463 + (i-1)//6}{(i-1)%6+1:02d}"} for i in range(1, 49)]
+        report = audit.audit_records(cases, gates, captures, gaps)
+        self.assertEqual(report["counts"]["entryGatesPendingOrWithoutEvidence"], 1)
+        self.assertEqual(report["readiness"], "BLOCKED")
+        self.assertFalse(report["businessUatExecuted"])
 
     def test_invalid_business_acceptance_date_does_not_count_as_accepted(self):
         cases = [case(i, authorized="YES", decision="APPROVED", source=f"SRS locator {i}",
