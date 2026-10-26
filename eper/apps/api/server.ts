@@ -331,6 +331,25 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
+    // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.
+    if (requestUrl.pathname === "/customer/workspace/modules" && request.method === "GET") {
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendJson(response, 401, { error: "unauthorized" }); return; }
+      let tenantModules: unknown;
+      try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { tenantModules = null; }
+      if (!tenantModules || typeof tenantModules !== "object" || Array.isArray(tenantModules)) {
+        sendJson(response, 200, { modules: [] }); return;
+      }
+      const configured = (tenantModules as Record<string, unknown>)[identity.tenantId];
+      const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings"]);
+      if (!Array.isArray(configured) || configured.some((item) => typeof item !== "string")) {
+        sendJson(response, 200, { modules: [] }); return;
+      }
+      const modules = [...new Set(configured.filter((item): item is string => allowed.has(item)))];
+      sendJson(response, 200, { modules });
+      return;
+    }
     if (isCustomerPortalPreviewRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
