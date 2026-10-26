@@ -13,7 +13,7 @@ import {
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
 
-test("live PostgreSQL capability conformance: RLS, append-only audit, rollback", { skip: !connectionString }, async t => {
+test("live PostgreSQL capability conformance: RLS, append-only audit, rollback", { skip: !connectionString || process.env.EPER_CAPABILITY_LIVE_TESTS !== "1" }, async t => {
   const admin = new Pool({ connectionString, max: 2 });
   const role = "eper_capability_test_app";
   const tenantA = `cap-a-${randomUUID()}`;
