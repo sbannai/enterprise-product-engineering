@@ -24,7 +24,7 @@ test("admin wireframe exposes feedback and ticketing with explicit demo-only beh
     assert.match(html, /server-side/i);
     assert.match(html, /supportApply/);
     assert.match(html, /supportClear/);
-    assert.match(html, /data-support-action/);
+    assert.match(html, /id="supportConnect"/);\n    assert.match(html, /id="supportBearer"/);\n    assert.match(html, /admin\/support\/tickets/);\n    assert.match(html, /supportBearerToken/);\n    assert.match(html, /token cleared from page memory|Token cleared from page memory/i);
     const scripts = html.split("<script>").slice(1).map((chunk) => chunk.split("</script>")[0]);
     assert.ok(scripts.length > 0, "wireframe should include its UI controller");
     for (const script of scripts) {
