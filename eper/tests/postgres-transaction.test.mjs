@@ -196,3 +196,33 @@ test("governed report publication rejects missing provenance before opening a tr
   }, "pub-1", "user-1", "corr-1"), /REPORT_PROVENANCE_REQUIRED/);
   assert.equal(calls.length, 0);
 });
+
+
+test("governed record creation commits record, audit, and outbox together", async () => {
+  const { calls, pool } = fakePool({ onQuery: async (sql, params) => {
+    if (sql.includes("INSERT INTO authoritative_records")) return { rowCount: 1, rows: [{ tenant_id: params[0], record_id: params[1], version: params[2], state: params[3], data: JSON.parse(params[4]) }] };
+    return { rowCount: 1, rows: [] };
+  }});
+  const store = new PostgresAuthoritativeRecordStore(pool);
+  await store.createGoverned({ id: "r2", tenantId: "tenant-a", version: 1, state: "OPEN", data: {} }, {
+    principalId: "user-1", correlationId: "corr-2", requirementId: "REQ-2",
+  });
+  const record = calls.findIndex(call => call.sql.includes("INSERT INTO authoritative_records"));
+  const audit = calls.findIndex(call => call.sql.includes("INSERT INTO audit_evidence"));
+  const outbox = calls.findIndex(call => call.sql.includes("INSERT INTO transactional_outbox"));
+  assert.ok(record >= 0 && record < audit && audit < outbox);
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("governed policy write commits policy, audit, and outbox together", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresAuthorizationPolicyStore(pool);
+  await store.addPolicyGoverned({
+    tenantId: "tenant-a", principalId: "user-1", actions: ["read"], resources: ["record"], effect: "ALLOW",
+  }, { principalId: "admin-1", correlationId: "corr-3", requirementId: "REQ-3" });
+  const policy = calls.findIndex(call => call.sql.includes("INSERT INTO authorization_policies"));
+  const audit = calls.findIndex(call => call.sql.includes("INSERT INTO audit_evidence"));
+  const outbox = calls.findIndex(call => call.sql.includes("INSERT INTO transactional_outbox"));
+  assert.ok(policy >= 0 && policy < audit && audit < outbox);
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
