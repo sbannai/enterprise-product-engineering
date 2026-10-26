@@ -8,6 +8,7 @@ import {
 import {
   PostgresAuthoritativeRecordStore,
   PostgresAuditEvidenceStore,
+  PostgresExceptionStore,
 } from "../dist/packages/capabilities/postgres-stores.js";
 
 const { Pool } = pg;
@@ -90,6 +91,38 @@ test("live PostgreSQL capability conformance: RLS, append-only audit, rollback",
       assert.ok(roundTrip);
       assert.equal(audit.verify(roundTrip), true);
       assert.equal(await audit.get(tenantB, evidenceId), undefined);
+    });
+
+    await t.test("concurrent exception creates replay one committed result per tenant/idempotency key", async () => {
+      const exceptions = new PostgresExceptionStore(app);
+      const id = `exception-${randomUUID()}`;
+      const createdAt = new Date().toISOString();
+      const input = {
+        id, tenantId: tenantA, requirementId: "LIVE-POSTGRES-TEST", code: "CONCURRENT",
+        message: "same idempotent request", idempotencyKey: `idem-${randomUUID()}`, createdAt,
+      };
+      const [first, second] = await Promise.all([
+        exceptions.create(input, "corr-live-concurrent", "ci-test"),
+        exceptions.create(input, "corr-live-concurrent", "ci-test"),
+      ]);
+      assert.equal(first.id, second.id);
+      assert.equal(first.state, second.state);
+      const counts = await withTenantTransaction(app, tenantA, async ({ client }) => {
+        const domain = await client.query(
+          "SELECT count(*)::int AS count FROM workflow_exceptions WHERE tenant_id=$1 AND exception_id=$2",
+          [tenantA, id],
+        );
+        const auditRows = await client.query(
+          "SELECT count(*)::int AS count FROM audit_evidence WHERE tenant_id=$1 AND action='EXCEPTION_CREATED' AND payload @> $2::jsonb",
+          [tenantA, JSON.stringify({ exceptionId: id })],
+        );
+        const outboxRows = await client.query(
+          "SELECT count(*)::int AS count FROM transactional_outbox WHERE tenant_id=$1 AND aggregate_type='workflow_exception' AND aggregate_id=$2 AND event_type='EXCEPTION_CREATED'",
+          [tenantA, id],
+        );
+        return { domain: domain.rows[0].count, audit: auditRows.rows[0].count, outbox: outboxRows.rows[0].count };
+      });
+      assert.deepEqual(counts, { domain: 1, audit: 1, outbox: 1 });
     });
 
     await t.test("a failed unit of work rolls back its database writes", async () => {
