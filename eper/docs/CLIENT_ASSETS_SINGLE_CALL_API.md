@@ -12,7 +12,7 @@ The customer workspace loads the authorized asset manifest for all applications 
 - Derives the tenant and allowed application IDs from server-side identity and `EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON`. Request headers and query parameters cannot override that scope.
 - Reads metadata from `EPER_CUSTOMER_APPLICATION_ASSETS_JSON`, shaped as tenant ID → application ID → asset array.
 - Returns metadata for the assigned applications only. Unknown or invalid asset entries are omitted; missing/malformed server configuration fails with a service error.
-- Returns no-store JSON. The default page contains up to 100 assets; pass the opaque numeric `cursor` offset to continue when `nextCursor` is non-null.
+- Returns no-store JSON. The default page contains up to 100 assets; pass the opaque numeric `cursor` offset to continue when `nextCursor` is non-null. The customer workspace follows `nextCursor` automatically through the same endpoint until all pages have loaded.
 
 ## Response shape
 ```json
