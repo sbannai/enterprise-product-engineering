@@ -435,6 +435,7 @@ test("customer application settings expose only safe preferences for assigned ap
     const disabledForTenant = await fetch(url + "app-a", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(disabledForTenant.status, 403);
     assert.deepEqual(await disabledForTenant.json(), { error: "customer_settings_not_enabled" });
+    process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"], "tenant-b": ["settings"] });
     process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-invalid"], "tenant-b": ["app-b"] });
     const invalidPreferences = await fetch(url + "app-invalid", { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(invalidPreferences.status, 200);
