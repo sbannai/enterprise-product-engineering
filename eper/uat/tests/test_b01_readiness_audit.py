@@ -107,6 +107,10 @@ class B01ReadinessAuditTests(unittest.TestCase):
             cases, [gate()], [capture()], [{"requirement_id": "REQ-46301"}])
         blockers = {b["gate"]: b for b in report["blockers"]}
         self.assertEqual(report["counts"]["casesWithIncompletePreparation"], 1)
+        self.assertEqual(
+            report["counts"]["preparationFieldGapCounts"]["negative_path_reviewed"], 1)
+        self.assertEqual(
+            report["counts"]["preparationFieldGapCounts"]["approved_srs_version_locator"], 1)
         self.assertEqual(blockers["E13/case preparation completeness"]["count"], 1)
         self.assertEqual(
             blockers["E13/case preparation completeness"]["cases"][0]["missing_fields"],
