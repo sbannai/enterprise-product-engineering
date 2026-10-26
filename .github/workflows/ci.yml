@@ -53,6 +53,10 @@ jobs:
         run: npm run migrate:audit
       - name: Apply capability persistence migrations to ephemeral CI database
         run: npm run migrate:capabilities
+      - name: Apply ticketing persistence migrations to ephemeral CI database
+        run: npm run migrate:ticketing
+      - name: Verify ticketing migrations are safely repeatable
+        run: npm run migrate:ticketing
       - name: Verify capability migrations are safely repeatable
         run: npm run migrate:capabilities
       - name: Test
