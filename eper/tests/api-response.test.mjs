@@ -63,6 +63,22 @@ test("versioned error envelope normalizes details and never accepts an invalid e
   assert.throws(() => sendApiError(request(), responseRecorder(), 200, "INVALID", "bad"), /API_ERROR_STATUS_INVALID/);
 });
 
+test("error responses bound messages and tolerate malformed detail entries", () => {
+  const res = responseRecorder();
+  sendApiError(request(), res, 400, "INVALID_INPUT", "x".repeat(900), [
+    null,
+    { field: 17, code: 3 },
+    { field: "f".repeat(200), code: "REQUIRED" },
+  ]);
+  const body = res.json();
+  assert.equal(body.error.message.length, 500);
+  assert.deepEqual(body.error.details, [
+    { field: "unknown", code: "INVALID_DETAIL" },
+    { field: "unknown", code: "INVALID_DETAIL" },
+    { field: "f".repeat(128), code: "REQUIRED" },
+  ]);
+});
+
 test("invalid correlation IDs are replaced with safe generated request IDs", () => {
   const resolved = resolveApiRequestId(request({ "x-correlation-id": "bad correlation id" }));
   assert.match(resolved, /^[0-9a-f-]{36}$/i);
