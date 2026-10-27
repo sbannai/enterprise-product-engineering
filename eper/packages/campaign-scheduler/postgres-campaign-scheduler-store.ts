@@ -123,6 +123,8 @@ export class PostgresCampaignSchedulerStore {
     const createdBy = required(input.createdBy, "CAMPAIGN_ACTOR_REQUIRED");
     if (!["once", "recurring", "event", "condition"].includes(input.triggerType)) throw new Error("CAMPAIGN_TRIGGER_TYPE_INVALID");
     if (!TZ_PATTERN.test(input.timezone) || input.timezone.length > 128) throw new Error("CAMPAIGN_TIMEZONE_INVALID");
+    try { new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(); }
+    catch { throw new Error("CAMPAIGN_TIMEZONE_INVALID"); }
     if (!input.scheduleDefinition || typeof input.scheduleDefinition !== "object" || Array.isArray(input.scheduleDefinition)) {
       throw new Error("CAMPAIGN_SCHEDULE_DEFINITION_REQUIRED");
     }
