@@ -172,7 +172,7 @@ test("event trigger fan-out is tenant/application scoped and idempotent", async 
   assert.match(calls[0].sql, /schedule_definition->>'eventType'=\$6/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
   assert.equal(calls[0].values[3], "evt-123");
-  assert.equal(calls[0].values[4], "evt-123");
+  assert.equal(calls[0].values[4], "lead.created");
 });
 
 test("event trigger rejects invalid occurrence timestamp before database access", async () => {
