@@ -421,6 +421,56 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     // is checked independently before any database lookup.
     const campaignCollection = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules$/.exec(requestUrl.pathname);
     const campaignDetail = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    const campaignLifecycle = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/(approve|pause|resume|cancel)$/.exec(requestUrl.pathname);
+    if (campaignLifecycle && request.method === "POST") {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!["customer-admin", "application-admin", "campaign-approver"].includes(identity.roleKey)) {
+        sendApiError(request, response, 403, "CAMPAIGN_LIFECYCLE_FORBIDDEN", "A campaign approver role is required."); return;
+      }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationId = campaignLifecycle[1], scheduleId = campaignLifecycle[2], action = campaignLifecycle[3];
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
+        let schedule;
+        if (action === "approve") {
+          let body: Record<string, unknown>;
+          try { body = await readJson(request); }
+          catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
+          if (typeof body.nextRunAt !== "string" || !Number.isFinite(Date.parse(body.nextRunAt))) {
+            sendApiError(request, response, 400, "INVALID_NEXT_RUN_AT", "A valid future nextRunAt timestamp is required."); return;
+          }
+          schedule = await options.campaignSchedulerStore.approveAndSchedule({
+            tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, nextRunAt: body.nextRunAt,
+          });
+        } else if (action === "pause" || action === "cancel") {
+          schedule = await options.campaignSchedulerStore.pauseOrCancel({
+            tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, action,
+          });
+        } else {
+          sendApiError(request, response, 501, "CAMPAIGN_RESUME_NOT_IMPLEMENTED", "Resume is not available yet; create a new approval action after review."); return;
+        }
+        sendApiSuccess(request, response, 200, { schedule });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const invalid = message === "CAMPAIGN_SCHEDULE_ID_INVALID" || message === "CAMPAIGN_NEXT_RUN_MUST_BE_FUTURE";
+        sendApiError(request, response, invalid ? 400 : message.includes("NOT_FOUND") ? 404 : 409,
+          invalid ? message : message.includes("NOT_FOUND") ? "SCHEDULE_NOT_FOUND" : "CAMPAIGN_LIFECYCLE_CONFLICT",
+          "The campaign schedule could not be updated.");
+      }
+      return;
+    }
     if (campaignCollection && request.method === "POST") {
       if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
