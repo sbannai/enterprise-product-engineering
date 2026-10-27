@@ -99,32 +99,44 @@ test("AI integration config requires mapped admin identity and saves versioned t
   assert.equal(store.calls.at(-1).input.tenantId, "tenant-a");
 });
 
-test("AI agent requests enforce per-application OFF/ON after authentication", async (t) => {
+test("AI Integration package switch governs CRM, Sales, and Marketing together", async (t) => {
   const store = fakeStore();
   const { base } = await withServer(t, store);
-  const url = (applicationId) => base + "/v1/agents/sales/drafts?applicationId=" + applicationId;
-  const unauthorized = await fetch(url("app-off"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ intent: "campaign-brief", input: {} }) });
+  const cases = [
+    { agent: "crm", intent: "lead-qualification" },
+    { agent: "sales", intent: "follow-up" },
+    { agent: "marketing", intent: "campaign-brief" },
+  ];
+  const request = (agent, intent, applicationId, token = AGENT_TOKEN_A) => fetch(
+    base + "/v1/agents/" + agent + "/drafts?applicationId=" + applicationId,
+    { method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify({ intent, input: {} }) },
+  );
+
+  const unauthorized = await fetch(base + "/v1/agents/sales/drafts?applicationId=app-off", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ intent: "follow-up", input: {} }),
+  });
   assert.equal(unauthorized.status, 401);
 
-  const off = await fetch(url("app-off"), {
-    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
-    body: JSON.stringify({ intent: "campaign-brief", input: {} }),
-  });
-  assert.equal(off.status, 403);
-  assert.equal((await off.json()).error, "ai_integration_disabled_for_application");
+  for (const item of cases) {
+    const off = await request(item.agent, item.intent, "app-off");
+    assert.equal(off.status, 403, item.agent + " must be blocked when the AI Integration package is OFF");
+    assert.equal((await off.json()).error, "ai_integration_disabled_for_application");
+  }
 
   const missingApp = await fetch(base + "/v1/agents/sales/drafts", {
     method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
-    body: JSON.stringify({ intent: "campaign-brief", input: {} }),
+    body: JSON.stringify({ intent: "follow-up", input: {} }),
   });
   assert.equal(missingApp.status, 400);
 
-  const on = await fetch(base + "/v1/agents/marketing/drafts?applicationId=app-on", {
-    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
-    body: JSON.stringify({ intent: "campaign-brief", input: {} }),
-  });
-  assert.equal(on.status, 201);
-  assert.equal((await on.json()).controls.externalActionsExecuted, false);
+  for (const item of cases) {
+    const on = await request(item.agent, item.intent, "app-on");
+    assert.equal(on.status, 201, item.agent + " should be available when the AI Integration package is ON");
+    const result = await on.json();
+    assert.equal(result.controls.externalActionsExecuted, false);
+    assert.equal(result.controls.humanApprovalRequired, true);
+  }
 });
 
 test("AI integration settings reject unsupported providers and malformed applications", async (t) => {
