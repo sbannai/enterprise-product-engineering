@@ -79,6 +79,16 @@ test("error responses bound messages and tolerate malformed detail entries", () 
   ]);
 });
 
+test("error response detail count is capped at fifty entries", () => {
+  const res = responseRecorder();
+  const details = Array.from({ length: 75 }, (_, index) => ({ field: "field" + index, code: "REQUIRED" }));
+  sendApiError(request(), res, 400, "INVALID_INPUT", "Invalid input.", details);
+  const body = res.json();
+  assert.equal(body.error.details.length, 50);
+  assert.equal(body.error.details[0].field, "field0");
+  assert.equal(body.error.details[49].field, "field49");
+});
+
 test("invalid correlation IDs are replaced with safe generated request IDs", () => {
   const resolved = resolveApiRequestId(request({ "x-correlation-id": "bad correlation id" }));
   assert.match(resolved, /^[0-9a-f-]{36}$/i);
