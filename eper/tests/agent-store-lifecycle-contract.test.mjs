@@ -70,6 +70,7 @@ test("durable draft read returns review metadata only through tenant/application
   assert.ok(routes.includes('const isDraftReviewRoute = /^\\/v1\\/agent-drafts\\/[0-9a-f-]+\\/(approve|reject)$/.test(pathname);'));
   assert.match(routes, /const allowedMethod = pathname === "\/v1\/agent-jobs" \|\| isDraftReviewRoute \? "POST" : "GET";/);
   assert.match(routes, /response\.setHeader\("allow", allowedMethod\);/);
+  assert.match(routes, /This HTTP method is not supported for the agent job or draft resource/);
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
   assert.match(routes, /AGENT_DRAFT_NOT_FOUND/);
 });
