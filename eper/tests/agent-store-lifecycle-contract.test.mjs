@@ -67,6 +67,7 @@ test("durable draft read returns review metadata only through tenant/application
   assert.match(source, /WHERE tenant_id=\$1 AND application_id=\$2 AND draft_id=\$3/);
   assert.ok(routes.includes('const draftMatch = /^\\/v1\\/agent-drafts\\/([0-9a-f-]+)$/;'));
   assert.match(routes, /options\.store\.getDraft/);
+  assert.ok(routes.includes('response.setHeader("allow", pathname === "/v1/agent-jobs" ? "POST" : /^\\/v1\\/agent-drafts\\/[0-9a-f-]+\\/(approve|reject)$/.test(pathname) ? "POST" : pathname.startsWith("/v1/agent-drafts/") ? "GET" : "GET");'));
   assert.match(routes, /pathname\.startsWith\("\/v1\/agent-drafts\/"\) \? "GET" : "GET"/);
   assert.match(routes, /\(approve\|reject\)/);
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
