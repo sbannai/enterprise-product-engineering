@@ -518,6 +518,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           scheduleDefinition: scheduleDefinition as Record<string, unknown>,
           createdBy: identity.actorId,
         });
+        if (options.campaignAuditWriter) {
+          await options.campaignAuditWriter({
+            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+            action: "campaign_schedule_create", outcome: "success", resourceId: schedule.id,
+            operationName: "campaign.schedule.create", requestId: resolveApiRequestId(request),
+            payload: { campaignId: schedule.campaignId, triggerType: schedule.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus },
+          });
+        }
         sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
       } catch (error) {
         const code = error instanceof Error && /^CAMPAIGN_.*INVALID$/.test(error.message) ? error.message : "CAMPAIGN_SCHEDULE_CREATE_FAILED";
