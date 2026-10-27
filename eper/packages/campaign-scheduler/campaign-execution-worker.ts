@@ -8,6 +8,8 @@ export interface CampaignWorkerOptions {
   idleDelayMs?: number;
   maxAttempts?: number;
   signal?: AbortSignal;
+  /** Must reload current schedule/approval/consent/channel policy immediately before dispatch. */
+  authorizeDispatch: (execution: CampaignExecutionRecord) => Promise<boolean>;
   onError?: (error: unknown) => void;
 }
 const sleep = (milliseconds: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
@@ -61,6 +63,16 @@ export async function runCampaignExecutionWorker(
     await Promise.all(executions.map(async (execution) => {
       if (options.signal?.aborted) return;
       try {
+        // Fail closed: never call the provider unless current policy authorizes this execution.
+        // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
+        if (typeof options.authorizeDispatch !== "function" || !(await options.authorizeDispatch(execution))) {
+          await store.failExecution({
+            tenantId: execution.tenantId, applicationId: execution.applicationId,
+            executionId: execution.id, workerId: options.workerId,
+            errorCode: "CAMPAIGN_DISPATCH_POLICY_DENIED", maxAttempts: 1,
+          });
+          return;
+        }
         const dispatched = await dispatch(execution);
         await store.completeExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
