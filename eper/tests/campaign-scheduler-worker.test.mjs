@@ -90,3 +90,27 @@ test("worker rejects invalid configuration before touching the store", async () 
   );
   assert.deepEqual(store.calls, []);
 });
+
+
+test("worker does not call provider when the atomic dispatch fence is denied", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.beginExecutionDispatch = async (input) => {
+    store.calls.push(["dispatch-fence", input]);
+    return false;
+  };
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => {
+    dispatchCalls += 1;
+    controller.abort();
+    return { outcome: { accepted: true } };
+  }, {
+    workerId: "worker-fence-denied",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    authorizeDispatch: async () => true,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_DISPATCH_POLICY_DENIED"));
+});
