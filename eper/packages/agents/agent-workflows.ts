@@ -138,6 +138,7 @@ function errorStatus(message: string): number {
  */
 export type AgentAuditRecord = {
   tenantId: string;
+  applicationId?: string;
   actorId: string;
   action: string;
   outcome: "success" | "denied" | "failure";
@@ -202,7 +203,7 @@ export async function handleAgentRoute(
   const recordAudit = async (record: Omit<AgentAuditRecord, "tenantId" | "actorId" | "requestId">) => {
     if (!auditWriter) return;
     await auditWriter({
-      ...record, tenantId, actorId: principalId,
+      ...record, tenantId, applicationId, actorId: principalId,
       requestId: typeof request.headers["x-request-id"] === "string" ? request.headers["x-request-id"] : undefined,
     });
   };
