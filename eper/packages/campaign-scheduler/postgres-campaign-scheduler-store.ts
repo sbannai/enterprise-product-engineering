@@ -437,7 +437,8 @@ export class PostgresCampaignSchedulerStore {
            SELECT e.id FROM eper_campaign_executions e
            JOIN eper_campaign_schedules s
              ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
-           WHERE e.status IN ('queued','retry_wait') AND e.dispatch_started_at IS NULL AND e.available_at <= now()
+           WHERE e.status IN ('queued','retry_wait') AND e.dispatch_started_at IS NULL
+             AND e.scheduled_for <= now() AND e.available_at <= now()
              AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
            ORDER BY e.available_at, e.created_at
            FOR UPDATE OF e SKIP LOCKED
