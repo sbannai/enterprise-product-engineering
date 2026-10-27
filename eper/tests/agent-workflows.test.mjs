@@ -5,6 +5,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 const original = {
   enabled: process.env.EPER_AGENTS_API_ENABLED,
   principalTokens: process.env.EPER_AGENTS_PRINCIPAL_TOKENS,
+  reviewerPrincipals: process.env.EPER_AGENTS_REVIEWER_PRINCIPALS,
   tenant: process.env.EPER_AGENTS_TENANT_ID,
 };
 const makerToken = "maker-test-token-with-at-least-32-characters";
@@ -16,6 +17,7 @@ const auditEvents = [];
 test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   process.env.EPER_AGENTS_API_ENABLED = "true";
   process.env.EPER_AGENTS_PRINCIPAL_TOKENS = `maker-test=${makerToken};reviewer-test=${reviewerToken}`;
+  process.env.EPER_AGENTS_REVIEWER_PRINCIPALS = "reviewer-test";
   process.env.EPER_AGENTS_TENANT_ID = "tenant-test";
   server = createAppServer({ auditWriter: async (event) => { auditEvents.push(event); } });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -47,6 +49,20 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
       assert.equal(result.json.controls.externalActionsExecuted, false);
       assert.equal(result.json.controls.crmWritesExecuted, false);
     }
+  });
+
+  await t.test("authenticated non-reviewers cannot approve or reject drafts", async () => {
+    const created = await request("/v1/agents/sales/drafts", {
+      method: "POST", body: { intent: "follow-up", input: { objective: "role authorization check" } },
+    });
+    assert.equal(created.status, 201);
+    const denied = await request(`/v1/agents/drafts/${created.json.draft.id}/approve`, {
+      method: "POST", principal: "maker-test", body: {},
+    });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.json.error, "reviewer_role_required");
+    assert.ok(auditEvents.some((event) => event.action === "agent.draft.review" && event.outcome === "denied"
+      && event.payload?.reason === "reviewer_role_required"));
   });
 
   await t.test("requires a different principal to approve and never executes side effects", async () => {
@@ -110,6 +126,7 @@ test.after(async () => {
   for (const [key, value] of Object.entries({
     EPER_AGENTS_API_ENABLED: original.enabled,
     EPER_AGENTS_PRINCIPAL_TOKENS: original.principalTokens,
+    EPER_AGENTS_REVIEWER_PRINCIPALS: original.reviewerPrincipals,
     EPER_AGENTS_TENANT_ID: original.tenant,
   })) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
