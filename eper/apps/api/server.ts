@@ -24,6 +24,7 @@ import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
+import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
@@ -377,7 +378,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; campaignAuditWriter?: (record: { tenantId: string; applicationId: string; actorId: string; action: string; outcome: "success" | "failure"; resourceId: string; operationName: string; requestId?: string; payload?: Record<string, unknown> }) => Promise<void> } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -414,6 +415,189 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         roleKey: identity.roleKey,
       });
       return;
+    }
+
+    // Campaign schedule read APIs: tenant identity is server-derived, and application assignment
+    // is checked independently before any database lookup.
+    const campaignCollection = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules$/.exec(requestUrl.pathname);
+    const campaignDetail = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    const campaignLifecycle = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/(approve|pause|resume|cancel)$/.exec(requestUrl.pathname);
+    if (campaignLifecycle && request.method === "POST") {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!["customer-admin", "application-admin", "campaign-approver"].includes(identity.roleKey)) {
+        sendApiError(request, response, 403, "CAMPAIGN_LIFECYCLE_FORBIDDEN", "A campaign approver role is required."); return;
+      }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationId = campaignLifecycle[1], scheduleId = campaignLifecycle[2], action = campaignLifecycle[3];
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
+        let schedule;
+        if (action === "approve" || action === "resume") {
+          let body: Record<string, unknown>;
+          try { body = await readJson(request); }
+          catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
+          const nextRunAtMs = typeof body.nextRunAt === "string" ? Date.parse(body.nextRunAt) : Number.NaN;
+          if (!Number.isFinite(nextRunAtMs) || nextRunAtMs <= Date.now()) {
+            sendApiError(request, response, 400, "INVALID_NEXT_RUN_AT", "A valid future nextRunAt timestamp is required."); return;
+          }
+          schedule = await options.campaignSchedulerStore.approveAndSchedule({
+            tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId,
+            nextRunAt: body.nextRunAt, operation: action === "resume" ? "resume" : "approve",
+          });
+        } else if (action === "pause" || action === "cancel") {
+          schedule = await options.campaignSchedulerStore.pauseOrCancel({
+            tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, action,
+          });
+        }
+        try {
+          if (options.campaignAuditWriter) {
+            await options.campaignAuditWriter({
+              tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+              action: `campaign_schedule_${action}`, outcome: "success", resourceId: scheduleId,
+              operationName: `campaign.schedule.${action}`, requestId: resolveApiRequestId(request),
+              payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus },
+            });
+          }
+        } catch (auditError) {
+          console.error("Campaign schedule changed but audit persistence failed", {
+            requestId: resolveApiRequestId(request), scheduleId,
+            action, error: auditError instanceof Error ? auditError.message : "unknown",
+          });
+          sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "The schedule changed but audit confirmation is unavailable; check its status before retrying.");
+          return;
+        }
+        sendApiSuccess(request, response, 200, { schedule });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const invalid = message === "CAMPAIGN_SCHEDULE_ID_INVALID" || message === "CAMPAIGN_NEXT_RUN_MUST_BE_FUTURE";
+        const auditUnavailable = message === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED";
+        const dispatchStarted = message === "CAMPAIGN_DISPATCH_ALREADY_STARTED";
+        sendApiError(request, response, auditUnavailable ? 503 : invalid ? 400 : message.includes("NOT_FOUND") ? 404 : 409,
+          auditUnavailable ? message : invalid ? message : dispatchStarted ? message : message.includes("NOT_FOUND") ? "SCHEDULE_NOT_FOUND" : "CAMPAIGN_LIFECYCLE_CONFLICT",
+          auditUnavailable ? "The schedule change was rolled back because audit persistence failed."
+            : dispatchStarted ? "Dispatch has already started; this campaign cannot be cancelled safely."
+            : "The campaign schedule could not be updated.");
+      }
+      return;
+    }
+    if (campaignCollection && request.method === "POST") {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationId = campaignCollection[1];
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      let body: Record<string, unknown>;
+      try { body = await readJson(request); }
+      catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
+      const campaignId = body.campaignId;
+      const triggerType = body.triggerType;
+      const timezone = body.timezone;
+      const scheduleDefinition = body.scheduleDefinition;
+      if (typeof campaignId !== "string" || !campaignId.trim() || campaignId.length > 128 ||
+          !["once", "recurring", "event", "condition"].includes(String(triggerType)) ||
+          typeof timezone !== "string" || !timezone.trim() || timezone.length > 128 ||
+          !scheduleDefinition || typeof scheduleDefinition !== "object" || Array.isArray(scheduleDefinition)) {
+        sendApiError(request, response, 400, "INVALID_CAMPAIGN_SCHEDULE", "Required schedule fields are missing or invalid."); return;
+      }
+      try {
+        const schedule = await options.campaignSchedulerStore.createSchedule({
+          tenantId: identity.tenantId,
+          applicationId,
+          campaignId: campaignId.trim(),
+          triggerType: triggerType as "once" | "recurring" | "event" | "condition",
+          timezone,
+          scheduleDefinition: scheduleDefinition as Record<string, unknown>,
+          createdBy: identity.actorId,
+        });
+        try {
+          if (options.campaignAuditWriter) {
+            await options.campaignAuditWriter({
+              tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+              action: "campaign_schedule_create", outcome: "success", resourceId: schedule.id,
+              operationName: "campaign.schedule.create", requestId: resolveApiRequestId(request),
+              payload: { campaignId: schedule.campaignId, triggerType: schedule.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus },
+            });
+          }
+        } catch (auditError) {
+          console.error("Campaign schedule created but audit persistence failed", {
+            requestId: resolveApiRequestId(request), scheduleId: schedule.id,
+            error: auditError instanceof Error ? auditError.message : "unknown",
+          });
+          sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "The schedule was created but audit confirmation is unavailable; check its status before retrying.");
+          return;
+        }
+        sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const code = message === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED" ? message
+          : /^CAMPAIGN_.*INVALID$/.test(message) ? message : "CAMPAIGN_SCHEDULE_CREATE_FAILED";
+        const status = code === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED" ? 503
+          : code === "CAMPAIGN_SCHEDULE_CREATE_FAILED" ? 500 : 400;
+        sendApiError(request, response, status, code, "The campaign schedule could not be created."); return;
+      }
+    }
+    if ((campaignCollection || campaignDetail) && ["GET", "HEAD"].includes(request.method ?? "")) {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationId = (campaignCollection ?? campaignDetail)![1];
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
+        if (campaignCollection) {
+          const rawLimit = requestUrl.searchParams.get("limit");
+          const rawOffset = requestUrl.searchParams.get("offset");
+          const limit = rawLimit === null ? 25 : Number(rawLimit);
+          const offset = rawOffset === null ? 0 : Number(rawOffset);
+          if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0 || offset > 1000000) {
+            sendApiError(request, response, 400, "INVALID_PAGINATION", "Pagination parameters are invalid."); return;
+          }
+          const schedules = await options.campaignSchedulerStore.listSchedules({ tenantId: identity.tenantId, applicationId, limit, offset });
+          sendApiSuccess(request, response, 200, { schedules, pagination: { limit, offset } }); return;
+        }
+        const schedule = await options.campaignSchedulerStore.getSchedule({ tenantId: identity.tenantId, applicationId, scheduleId: campaignDetail![2] });
+        if (!schedule) { sendApiError(request, response, 404, "SCHEDULE_NOT_FOUND", "The schedule was not found."); return; }
+        sendApiSuccess(request, response, 200, { schedule }); return;
+      } catch (error) {
+        const code = error instanceof Error && error.message === "CAMPAIGN_SCHEDULE_ID_INVALID" ? "INVALID_SCHEDULE_ID" : "CAMPAIGN_SCHEDULER_READ_FAILED";
+        sendApiError(request, response, code === "INVALID_SCHEDULE_ID" ? 400 : 500, code, "The campaign schedule could not be retrieved."); return;
+      }
+    }
+    if ((campaignCollection || campaignDetail) && request.method !== "GET" && request.method !== "HEAD") {
+      sendMethodNotAllowed(request, response, "GET, HEAD"); return;
     }
 
     // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AuditSqlPool } from "../audit/audit-event-store.js";
+import { appendAuditEventInTransaction, type AuditEnvironment, type AuditSqlPool, type AuditSqlClient } from "../audit/audit-event-store.js";
 
 export type CampaignTriggerType = "once" | "recurring" | "event" | "condition";
 export type CampaignScheduleStatus = "draft" | "scheduled" | "paused" | "cancelled" | "completed";
@@ -66,19 +66,52 @@ function mapSchedule(row: Record<string, unknown>): CampaignScheduleRecord {
 
 /** PostgreSQL-backed schedule/queue primitives. Caller must supply trusted tenant and actor identities. */
 export class PostgresCampaignSchedulerStore {
-  constructor(private readonly pool: AuditSqlPool) {}
+  constructor(
+    private readonly pool: AuditSqlPool,
+    private readonly auditEnvironment: AuditEnvironment = "uat",
+    private readonly serviceVersion?: string,
+  ) {}
+
+  private async appendLifecycleAudit(client: AuditSqlClient, input: {
+    tenantId: string; applicationId: string; actorId: string; action: string;
+    resourceId: string; operationName: string; payload?: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      await appendAuditEventInTransaction(client, {
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        environment: this.auditEnvironment, actorType: "human", actorId: input.actorId,
+        action: input.action, outcome: "success", resourceType: "campaign-schedule",
+        resourceId: input.resourceId, source: "api", operationName: input.operationName,
+        serviceVersion: this.serviceVersion, payload: input.payload,
+      });
+    } catch {
+      throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED");
+    }
+  }
 
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ schedules_table: string | null; executions_table: string | null }>(
-        "SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table, to_regclass('public.eper_campaign_executions')::text AS executions_table",
+      const result = await client.query<{
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null;
+      }>(
+        `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
+                to_regclass('public.eper_campaign_executions')::text AS executions_table,
+                (SELECT column_name FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                   AND column_name='dispatch_started_at') AS dispatch_started_column`,
       );
       if (!result.rows[0]?.schedules_table || !result.rows[0]?.executions_table) {
         throw new Error("EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED");
       }
+      if (!result.rows[0]?.dispatch_started_column) {
+        throw new Error("EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED");
+      }
     } catch (error) {
-      if (error instanceof Error && error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED") throw error;
+      if (error instanceof Error && (
+        error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED" ||
+        error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED"
+      )) throw error;
       throw new Error("EPER_CAMPAIGN_SCHEDULER_READINESS_CHECK_FAILED", { cause: error });
     } finally { client.release(); }
   }
@@ -90,6 +123,8 @@ export class PostgresCampaignSchedulerStore {
     const createdBy = required(input.createdBy, "CAMPAIGN_ACTOR_REQUIRED");
     if (!["once", "recurring", "event", "condition"].includes(input.triggerType)) throw new Error("CAMPAIGN_TRIGGER_TYPE_INVALID");
     if (!TZ_PATTERN.test(input.timezone) || input.timezone.length > 128) throw new Error("CAMPAIGN_TIMEZONE_INVALID");
+    try { new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(); }
+    catch { throw new Error("CAMPAIGN_TIMEZONE_INVALID"); }
     if (!input.scheduleDefinition || typeof input.scheduleDefinition !== "object" || Array.isArray(input.scheduleDefinition)) {
       throw new Error("CAMPAIGN_SCHEDULE_DEFINITION_REQUIRED");
     }
@@ -102,6 +137,7 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     const id = randomUUID();
     try {
+      await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `INSERT INTO eper_campaign_schedules
           (id, tenant_id, application_id, campaign_id, trigger_type, timezone, schedule_definition, created_by, updated_by)
@@ -110,12 +146,54 @@ export class PostgresCampaignSchedulerStore {
         [id, tenantId, applicationId, campaignId, input.triggerType, input.timezone,
           JSON.stringify(input.scheduleDefinition), createdBy],
       );
-      return mapSchedule(result.rows[0]);
+      const schedule = mapSchedule(result.rows[0]);
+      await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId: createdBy, action: "campaign_schedule_create", resourceId: schedule.id, operationName: "campaign.schedule.create", payload: { campaignId, triggerType: input.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus } });
+      await client.query("COMMIT");
+      return schedule;
+    } catch (error) { try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ } throw error; }
+    finally { client.release(); }
+  }
+
+  async listSchedules(input: {
+    tenantId: string; applicationId: string; limit?: number; offset?: number;
+  }): Promise<CampaignScheduleRecord[]> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const limit = input.limit ?? 25;
+    const offset = input.offset ?? 0;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("CAMPAIGN_LIST_LIMIT_INVALID");
+    if (!Number.isInteger(offset) || offset < 0 || offset > 1000000) throw new Error("CAMPAIGN_LIST_OFFSET_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT * FROM eper_campaign_schedules
+         WHERE tenant_id=$1 AND application_id=$2
+         ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`,
+        [tenantId, applicationId, limit, offset],
+      );
+      return result.rows.map(mapSchedule);
+    } finally { client.release(); }
+  }
+
+  async getSchedule(input: {
+    tenantId: string; applicationId: string; scheduleId: string;
+  }): Promise<CampaignScheduleRecord | null> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    if (!ID_PATTERN.test(input.scheduleId)) throw new Error("CAMPAIGN_SCHEDULE_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT * FROM eper_campaign_schedules
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 LIMIT 1`,
+        [tenantId, applicationId, input.scheduleId],
+      );
+      return result.rows[0] ? mapSchedule(result.rows[0]) : null;
     } finally { client.release(); }
   }
 
   async approveAndSchedule(input: {
-    tenantId: string; applicationId: string; scheduleId: string; actorId: string; nextRunAt: string;
+    tenantId: string; applicationId: string; scheduleId: string; actorId: string; nextRunAt: string; operation?: "approve" | "resume";
   }): Promise<CampaignScheduleRecord> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
@@ -125,6 +203,7 @@ export class PostgresCampaignSchedulerStore {
     if (!Number.isFinite(nextRunAt.getTime()) || nextRunAt.getTime() <= Date.now()) throw new Error("CAMPAIGN_NEXT_RUN_MUST_BE_FUTURE");
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_campaign_schedules
            SET approval_status='approved', status='scheduled', next_run_at=$4, updated_by=$5, updated_at=now()
@@ -133,8 +212,17 @@ export class PostgresCampaignSchedulerStore {
         [tenantId, applicationId, input.scheduleId, nextRunAt.toISOString(), actorId],
       );
       if (!result.rows[0]) throw new Error("CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_APPROVABLE");
-      return mapSchedule(result.rows[0]);
-    } finally { client.release(); }
+      const schedule = mapSchedule(result.rows[0]);
+      const operation = input.operation ?? "approve";
+      await this.appendLifecycleAudit(client, {
+        tenantId, applicationId, actorId, action: "campaign_schedule_" + operation,
+        resourceId: schedule.id, operationName: "campaign.schedule." + operation,
+        payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus, nextRunAt: schedule.nextRunAt },
+      });
+      await client.query("COMMIT");
+      return schedule;
+    } catch (error) { try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ } throw error; }
+    finally { client.release(); }
   }
 
   async pauseOrCancel(input: {
@@ -156,14 +244,24 @@ export class PostgresCampaignSchedulerStore {
       );
       if (!result.rows[0]) throw new Error("CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_MUTABLE");
       if (input.action === "cancel") {
+        const dispatchStarted = await client.query(
+          `SELECT id FROM eper_campaign_executions
+           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3
+             AND status='running' AND dispatch_started_at IS NOT NULL
+           FOR UPDATE`,
+          [tenantId, applicationId, input.scheduleId],
+        );
+        if (dispatchStarted.rows.length) throw new Error("CAMPAIGN_DISPATCH_ALREADY_STARTED");
         await client.query(
-          `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now()
-           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait')`,
+          `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now(), locked_at=NULL, locked_by=NULL
+           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')`,
           [tenantId, applicationId, input.scheduleId],
         );
       }
+      const schedule = mapSchedule(result.rows[0]);
+      await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId, action: "campaign_schedule_" + input.action, resourceId: schedule.id, operationName: "campaign.schedule." + input.action, payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus } });
       await client.query("COMMIT");
-      return mapSchedule(result.rows[0]);
+      return schedule;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -234,7 +332,7 @@ export class PostgresCampaignSchedulerStore {
         `INSERT INTO eper_campaign_executions
           (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
          SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $3,
-           'event:' || $4 || ':' || s.id::text,
+           'event:' || $5 || ':' || $4 || ':' || s.id::text,
            jsonb_build_object('campaignId', s.campaign_id, 'eventType', $5, 'eventId', $4, 'eventPayload', $6::jsonb)
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$1 AND s.application_id=$2
@@ -339,7 +437,7 @@ export class PostgresCampaignSchedulerStore {
            SELECT e.id FROM eper_campaign_executions e
            JOIN eper_campaign_schedules s
              ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
-           WHERE e.status IN ('queued','retry_wait') AND e.available_at <= now()
+           WHERE e.status IN ('queued','retry_wait') AND e.dispatch_started_at IS NULL AND e.available_at <= now()
              AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
            ORDER BY e.available_at, e.created_at
            FOR UPDATE OF e SKIP LOCKED
@@ -362,6 +460,77 @@ export class PostgresCampaignSchedulerStore {
           availableAt: new Date(row.available_at as string | Date).toISOString(),
         };
       });
+    } finally { client.release(); }
+  }
+
+  /**
+   * Re-check mutable schedule/approval state immediately before provider dispatch.
+   * This is a necessary baseline check, not a replacement for consent, quiet-hours,
+   * channel-configuration, or serialized cancellation authorization.
+   */
+  /**
+   * Atomically establishes the dispatch-start fence while holding the schedule row lock.
+   * Cancellation takes the same schedule lock and is rejected once this fence exists.
+   */
+  async beginExecutionDispatch(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string }>(
+        `SELECT s.id
+         FROM eper_campaign_schedules s
+         JOIN eper_campaign_executions e
+           ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
+         WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
+           AND e.locked_by=$4 AND e.dispatch_started_at IS NULL
+           AND s.status='scheduled' AND s.approval_status='approved'
+         FOR UPDATE OF s, e`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      if (!result.rows.length) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      await client.query(
+        `UPDATE eper_campaign_executions SET dispatch_started_at=now(), updated_at=now()
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+           AND dispatch_started_at IS NULL`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async isExecutionAuthorizedForDispatch(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ authorized: boolean }>(
+        `SELECT (e.status='running' AND e.locked_by=$4
+                  AND s.status='scheduled' AND s.approval_status='approved') AS authorized
+         FROM eper_campaign_executions e
+         JOIN eper_campaign_schedules s
+           ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
+         WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3
+         LIMIT 1`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      return result.rows[0]?.authorized === true;
     } finally { client.release(); }
   }
 
@@ -403,12 +572,12 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query<{ status: "retry_wait" | "dead_letter" }>(
         `UPDATE eper_campaign_executions
-         SET status=CASE WHEN attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
-             last_error_code=$6,
-             available_at=CASE WHEN attempt_count >= $5 THEN available_at
+         SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
+             last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE $6 END,
+             available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN available_at
                ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
-             completed_at=CASE WHEN attempt_count >= $5 THEN now() ELSE NULL END
+             completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN now() ELSE NULL END
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
          RETURNING status`,
         [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds],
@@ -427,12 +596,12 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query(
         `UPDATE eper_campaign_executions
-         SET status=CASE WHEN attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
-             last_error_code='WORKER_LEASE_EXPIRED',
-             available_at=CASE WHEN attempt_count >= $2 THEN available_at
+         SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
+             last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE 'WORKER_LEASE_EXPIRED' END,
+             available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN available_at
                ELSE now() + (LEAST(15 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
-             completed_at=CASE WHEN attempt_count >= $2 THEN now() ELSE NULL END
+             completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN now() ELSE NULL END
          WHERE status='running' AND locked_at < now() - ($1 * interval '1 second')`,
         [staleAfterSeconds, maxAttempts],
       );

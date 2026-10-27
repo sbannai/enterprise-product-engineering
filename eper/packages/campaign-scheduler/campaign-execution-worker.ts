@@ -8,6 +8,8 @@ export interface CampaignWorkerOptions {
   idleDelayMs?: number;
   maxAttempts?: number;
   signal?: AbortSignal;
+  /** Must reload current schedule/approval/consent/channel policy immediately before dispatch. */
+  authorizeDispatch: (execution: CampaignExecutionRecord) => Promise<boolean>;
   onError?: (error: unknown) => void;
 }
 const sleep = (milliseconds: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
@@ -61,11 +63,68 @@ export async function runCampaignExecutionWorker(
     await Promise.all(executions.map(async (execution) => {
       if (options.signal?.aborted) return;
       try {
+        // Fail closed: never call the provider unless current policy authorizes this execution.
+        // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
+        let authorized = false;
+        let authorizationError: unknown;
+        try {
+          // Evaluate consent, quiet-hours, and channel policy before acquiring the
+          // dispatch fence; the fence then atomically rechecks the live lease and schedule.
+          authorized = await options.authorizeDispatch(execution);
+          // A graceful shutdown during an async policy check must not acquire the
+          // irreversible dispatch fence or start a provider side effect.
+          if (options.signal?.aborted) {
+            authorized = false;
+            authorizationError = new Error("CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE");
+          }
+          if (authorized) {
+            authorized = await store.beginExecutionDispatch({
+              tenantId: execution.tenantId,
+              applicationId: execution.applicationId,
+              executionId: execution.id,
+              workerId: options.workerId,
+            });
+          }
+        } catch (error) {
+          // A policy service outage is not permission to dispatch. Preserve the distinction
+          // between an explicit denial and an unavailable/failed authorization check.
+          authorizationError = error;
+          options.onError?.(error);
+        }
+        if (authorized && options.signal?.aborted) {
+          // The fence is irreversible: do not dispatch after shutdown, and do not
+          // let stale recovery replay an execution whose dispatch outcome is ambiguous.
+          await store.failExecution({
+            tenantId: execution.tenantId, applicationId: execution.applicationId,
+            executionId: execution.id, workerId: options.workerId,
+            errorCode: "CAMPAIGN_WORKER_SHUTDOWN_AFTER_DISPATCH_FENCE",
+            maxAttempts: 1,
+          });
+          return;
+        }
+        if (!authorized) {
+          await store.failExecution({
+            tenantId: execution.tenantId, applicationId: execution.applicationId,
+            executionId: execution.id, workerId: options.workerId,
+            errorCode: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+              ? "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+              : authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
+            maxAttempts: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+              ? maxAttempts : 1,
+          });
+          return;
+        }
         const dispatched = await dispatch(execution);
-        await store.completeExecution({
+        const completed = await store.completeExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
           executionId: execution.id, workerId: options.workerId, result: dispatched.outcome,
         });
+        if (!completed) {
+          // The provider may have accepted the request, but this worker no longer owns
+          // the lease. Treat the outcome as ambiguous; failExecution will dead-letter
+          // because the dispatch fence has already been crossed, never auto-replay it.
+          throw new Error("CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST");
+        }
       } catch (error) {
         options.onError?.(error);
         const code = error instanceof Error && error.name !== "Error" ? error.name : "CAMPAIGN_DISPATCH_FAILED";
