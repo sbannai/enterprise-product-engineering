@@ -48,7 +48,7 @@ function cleanText(value: unknown, field: string, max = 2000): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > max) throw new Error(`INVALID_${field.toUpperCase()}`);
   return value.trim();
 }
-function buildDraft(agent: AgentKind, intent: string, input: Record<string, unknown>): Record<string, unknown> {
+export function buildAgentDraft(agent: AgentKind, intent: string, input: Record<string, unknown>): Record<string, unknown> {
   const context = typeof input.context === "string" ? input.context.trim().slice(0, 4000) : "";
   const objective = typeof input.objective === "string" ? input.objective.trim().slice(0, 1000) : intent;
   const audience = typeof input.audience === "string" ? input.audience.trim().slice(0, 300) : "the intended customer";
@@ -191,7 +191,7 @@ export async function handleAgentRoute(
       const body = await readBody(request);
       const intent = cleanText(body.intent, "intent", 80);
       if (!body.input || typeof body.input !== "object" || Array.isArray(body.input)) throw new Error("INVALID_INPUT");
-      const content = buildDraft(draftMatch[1] as AgentKind, intent, body.input as Record<string, unknown>);
+      const content = buildAgentDraft(draftMatch[1] as AgentKind, intent, body.input as Record<string, unknown>);
       const draft: Draft = { id: randomUUID(), tenantId, createdBy: principalId, agent: draftMatch[1] as AgentKind, intent, content, status: "PENDING_APPROVAL", createdAt: new Date().toISOString() };
       drafts.set(draft.id, draft);
       try {
