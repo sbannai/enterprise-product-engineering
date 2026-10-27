@@ -37,6 +37,7 @@ export interface StoredAgentJob {
   updatedAt: string;
   failureCode?: string;
   resultRef?: string;
+  input?: Record<string, unknown>;
 }
 export type EnqueueAgentJobResult =
   | { kind: "created" | "existing"; job: StoredAgentJob }
