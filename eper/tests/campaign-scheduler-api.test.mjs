@@ -217,3 +217,17 @@ test("campaign lifecycle audit records the persisted schedule state", async (t) 
   assert.equal(capturedAudit.payload.resultingStatus, "scheduled");
   assert.equal(capturedAudit.payload.approvalStatus, "approved");
 });
+
+test("campaign lifecycle returns explicit unavailable when audit persistence fails", async (t) => {
+  const { base } = await withServer(t, {
+    campaignAuditWriter: async () => { throw new Error("audit database unavailable"); },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/approve", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json" },
+    body: JSON.stringify({ nextRunAt: "2030-01-01T10:00:00+05:30" }),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error.code, "CAMPAIGN_AUDIT_UNAVAILABLE");
+});
