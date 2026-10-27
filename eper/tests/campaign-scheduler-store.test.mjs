@@ -83,3 +83,41 @@ test("enqueue accepts only approved scheduled tenant/application schedules and i
   assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\)/);
 });
+
+
+test("failure uses bounded exponential retry policy and returns dead-letter at max attempts", async () => {
+  const outcomes = [{ status: "retry_wait" }, { status: "dead_letter" }];
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [outcomes.shift()] : [], rowCount: 1 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const first = await store.failExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", errorCode: "provider_timeout",
+  });
+  assert.equal(first, "retry_wait");
+  assert.match(calls[0].sql, /power\(2, GREATEST\(attempt_count - 1, 0\)\)/);
+  assert.equal(calls[0].values[5], "PROVIDER_TIMEOUT");
+  const second = await store.failExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", errorCode: "provider_timeout",
+  });
+  assert.equal(second, "dead_letter");
+});
+
+test("execution completion requires the current worker lease", async () => {
+  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const completed = await store.completeExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", result: { delivered: true },
+  });
+  assert.equal(completed, false);
+  assert.match(calls[0].sql, /status='running' AND locked_by=\$4/);
+});
+
+test("stale worker recovery validates policy and requeues or dead-letters expired leases", async () => {
+  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 3 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.recoverStaleExecutions(5, 5), /CAMPAIGN_RECOVERY_POLICY_INVALID/);
+  assert.equal(calls.length, 0);
+  const recovered = await store.recoverStaleExecutions(300, 5);
+  assert.equal(recovered, 3);
+  assert.match(calls[0].sql, /WORKER_LEASE_EXPIRED/);
+  assert.match(calls[0].sql, /status='running' AND locked_at < now\(\)/);
+});
