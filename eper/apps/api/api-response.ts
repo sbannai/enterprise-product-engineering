@@ -5,10 +5,15 @@ export interface ApiErrorDetail { field: string; code: string; }
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/;
 const ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,63}$/;
+const requestIds = new WeakMap<IncomingMessage, string>();
 
 export function resolveApiRequestId(request: IncomingMessage): string {
+  const existing = requestIds.get(request);
+  if (existing) return existing;
   const supplied = request.headers["x-correlation-id"];
-  return typeof supplied === "string" && REQUEST_ID_PATTERN.test(supplied) ? supplied : randomUUID();
+  const requestId = typeof supplied === "string" && REQUEST_ID_PATTERN.test(supplied) ? supplied : randomUUID();
+  requestIds.set(request, requestId);
+  return requestId;
 }
 
 function writeEnvelope(response: ServerResponse, statusCode: number, body: Record<string, unknown>, requestId: string): void {
