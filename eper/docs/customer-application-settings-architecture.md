@@ -215,3 +215,8 @@ The platform Admin owns customer records, application registration/assignment, p
 ## Product Admin ownership of localized pricing
 
 Product Admin owns the product catalogue, localized market price books, currency/amount, effective dates, version approvals, tax/rounding policy, and plan/tariff pricing. This is platform-level commercial configuration, not a customer application's operational setting. Customer admins may manage application settings and request/select available plans within their permissions, but may not alter canonical prices or contracted price snapshots. Display locale controls language and formatting only; the authoritative market-specific price and accepted contract snapshot control actual charges. A locale switch must never silently trigger FX conversion or repricing. The existing Price Book/resolver is the initial UI path; durable production readiness remains subject to the persistence, authorization, audit and payment/invoice consistency gates documented in the pricing admin console spec.
+
+
+## Product POC documentation and wireframe baseline
+
+See [Product POC Update Log](product-poc-update-log.md) for the 2026-10-27 ownership and scope update, and the product-level [BRD](product-brd.md), [HLD](product-hld.md), [LLD](product-lld.md), and [SRS](product-srs.md). The responsive [Product Admin localized-pricing wireframe](../wireframes/product-admin-localization-wireframe.html) illustrates central Product Admin controls. The [marketing deck](../marketing/eper-product-marketing-deck.html) and [sales flyers](../marketing/eper-sales-flyers.html) are editable HTML drafts, not evidence that all features or integrations are production-ready.
