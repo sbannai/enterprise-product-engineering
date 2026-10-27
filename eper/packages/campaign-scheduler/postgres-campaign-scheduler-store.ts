@@ -186,7 +186,7 @@ export class PostgresCampaignSchedulerStore {
          SELECT $1, s.id, s.tenant_id, s.application_id, $5, $6, $7::jsonb
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$2 AND s.application_id=$3 AND s.id=$4
-           AND s.status='scheduled' AND s.approval_status='approved'
+           AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
          ON CONFLICT (tenant_id, application_id, idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
          RETURNING *`,
         [randomUUID(), tenantId, applicationId, input.scheduleId, scheduledFor.toISOString(), idempotencyKey, JSON.stringify(payload)],
@@ -201,6 +201,43 @@ export class PostgresCampaignSchedulerStore {
         idempotencyKey: String(row.idempotency_key), payload: storedPayload as Record<string, unknown>,
         availableAt: new Date(row.available_at as string | Date).toISOString(),
       };
+    } finally { client.release(); }
+  }
+
+  /** Materialize due one-time schedules into durable executions without double-claiming across schedulers. */
+  async materializeDueOneTimeSchedules(limit = 50): Promise<number> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error("CAMPAIGN_MATERIALIZE_LIMIT_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `WITH due AS (
+           SELECT id, tenant_id, application_id, next_run_at
+           FROM eper_campaign_schedules
+           WHERE status='scheduled' AND approval_status='approved'
+             AND trigger_type='once' AND next_run_at <= now()
+           ORDER BY next_run_at, created_at
+           FOR UPDATE SKIP LOCKED
+           LIMIT $1
+         ), completed AS (
+           UPDATE eper_campaign_schedules s
+           SET status='completed', updated_at=now()
+           FROM due d
+           WHERE s.id=d.id AND s.tenant_id=d.tenant_id AND s.application_id=d.application_id
+           RETURNING s.id, s.tenant_id, s.application_id, s.campaign_id, s.next_run_at
+         ), inserted AS (
+           INSERT INTO eper_campaign_executions
+             (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
+           SELECT gen_random_uuid(), c.id, c.tenant_id, c.application_id, c.next_run_at,
+             'campaign:' || c.id::text || ':' || to_char(c.next_run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+             jsonb_build_object('campaignId', c.campaign_id)
+           FROM completed c
+           ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
+           RETURNING id
+         )
+         SELECT count(*)::int AS materialized_count FROM inserted`,
+        [limit],
+      );
+      return Number(result.rows[0]?.materialized_count ?? 0);
     } finally { client.release(); }
   }
 
