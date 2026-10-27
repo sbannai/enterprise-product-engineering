@@ -73,7 +73,10 @@ export async function runCampaignExecutionWorker(
           authorized = await options.authorizeDispatch(execution);
           // A graceful shutdown during an async policy check must not acquire the
           // irreversible dispatch fence or start a provider side effect.
-          if (options.signal?.aborted) return;
+          if (options.signal?.aborted) {
+            authorized = false;
+            authorizationError = new Error("CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE");
+          }
           if (authorized) {
             authorized = await store.beginExecutionDispatch({
               tenantId: execution.tenantId,
@@ -103,8 +106,11 @@ export async function runCampaignExecutionWorker(
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
             executionId: execution.id, workerId: options.workerId,
-            errorCode: authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
-            maxAttempts: 1,
+            errorCode: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+              ? "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+              : authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
+            maxAttempts: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+              ? maxAttempts : 1,
           });
           return;
         }
