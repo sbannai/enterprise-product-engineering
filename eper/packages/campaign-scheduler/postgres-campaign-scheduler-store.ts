@@ -114,6 +114,44 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  async listSchedules(input: {
+    tenantId: string; applicationId: string; limit?: number; offset?: number;
+  }): Promise<CampaignScheduleRecord[]> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const limit = input.limit ?? 25;
+    const offset = input.offset ?? 0;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("CAMPAIGN_LIST_LIMIT_INVALID");
+    if (!Number.isInteger(offset) || offset < 0 || offset > 1000000) throw new Error("CAMPAIGN_LIST_OFFSET_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT * FROM eper_campaign_schedules
+         WHERE tenant_id=$1 AND application_id=$2
+         ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`,
+        [tenantId, applicationId, limit, offset],
+      );
+      return result.rows.map(mapSchedule);
+    } finally { client.release(); }
+  }
+
+  async getSchedule(input: {
+    tenantId: string; applicationId: string; scheduleId: string;
+  }): Promise<CampaignScheduleRecord | null> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    if (!ID_PATTERN.test(input.scheduleId)) throw new Error("CAMPAIGN_SCHEDULE_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT * FROM eper_campaign_schedules
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 LIMIT 1`,
+        [tenantId, applicationId, input.scheduleId],
+      );
+      return result.rows[0] ? mapSchedule(result.rows[0]) : null;
+    } finally { client.release(); }
+  }
+
   async approveAndSchedule(input: {
     tenantId: string; applicationId: string; scheduleId: string; actorId: string; nextRunAt: string;
   }): Promise<CampaignScheduleRecord> {
