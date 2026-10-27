@@ -135,12 +135,15 @@ Every endpoint must use the shared response contract, safe errors, request IDs, 
 ## 10. Immediate implementation slice and progress
 
 - **A1 partial:** typed contracts for jobs, drafts, approvals, tool risk, transport validation and maker-checker version/hash checks have been added in `packages/agents/agent-contracts.ts`, with tests in `tests/agent-contracts.test.mjs`. Agent route envelope alignment and full tenant/application authorization coverage remain open.
-- **A2 schema foundation added, not yet validated:** migration `packages/capabilities/migrations/003_agent_workflows.sql` defines tenant/application-scoped job, draft, approval and configuration tables, idempotency constraints, worker-claim index, composite foreign keys and forced RLS. Do not claim migration CI passed until current-head workflows complete.
-- **Still to implement:** PostgreSQL repositories and transaction/audit integration; durable outbox event handling; async job claim/lease/retry/cancel service; trusted customer identity and application assignment integration; API v1 envelope alignment; focused database and failure-injection tests.
+- **A2 schema foundation added:** migration `packages/capabilities/migrations/003_agent_workflows.sql` defines tenant/application-scoped job, draft, approval and configuration tables, idempotency constraints, worker-claim index, composite foreign keys and forced RLS.
+- **A2 repository slice added, runtime integration not yet proven:** `packages/agents/postgres-agent-store.ts` implements tenant/application transaction context, idempotent enqueue, leased worker claim, draft persistence, maker-checker review, bounded exponential retry, cancellation, and atomic audit writes for these operations. It is a persistence primitive, not yet connected to the live agent routes or a running worker.
+- **Lifecycle contract tests added:** `tests/agent-store-lifecycle-contract.test.mjs` covers RLS context, skip-locked claims, lease ownership, bounded retry, cancellation and audit call paths. These are source-contract checks, not a substitute for live PostgreSQL concurrency/RLS tests.
+- **Latest recorded CI before this lifecycle slice:** commit `d4c3b2c6f910fcf7a57594415f39e846bfb2d4a4` completed 11 reported workflows successfully. Newer commits for retries/cancellation and lifecycle tests still require current-head CI confirmation.
+- **Still open:** live PostgreSQL integration and failure-injection tests; retry jitter and worker heartbeat/lease renewal; durable outbox handling; trusted customer identity/application assignment integration; shared API v1 envelope alignment; wiring the store into the live routes; worker service and job-status polling API.
 
 Next actions:
-1. Verify current-head CI and migration repeatability/RLS behavior.
-2. Implement durable PostgreSQL repositories and atomic audit/approval state changes.
-3. Add async worker/job lifecycle and idempotency tests.
+1. Validate the new store and lifecycle tests on the current commit.
+2. Add live database/failure-injection tests and configuration read/write persistence.
+3. Wire the store behind the opt-in agent API and introduce a bounded async worker.
 4. Integrate trusted tenant/application authorization before customer rollout.
-5. Keep the existing intents behind the opt-in flag. No real model provider, CRM writes or external tools until the persistence, identity, approval and audit gates pass.
+5. Keep real model providers, CRM writes and external tools disabled until persistence, identity, approval and audit gates pass.
