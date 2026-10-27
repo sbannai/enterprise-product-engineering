@@ -460,13 +460,22 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, action,
           });
         }
-        if (options.campaignAuditWriter) {
-          await options.campaignAuditWriter({
-            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
-            action: `campaign_schedule_${action}`, outcome: "success", resourceId: scheduleId,
-            operationName: `campaign.schedule.${action}`, requestId: resolveApiRequestId(request),
-            payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus },
+        try {
+          if (options.campaignAuditWriter) {
+            await options.campaignAuditWriter({
+              tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+              action: `campaign_schedule_${action}`, outcome: "success", resourceId: scheduleId,
+              operationName: `campaign.schedule.${action}`, requestId: resolveApiRequestId(request),
+              payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus },
+            });
+          }
+        } catch (auditError) {
+          console.error("Campaign schedule changed but audit persistence failed", {
+            requestId: resolveApiRequestId(request), scheduleId,
+            action, error: auditError instanceof Error ? auditError.message : "unknown",
           });
+          sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "The schedule changed but audit confirmation is unavailable; check its status before retrying.");
+          return;
         }
         sendApiSuccess(request, response, 200, { schedule });
       } catch (error) {
@@ -518,13 +527,22 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           scheduleDefinition: scheduleDefinition as Record<string, unknown>,
           createdBy: identity.actorId,
         });
-        if (options.campaignAuditWriter) {
-          await options.campaignAuditWriter({
-            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
-            action: "campaign_schedule_create", outcome: "success", resourceId: schedule.id,
-            operationName: "campaign.schedule.create", requestId: resolveApiRequestId(request),
-            payload: { campaignId: schedule.campaignId, triggerType: schedule.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus },
+        try {
+          if (options.campaignAuditWriter) {
+            await options.campaignAuditWriter({
+              tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+              action: "campaign_schedule_create", outcome: "success", resourceId: schedule.id,
+              operationName: "campaign.schedule.create", requestId: resolveApiRequestId(request),
+              payload: { campaignId: schedule.campaignId, triggerType: schedule.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus },
+            });
+          }
+        } catch (auditError) {
+          console.error("Campaign schedule created but audit persistence failed", {
+            requestId: resolveApiRequestId(request), scheduleId: schedule.id,
+            error: auditError instanceof Error ? auditError.message : "unknown",
           });
+          sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "The schedule was created but audit confirmation is unavailable; check its status before retrying.");
+          return;
         }
         sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
       } catch (error) {
