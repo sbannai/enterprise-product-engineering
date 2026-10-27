@@ -48,7 +48,7 @@ export function sendApiError(request: IncomingMessage, response: ServerResponse,
   const requestId = resolveApiRequestId(request);
   const error: Record<string, unknown> = { code, message: message.trim() || "The request could not be completed." };
   if (details?.length) {
-    error.details = details.map(({ field, code: detailCode }) => ({
+    error.details = details.slice(0, 50).map(({ field, code: detailCode }) => ({
       field: field.slice(0, 128),
       code: ERROR_CODE_PATTERN.test(detailCode) ? detailCode : "INVALID_DETAIL",
     }));
