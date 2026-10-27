@@ -115,11 +115,15 @@ test("pausing before dispatch releases the claim without consuming retry budget"
     tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
   });
   assert.equal(released, true);
-  assert.match(calls[0].sql, /status='retry_wait'/);
-  assert.match(calls[0].sql, /attempt_count=GREATEST\(attempt_count - 1, 0\)/);
-  assert.match(calls[0].sql, /dispatch_started_at IS NULL/);
-  assert.match(calls[0].sql, /locked_by=\$4/);
-  assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.ok(update, "must update the claimed execution");
+  assert.match(update.sql, /status='retry_wait'/);
+  assert.match(update.sql, /attempt_count=GREATEST\(attempt_count - 1, 0\)/);
+  assert.match(update.sql, /dispatch_started_at IS NULL/);
+  assert.match(update.sql, /locked_by=\$4/);
+  assert.deepEqual(update.values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")), "pause deferral must be audited");
+  assert.ok(calls.some((call) => call.sql === "COMMIT"), "execution update and audit must commit together");
 });
 
 test("failure uses bounded exponential retry policy and returns dead-letter at max attempts", async () => {
