@@ -68,7 +68,7 @@ test("worker records dispatch failures for bounded retry handling", async () => 
   assert.equal(failed[1].tenantId, "tenant-a");
   assert.equal(failed[1].applicationId, "app-a");
   assert.equal(failed[1].workerId, "worker-b");
-  assert.equal(failed[1].errorCode, "ERROR");
+  assert.equal(failed[1].errorCode, "CAMPAIGN_DISPATCH_FAILED");
   assert.equal(failed[1].maxAttempts, 5);
   assert.deepEqual(reported, ["provider timeout"]);
 });
