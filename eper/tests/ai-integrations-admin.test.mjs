@@ -7,7 +7,7 @@ const AGENT_TOKEN_A = "ai-agent-maker-token-with-more-than-32-characters";
 const AGENT_TOKEN_B = "ai-agent-reviewer-token-with-more-than-32-characters";
 
 function fakeStore() {
-  let config = { applications: { "app-off": { enabled: false, provider: "none" }, "app-on": { enabled: true, provider: "openai" } } };
+  let config = { applications: { "app-off": { enabled: false, provider: "none" }, "app-on": { enabled: true, provider: "openai" }, "app-no-provider": { enabled: true, provider: "none" } } };
   let version = 1;
   const calls = [];
   return {
@@ -129,6 +129,10 @@ test("AI Integration package switch governs CRM, Sales, and Marketing together",
     body: JSON.stringify({ intent: "follow-up", input: {} }),
   });
   assert.equal(missingApp.status, 400);
+
+  const providerMissing = await request("crm", "lead-qualification", "app-no-provider");
+  assert.equal(providerMissing.status, 403);
+  assert.equal((await providerMissing.json()).error, "ai_integration_provider_not_configured");
 
   for (const item of cases) {
     const on = await request(item.agent, item.intent, "app-on");
