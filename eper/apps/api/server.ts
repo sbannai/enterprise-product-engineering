@@ -482,9 +482,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         const message = error instanceof Error ? error.message : "";
         const invalid = message === "CAMPAIGN_SCHEDULE_ID_INVALID" || message === "CAMPAIGN_NEXT_RUN_MUST_BE_FUTURE";
         const auditUnavailable = message === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED";
+        const dispatchStarted = message === "CAMPAIGN_DISPATCH_ALREADY_STARTED";
         sendApiError(request, response, auditUnavailable ? 503 : invalid ? 400 : message.includes("NOT_FOUND") ? 404 : 409,
-          auditUnavailable ? message : invalid ? message : message.includes("NOT_FOUND") ? "SCHEDULE_NOT_FOUND" : "CAMPAIGN_LIFECYCLE_CONFLICT",
-          auditUnavailable ? "The schedule change was rolled back because audit persistence failed." : "The campaign schedule could not be updated.");
+          auditUnavailable ? message : invalid ? message : dispatchStarted ? message : message.includes("NOT_FOUND") ? "SCHEDULE_NOT_FOUND" : "CAMPAIGN_LIFECYCLE_CONFLICT",
+          auditUnavailable ? "The schedule change was rolled back because audit persistence failed."
+            : dispatchStarted ? "Dispatch has already started; this campaign cannot be cancelled safely."
+            : "The campaign schedule could not be updated.");
       }
       return;
     }
