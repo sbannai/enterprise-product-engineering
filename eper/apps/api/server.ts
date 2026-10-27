@@ -1455,10 +1455,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         return { allowed: false, statusCode: 503, error: "ai_integration_policy_store_unconfigured" };
       }
       const saved = await options.adminConfigurationStore.get(tenantId, "ai-integrations");
-      const config = saved?.config as { applications?: Record<string, { enabled?: boolean }> } | undefined;
-      return config?.applications?.[applicationId]?.enabled === true
-        ? { allowed: true }
-        : { allowed: false, statusCode: 403, error: "ai_integration_disabled_for_application" };
+      const config = saved?.config as { applications?: Record<string, { enabled?: boolean; provider?: string }> } | undefined;
+      const application = config?.applications?.[applicationId];
+      if (application?.enabled !== true) {
+        return { allowed: false, statusCode: 403, error: "ai_integration_disabled_for_application" };
+      }
+      if (!application.provider || application.provider === "none") {
+        return { allowed: false, statusCode: 403, error: "ai_integration_provider_not_configured" };
+      }
+      return { allowed: true };
     };
     if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter, aiIntegrationGuard)) return;
 
