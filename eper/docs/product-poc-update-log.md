@@ -40,3 +40,11 @@ These artifacts update product documentation and static POC wireframes. They do 
 - Product Admin pricing console includes a **Feedback & Ticketing** tab and launch action to the separate support workspace at `/wireframes#support`.
 - The wireframes workspace now opens the Feedback & tickets screen when that hash is present. Ticketing still uses its own authorized token and server-side authorization; the pricing-console token is not forwarded.
 - Ticket access and workflow remain subject to environment configuration and live API readiness. Do not treat a preview screen as proof of a connected production queue.
+
+
+## Ticketing scope clarification (2026-10-27)
+
+- Product Admin ticketing is a privileged cross-client oversight queue, guarded by a distinct platform-support permission and audited.
+- Client ticketing/feedback remains available in customer login but is limited to the selected application assigned to that customer's tenant.
+- The customer-facing application selector and all API operations must be validated against trusted tenant/application membership; UI filters alone are not authorization.
+- [Product User Manual](product-user-manual.md) includes the updated admin/client workflows; [Product Admin wireframe](../wireframes/product-admin-localization-wireframe.html) includes a static Client Tickets & Feedback screen.
