@@ -24,6 +24,7 @@ import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
+import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
@@ -377,7 +378,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -414,6 +415,51 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         roleKey: identity.roleKey,
       });
       return;
+    }
+
+    // Campaign schedule read APIs: tenant identity is server-derived, and application assignment
+    // is checked independently before any database lookup.
+    const campaignCollection = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules$/.exec(requestUrl.pathname);
+    const campaignDetail = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    if ((campaignCollection || campaignDetail) && ["GET", "HEAD"].includes(request.method ?? "")) {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationId = (campaignCollection ?? campaignDetail)![1];
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
+        if (campaignCollection) {
+          const rawLimit = requestUrl.searchParams.get("limit");
+          const rawOffset = requestUrl.searchParams.get("offset");
+          const limit = rawLimit === null ? 25 : Number(rawLimit);
+          const offset = rawOffset === null ? 0 : Number(rawOffset);
+          if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0 || offset > 1000000) {
+            sendApiError(request, response, 400, "INVALID_PAGINATION", "Pagination parameters are invalid."); return;
+          }
+          const schedules = await options.campaignSchedulerStore.listSchedules({ tenantId: identity.tenantId, applicationId, limit, offset });
+          sendApiSuccess(request, response, 200, { schedules, pagination: { limit, offset } }); return;
+        }
+        const schedule = await options.campaignSchedulerStore.getSchedule({ tenantId: identity.tenantId, applicationId, scheduleId: campaignDetail![2] });
+        if (!schedule) { sendApiError(request, response, 404, "SCHEDULE_NOT_FOUND", "The schedule was not found."); return; }
+        sendApiSuccess(request, response, 200, { schedule }); return;
+      } catch (error) {
+        const code = error instanceof Error && error.message === "CAMPAIGN_SCHEDULE_ID_INVALID" ? "INVALID_SCHEDULE_ID" : "CAMPAIGN_SCHEDULER_READ_FAILED";
+        sendApiError(request, response, code === "INVALID_SCHEDULE_ID" ? 400 : 500, code, "The campaign schedule could not be retrieved."); return;
+      }
+    }
+    if ((campaignCollection || campaignDetail) && request.method !== "GET" && request.method !== "HEAD") {
+      sendMethodNotAllowed(request, response, "GET, HEAD"); return;
     }
 
     // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.
