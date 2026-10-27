@@ -5,6 +5,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 const ADMIN_TOKEN = "ai-integration-admin-token-with-more-than-32-characters";
 const AGENT_TOKEN_A = "ai-agent-maker-token-with-more-than-32-characters";
 const AGENT_TOKEN_B = "ai-agent-reviewer-token-with-more-than-32-characters";
+const AGENT_TOKEN_C = "ai-agent-other-tenant-token-with-more-than-32-characters";
 
 function fakeStore() {
   let config = { applications: { "app-off": { enabled: false, provider: "none" }, "app-on": { enabled: true, provider: "openai" }, "app-no-provider": { enabled: true, provider: "none" } } };
@@ -15,7 +16,7 @@ function fakeStore() {
     async assertReady() {},
     async get(tenantId, resourceType) {
       calls.push({ method: "get", tenantId, resourceType });
-      if (resourceType !== "ai-integrations") return null;
+      if (resourceType !== "ai-integrations" || tenantId !== "tenant-a") return null;
       return { tenantId, resourceType, config, version, updatedAt: new Date().toISOString(), updatedBy: "admin-a" };
     },
     async replace(input) {
@@ -36,7 +37,7 @@ async function withServer(t, store, extraEnv = {}) {
   const keys = [
     "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
     "EPER_ADMIN_CONFIG_API_TOKEN", "EPER_ADMIN_CONFIG_API_ENABLED",
-    "EPER_AGENTS_API_ENABLED", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS",
+    "EPER_AGENTS_API_ENABLED", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS", "EPER_AGENTS_PRINCIPAL_TENANTS_JSON",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
@@ -45,7 +46,8 @@ async function withServer(t, store, extraEnv = {}) {
     EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({ [ADMIN_TOKEN]: { tenantId: "tenant-a", actorId: "admin-a" } }),
     EPER_AGENTS_API_ENABLED: "true",
     EPER_AGENTS_TENANT_ID: "tenant-a",
-    EPER_AGENTS_PRINCIPAL_TOKENS: `maker-a=${AGENT_TOKEN_A};reviewer-b=${AGENT_TOKEN_B}`,
+    EPER_AGENTS_PRINCIPAL_TOKENS: "maker-a=" + AGENT_TOKEN_A + ";reviewer-b=" + AGENT_TOKEN_B + ";maker-other=" + AGENT_TOKEN_C,
+    EPER_AGENTS_PRINCIPAL_TENANTS_JSON: JSON.stringify({ "maker-a": "tenant-a", "reviewer-b": "tenant-a", "maker-other": "tenant-b" }),
     ...extraEnv,
   });
   const server = createAppServer({ adminConfigurationStore: store });
@@ -169,4 +171,17 @@ test("AI agent requests fail closed when the policy store is unavailable", async
   });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error, "ai_integration_policy_unavailable");
+});
+
+test("AI integration policy uses the authenticated principal tenant, not deployment default", async (t) => {
+  const store = fakeStore();
+  const { base } = await withServer(t, store);
+  const response = await fetch(base + "/v1/agents/crm/drafts?applicationId=app-on", {
+    method: "POST",
+    headers: { authorization: "Bearer " + AGENT_TOKEN_C, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "ai_integration_disabled_for_application");
+  assert.equal(store.calls.at(-1).tenantId, "tenant-b");
 });
