@@ -8,9 +8,9 @@ on:
       - ".github/workflows/eper-reexec-qa.yml"
       - ".github/workflows/**"
   push:
+    branches: ["main"]
     paths:
       - "eper/**"
-      - ".github/workflows/eper-reexec-qa.yml"
   workflow_dispatch:
 
 jobs:
