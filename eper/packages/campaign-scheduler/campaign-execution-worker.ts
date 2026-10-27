@@ -66,6 +66,7 @@ export async function runCampaignExecutionWorker(
         // Fail closed: never call the provider unless current policy authorizes this execution.
         // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
         let authorized = false;
+        let authorizationError: unknown;
         try {
           // Evaluate consent, quiet-hours, and channel policy before acquiring the
           // dispatch fence; the fence then atomically rechecks the live lease and schedule.
@@ -78,16 +79,18 @@ export async function runCampaignExecutionWorker(
               workerId: options.workerId,
             });
           }
-        } catch (authorizationError) {
-          // A policy service outage is not permission to dispatch. Fail closed and do not retry
-          // this execution automatically; an operator can review and explicitly requeue it.
-          options.onError?.(authorizationError);
+        } catch (error) {
+          // A policy service outage is not permission to dispatch. Preserve the distinction
+          // between an explicit denial and an unavailable/failed authorization check.
+          authorizationError = error;
+          options.onError?.(error);
         }
         if (!authorized) {
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
             executionId: execution.id, workerId: options.workerId,
-            errorCode: "CAMPAIGN_DISPATCH_POLICY_DENIED", maxAttempts: 1,
+            errorCode: authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
+            maxAttempts: 1,
           });
           return;
         }
