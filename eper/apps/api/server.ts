@@ -448,18 +448,22 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           let body: Record<string, unknown>;
           try { body = await readJson(request); }
           catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
-          const nextRunAtMs = typeof body.nextRunAt === "string" ? Date.parse(body.nextRunAt) : Number.NaN;
+          const nextRunAt = typeof body.nextRunAt === "string" ? body.nextRunAt : "";
+          const nextRunAtMs = nextRunAt ? Date.parse(nextRunAt) : Number.NaN;
           if (!Number.isFinite(nextRunAtMs) || nextRunAtMs <= Date.now()) {
             sendApiError(request, response, 400, "INVALID_NEXT_RUN_AT", "A valid future nextRunAt timestamp is required."); return;
           }
           schedule = await options.campaignSchedulerStore.approveAndSchedule({
             tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId,
-            nextRunAt: body.nextRunAt, operation: action === "resume" ? "resume" : "approve",
+            nextRunAt, operation: action === "resume" ? "resume" : "approve",
           });
         } else if (action === "pause" || action === "cancel") {
           schedule = await options.campaignSchedulerStore.pauseOrCancel({
             tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, action,
           });
+        }
+        if (!schedule) {
+          sendApiError(request, response, 400, "CAMPAIGN_ACTION_INVALID", "The requested campaign lifecycle action is not supported."); return;
         }
         try {
           if (options.campaignAuditWriter) {
