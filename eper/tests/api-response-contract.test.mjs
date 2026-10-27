@@ -91,7 +91,7 @@ test("API 205 success has no body and rejects payload data", async () => {
 test("API error details are bounded and machine-readable", async () => {
   const server = createServer((request, response) => sendApiError(
     request, response, 422, "VALIDATION_FAILED", "   ",
-    [{ field: "x".repeat(200), code: "INVALID_FIELD" }, { field: "amount", code: "bad code" }],
+    [{ field: "x".repeat(200), code: "INVALID_FIELD" }, { field: "amount", code: "bad code" }, ...Array.from({ length: 60 }, (_, index) => ({ field: "field" + index, code: "INVALID_FIELD" }))],
   ));
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
@@ -104,6 +104,7 @@ test("API error details are bounded and machine-readable", async () => {
       { field: "x".repeat(128), code: "INVALID_FIELD" },
       { field: "amount", code: "INVALID_DETAIL" },
     ]);
+    assert.equal(payload.error.details.length, 50, "error details must be capped to prevent oversized envelopes");
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
 
