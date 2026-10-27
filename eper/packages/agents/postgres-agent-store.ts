@@ -180,7 +180,7 @@ export class PostgresAgentStore {
   }
 
   /** Claims the oldest eligible job for this tenant/application; use a worker lease. */
-  async claimNextJob(input: { tenantId: string; applicationId: string; workerId: string; leaseSeconds?: number }): Promise<StoredAgentJob | null> {
+  async claimNextJob(input: { tenantId: string; applicationId: string; workerId: string; environment: AuditEnvironment; leaseSeconds?: number }): Promise<StoredAgentJob | null> {
     requireId(input.workerId, "worker_id");
     const leaseSeconds = input.leaseSeconds ?? 60;
     if (!Number.isInteger(leaseSeconds) || leaseSeconds < 5 || leaseSeconds > 900) throw new Error("INVALID_AGENT_LEASE");
@@ -197,7 +197,7 @@ export class PostgresAgentStore {
       );
       for (const row of expired.rows) {
         await appendAuditEventInTransaction(client, {
-          tenantId: input.tenantId, applicationId: input.applicationId, environment: "sandbox",
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
           actorType: "system", actorId: input.workerId, action: "agent.job.deadline_exceeded", outcome: "failure",
           reasonCode: "AGENT_JOB_DEADLINE_EXCEEDED", resourceType: "agent-job", resourceId: String(row.job_id),
           source: "job", operationName: "claim agent job",
@@ -225,7 +225,7 @@ export class PostgresAgentStore {
       if (result.rows[0]) {
         const claimed = result.rows[0];
         await appendAuditEventInTransaction(client, {
-          tenantId: input.tenantId, applicationId: input.applicationId, environment: "sandbox",
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
           actorType: "service", actorId: input.workerId, action: "agent.job.claim", outcome: "success",
           resourceType: "agent-job", resourceId: String(claimed.job_id), source: "job",
           operationName: "claim agent job",
