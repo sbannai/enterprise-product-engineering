@@ -4,7 +4,7 @@ import { type IncomingMessage, type ServerResponse } from "node:http";
 type AgentKind = "crm" | "sales" | "marketing";
 type DraftStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 type Draft = {
-  id: string; tenantId: string; createdBy: string; agent: AgentKind; intent: string;
+  id: string; tenantId: string; applicationId: string; createdBy: string; agent: AgentKind; intent: string;
   content: Record<string, unknown>; status: DraftStatus; createdAt: string;
   reviewedBy?: string; reviewedAt?: string; reviewNote?: string;
 };
@@ -186,6 +186,11 @@ export async function handleAgentRoute(
     send(response, 503, { error: "agents_principal_tenant_mapping_unconfigured" }); return true;
   }
 
+  const applicationId = new URL(request.url ?? "/", "http://localhost").searchParams.get("applicationId") ?? "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
+    send(response, 400, { error: "application_id_required_for_ai_integration_policy" }); return true;
+  }
+
   const recordAudit = async (record: Omit<AgentAuditRecord, "tenantId" | "actorId" | "requestId">) => {
     if (!auditWriter) return;
     await auditWriter({
@@ -215,12 +220,12 @@ export async function handleAgentRoute(
       const intent = cleanText(body.intent, "intent", 80);
       if (!body.input || typeof body.input !== "object" || Array.isArray(body.input)) throw new Error("INVALID_INPUT");
       const content = buildDraft(draftMatch[1] as AgentKind, intent, body.input as Record<string, unknown>);
-      const draft: Draft = { id: randomUUID(), tenantId, createdBy: principalId, agent: draftMatch[1] as AgentKind, intent, content, status: "PENDING_APPROVAL", createdAt: new Date().toISOString() };
+      const draft: Draft = { id: randomUUID(), tenantId, applicationId, createdBy: principalId, agent: draftMatch[1] as AgentKind, intent, content, status: "PENDING_APPROVAL", createdAt: new Date().toISOString() };
       drafts.set(draft.id, draft);
       try {
         await recordAudit({ action: "agent.draft.create", outcome: "success", resourceType: "agent-draft",
           resourceId: draft.id, operationName: `${request.method} ${pathname}`,
-          payload: { agent: draft.agent, intent: draft.intent, status: draft.status } });
+          payload: { applicationId, agent: draft.agent, intent: draft.intent, status: draft.status } });
       } catch {
         drafts.delete(draft.id);
         send(response, 503, { error: "audit_persistence_unavailable" }); return true;
@@ -229,19 +234,19 @@ export async function handleAgentRoute(
     }
     if (request.method === "GET" && pathname === "/v1/agents/drafts") {
       const status = new URL(request.url ?? "/", "http://localhost").searchParams.get("status");
-      const items = [...drafts.values()].filter((d) => d.tenantId === tenantId && (!status || d.status === status)).map((d) => ({ ...d }));
+      const items = [...drafts.values()].filter((d) => d.tenantId === tenantId && d.applicationId === applicationId && (!status || d.status === status)).map((d) => ({ ...d }));
       try {
         await recordAudit({ action: "agent.drafts.list", outcome: "success", resourceType: "agent-api",
-          operationName: `${request.method} ${pathname}`, payload: { statusFilter: status, resultCount: items.length } });
+          operationName: `${request.method} ${pathname}`, payload: { applicationId, statusFilter: status, resultCount: items.length } });
       } catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
       send(response, 200, { drafts: items, total: items.length, persistence: "process-memory" }); return true;
     }
     const reviewMatch = /^\/v1\/agents\/drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
     if (request.method === "POST" && reviewMatch) {
       const draft = drafts.get(reviewMatch[1]);
-      if (!draft || draft.tenantId !== tenantId) {
+      if (!draft || draft.tenantId !== tenantId || draft.applicationId !== applicationId) {
         try { await recordAudit({ action: "agent.draft.review", outcome: "denied", resourceType: "agent-draft",
-          resourceId: reviewMatch[1], operationName: `${request.method} ${pathname}`, payload: { reason: "draft_not_found_or_wrong_tenant" } }); }
+          resourceId: reviewMatch[1], operationName: `${request.method} ${pathname}`, payload: { applicationId, reason: "draft_not_found_or_wrong_scope" } }); }
         catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
         send(response, 404, { error: "draft_not_found" }); return true;
       }
@@ -266,7 +271,7 @@ export async function handleAgentRoute(
         await recordAudit({ action: reviewMatch[2] === "approve" ? "agent.draft.approve" : "agent.draft.reject",
           outcome: "success", resourceType: "agent-draft", resourceId: draft.id,
           operationName: `${request.method} ${pathname}`,
-          payload: { previousStatus, status: draft.status, noteProvided: Boolean(note) } });
+          payload: { applicationId, previousStatus, status: draft.status, noteProvided: Boolean(note) } });
       } catch {
         draft.status = previousStatus; delete draft.reviewedBy; delete draft.reviewedAt; delete draft.reviewNote;
         send(response, 503, { error: "audit_persistence_unavailable" }); return true;
