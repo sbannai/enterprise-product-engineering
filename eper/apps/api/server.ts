@@ -21,6 +21,8 @@ import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 import { handleAgentRoute, type AgentAuditWriter } from "../../packages/agents/agent-workflows.js";
+import { PostgresAgentStore, type AgentSqlPool } from "../../packages/agents/postgres-agent-store.js";
+import { handleAgentJobRoute } from "./agent-job-routes.js";
 import { appendAuditEvent, type AuditSqlPool } from "../../packages/audit/audit-event-store.js";
 import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
@@ -138,6 +140,28 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
         typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId !== record.actorId.trim() || record.actorId.length > 128 ||
         typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey !== record.roleKey.trim() || record.roleKey.length > 128) return null;
     return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey };
+  }
+  return null;
+}
+
+/** Agent job access additionally requires an explicit server-side application assignment. */
+function resolveAgentJobIdentity(request: IncomingMessage): TrustedAgentJobIdentity | null {
+  const base = resolveCustomerAccessIdentity(request);
+  if (!base) return null;
+  const match = /^Bearer (.+)$/i.exec(request.headers.authorization ?? "");
+  if (!match) return null;
+  let mapping: unknown;
+  try { mapping = JSON.parse(process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON ?? ""); } catch { return null; }
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) return null;
+  const supplied = Buffer.from(match[1], "utf8");
+  for (const [credential, identity] of Object.entries(mapping as Record<string, unknown>)) {
+    const expected = Buffer.from(credential, "utf8");
+    if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
+    if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
+    const applications = (identity as Record<string, unknown>).applicationIds;
+    if (!Array.isArray(applications) || applications.length === 0 ||
+        applications.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9._-]{2,100}$/.test(id))) return null;
+    return { ...base, applicationIds: [...new Set(applications as string[])] };
   }
   return null;
 }
@@ -1822,7 +1846,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
-    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
+    const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;\n    if (await handleAgentJobRoute(request, response, requestUrl.pathname, {\n      store: agentStore, resolveIdentity: resolveAgentJobIdentity,\n      environment: options.adminConfigEnvironment ?? "sandbox",\n    })) return;\n\n    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
 
     sendJson(request, response, 404, { error: "not_found" });
   });
