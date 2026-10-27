@@ -25,7 +25,10 @@ Application-specific values must never be stored in a global singleton or shared
 ### Customer portal
 - List of applications assigned to the authenticated customer.
 - An application dashboard with a dedicated **Settings** area.
-- Integration settings for that application: payment provider, messaging/WhatsApp, AI provider, storage/document sharing, video conferencing, and application-specific workflow/notification preferences where enabled.
+- Integration settings for that application: payment provider, messaging/WhatsApp, AI provider, storage/document sharing, **video conferencing**, and **alerts/notifications**.
+- Video conferencing and alert configuration must be reached from Customer login → My Applications → select application → Settings. These are not platform-admin global settings.
+- Every integration setting, credential reference, connection test, notification rule, recipient group, template, and delivery history is isolated by `(tenant_id, application_id, integration_key, environment)` or the corresponding application-scoped key.
+- Provider reuse is permitted only through an explicit, authorized connection reference; sharing a provider project never shares application policies, recipients, secrets, or delivery records.
 - Credential setup/rotation, Test Connection, last test result, and connection health.
 - Customer-facing Help Center and Growth Hub remain in customer login, not admin login.
 
