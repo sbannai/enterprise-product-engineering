@@ -171,6 +171,44 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
 });
 
 
+test("actor application authorization blocks ticket listing, history, and replies before store access", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-b"] },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-b"] });
+  let storeCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { storeCalls++; return []; },
+    async create() { storeCalls++; throw new Error("must not be called"); },
+    async listReplies() { storeCalls++; return []; },
+    async addReply() { storeCalls++; throw new Error("must not be called"); },
+  };
+  const ticketId = "00000000-0000-4000-8000-000000000099";
+  await withServer({ ticketStore }, async (base) => {
+    const headers = {
+      authorization: `Bearer ${credential}`,
+      accept: "application/vnd.eper.v1+json",
+      "content-type": "application/json",
+    };
+    const requests = [
+      fetch(base + "/customer/applications/app-a/tickets", { headers }),
+      fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", { headers }),
+      fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
+        method: "POST", headers, body: JSON.stringify({ body: "unauthorized reply" }),
+      }),
+    ];
+    for (const response of await Promise.all(requests)) {
+      assert.equal(response.status, 403);
+      const payload = await response.json();
+      assert.equal(payload.success, false);
+      assert.equal(payload.error.code, "ACTOR_NOT_ASSIGNED_TO_APPLICATION");
+    }
+    assert.equal(storeCalls, 0, "unauthorized requests must not reach ticket list/history/reply storage");
+  });
+});
+
 test("ticket creation returns a stable conflict when an idempotency key is reused with a different payload", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
