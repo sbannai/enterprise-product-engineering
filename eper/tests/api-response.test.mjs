@@ -107,6 +107,19 @@ test("invalid correlation IDs are replaced with safe generated request IDs", () 
   assert.match(res.headers.get("x-request-id"), /^[0-9a-f-]{36}$/i);
 });
 
+test("success and error helpers reuse one request correlation ID", () => {
+  const req = request({ "x-correlation-id": "shared-request-42" });
+  const success = responseRecorder();
+  const failure = responseRecorder();
+
+  sendApiSuccess(req, success, 200, { ok: true });
+  sendApiError(req, failure, 409, "STATE_CONFLICT", "The operation conflicts with current state.");
+
+  assert.equal(success.headers.get("x-request-id"), "shared-request-42");
+  assert.equal(failure.headers.get("x-request-id"), "shared-request-42");
+  assert.equal(success.json().meta.requestId, failure.json().meta.requestId);
+});
+
 test("array and oversized correlation headers are replaced with generated IDs", () => {
   const headers = [
     { "x-correlation-id": ["first", "second"] },
