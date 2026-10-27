@@ -330,3 +330,26 @@ test("dispatch-start fence denies jobs whose live schedule is cancelled", async 
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
   assert.ok(!calls.some((call) => call.sql.includes("SET dispatch_started_at=COALESCE")));
 });
+
+
+test("cancellation rolls back when a running execution has crossed the dispatch fence", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("UPDATE eper_campaign_schedules")) return { rows: [scheduleRow({ status: "cancelled" })], rowCount: 1 };
+    if (sql.includes("SELECT id FROM eper_campaign_executions") && sql.includes("dispatch_started_at IS NOT NULL")) {
+      return { rows: [{ id: "execution-1" }], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(
+    store.pauseOrCancel({
+      tenantId: "tenant-a", applicationId: "app-a",
+      scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+      actorId: "actor-a", action: "cancel",
+    }),
+    /CAMPAIGN_DISPATCH_ALREADY_STARTED/,
+  );
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some((call) => call.sql === "COMMIT"));
+  assert.ok(!calls.some((call) => call.sql.includes("UPDATE eper_campaign_executions SET status='cancelled'")));
+});
