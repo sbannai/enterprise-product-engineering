@@ -63,3 +63,7 @@ These are proposed objectives to approve and validate—not current guarantees:
 The API currently requires a configured PostgreSQL connection and fails startup when the database URL is absent or invalid. This is intentional fail-closed behavior, not a complete HA implementation. This document defines the recovery design; it does not claim that a standby, automated promotion, backup schedule, restore rehearsal, or RPO/RTO objective is already configured or verified.
 
 No chargeable cloud database, replica, backup tier, or other resource may be provisioned without explicit authorization.
+
+## Controlled drill checklist
+
+Use [the PostgreSQL failover drill checklist](./database-failover-drill-checklist.md) to capture authorization, entry/exit gates, provider-level fencing/promotion evidence, payment reconciliation, audit verification, and measured RPO/RTO. The checklist is marked NOT RUN until a real isolated-environment drill is executed and independently reviewed.
