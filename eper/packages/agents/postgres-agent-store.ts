@@ -424,6 +424,13 @@ export class PostgresAgentStore {
       const draft = result.rows[0];
       if (!draft) throw new AgentDraftConflictError("AGENT_DRAFT_NOT_FOUND");
       if (draft.status !== "pending_approval") throw new AgentDraftConflictError("AGENT_DRAFT_ALREADY_REVIEWED");
+      const jobState = await client.query<Record<string, unknown>>(
+        "SELECT status FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3 FOR UPDATE",
+        [input.tenantId, input.applicationId, String(draft.job_id)],
+      );
+      if (!jobState.rows[0] || jobState.rows[0].status !== "awaiting_approval") {
+        throw new AgentDraftConflictError("AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL");
+      }
       try {
         assertApprovalAllowed({
           createdBy: String(draft.created_by), reviewerId: input.reviewerId,
