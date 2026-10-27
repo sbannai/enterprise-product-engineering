@@ -54,3 +54,7 @@ These are targets to validate, not measured results:
 
 ## Current limitation
 CI passing is not a database capacity result. EPER has not yet produced a measured throughput ceiling or a production capacity guarantee from the code changes alone. Final pool values and hardware sizing must be based on expected peak traffic, data size, managed PostgreSQL limits, and the above load-test results.
+
+## Resilience and fallback
+
+PostgreSQL outage recovery, standby promotion, backup/PITR, single-writer fencing, unknown payment-commit reconciliation, and recovery rehearsal requirements are defined in [Database Resilience and Failover](./database-resilience-and-failover.md). Do not silently switch to another database engine or a stale/local store when PostgreSQL is unavailable. The fallback must preserve durable financial state, tenant isolation, idempotency, and audit integrity.
