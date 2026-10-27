@@ -154,3 +154,16 @@ test("campaign resume requires a new future run time and uses the approval path"
   assert.equal(body.data.schedule.status, "scheduled");
   assert.equal(body.data.schedule.approvalStatus, "approved");
 });
+
+
+test("campaign resume rejects a timestamp that is no longer in the future", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/resume", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ nextRunAt: "2020-01-01T10:00:00Z" }),
+  });
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error.code, "INVALID_NEXT_RUN_AT");
+});
