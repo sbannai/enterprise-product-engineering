@@ -421,6 +421,52 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     // is checked independently before any database lookup.
     const campaignCollection = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules$/.exec(requestUrl.pathname);
     const campaignDetail = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    if (campaignCollection && request.method === "POST") {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      const applicationId = campaignCollection[1];
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      let body: Record<string, unknown>;
+      try { body = await readJson(request); }
+      catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
+      const campaignId = body.campaignId;
+      const triggerType = body.triggerType;
+      const timezone = body.timezone;
+      const scheduleDefinition = body.scheduleDefinition;
+      if (typeof campaignId !== "string" || !campaignId.trim() || campaignId.length > 128 ||
+          !["once", "recurring", "event", "condition"].includes(String(triggerType)) ||
+          typeof timezone !== "string" || !timezone.trim() || timezone.length > 128 ||
+          !scheduleDefinition || typeof scheduleDefinition !== "object" || Array.isArray(scheduleDefinition)) {
+        sendApiError(request, response, 400, "INVALID_CAMPAIGN_SCHEDULE", "Required schedule fields are missing or invalid."); return;
+      }
+      try {
+        const schedule = await options.campaignSchedulerStore.createSchedule({
+          tenantId: identity.tenantId,
+          applicationId,
+          campaignId: campaignId.trim(),
+          triggerType: triggerType as "once" | "recurring" | "event" | "condition",
+          timezone,
+          scheduleDefinition: scheduleDefinition as Record<string, unknown>,
+          createdBy: identity.actorId,
+        });
+        sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
+      } catch (error) {
+        const code = error instanceof Error && /^CAMPAIGN_.*INVALID$/.test(error.message) ? error.message : "CAMPAIGN_SCHEDULE_CREATE_FAILED";
+        sendApiError(request, response, code === "CAMPAIGN_SCHEDULE_CREATE_FAILED" ? 500 : 400, code, "The campaign schedule could not be created."); return;
+      }
+    }
     if ((campaignCollection || campaignDetail) && ["GET", "HEAD"].includes(request.method ?? "")) {
       if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
