@@ -483,7 +483,8 @@ export class PostgresCampaignSchedulerStore {
          JOIN eper_campaign_executions e
            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
-           AND e.locked_by=$4 AND s.status='scheduled' AND s.approval_status='approved'
+           AND e.locked_by=$4 AND e.dispatch_started_at IS NULL
+           AND s.status='scheduled' AND s.approval_status='approved'
          FOR UPDATE OF s, e`,
         [tenantId, applicationId, input.executionId, workerId],
       );
@@ -492,8 +493,9 @@ export class PostgresCampaignSchedulerStore {
         return false;
       }
       await client.query(
-        `UPDATE eper_campaign_executions SET dispatch_started_at=COALESCE(dispatch_started_at, now()), updated_at=now()
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4`,
+        `UPDATE eper_campaign_executions SET dispatch_started_at=now(), updated_at=now()
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+           AND dispatch_started_at IS NULL`,
         [tenantId, applicationId, input.executionId, workerId],
       );
       await client.query("COMMIT");
