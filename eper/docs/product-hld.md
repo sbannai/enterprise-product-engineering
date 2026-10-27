@@ -55,3 +55,8 @@ Authorized user creates draft → persisted pending review → independent revie
 
 ## 6. Deployment and maturity note
 The repository contains implemented components and design/preview-only surfaces. Customer/application/plans/tariffs/access UI sections remain placeholders; localized pricing configuration may use process memory unless a durable adapter is active; production payment provider and actual HA drills are not proven by design documents. Verify each component against CI and environment evidence before release.
+
+
+## Product Admin ticketing and feedback
+
+Product Admin has an administrative entry point into the existing ticketing/feedback workspace. Ticket storage and support API remain a separate domain service; the pricing console must not duplicate ticket records or bypass ticket-specific authorization. The admin opens the support workspace and authenticates there independently. Support queries must be authorized and auditable, and cross-tenant views are allowed only for explicitly privileged platform roles. Ticketing unavailability must be surfaced rather than replaced by misleading sample data.
