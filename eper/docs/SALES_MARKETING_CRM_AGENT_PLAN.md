@@ -132,11 +132,15 @@ Every endpoint must use the shared response contract, safe errors, request IDs, 
 - Preserve the 228 requirements and 38 chapters; map each accepted feature to existing requirement IDs before closure claims.
 - Do not provision chargeable resources or authorize Business UAT from this plan.
 
-## 10. Immediate implementation slice
+## 10. Immediate implementation slice and progress
 
-Implement A1 before expanding agent behavior:
-1. Add shared typed contracts for jobs, drafts, approvals and tool risk.
-2. Align agent routes to shared response envelope and request-ID contract.
-3. Add tests for tenant/application scope, maker-checker, unsupported intents, audit failure and safe errors.
-4. Keep current intents behind the opt-in flag and label process-memory behavior as a non-durable prototype until A2 lands.
-5. Implement durable stores and async jobs before enabling a real model provider or external tools.
+- **A1 partial:** typed contracts for jobs, drafts, approvals, tool risk, transport validation and maker-checker version/hash checks have been added in `packages/agents/agent-contracts.ts`, with tests in `tests/agent-contracts.test.mjs`. Agent route envelope alignment and full tenant/application authorization coverage remain open.
+- **A2 schema foundation added, not yet validated:** migration `packages/capabilities/migrations/003_agent_workflows.sql` defines tenant/application-scoped job, draft, approval and configuration tables, idempotency constraints, worker-claim index, composite foreign keys and forced RLS. Do not claim migration CI passed until current-head workflows complete.
+- **Still to implement:** PostgreSQL repositories and transaction/audit integration; durable outbox event handling; async job claim/lease/retry/cancel service; trusted customer identity and application assignment integration; API v1 envelope alignment; focused database and failure-injection tests.
+
+Next actions:
+1. Verify current-head CI and migration repeatability/RLS behavior.
+2. Implement durable PostgreSQL repositories and atomic audit/approval state changes.
+3. Add async worker/job lifecycle and idempotency tests.
+4. Integrate trusted tenant/application authorization before customer rollout.
+5. Keep the existing intents behind the opt-in flag. No real model provider, CRM writes or external tools until the persistence, identity, approval and audit gates pass.
