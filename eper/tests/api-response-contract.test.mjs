@@ -34,8 +34,11 @@ test("API error envelope is stable and omits absent details", async () => {
 
 test("request ID rejects unsafe caller values and generates a replacement", () => {
   assert.equal(resolveApiRequestId({ headers: { "x-correlation-id": "safe.id-123" } }), "safe.id-123");
-  const generated = resolveApiRequestId({ headers: { "x-correlation-id": "bad value" } });
+  const request = { headers: { "x-correlation-id": "bad value" } };
+  const generated = resolveApiRequestId(request);
   assert.match(generated, /^[0-9a-f-]{36}$/i);
+  assert.equal(resolveApiRequestId(request), generated, "generated request ID must remain stable for this request");
+  assert.notEqual(resolveApiRequestId({ headers: { "x-correlation-id": "bad value" } }), generated, "separate requests must not share generated IDs");
 });
 
 
