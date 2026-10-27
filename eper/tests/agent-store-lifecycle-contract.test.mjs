@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../packages/agents/postgres-agent-store.ts", import.meta.url), "utf8");
 const routes = await readFile(new URL("../apps/api/agent-job-routes.ts", import.meta.url), "utf8");
+const apiResponse = await readFile(new URL("../apps/api/api-response.ts", import.meta.url), "utf8");
 
 test("agent store scopes each transaction with tenant and application RLS context", () => {
   assert.match(source, /set_config\('eper\.tenant_id', \$1, true\)/);
@@ -60,6 +61,12 @@ test("durable draft review requires trusted reviewer role and assigned applicati
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
   assert.match(routes, /expectedContentHash/);
   assert.match(routes, /options\.store\.reviewDraft/);
+});
+
+test("API request ID stays stable across audit correlation and response envelopes", () => {
+  assert.match(apiResponse, /const requestIds = new WeakMap<IncomingMessage, string>\(\);/);
+  assert.match(apiResponse, /const existing = requestIds\.get\(request\);/);
+  assert.match(apiResponse, /requestIds\.set\(request, requestId\);/);
 });
 
 test("durable draft read returns review metadata only through tenant/application-scoped storage", () => {
