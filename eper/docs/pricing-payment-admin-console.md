@@ -92,3 +92,30 @@ The admin UI now contains clearly labelled **Customers & Applications**, **Plans
 - Access and commercial changes create durable, correlated audit events with a mandatory reason where required.
 - Failed writes, stale versions, and unauthorized attempts return standardized errors and do not partially mutate state.
 - Test both access enforcement and UI behavior; a disabled control in the preview is not an authorization test.
+
+
+## Product Admin ownership: localized pricing
+
+Localized product pricing is a **Product Admin responsibility** in the platform Admin control plane, not a customer-admin setting. Product Admin maintains the canonical product catalogue and market-specific commercial price books. Customer admins may select or request only the plans and prices made available to their tenant; they cannot edit product prices or create their own tariff overrides.
+
+Product Admin responsibilities:
+- Maintain product identifiers and localized market availability.
+- Define a separate approved price entry for each product + market + price-book version, with explicit ISO currency, amount in minor units, effective interval, status, and approval/audit reference.
+- Manage localized plan/tariff pricing and versioning, including billing interval and pricing model; keep accepted customer/application price snapshots immutable unless an explicitly approved contract change is recorded.
+- Keep **market price** separate from **display locale**. Locale controls language/formatting; the market-specific approved price determines the amount and currency to charge. Never treat a locale switch as an FX conversion or silently reprice an existing contract.
+- Define and review tax, rounding, and regional compliance rules as explicit pricing policy; do not infer tax treatment from a browser locale.
+- Ensure quote, checkout, payment, invoice and receipt use the same authoritative server-side quote/accepted price snapshot and currency.
+- Audit price creation, approval, effective-date changes, retirement, overrides and contract repricing with actor, reason, version and correlation ID.
+
+### Localized pricing acceptance criteria
+1. Product Admin can maintain distinct approved prices for the same product in different markets and currencies.
+2. Only approved and effective entries are returned by the market resolver.
+3. Changing UI language or display locale does not change the market, accepted price, or charged currency.
+4. Changing market selects an explicit approved market price; it does not perform an implicit currency conversion.
+5. Existing customer/application agreements retain their accepted price snapshot when the catalogue changes.
+6. Quote, payment, invoice and receipt agree on amount, currency, price version and application/tenant scope.
+7. Unauthorized customer admins cannot create or mutate product prices, tariffs, discounts or other tenants' price books.
+
+## Implementation boundary — localized pricing
+
+The current Price Book UI and pricing resolver provide the initial product/market price-entry workflow, but current configuration may be held in API process memory unless a durable adapter is configured. The Customers & Applications, Plans & Tariffs and Client Access tabs remain preview placeholders. Do not treat localized pricing administration as production-ready until durable persistence, authorization, audit evidence, tax/rounding policy, and quote-to-payment-to-invoice/receipt consistency tests have passed.
