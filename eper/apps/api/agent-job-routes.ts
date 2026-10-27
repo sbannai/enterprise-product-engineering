@@ -124,7 +124,7 @@ export async function handleAgentJobRoute(
       sendApiSuccess(request, response, 200, { job, statusUrl: "/v1/agent-jobs/" + job.jobId + "?applicationId=" + encodeURIComponent(applicationId) });
       return true;
     }
-    response.setHeader("allow", pathname === "/v1/agent-jobs" ? "POST" : "GET");
+    response.setHeader("allow", pathname === "/v1/agent-jobs" ? "POST" : pathname.startsWith("/v1/agent-drafts/") ? "POST" : "GET");
     sendError(request, response, 405, "METHOD_NOT_ALLOWED", "This HTTP method is not supported for the agent job resource.");
     return true;
   } catch (error) {
