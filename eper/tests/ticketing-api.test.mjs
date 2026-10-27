@@ -71,6 +71,14 @@ test("ticket API is disabled by default", async () => {
     assert.match(invalidPayload.meta.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     assert.equal(invalidCorrelation.headers.get("x-request-id"), invalidPayload.meta.requestId);
     assert.notEqual(invalidPayload.meta.requestId, "invalid correlation id with spaces");
+
+    const legacyPreference = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: { accept: "application/vnd.eper.v1+json; q=0" },
+    });
+    assert.equal(legacyPreference.status, 404);
+    const legacyPayload = await legacyPreference.json();
+    assert.equal(legacyPayload.error, "not_found");
+    assert.equal(Object.hasOwn(legacyPayload, "success"), false, "q=0 must not opt into the versioned envelope");
   });
 });
 
