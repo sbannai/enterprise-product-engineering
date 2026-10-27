@@ -1,0 +1,77 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createAppServer } from "../dist/apps/api/server.js";
+
+const token = "campaign-api-test-token-with-at-least-32-characters";
+const schedule = { id: "schedule-1", tenantId: "tenant-a", applicationId: "app-a", status: "scheduled" };
+
+async function withServer(t, overrides = {}) {
+  const saved = {
+    EPER_CAMPAIGN_SCHEDULER_API_ENABLED: process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED,
+    EPER_CUSTOMER_ACCESS_IDENTITIES_JSON: process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON,
+    EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON: process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON,
+  };
+  process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
+    ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
+  const store = {
+    async listSchedules(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" ? [schedule] : []; },
+    async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
+    ...overrides,
+  };
+  const server = createAppServer({ campaignSchedulerStore: store });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const address = server.address();
+  return { base: `http://127.0.0.1:${address.port}`, store };
+}
+
+test("campaign schedule list requires authentication", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules");
+  assert.equal(response.status, 401);
+});
+
+test("campaign schedule list is scoped and uses bounded pagination", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules?limit=10&offset=0", {
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.eper.v1+json" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(body.data);
+  assert.equal(body.data.schedules.length, 1);
+  assert.equal(body.data.schedules[0].tenantId, "tenant-a");
+});
+
+test("campaign schedule list rejects invalid pagination", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules?limit=101", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 400);
+});
+
+test("campaign schedule detail hides applications not assigned to the caller", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-b/campaign-schedules/schedule-1", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 404);
+});
+
+test("campaign schedule detail returns 404 when the schedule is outside the tenant scope", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-other", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 404);
+});
