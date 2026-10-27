@@ -8,7 +8,7 @@ const AGENT_TOKEN_B = "ai-agent-reviewer-token-with-more-than-32-characters";
 const AGENT_TOKEN_C = "ai-agent-other-tenant-token-with-more-than-32-characters";
 
 function fakeStore() {
-  let config = { applications: { "app-off": { enabled: false, provider: "none" }, "app-on": { enabled: true, provider: "openai" }, "app-no-provider": { enabled: true, provider: "none" } } };
+  let config = { applications: { "app-off": { enabled: false, provider: "none" }, "app-on": { enabled: true, provider: "openai" }, "app-two": { enabled: true, provider: "openai" }, "app-no-provider": { enabled: true, provider: "none" } } };
   let version = 1;
   const calls = [];
   return {
@@ -195,4 +195,25 @@ test("agent endpoints fail closed when authenticated principal has no tenant map
   });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error, "agents_principal_tenant_mapping_unconfigured");
+});
+
+test("agent drafts and approvals are isolated by application within one tenant", async (t) => {
+  const { base } = await withServer(t, fakeStore());
+  const make = async (applicationId) => fetch(base + "/v1/agents/crm/drafts?applicationId=" + applicationId, {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  const created = await make("app-two");
+  assert.equal(created.status, 201);
+  const draft = (await created.json()).draft;
+  assert.equal(draft.applicationId, "app-two");
+  const listed = await fetch(base + "/v1/agents/drafts?applicationId=app-on", { headers: { authorization: "Bearer " + AGENT_TOKEN_A } });
+  assert.equal(listed.status, 200);
+  const list = await listed.json();
+  assert.ok(list.drafts.every((item) => item.applicationId === "app-on"));
+  const review = await fetch(base + "/v1/agents/drafts/" + draft.id + "/approve?applicationId=app-on", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_B, "content-type": "application/json" }, body: JSON.stringify({}),
+  });
+  assert.equal(review.status, 404);
+  assert.equal((await review.json()).error, "draft_not_found");
 });
