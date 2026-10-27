@@ -236,7 +236,7 @@ export class PostgresCampaignSchedulerStore {
     // A one-time schedule is marked completed when its execution is materialized.
     // Still allow cancellation while that execution is queued or retrying.
     const mutableStatusPredicate = input.action === "cancel"
-      ? "status IN ('draft','scheduled','paused') OR (status='completed' AND trigger_type='once')"
+      ? "status IN ('draft','scheduled','paused') OR (status='completed' AND trigger_type='once' AND EXISTS (SELECT 1 FROM eper_campaign_executions e WHERE e.tenant_id=eper_campaign_schedules.tenant_id AND e.application_id=eper_campaign_schedules.application_id AND e.schedule_id=eper_campaign_schedules.id AND e.status IN ('queued','retry_wait','running') AND e.dispatch_started_at IS NULL))"
       : "status IN ('draft','scheduled','paused')";
     const client = await this.pool.connect();
     try {
