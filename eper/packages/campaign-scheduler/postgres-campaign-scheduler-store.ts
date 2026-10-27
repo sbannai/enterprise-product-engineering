@@ -418,7 +418,7 @@ export class PostgresCampaignSchedulerStore {
            SELECT e.id FROM eper_campaign_executions e
            JOIN eper_campaign_schedules s
              ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
-           WHERE e.status IN ('queued','retry_wait') AND e.available_at <= now()
+           WHERE e.status IN ('queued','retry_wait') AND e.dispatch_started_at IS NULL AND e.available_at <= now()
              AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
            ORDER BY e.available_at, e.created_at
            FOR UPDATE OF e SKIP LOCKED
@@ -551,9 +551,9 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query<{ status: "retry_wait" | "dead_letter" }>(
         `UPDATE eper_campaign_executions
-         SET status=CASE WHEN attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
-             last_error_code=$6,
-             available_at=CASE WHEN attempt_count >= $5 THEN available_at
+         SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
+             last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE $6 END,
+             available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN available_at
                ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN attempt_count >= $5 THEN now() ELSE NULL END
@@ -575,9 +575,9 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query(
         `UPDATE eper_campaign_executions
-         SET status=CASE WHEN attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
-             last_error_code='WORKER_LEASE_EXPIRED',
-             available_at=CASE WHEN attempt_count >= $2 THEN available_at
+         SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
+             last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE 'WORKER_LEASE_EXPIRED' END,
+             available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN available_at
                ELSE now() + (LEAST(15 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN attempt_count >= $2 THEN now() ELSE NULL END
