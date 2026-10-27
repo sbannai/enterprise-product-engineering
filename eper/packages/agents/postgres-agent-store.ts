@@ -71,7 +71,7 @@ export interface ReviewAgentDraftInput {
   environment: AuditEnvironment;
 }
 export class AgentDraftConflictError extends Error {
-  constructor(code: "AGENT_DRAFT_NOT_FOUND" | "AGENT_DRAFT_ALREADY_REVIEWED" | "STALE_DRAFT_VERSION" | "STALE_DRAFT_HASH" | "MAKER_CHECKER_SEPARATION_REQUIRED") {
+  constructor(code: "AGENT_DRAFT_NOT_FOUND" | "AGENT_DRAFT_ALREADY_REVIEWED" | "AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL" | "STALE_DRAFT_VERSION" | "STALE_DRAFT_HASH" | "MAKER_CHECKER_SEPARATION_REQUIRED") {
     super(code);
     this.name = "AgentDraftConflictError";
   }
