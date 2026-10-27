@@ -16,6 +16,7 @@ test("worker fails closed and never calls provider when fresh dispatch authoriza
     async recoverStaleExecutions() {},
     async materializeDueOneTimeSchedules() {},
     async materializeDueRecurringSchedules() {},
+    async isExecutionAuthorizedForDispatch() { return true; },
     async claimExecutions() {
       if (claimed) return [];
       claimed = true;
@@ -61,7 +62,8 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
     async recoverStaleExecutions() {},
     async materializeDueOneTimeSchedules() {},
     async materializeDueRecurringSchedules() {},
-    async isExecutionAuthorizedForDispatch() { return true; },\n    async claimExecutions() { if (claimed) return []; claimed = true; return [execution]; },
+    async isExecutionAuthorizedForDispatch() { return true; },
+    async claimExecutions() { if (claimed) return []; claimed = true; return [execution]; },
     async failExecution(input) { failed = input; controller.abort(); return "dead_letter"; },
     async completeExecution() { throw new Error("must not complete denied execution"); },
   };
