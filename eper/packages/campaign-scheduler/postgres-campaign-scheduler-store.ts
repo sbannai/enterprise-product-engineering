@@ -212,10 +212,13 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query<Record<string, unknown>>(
         `WITH due AS (
-           SELECT id FROM eper_campaign_executions
-           WHERE status IN ('queued','retry_wait') AND available_at <= now()
-           ORDER BY available_at, created_at
-           FOR UPDATE SKIP LOCKED
+           SELECT e.id FROM eper_campaign_executions e
+           JOIN eper_campaign_schedules s
+             ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
+           WHERE e.status IN ('queued','retry_wait') AND e.available_at <= now()
+             AND s.status='scheduled' AND s.approval_status='approved'
+           ORDER BY e.available_at, e.created_at
+           FOR UPDATE OF e SKIP LOCKED
            LIMIT $2
          )
          UPDATE eper_campaign_executions e
@@ -237,4 +240,80 @@ export class PostgresCampaignSchedulerStore {
       });
     } finally { client.release(); }
   }
+
+  async completeExecution(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string; result?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `UPDATE eper_campaign_executions
+         SET status='succeeded', result=$5::jsonb, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4`,
+        [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {})],
+      );
+      return result.rowCount === 1;
+    } finally { client.release(); }
+  }
+
+  async failExecution(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+    errorCode: string; maxAttempts?: number; baseDelaySeconds?: number;
+  }): Promise<"retry_wait" | "dead_letter" | "not_owned"> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    const errorCode = required(input.errorCode, "CAMPAIGN_ERROR_CODE_REQUIRED").toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0,64);
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const maxAttempts = input.maxAttempts ?? 5;
+    const baseDelaySeconds = input.baseDelaySeconds ?? 15;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20 ||
+        !Number.isFinite(baseDelaySeconds) || baseDelaySeconds < 1 || baseDelaySeconds > 3600) {
+      throw new Error("CAMPAIGN_RETRY_POLICY_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ status: "retry_wait" | "dead_letter" }>(
+        `UPDATE eper_campaign_executions
+         SET status=CASE WHEN attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
+             last_error_code=$6,
+             available_at=CASE WHEN attempt_count >= $5 THEN available_at
+               ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
+             updated_at=now(), locked_at=NULL, locked_by=NULL,
+             completed_at=CASE WHEN attempt_count >= $5 THEN now() ELSE NULL END
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         RETURNING status`,
+        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds],
+      );
+      return result.rows[0]?.status ?? "not_owned";
+    } finally { client.release(); }
+  }
+
+  /** Recover worker crashes; replay remains safe only when dispatch side effects honor the job idempotency key. */
+  async recoverStaleExecutions(staleAfterSeconds = 300, maxAttempts = 5): Promise<number> {
+    if (!Number.isInteger(staleAfterSeconds) || staleAfterSeconds < 30 || staleAfterSeconds > 86400 ||
+        !Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
+      throw new Error("CAMPAIGN_RECOVERY_POLICY_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `UPDATE eper_campaign_executions
+         SET status=CASE WHEN attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
+             last_error_code='WORKER_LEASE_EXPIRED',
+             available_at=CASE WHEN attempt_count >= $2 THEN available_at
+               ELSE now() + (LEAST(15 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
+             updated_at=now(), locked_at=NULL, locked_by=NULL,
+             completed_at=CASE WHEN attempt_count >= $2 THEN now() ELSE NULL END
+         WHERE status='running' AND locked_at < now() - ($1 * interval '1 second')`,
+        [staleAfterSeconds, maxAttempts],
+      );
+      return result.rowCount ?? 0;
+    } finally { client.release(); }
+  }
+
 }
