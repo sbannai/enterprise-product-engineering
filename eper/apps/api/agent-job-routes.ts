@@ -37,7 +37,7 @@ export async function handleAgentJobRoute(
   pathname: string,
   options: { store?: PostgresAgentStore; resolveIdentity: AgentJobIdentityResolver; environment: AuditEnvironment },
 ): Promise<boolean> {
-  if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname) && !/^\/v1\/agent-drafts\/[0-9a-f-]+\/(approve|reject)$/.test(pathname)) return false;
+  if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname) && !/^\/v1\/agent-drafts\/[0-9a-f-]+(?:\/(approve|reject))?$/.test(pathname)) return false;
   if (!options.store) {
     sendError(request, response, 503, "AGENT_PERSISTENCE_UNAVAILABLE", "Durable agent job storage is not configured.");
     return true;
@@ -50,6 +50,21 @@ export async function handleAgentJobRoute(
   const requestId = resolveApiRequestId(request);
   try {
     const reviewMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
+    const draftMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)$/.exec(pathname);
+    if (request.method === "GET" && draftMatch) {
+      const applicationId = new URL(request.url ?? pathname, "http://localhost").searchParams.get("applicationId") ?? "";
+      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+        sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
+        return true;
+      }
+      const draft = await options.store.getDraft({ tenantId: identity.tenantId, applicationId, draftId: draftMatch[1] });
+      if (!draft) {
+        sendError(request, response, 404, "AGENT_DRAFT_NOT_FOUND", "The requested draft was not found.");
+        return true;
+      }
+      sendApiSuccess(request, response, 200, { draft, execution: "NOT_EXECUTED" });
+      return true;
+    }
     if (request.method === "POST" && reviewMatch) {
       const reviewerRoles = new Set((process.env.EPER_AGENT_REVIEWER_ROLE_KEYS ?? "")
         .split(";").map((role) => role.trim()).filter(Boolean));
