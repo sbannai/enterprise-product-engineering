@@ -381,3 +381,24 @@ test("claim query excludes executions that already crossed the dispatch-start fe
   await store.claimExecutions("worker-a", 10);
   assert.match(calls[0].sql, /e\.dispatch_started_at IS NULL/);
 });
+
+
+test("scheduler readiness rejects a database missing the dispatch-fence migration", async () => {
+  const { pool, calls } = fakePool(async () => ({
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: null }],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.assertReady(), /EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED/);
+  assert.match(calls[0].sql, /information_schema\.columns/);
+  assert.match(calls[0].sql, /dispatch_started_at/);
+});
+
+test("scheduler readiness accepts schema with dispatch-fence migration applied", async () => {
+  const { pool } = fakePool(async () => ({
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at" }],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.doesNotReject(store.assertReady());
+});
