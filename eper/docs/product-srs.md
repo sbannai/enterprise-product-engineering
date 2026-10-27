@@ -41,3 +41,8 @@ Define testable software requirements for the EPER multi-tenant product, includi
 
 ## 4. Acceptance strategy
 Trace each requirement to implementation path, automated test, CI run, deployment/environment evidence and business owner decision. A passing unit/CI test is not Business UAT acceptance. Product Admin workflows remain blocked from production claims until persistent APIs, authorization, audit, approval and payment consistency are verified.
+
+- **SRS-F-021:** Product Admin shall have a discoverable entry point to the authorized ticketing and feedback queue.
+- **SRS-F-022:** Ticket management shall distinguish defects, feedback, feature requests and questions; only confirmed evidence-backed issues may count toward P1 tracking.
+- **SRS-F-023:** Admin ticket access shall be role-authorized, audited and scoped to the permitted tenant/support boundary; the Product Admin console shall not forward its bearer token into the support workspace.
+- **SRS-F-024:** The product shall provide a user manual describing Product Admin commercial workflows, customer application settings, ticket triage, AI approval, payment/receipt checks and POC limitations.
