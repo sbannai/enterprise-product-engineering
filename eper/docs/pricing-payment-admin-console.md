@@ -119,3 +119,17 @@ Product Admin responsibilities:
 ## Implementation boundary — localized pricing
 
 The current Price Book UI and pricing resolver provide the initial product/market price-entry workflow, but current configuration may be held in API process memory unless a durable adapter is configured. The Customers & Applications, Plans & Tariffs and Client Access tabs remain preview placeholders. Do not treat localized pricing administration as production-ready until durable persistence, authorization, audit evidence, tax/rounding policy, and quote-to-payment-to-invoice/receipt consistency tests have passed.
+
+
+## Product-level POC documentation bundle (2026-10-27)
+
+The product-level design and commercial ownership baseline is indexed in [Product POC Update Log](product-poc-update-log.md). Related artifacts:
+- [BRD](product-brd.md)
+- [HLD](product-hld.md)
+- [LLD](product-lld.md)
+- [SRS](product-srs.md)
+- [Product Admin localized-pricing wireframe](../wireframes/product-admin-localization-wireframe.html)
+- [Marketing deck](../marketing/eper-product-marketing-deck.html)
+- [Sales flyers](../marketing/eper-sales-flyers.html)
+
+These are product planning and POC artifacts. The static HTML files are not connected to the runtime API and must not be presented as completed production functionality.
