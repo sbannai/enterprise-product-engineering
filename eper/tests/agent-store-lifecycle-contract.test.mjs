@@ -37,3 +37,9 @@ test("job, draft and review mutations write audit inside the same transaction", 
   assert.match(source, /async reviewDraft/);
   assert.ok((source.match(/appendAuditEventInTransaction\(/g) ?? []).length >= 6);
 });
+
+test("agent job idempotency is safe when concurrent requests race on a new key", () => {
+  assert.match(source, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
+  assert.match(source, /AGENT_JOB_IDEMPOTENCY_LOOKUP_FAILED/);
+  assert.match(source, /agent\.job\.idempotency_replay/);
+});
