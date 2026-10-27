@@ -234,15 +234,15 @@ export class PostgresCampaignSchedulerStore {
         `INSERT INTO eper_campaign_executions
           (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
          SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $3,
-           'event:' || $5 || ':' || s.id::text,
-           jsonb_build_object('campaignId', s.campaign_id, 'eventType', $6, 'eventId', $5, 'eventPayload', $7::jsonb)
+           'event:' || $4 || ':' || s.id::text,
+           jsonb_build_object('campaignId', s.campaign_id, 'eventType', $5, 'eventId', $4, 'eventPayload', $6::jsonb)
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$1 AND s.application_id=$2
            AND s.trigger_type='event' AND s.status='scheduled' AND s.approval_status='approved'
-           AND s.schedule_definition->>'eventType'=$6
+           AND s.schedule_definition->>'eventType'=$5
          ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
          RETURNING id`,
-        [tenantId, applicationId, occurredAt.toISOString(), eventId, eventId, eventType, JSON.stringify(payload)],
+        [tenantId, applicationId, occurredAt.toISOString(), eventId, eventType, JSON.stringify(payload)],
       );
       return result.rowCount ?? result.rows.length;
     } finally { client.release(); }
