@@ -63,7 +63,7 @@ test("durable draft review requires trusted reviewer role and assigned applicati
 test("durable draft read returns review metadata only through tenant/application-scoped storage", () => {
   assert.match(source, /async getDraft/);
   assert.match(source, /WHERE tenant_id=\$1 AND application_id=\$2 AND draft_id=\$3/);
-  assert.match(routes, /const draftMatch = \/\^\\\\\/v1\\\\\/agent-drafts/);
+  assert.ok(routes.includes('const draftMatch = /^\\\\/v1\\\\/agent-drafts\\\\/([0-9a-f-]+)$/;'));
   assert.match(routes, /options\.store\.getDraft/);
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
   assert.match(routes, /AGENT_DRAFT_NOT_FOUND/);
