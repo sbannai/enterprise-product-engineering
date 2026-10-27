@@ -79,9 +79,18 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
 });
 
 
+
 for (const policyCase of [
-  { name: "approval revocation", authorized: false },
-  { name: "consent withdrawal", authorized: false },
+  {
+    name: "approval revocation",
+    livePolicy: { approvalStatus: "revoked", consentStatus: "granted" },
+    isAuthorized(policy) { return policy.approvalStatus === "approved" && policy.consentStatus === "granted"; },
+  },
+  {
+    name: "consent withdrawal",
+    livePolicy: { approvalStatus: "approved", consentStatus: "withdrawn" },
+    isAuthorized(policy) { return policy.approvalStatus === "approved" && policy.consentStatus === "granted"; },
+  },
 ]) {
   test("worker does not dispatch after live " + policyCase.name, async () => {
     const controller = new AbortController();
@@ -98,7 +107,7 @@ for (const policyCase of [
       async materializeDueOneTimeSchedules() {},
       async materializeDueRecurringSchedules() {},
       async claimExecutions() { if (claimed) return []; claimed = true; return [execution]; },
-      async beginExecutionDispatch() { throw new Error("dispatch fence must not be acquired after policy revocation"); },
+      async beginExecutionDispatch() { throw new Error("dispatch fence must not be acquired after live policy revocation"); },
       async failExecution(input) { failed = input; controller.abort(); return "dead_letter"; },
       async completeExecution() { throw new Error("must not complete an unauthorized execution"); },
     };
@@ -107,7 +116,7 @@ for (const policyCase of [
       return { outcome: {} };
     }, {
       workerId: "test-worker", signal: controller.signal, idleDelayMs: 100,
-      authorizeDispatch: async () => policyCase.authorized,
+      authorizeDispatch: async () => policyCase.isAuthorized(policyCase.livePolicy),
     });
     assert.equal(providerCalls, 0);
     assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_POLICY_DENIED");
