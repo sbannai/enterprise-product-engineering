@@ -37,7 +37,7 @@ export async function handleAgentJobRoute(
   pathname: string,
   options: { store?: PostgresAgentStore; resolveIdentity: AgentJobIdentityResolver; environment: AuditEnvironment },
 ): Promise<boolean> {
-  if (pathname !== "/v1/agent-jobs" && !/^\\/v1\\/agent-jobs\\/[0-9a-f-]+$/.test(pathname) && !/^\\/v1\\/agent-drafts\\/[0-9a-f-]+\\/(approve|reject)$/.test(pathname)) return false;
+  if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname) && !/^\/v1\/agent-drafts\/[0-9a-f-]+\/(approve|reject)$/.test(pathname)) return false;
   if (!options.store) {
     sendError(request, response, 503, "AGENT_PERSISTENCE_UNAVAILABLE", "Durable agent job storage is not configured.");
     return true;
@@ -49,7 +49,7 @@ export async function handleAgentJobRoute(
   }
   const requestId = resolveApiRequestId(request);
   try {
-    const reviewMatch = /^\\/v1\\/agent-drafts\\/([0-9a-f-]+)\\/(approve|reject)$/.exec(pathname);
+    const reviewMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
     if (request.method === "POST" && reviewMatch) {
       const reviewerRoles = new Set((process.env.EPER_AGENT_REVIEWER_ROLE_KEYS ?? "")
         .split(";").map((role) => role.trim()).filter(Boolean));
