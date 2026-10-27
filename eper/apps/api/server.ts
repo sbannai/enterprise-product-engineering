@@ -1438,26 +1438,25 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
-    if (requestUrl.pathname.startsWith("/v1/agents/") && process.env.EPER_AI_INTEGRATION_ENFORCEMENT === "true") {
-      const applicationId = requestUrl.searchParams.get("applicationId") ?? "";
-      const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
-      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
-        sendJson(request, response, 400, { error: "application_id_required_for_ai_integration_policy" }); return;
-      }
-      if (!options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
-        sendJson(request, response, 503, { error: "ai_integration_policy_store_unconfigured" }); return;
-      }
-      try {
-        const saved = await options.adminConfigurationStore.get(tenantId, "ai-integrations");
-        const config = saved?.config as { applications?: Record<string, { enabled?: boolean }> } | undefined;
-        if (config?.applications?.[applicationId]?.enabled !== true) {
-          sendJson(request, response, 403, { error: "ai_integration_disabled_for_application", applicationId }); return;
+    const aiIntegrationGuard = process.env.EPER_AI_INTEGRATION_ENFORCEMENT === "true"
+      ? async (agentRequest: IncomingMessage) => {
+          const agentUrl = new URL(agentRequest.url ?? "/", "http://localhost");
+          const applicationId = agentUrl.searchParams.get("applicationId") ?? "";
+          const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
+          if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
+            return { allowed: false, statusCode: 400, error: "application_id_required_for_ai_integration_policy" };
+          }
+          if (!options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
+            return { allowed: false, statusCode: 503, error: "ai_integration_policy_store_unconfigured" };
+          }
+          const saved = await options.adminConfigurationStore.get(tenantId, "ai-integrations");
+          const config = saved?.config as { applications?: Record<string, { enabled?: boolean }> } | undefined;
+          return config?.applications?.[applicationId]?.enabled === true
+            ? { allowed: true }
+            : { allowed: false, statusCode: 403, error: "ai_integration_disabled_for_application" };
         }
-      } catch {
-        sendJson(request, response, 503, { error: "ai_integration_policy_unavailable" }); return;
-      }
-    }
-    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
+      : undefined;
+    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter, aiIntegrationGuard)) return;
 
     sendJson(request, response, 404, { error: "not_found" });
   });
