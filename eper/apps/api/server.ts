@@ -453,7 +453,8 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             sendApiError(request, response, 400, "INVALID_NEXT_RUN_AT", "A valid future nextRunAt timestamp is required."); return;
           }
           schedule = await options.campaignSchedulerStore.approveAndSchedule({
-            tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, nextRunAt: body.nextRunAt,
+            tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId,
+            nextRunAt: body.nextRunAt, operation: action === "resume" ? "resume" : "approve",
           });
         } else if (action === "pause" || action === "cancel") {
           schedule = await options.campaignSchedulerStore.pauseOrCancel({
