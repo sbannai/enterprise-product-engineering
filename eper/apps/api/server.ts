@@ -378,7 +378,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; campaignAuditWriter?: (record: { tenantId: string; applicationId: string; actorId: string; action: string; outcome: "success" | "failure"; resourceId: string; operationName: string; requestId?: string; payload?: Record<string, unknown> }) => Promise<void> } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -468,24 +468,6 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         }
         if (!schedule) {
           sendApiError(request, response, 400, "CAMPAIGN_ACTION_INVALID", "The requested campaign lifecycle action is not supported."); return;
-        }
-        const savedSchedule = schedule;
-        try {
-          if (options.campaignAuditWriter) {
-            await options.campaignAuditWriter({
-              tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
-              action: `campaign_schedule_${action}`, outcome: "success", resourceId: scheduleId,
-              operationName: `campaign.schedule.${action}`, requestId: resolveApiRequestId(request),
-              payload: { resultingStatus: savedSchedule.status, approvalStatus: savedSchedule.approvalStatus },
-            });
-          }
-        } catch (auditError) {
-          console.error("Campaign schedule changed but audit persistence failed", {
-            requestId: resolveApiRequestId(request), scheduleId,
-            action, error: auditError instanceof Error ? auditError.message : "unknown",
-          });
-          sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "The schedule changed but audit confirmation is unavailable; check its status before retrying.");
-          return;
         }
         sendApiSuccess(request, response, 200, { schedule });
       } catch (error) {
