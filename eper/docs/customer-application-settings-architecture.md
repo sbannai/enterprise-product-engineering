@@ -210,3 +210,8 @@ The platform Admin owns customer records, application registration/assignment, p
 - Plan and tariff assignments use a versioned accepted-price snapshot; later catalogue edits must not silently alter an existing agreement.
 - Customer users cannot self-grant entitlements, modify tariffs, or override platform access decisions.
 - The platform admin UI's Customers & Applications, Plans & Tariffs and Client Access sections are currently preview placeholders only; runtime persistence/API enforcement remains outstanding.
+
+
+## Product Admin ownership of localized pricing
+
+Product Admin owns the product catalogue, localized market price books, currency/amount, effective dates, version approvals, tax/rounding policy, and plan/tariff pricing. This is platform-level commercial configuration, not a customer application's operational setting. Customer admins may manage application settings and request/select available plans within their permissions, but may not alter canonical prices or contracted price snapshots. Display locale controls language and formatting only; the authoritative market-specific price and accepted contract snapshot control actual charges. A locale switch must never silently trigger FX conversion or repricing. The existing Price Book/resolver is the initial UI path; durable production readiness remains subject to the persistence, authorization, audit and payment/invoice consistency gates documented in the pricing admin console spec.
