@@ -486,3 +486,38 @@ test("cancelling a claimed execution before the dispatch fence prevents fence ac
   assert.equal(dispatchStarted, false);
   assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_campaign_executions SET status='cancelled'")));
 });
+
+
+test("pausing a schedule after execution claim prevents dispatch-fence acquisition", async () => {
+  let scheduleStatus = "scheduled";
+  let dispatchStarted = false;
+  const { pool, calls } = fakePool(async (sql, values) => {
+    if (sql.includes("UPDATE eper_campaign_schedules SET status=")) {
+      scheduleStatus = String(values[3]);
+      return { rows: [scheduleRow({ status: scheduleStatus, approval_status: "approved" })], rowCount: 1 };
+    }
+    if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) {
+      const allowed = scheduleStatus === "scheduled" && !dispatchStarted;
+      return { rows: allowed ? [{ id: "schedule-1" }] : [], rowCount: allowed ? 1 : 0 };
+    }
+    if (sql.includes("SET dispatch_started_at=now()")) {
+      dispatchStarted = true;
+      return { rows: [], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.pauseOrCancel({
+    tenantId: "tenant-a", applicationId: "app-a",
+    scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    actorId: "actor-a", action: "pause",
+  });
+  assert.equal(scheduleStatus, "paused");
+  const result = await store.beginExecutionDispatch({
+    tenantId: "tenant-a", applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a",
+  });
+  assert.equal(result, false);
+  assert.equal(dispatchStarted, false);
+  assert.ok(calls.some((call) => call.sql.includes("FOR UPDATE OF s, e")));
+});
