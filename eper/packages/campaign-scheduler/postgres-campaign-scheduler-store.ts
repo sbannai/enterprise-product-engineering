@@ -76,13 +76,17 @@ export class PostgresCampaignSchedulerStore {
     tenantId: string; applicationId: string; actorId: string; action: string;
     resourceId: string; operationName: string; payload?: Record<string, unknown>;
   }): Promise<void> {
-    await appendAuditEventInTransaction(client, {
-      tenantId: input.tenantId, applicationId: input.applicationId,
-      environment: this.auditEnvironment, actorType: "human", actorId: input.actorId,
-      action: input.action, outcome: "success", resourceType: "campaign-schedule",
-      resourceId: input.resourceId, source: "api", operationName: input.operationName,
-      serviceVersion: this.serviceVersion, payload: input.payload,
-    });
+    try {
+      await appendAuditEventInTransaction(client, {
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        environment: this.auditEnvironment, actorType: "human", actorId: input.actorId,
+        action: input.action, outcome: "success", resourceType: "campaign-schedule",
+        resourceId: input.resourceId, source: "api", operationName: input.operationName,
+        serviceVersion: this.serviceVersion, payload: input.payload,
+      });
+    } catch {
+      throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED");
+    }
   }
 
   async assertReady(): Promise<void> {
