@@ -27,6 +27,7 @@ function fakeStore(claimed = []) {
     async materializeDueRecurringSchedules() { calls.push("materialize-recurring"); return 0; },
     async claimExecutions(workerId, batchSize) { calls.push(["claim", workerId, batchSize]); return claimed.splice(0); },
     async isExecutionAuthorizedForDispatch(input) { calls.push(["authorize-current", input]); return true; },
+    async beginExecutionDispatch(input) { calls.push(["dispatch-fence", input]); return true; },
     async completeExecution(input) { calls.push(["complete", input]); return true; },
     async failExecution(input) { calls.push(["fail", input]); return "retry_wait"; },
   };
@@ -43,6 +44,8 @@ test("worker processes claimed executions asynchronously and completes with tena
   }, { workerId: "worker-a", signal: controller.signal, idleDelayMs: 100, authorizeDispatch: async () => true });
   assert.equal(dispatchCalls.length, 1);
   assert.equal(dispatchCalls[0].idempotencyKey, "campaign:schedule-1:2030-01-01T00:00:00.000Z");
+  const fence = store.calls.find((call) => Array.isArray(call) && call[0] === "dispatch-fence");
+  assert.ok(fence, "worker must establish the dispatch fence before provider dispatch");
   const complete = store.calls.find((call) => Array.isArray(call) && call[0] === "complete");
   assert.ok(complete);
   assert.equal(complete[1].tenantId, "tenant-a");
