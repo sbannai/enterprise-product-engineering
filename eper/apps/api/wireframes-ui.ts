@@ -183,6 +183,7 @@ async function loadSupportTickets(){
 document.getElementById("supportConnect").addEventListener("click",()=>{supportBearerToken=document.getElementById("supportBearer").value.trim();loadSupportTickets();});
 document.getElementById("supportDisconnect").addEventListener("click",()=>{supportBearerToken="";document.getElementById("supportBearer").value="";document.getElementById("supportLiveQueue").replaceChildren(supportNode("p","Disconnected. Live ticket data cleared.","small muted"));document.getElementById("supportApiStatus").textContent="Token cleared from page memory.";});
 updateSummary();
+if(window.location.hash==="#support"){var supportTab=document.querySelector("[data-screen=\"support\"]");if(supportTab)supportTab.click();}
 })();
 </script>
 </body></html>`;
