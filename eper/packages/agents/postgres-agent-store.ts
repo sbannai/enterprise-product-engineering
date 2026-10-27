@@ -186,6 +186,24 @@ export class PostgresAgentStore {
     if (!Number.isInteger(leaseSeconds) || leaseSeconds < 5 || leaseSeconds > 900) throw new Error("INVALID_AGENT_LEASE");
     const client = await this.scopedClient(input.tenantId, input.applicationId);
     try {
+      const expired = await client.query<Record<string, unknown>>(
+        `UPDATE eper_agent_jobs
+            SET status='failed', failure_code='AGENT_JOB_DEADLINE_EXCEEDED',
+                version=version+1, updated_at=NOW(), lease_owner=NULL, lease_expires_at=NULL
+          WHERE tenant_id=$1 AND application_id=$2 AND deadline_at <= NOW()
+            AND status IN ('queued','running')
+          RETURNING job_id, requested_by`,
+        [input.tenantId, input.applicationId],
+      );
+      for (const row of expired.rows) {
+        await appendAuditEventInTransaction(client, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: "sandbox",
+          actorType: "system", actorId: input.workerId, action: "agent.job.deadline_exceeded", outcome: "failure",
+          reasonCode: "AGENT_JOB_DEADLINE_EXCEEDED", resourceType: "agent-job", resourceId: String(row.job_id),
+          source: "job", operationName: "claim agent job",
+          payload: { status: "failed" },
+        });
+      }
       const result = await client.query<Record<string, unknown>>(
         `WITH candidate AS (
            SELECT job_id FROM eper_agent_jobs
@@ -204,6 +222,16 @@ export class PostgresAgentStore {
          RETURNING j.*`,
         [input.tenantId, input.applicationId, input.workerId, leaseSeconds],
       );
+      if (result.rows[0]) {
+        const claimed = result.rows[0];
+        await appendAuditEventInTransaction(client, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: "sandbox",
+          actorType: "service", actorId: input.workerId, action: "agent.job.claim", outcome: "success",
+          resourceType: "agent-job", resourceId: String(claimed.job_id), source: "job",
+          operationName: "claim agent job",
+          payload: { attempt: Number(claimed.attempt), leaseSeconds },
+        });
+      }
       await client.query("COMMIT");
       return result.rows[0] ? mapJob(result.rows[0]) : null;
     } catch (error) {
