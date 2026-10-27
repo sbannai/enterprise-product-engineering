@@ -65,7 +65,16 @@ export async function runCampaignExecutionWorker(
       try {
         // Fail closed: never call the provider unless current policy authorizes this execution.
         // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
-        if (typeof options.authorizeDispatch !== "function" || !(await options.authorizeDispatch(execution))) {
+        let authorized = false;
+        try {
+          authorized = typeof options.authorizeDispatch === "function" &&
+            await options.authorizeDispatch(execution);
+        } catch (authorizationError) {
+          // A policy service outage is not permission to dispatch. Fail closed and do not retry
+          // this execution automatically; an operator can review and explicitly requeue it.
+          options.onError?.(authorizationError);
+        }
+        if (!authorized) {
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
             executionId: execution.id, workerId: options.workerId,
