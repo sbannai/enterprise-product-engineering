@@ -2,16 +2,12 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runMigrations } from "../migrate-payments.mjs";
+import { selectCampaignSchedulerDatabaseUrl } from "./select-campaign-scheduler-database-url.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const connectionString = [
-  process.env.EPER_CAMPAIGN_SCHEDULER_DATABASE_URL,
-  process.env.EPER_AUDIT_DATABASE_URL,
-  process.env.EPER_PAYMENT_DATABASE_URL,
-  process.env.DATABASE_URL,
-].find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? "";
+const connectionString = selectCampaignSchedulerDatabaseUrl();
 
-if (!connectionString.trim()) {
+if (!connectionString) {
   console.error("EPER_CAMPAIGN_SCHEDULER_DATABASE_URL_REQUIRED");
   process.exitCode = 1;
 } else {
