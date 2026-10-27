@@ -434,6 +434,10 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
+      // Do not mutate a schedule unless durable audit confirmation is configured.
+      if (!options.campaignAuditWriter) {
+        sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "Campaign audit persistence is not configured."); return;
+      }
       let assignments: unknown;
       try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
       const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
