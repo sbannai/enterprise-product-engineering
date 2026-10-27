@@ -63,6 +63,17 @@ test("versioned error envelope normalizes details and never accepts an invalid e
   assert.throws(() => sendApiError(request(), responseRecorder(), 200, "INVALID", "bad"), /API_ERROR_STATUS_INVALID/);
 });
 
+test("error detail objects with throwing property getters are normalized safely", () => {
+  const malformed = Object.defineProperties({}, {
+    field: { enumerable: true, get() { throw new Error("untrusted getter"); } },
+    code: { enumerable: true, get() { throw new Error("untrusted getter"); } },
+  });
+  const res = responseRecorder();
+
+  assert.doesNotThrow(() => sendApiError(request(), res, 400, "INVALID_INPUT", "Invalid input.", [malformed]));
+  assert.deepEqual(res.json().error.details, [{ field: "unknown", code: "INVALID_DETAIL" }]);
+});
+
 test("error responses bound messages and tolerate malformed detail entries", () => {
   const res = responseRecorder();
   sendApiError(request(), res, 400, "INVALID_INPUT", "x".repeat(900), [
