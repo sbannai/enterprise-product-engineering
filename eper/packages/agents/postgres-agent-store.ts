@@ -454,10 +454,13 @@ export class PostgresAgentStore {
         "UPDATE eper_agent_drafts SET status=$4,version=version+1 WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3",
         [input.tenantId, input.applicationId, input.draftId, status],
       );
-      await client.query(
+      const jobUpdate = await client.query(
         "UPDATE eper_agent_jobs SET status=CASE WHEN $4='approve' THEN 'succeeded' ELSE 'failed' END,failure_code=CASE WHEN $4='reject' THEN 'AGENT_DRAFT_REJECTED' ELSE NULL END,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3 AND status='awaiting_approval'",
         [input.tenantId, input.applicationId, String(draft.job_id), input.action],
       );
+      if (jobUpdate.rowCount !== 1) {
+        throw new AgentDraftConflictError("AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL");
+      }
       await appendAuditEventInTransaction(client, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.reviewerId, action: "agent.draft." + input.action, outcome: "success",
