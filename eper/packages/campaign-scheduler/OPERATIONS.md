@@ -12,8 +12,9 @@
 1. Confirm the intended environment and the database identity. The migration runner selects the first non-empty variable in this order:
    `EPER_CAMPAIGN_SCHEDULER_DATABASE_URL`, `EPER_AUDIT_DATABASE_URL`, `EPER_PAYMENT_DATABASE_URL`, `DATABASE_URL`.
 2. Verify the selected database is the intended environment before running any migration.
-3. From the `eper` directory, install locked dependencies and run the complete build-and-test command:
+3. From the `eper` directory, install locked dependencies, run the focused URL-selection tests, then run the complete build-and-test command:
    `npm ci`
+   `npm run test:campaign-scheduler-url`
    `npm test`
 4. Apply scheduler migrations only after review:
    `npm run migrate:campaign-scheduler`
