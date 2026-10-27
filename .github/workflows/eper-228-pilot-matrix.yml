@@ -7,7 +7,6 @@ on:
     paths:
       - 'eper/**'
       - '.github/workflows/eper-228-pilot-matrix.yml'
-      - '.github/workflows/**'
   push:
     branches: ["main"]
     paths:

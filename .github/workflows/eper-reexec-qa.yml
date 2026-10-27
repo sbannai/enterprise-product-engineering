@@ -6,7 +6,6 @@ on:
     paths:
       - "eper/**"
       - ".github/workflows/eper-reexec-qa.yml"
-      - ".github/workflows/**"
   push:
     branches: ["main"]
     paths:

@@ -6,7 +6,6 @@ on:
     paths:
       - "eper/**"
       - ".github/workflows/eper-reexec-uat.yml"
-      - ".github/workflows/**"
   workflow_dispatch:
   push:
     branches: ["main"]

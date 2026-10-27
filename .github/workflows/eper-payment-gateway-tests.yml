@@ -16,7 +16,6 @@ on:
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
       - ".github/workflows/eper-payment-gateway-tests.yml"
-      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
