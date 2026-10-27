@@ -1035,6 +1035,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const correlationHeader = request.headers["x-correlation-id"];
       const correlationId = typeof correlationHeader === "string" &&
         /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      let crossTenantRoles: unknown;
+      try { crossTenantRoles = JSON.parse(process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON ?? "[]"); }
+      catch { crossTenantRoles = null; }
+      if (!Array.isArray(crossTenantRoles) ||
+          crossTenantRoles.some((role) => typeof role !== "string" || !role.trim())) {
+        sendJson(request, response, 503, { error: "ticket_scope_configuration_invalid" });
+        return;
+      }
+      const canViewCrossTenant = crossTenantRoles.includes(identity.roleKey);
       const trustedIdentity = {
         tenantId: identity.tenantId,
         applicationId: "eper",
@@ -1059,12 +1068,17 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             sendJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
-          const tickets = await options.ticketStore.list({ tenantId: identity.tenantId }, {
+          const scope = canViewCrossTenant ? {} : { tenantId: identity.tenantId };
+          const tickets = await options.ticketStore.list(scope, {
             status: status as typeof TICKET_STATUSES[number] | undefined,
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
             type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit, offset,
           });
-          sendJson(request, response, 200, { tickets, limit, offset, tenantId: identity.tenantId });
+          sendJson(request, response, 200, {
+            tickets, limit, offset,
+            scope: canViewCrossTenant ? "authorized_platform" : "tenant",
+            ...(canViewCrossTenant ? {} : { tenantId: identity.tenantId }),
+          });
           return;
         }
         if (request.method === "PATCH" && adminTicketMatch[1]) {
