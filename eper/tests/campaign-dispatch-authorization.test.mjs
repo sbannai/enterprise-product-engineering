@@ -77,3 +77,40 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
   assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_POLICY_DENIED");
   assert.equal(failed?.maxAttempts, 1);
 });
+
+
+for (const policyCase of [
+  { name: "approval revocation", authorized: false },
+  { name: "consent withdrawal", authorized: false },
+]) {
+  test("worker does not dispatch after live " + policyCase.name, async () => {
+    const controller = new AbortController();
+    let claimed = false;
+    let providerCalls = 0;
+    let failed = null;
+    const execution = {
+      id: "exec-live-policy", scheduleId: "schedule-live-policy", tenantId: "tenant-a", applicationId: "app-a",
+      scheduledFor: "2026-10-27T08:00:00.000Z", status: "running", attemptCount: 1,
+      idempotencyKey: "campaign:schedule-live-policy:run-1", payload: {}, availableAt: "2026-10-27T08:00:00.000Z",
+    };
+    const store = {
+      async recoverStaleExecutions() {},
+      async materializeDueOneTimeSchedules() {},
+      async materializeDueRecurringSchedules() {},
+      async claimExecutions() { if (claimed) return []; claimed = true; return [execution]; },
+      async beginExecutionDispatch() { throw new Error("dispatch fence must not be acquired after policy revocation"); },
+      async failExecution(input) { failed = input; controller.abort(); return "dead_letter"; },
+      async completeExecution() { throw new Error("must not complete an unauthorized execution"); },
+    };
+    await runCampaignExecutionWorker(store, async () => {
+      providerCalls += 1;
+      return { outcome: {} };
+    }, {
+      workerId: "test-worker", signal: controller.signal, idleDelayMs: 100,
+      authorizeDispatch: async () => policyCase.authorized,
+    });
+    assert.equal(providerCalls, 0);
+    assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_POLICY_DENIED");
+    assert.equal(failed?.maxAttempts, 1);
+  });
+}
