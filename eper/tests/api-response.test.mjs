@@ -145,6 +145,14 @@ test("204 and 205 success responses remain bodyless while retaining request corr
   }
 });
 
+test("BigInt success payloads fail before mutating the response", () => {
+  const res = responseRecorder();
+  assert.throws(() => sendApiSuccess(request(), res, 200, { amount: 1n }), /BigInt|serialize/i);
+  assert.equal(res.ended, false);
+  assert.equal(res.headers.size, 0);
+  assert.equal(res.statusCode, undefined);
+});
+
 test("circular success payloads fail before mutating the response", () => {
   const data = {};
   data.self = data;
