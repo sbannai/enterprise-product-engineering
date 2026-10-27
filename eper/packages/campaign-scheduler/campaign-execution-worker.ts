@@ -88,6 +88,17 @@ export async function runCampaignExecutionWorker(
           authorizationError = error;
           options.onError?.(error);
         }
+        if (authorized && options.signal?.aborted) {
+          // The fence is irreversible: do not dispatch after shutdown, and do not
+          // let stale recovery replay an execution whose dispatch outcome is ambiguous.
+          await store.failExecution({
+            tenantId: execution.tenantId, applicationId: execution.applicationId,
+            executionId: execution.id, workerId: options.workerId,
+            errorCode: "CAMPAIGN_WORKER_SHUTDOWN_AFTER_DISPATCH_FENCE",
+            maxAttempts: 1,
+          });
+          return;
+        }
         if (!authorized) {
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
