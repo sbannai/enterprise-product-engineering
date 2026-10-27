@@ -70,7 +70,7 @@ test("AI integration admin UI is responsive page served on same origin", async (
   assert.equal(response.status, 200);
   assert.match(html, /AI Integration Controls/);
   assert.match(html, /Switch OFF/);
-  assert.match(html, /applicationId/);
+  assert.match(html, /Application ID/);
   assert.match(html, /Configuration version/);
 });
 
@@ -120,7 +120,7 @@ test("AI agent requests enforce per-application OFF/ON after authentication", as
   });
   assert.equal(missingApp.status, 400);
 
-  const on = await fetch(url("app-on"), {
+  const on = await fetch(base + "/v1/agents/marketing/drafts?applicationId=app-on", {
     method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
     body: JSON.stringify({ intent: "campaign-brief", input: {} }),
   });
