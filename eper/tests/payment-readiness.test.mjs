@@ -307,13 +307,16 @@ for (const persistence of [undefined, "json-file"]) {
 
 
 test("payment readiness recovers after PostgreSQL connectivity is restored", async () => {
-  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_API_TOKEN"];
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_API_TOKEN", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"];
   const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_PAYMENT_PERSISTENCE: "postgres",
     NODE_ENV: "test",
     EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ tenant_recovery_test: "tenant-recovery-token-with-at-least-32-chars" }),
-    EPER_PAYMENT_API_TOKEN: "",
+    EPER_PAYMENT_API_TOKEN: "eper-test-api-token-with-at-least-32-characters",
+    RAZORPAY_KEY_ID: "test_key_id",
+    RAZORPAY_KEY_SECRET: "test_key_secret",
+    RAZORPAY_WEBHOOK_SECRET: "test_webhook_secret",
   });
   let databaseAvailable = false;
   const paymentStore = {
