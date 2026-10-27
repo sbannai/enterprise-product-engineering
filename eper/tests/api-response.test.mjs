@@ -88,6 +88,14 @@ test("error detail objects with throwing property getters are normalized safely"
   assert.deepEqual(res.json().error.details, [{ field: "unknown", code: "INVALID_DETAIL" }]);
 });
 
+test("error messages fall back safely for blank and non-string runtime values", () => {
+  for (const message of ["   ", null, 17, {}]) {
+    const res = responseRecorder();
+    sendApiError(request(), res, 400, "INVALID_INPUT", message);
+    assert.equal(res.json().error.message, "The request could not be completed.");
+  }
+});
+
 test("error responses bound messages and tolerate malformed detail entries", () => {
   const res = responseRecorder();
   sendApiError(request(), res, 400, "INVALID_INPUT", "x".repeat(900), [
