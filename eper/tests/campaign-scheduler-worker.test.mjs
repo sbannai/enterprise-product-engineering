@@ -101,6 +101,27 @@ test("worker reports lost completion lease and records ambiguous outcome without
     && call[1].errorCode === "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST"));
 });
 
+test("worker treats explicit policy denial as terminal and never acquires dispatch fence", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => {
+    dispatchCalls += 1;
+    controller.abort();
+    return { outcome: { accepted: true } };
+  }, {
+    workerId: "worker-policy-denied",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    authorizeDispatch: async () => false,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "dispatch-fence"));
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_DISPATCH_POLICY_DENIED"
+    && call[1].maxAttempts === 1));
+});
+
 test("worker records authorization service failures distinctly and never dispatches", async () => {
   const controller = new AbortController();
   const store = fakeStore([execution()]);
