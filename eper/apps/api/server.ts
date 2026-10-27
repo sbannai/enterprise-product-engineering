@@ -13,6 +13,7 @@ import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
+import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import type { TrustedReceiptNumberSource } from "./payments.js";
@@ -302,6 +303,37 @@ async function handleDurableAdminConfig(
     });
     return;
   }
+  if (path === "/admin/config/ai-integrations" && request.method === "GET") {
+    const saved = await getConfig("ai-integrations");
+    sendJson(request, response, 200, { config: saved?.config ?? { applications: {} }, version: saved?.version ?? 0, persistence: "postgres" });
+    return;
+  }
+  if (path === "/admin/config/ai-integrations" && request.method === "PUT") {
+    const body = await readJson(request);
+    const candidate = body.config;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
+        !candidate.applications || typeof candidate.applications !== "object" || Array.isArray(candidate.applications)) {
+      sendJson(request, response, 400, { error: "ai_integrations_config_invalid" }); return;
+    }
+    const applications = candidate.applications as Record<string, unknown>;
+    if (Object.keys(applications).length > 500) { sendJson(request, response, 400, { error: "ai_integrations_application_limit_exceeded" }); return; }
+    const normalized: Record<string, { enabled: boolean; provider: string }> = {};
+    for (const [applicationId, raw] of Object.entries(applications)) {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId) || !raw || typeof raw !== "object" || Array.isArray(raw)) {
+        sendJson(request, response, 400, { error: "ai_integrations_application_invalid" }); return;
+      }
+      const setting = raw as Record<string, unknown>;
+      const providers = ["none", "openai", "azure-openai", "google", "anthropic", "provider-neutral"];
+      if (typeof setting.enabled !== "boolean" || typeof setting.provider !== "string" || !providers.includes(setting.provider) ||
+          (setting.enabled && setting.provider === "none")) {
+        sendJson(request, response, 400, { error: "ai_integrations_setting_invalid" }); return;
+      }
+      normalized[applicationId] = { enabled: setting.enabled, provider: setting.enabled ? setting.provider : "none" };
+    }
+    const saved = await saveConfig("ai-integrations", { applications: normalized }, body.expectedVersion);
+    sendJson(request, response, 200, { config: saved.config, version: saved.version, persistence: "postgres" });
+    return;
+  }
   if (path === "/admin/config/payment-vendor" && request.method === "PUT") {
     const body = await readJson(request);
     const allowedProviders = ["sandbox", "razorpay", "stripe", "adyen"];
@@ -426,6 +458,11 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       sendApiSuccess(request, response, 200, { module: moduleKey, items });
       return;
     }
+    if (isAiIntegrationsAdminRequest(request)) {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "same-origin" });
+      response.end(aiIntegrationsAdminHtml);
+      return;
+    }
     if (isCustomerPortalPreviewRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
@@ -489,7 +526,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     }
 
     const adminConfigPath = requestUrl.pathname;
-    if (["/admin/config/price-book", "/admin/config/payment-vendor", "/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath)) {
+    if (["/admin/config/price-book", "/admin/config/payment-vendor", "/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check", "/admin/config/ai-integrations"].includes(adminConfigPath)) {
       if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
         return;
@@ -1401,6 +1438,25 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       return;
     }
 
+    if (requestUrl.pathname.startsWith("/v1/agents/") && process.env.EPER_AI_INTEGRATION_ENFORCEMENT === "true") {
+      const applicationId = requestUrl.searchParams.get("applicationId") ?? "";
+      const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "application_id_required_for_ai_integration_policy" }); return;
+      }
+      if (!options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 503, { error: "ai_integration_policy_store_unconfigured" }); return;
+      }
+      try {
+        const saved = await options.adminConfigurationStore.get(tenantId, "ai-integrations");
+        const config = saved?.config as { applications?: Record<string, { enabled?: boolean }> } | undefined;
+        if (config?.applications?.[applicationId]?.enabled !== true) {
+          sendJson(request, response, 403, { error: "ai_integration_disabled_for_application", applicationId }); return;
+        }
+      } catch {
+        sendJson(request, response, 503, { error: "ai_integration_policy_unavailable" }); return;
+      }
+    }
     if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
 
     sendJson(request, response, 404, { error: "not_found" });
