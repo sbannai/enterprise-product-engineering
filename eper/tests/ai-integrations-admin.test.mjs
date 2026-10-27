@@ -35,7 +35,7 @@ function fakeStore() {
 async function withServer(t, store, extraEnv = {}) {
   const keys = [
     "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
-    "EPER_ADMIN_CONFIG_API_TOKEN", "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_AI_INTEGRATION_ENFORCEMENT",
+    "EPER_ADMIN_CONFIG_API_TOKEN", "EPER_ADMIN_CONFIG_API_ENABLED",
     "EPER_AGENTS_API_ENABLED", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -43,7 +43,6 @@ async function withServer(t, store, extraEnv = {}) {
     EPER_ADMIN_CONFIG_API_ENABLED: "true",
     EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
     EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({ [ADMIN_TOKEN]: { tenantId: "tenant-a", actorId: "admin-a" } }),
-    EPER_AI_INTEGRATION_ENFORCEMENT: "true",
     EPER_AGENTS_API_ENABLED: "true",
     EPER_AGENTS_TENANT_ID: "tenant-a",
     EPER_AGENTS_PRINCIPAL_TOKENS: `maker-a=${AGENT_TOKEN_A};reviewer-b=${AGENT_TOKEN_B}`,
