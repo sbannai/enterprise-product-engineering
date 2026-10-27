@@ -1444,10 +1444,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
 
     // Application-level AI controls are always enforced for agent endpoints. Do not make
     // the customer's OFF switch depend on a deployment opt-in environment variable.
-    const aiIntegrationGuard = async (agentRequest: IncomingMessage) => {
+    const aiIntegrationGuard = async (
+      agentRequest: IncomingMessage,
+      _pathname: string,
+      identity: { tenantId: string; principalId: string },
+    ) => {
       const agentUrl = new URL(agentRequest.url ?? "/", "http://localhost");
       const applicationId = agentUrl.searchParams.get("applicationId") ?? "";
-      const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
+      const tenantId = identity.tenantId;
       if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
         return { allowed: false, statusCode: 400, error: "application_id_required_for_ai_integration_policy" };
       }
