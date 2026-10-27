@@ -1451,19 +1451,24 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
         return { allowed: false, statusCode: 400, error: "application_id_required_for_ai_integration_policy" };
       }
-      if (!options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
+      if (!tenantId || !options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
         return { allowed: false, statusCode: 503, error: "ai_integration_policy_store_unconfigured" };
       }
-      const saved = await options.adminConfigurationStore.get(tenantId, "ai-integrations");
-      const config = saved?.config as { applications?: Record<string, { enabled?: boolean; provider?: string }> } | undefined;
-      const application = config?.applications?.[applicationId];
-      if (application?.enabled !== true) {
-        return { allowed: false, statusCode: 403, error: "ai_integration_disabled_for_application" };
+      try {
+        const saved = await options.adminConfigurationStore.get(tenantId, "ai-integrations");
+        const config = saved?.config as { applications?: Record<string, { enabled?: boolean; provider?: string }> } | undefined;
+        const application = config?.applications?.[applicationId];
+        if (application?.enabled !== true) {
+          return { allowed: false, statusCode: 403, error: "ai_integration_disabled_for_application" };
+        }
+        if (!application.provider || application.provider === "none") {
+          return { allowed: false, statusCode: 403, error: "ai_integration_provider_not_configured" };
+        }
+        return { allowed: true };
+      } catch {
+        // Configuration-store failures must never turn into an AI-policy bypass.
+        return { allowed: false, statusCode: 503, error: "ai_integration_policy_unavailable" };
       }
-      if (!application.provider || application.provider === "none") {
-        return { allowed: false, statusCode: 403, error: "ai_integration_provider_not_configured" };
-      }
-      return { allowed: true };
     };
     if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter, aiIntegrationGuard)) return;
 
