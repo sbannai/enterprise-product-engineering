@@ -5,7 +5,9 @@ import { createAppServer } from "../dist/apps/api/server.js";
 const original = {
   enabled: process.env.EPER_AGENTS_API_ENABLED,
   principalTokens: process.env.EPER_AGENTS_PRINCIPAL_TOKENS,
+  principalTenants: process.env.EPER_AGENTS_PRINCIPAL_TENANTS_JSON,
   tenant: process.env.EPER_AGENTS_TENANT_ID,
+  adminPersistence: process.env.EPER_ADMIN_CONFIG_PERSISTENCE,
 };
 const makerToken = "maker-test-token-with-at-least-32-characters";
 const reviewerToken = "reviewer-test-token-with-at-least-32-characters";
@@ -16,13 +18,23 @@ const auditEvents = [];
 test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   process.env.EPER_AGENTS_API_ENABLED = "true";
   process.env.EPER_AGENTS_PRINCIPAL_TOKENS = `maker-test=${makerToken};reviewer-test=${reviewerToken}`;
+  process.env.EPER_AGENTS_PRINCIPAL_TENANTS_JSON = JSON.stringify({ "maker-test": "tenant-test", "reviewer-test": "tenant-test" });
   process.env.EPER_AGENTS_TENANT_ID = "tenant-test";
-  server = createAppServer({ auditWriter: async (event) => { auditEvents.push(event); } });
+  process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
+  const adminConfigurationStore = {
+    async assertReady() {},
+    async get(tenantId, resourceType) {
+      if (resourceType !== "ai-integrations") return null;
+      return { tenantId, resourceType, config: { applications: { "app-on": { enabled: true, provider: "openai" } } }, version: 1, updatedAt: new Date().toISOString(), updatedBy: "test" };
+    },
+  };
+  server = createAppServer({ auditWriter: async (event) => { auditEvents.push(event); }, adminConfigurationStore });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   async function request(path, { method = "GET", principal = "maker-test", body } = {}) {
-    const response = await fetch(baseUrl + path, {
+    const separator = path.includes("?") ? "&" : "?";
+    const response = await fetch(baseUrl + path + separator + "applicationId=app-on", {
       method,
       headers: {
         authorization: `Bearer ${principal === "reviewer-test" ? reviewerToken : makerToken}`,
@@ -65,7 +77,7 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   });
 
   await t.test("ignores spoofed principal headers and denies unknown credentials", async () => {
-    const created = await fetch(baseUrl + "/v1/agents/sales/drafts", {
+    const created = await fetch(baseUrl + "/v1/agents/sales/drafts?applicationId=app-on", {
       method: "POST",
       headers: { authorization: `Bearer ${makerToken}`, "x-eper-principal-id": "reviewer-test", "content-type": "application/json" },
       body: JSON.stringify({ intent: "follow-up", input: { objective: "identity binding regression" } }),
@@ -73,7 +85,7 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
     assert.equal(created.status, 201);
     const draft = (await created.json()).draft;
     assert.equal(draft.createdBy, "maker-test");
-    const selfApproval = await fetch(baseUrl + `/v1/agents/drafts/${draft.id}/approve`, {
+    const selfApproval = await fetch(baseUrl + `/v1/agents/drafts/${draft.id}/approve?applicationId=app-on`, {
       method: "POST",
       headers: { authorization: `Bearer ${makerToken}`, "x-eper-principal-id": "reviewer-test", "content-type": "application/json" },
       body: JSON.stringify({}),
@@ -81,7 +93,7 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
     assert.equal(selfApproval.status, 403);
     const unsupported = await request("/v1/agents/crm/drafts", { method: "POST", body: { intent: "delete-all", input: {} } });
     assert.equal(unsupported.status, 400);
-    const denied = await fetch(baseUrl + "/v1/agents/drafts", {
+    const denied = await fetch(baseUrl + "/v1/agents/drafts?applicationId=app-on", {
       headers: { authorization: "Bearer intruder-token-with-at-least-32-characters", "x-eper-principal-id": "maker-test" },
     });
     assert.equal(denied.status, 401);
@@ -110,7 +122,9 @@ test.after(async () => {
   for (const [key, value] of Object.entries({
     EPER_AGENTS_API_ENABLED: original.enabled,
     EPER_AGENTS_PRINCIPAL_TOKENS: original.principalTokens,
+    EPER_AGENTS_PRINCIPAL_TENANTS_JSON: original.principalTenants,
     EPER_AGENTS_TENANT_ID: original.tenant,
+    EPER_ADMIN_CONFIG_PERSISTENCE: original.adminPersistence,
   })) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }

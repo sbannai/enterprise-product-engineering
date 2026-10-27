@@ -28,6 +28,7 @@ test("admin wireframe exposes authenticated feedback and ticketing API mode", as
     assert.match(html, /id="supportBearer"/);
     assert.match(html, /admin\/support\/tickets/);
     assert.match(html, /supportBearerToken/);
+    assert.match(html, /window.location.hash==="#support"/);
     assert.match(html, /params\.set\("type",type\)/);
     assert.match(html, /params\.set\("severity",severity\)/);
     assert.match(html, /params\.set\("status",status\)/);

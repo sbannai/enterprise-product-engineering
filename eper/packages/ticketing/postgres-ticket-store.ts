@@ -80,14 +80,15 @@ export class PostgresTicketStore {
     } finally { client.release(); }
   }
 
-  async list(identity: Pick<TicketIdentity, "tenantId">, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
+  async list(identity: Partial<Pick<TicketIdentity, "tenantId">>, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) {
       throw new Error("invalid_ticket_pagination");
     }
-    const values: unknown[] = [identity.tenantId];
-    const clauses = ["tenant_id = $1"];
+    const values: unknown[] = [];
+    const clauses: string[] = [];
+    if (identity.tenantId) { values.push(identity.tenantId); clauses.push("tenant_id = $1"); }
     const add = (column: string, value: unknown) => { values.push(value); clauses.push(column + " = $" + values.length); };
     if (filter.status) add("status", filter.status);
     if (filter.severity) add("severity", filter.severity);
@@ -97,7 +98,7 @@ export class PostgresTicketStore {
     const result = await this.pool.connect().then(async client => {
       try {
         return await client.query<Record<string, unknown>>(
-          `SELECT * FROM eper_support_tickets WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`, values,
+          `SELECT * FROM eper_support_tickets${clauses.length ? " WHERE " + clauses.join(" AND ") : ""} ORDER BY created_at DESC LIMIT ${values.length - 1} OFFSET ${values.length}`, values,
         );
       } finally { client.release(); }
     });

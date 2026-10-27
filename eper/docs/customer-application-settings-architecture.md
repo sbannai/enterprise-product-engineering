@@ -25,7 +25,10 @@ Application-specific values must never be stored in a global singleton or shared
 ### Customer portal
 - List of applications assigned to the authenticated customer.
 - An application dashboard with a dedicated **Settings** area.
-- Integration settings for that application: payment provider, messaging/WhatsApp, AI provider, storage/document sharing, video conferencing, and application-specific workflow/notification preferences where enabled.
+- Integration settings for that application: payment provider, messaging/WhatsApp, AI provider, storage/document sharing, **video conferencing**, and **alerts/notifications**.
+- Video conferencing and alert configuration must be reached from Customer login → My Applications → select application → Settings. These are not platform-admin global settings.
+- Every integration setting, credential reference, connection test, notification rule, recipient group, template, and delivery history is isolated by `(tenant_id, application_id, integration_key, environment)` or the corresponding application-scoped key.
+- Provider reuse is permitted only through an explicit, authorized connection reference; sharing a provider project never shares application policies, recipients, secrets, or delivery records.
 - Credential setup/rotation, Test Connection, last test result, and connection health.
 - Customer-facing Help Center and Growth Hub remain in customer login, not admin login.
 
@@ -194,3 +197,26 @@ The same global entitlement-enforcement switch also protects the local capabilit
 ### Route-level entitlement regression coverage (2026-10-26)
 
 Added `eper/tests/capability-entitlement-route.test.mjs` and `eper/tests/uat-capability-entitlement-route.test.mjs` to exercise the local and UAT HTTP execution paths for missing policy configuration, denied access, and allowed policy decisions. These are committed tests, not evidence of a passing run. Execute `npm test` from `eper/` in CI or a repository environment and resolve any failures before treating the gate as verified.
+
+
+## Platform Admin boundary: commercial control plane versus customer application settings
+
+The platform Admin owns customer records, application registration/assignment, plan and tariff catalogue, commercial price snapshots, module/add-on entitlements, and tenant/application access enablement or suspension. Customer administrators configure application-level integrations and operational preferences only within the entitlement and permissions granted by Admin.
+
+- Admin path: Customers → Applications → Plans & Tariffs → Entitlements → Client Access → Audit.
+- Customer path: My Applications → select application → Settings (including Video Conferencing and Alerts & Notifications).
+- An application access state is separate from an integration enabled state; disabling one application must not unintentionally disable its siblings.
+- A tenant suspension may affect all assigned applications, but the exact behavior for in-flight work, scheduled jobs, tokens and payments must be policy-defined and tested.
+- Plan and tariff assignments use a versioned accepted-price snapshot; later catalogue edits must not silently alter an existing agreement.
+- Customer users cannot self-grant entitlements, modify tariffs, or override platform access decisions.
+- The platform admin UI's Customers & Applications, Plans & Tariffs and Client Access sections are currently preview placeholders only; runtime persistence/API enforcement remains outstanding.
+
+
+## Product Admin ownership of localized pricing
+
+Product Admin owns the product catalogue, localized market price books, currency/amount, effective dates, version approvals, tax/rounding policy, and plan/tariff pricing. This is platform-level commercial configuration, not a customer application's operational setting. Customer admins may manage application settings and request/select available plans within their permissions, but may not alter canonical prices or contracted price snapshots. Display locale controls language and formatting only; the authoritative market-specific price and accepted contract snapshot control actual charges. A locale switch must never silently trigger FX conversion or repricing. The existing Price Book/resolver is the initial UI path; durable production readiness remains subject to the persistence, authorization, audit and payment/invoice consistency gates documented in the pricing admin console spec.
+
+
+## Product POC documentation and wireframe baseline
+
+See [Product POC Update Log](product-poc-update-log.md) for the 2026-10-27 ownership and scope update, and the product-level [BRD](product-brd.md), [HLD](product-hld.md), [LLD](product-lld.md), and [SRS](product-srs.md). The responsive [Product Admin localized-pricing wireframe](../wireframes/product-admin-localization-wireframe.html) illustrates central Product Admin controls. The [marketing deck](../marketing/eper-product-marketing-deck.html) and [sales flyers](../marketing/eper-sales-flyers.html) are editable HTML drafts, not evidence that all features or integrations are production-ready.

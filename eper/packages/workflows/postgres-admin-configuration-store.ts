@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendAuditEventInTransaction, type AuditSqlClient, type AuditSqlPool, type AuditEnvironment } from "../audit/audit-event-store.js";
 
-export type AdminConfigurationResource = "workflows" | "roles-access" | "price-book" | "payment-vendor";
+export type AdminConfigurationResource = "workflows" | "roles-access" | "price-book" | "payment-vendor" | "ai-integrations";
 export interface StoredAdminConfiguration {
   tenantId: string;
   resourceType: AdminConfigurationResource;
