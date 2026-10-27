@@ -108,7 +108,10 @@ export class PostgresCampaignSchedulerStore {
         throw new Error("EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED");
       }
     } catch (error) {
-      if (error instanceof Error && error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED") throw error;
+      if (error instanceof Error && (
+        error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED" ||
+        error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED"
+      )) throw error;
       throw new Error("EPER_CAMPAIGN_SCHEDULER_READINESS_CHECK_FAILED", { cause: error });
     } finally { client.release(); }
   }
