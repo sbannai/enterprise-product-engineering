@@ -490,7 +490,8 @@ export class PostgresCampaignSchedulerStore {
            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
            AND e.locked_by=$4 AND e.dispatch_started_at IS NULL
-           AND s.status='scheduled' AND s.approval_status='approved'
+           AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
+           AND s.approval_status='approved'
          FOR UPDATE OF s, e`,
         [tenantId, applicationId, input.executionId, workerId],
       );
@@ -551,7 +552,8 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query<{ authorized: boolean }>(
         `SELECT (e.status='running' AND e.locked_by=$4
-                  AND s.status='scheduled' AND s.approval_status='approved') AS authorized
+                  AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
+                  AND s.approval_status='approved') AS authorized
          FROM eper_campaign_executions e
          JOIN eper_campaign_schedules s
            ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
