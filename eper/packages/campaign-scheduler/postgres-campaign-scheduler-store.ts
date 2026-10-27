@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AuditSqlPool } from "../audit/audit-event-store.js";
+import { appendAuditEventInTransaction, type AuditEnvironment, type AuditSqlPool, type AuditSqlClient } from "../audit/audit-event-store.js";
 
 export type CampaignTriggerType = "once" | "recurring" | "event" | "condition";
 export type CampaignScheduleStatus = "draft" | "scheduled" | "paused" | "cancelled" | "completed";
@@ -66,7 +66,24 @@ function mapSchedule(row: Record<string, unknown>): CampaignScheduleRecord {
 
 /** PostgreSQL-backed schedule/queue primitives. Caller must supply trusted tenant and actor identities. */
 export class PostgresCampaignSchedulerStore {
-  constructor(private readonly pool: AuditSqlPool) {}
+  constructor(
+    private readonly pool: AuditSqlPool,
+    private readonly auditEnvironment: AuditEnvironment = "uat",
+    private readonly serviceVersion?: string,
+  ) {}
+
+  private async appendLifecycleAudit(client: AuditSqlClient, input: {
+    tenantId: string; applicationId: string; actorId: string; action: string;
+    resourceId: string; operationName: string; payload?: Record<string, unknown>;
+  }): Promise<void> {
+    await appendAuditEventInTransaction(client, {
+      tenantId: input.tenantId, applicationId: input.applicationId,
+      environment: this.auditEnvironment, actorType: "human", actorId: input.actorId,
+      action: input.action, outcome: "success", resourceType: "campaign-schedule",
+      resourceId: input.resourceId, source: "api", operationName: input.operationName,
+      serviceVersion: this.serviceVersion, payload: input.payload,
+    });
+  }
 
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
@@ -102,6 +119,7 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     const id = randomUUID();
     try {
+      await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `INSERT INTO eper_campaign_schedules
           (id, tenant_id, application_id, campaign_id, trigger_type, timezone, schedule_definition, created_by, updated_by)
@@ -110,8 +128,12 @@ export class PostgresCampaignSchedulerStore {
         [id, tenantId, applicationId, campaignId, input.triggerType, input.timezone,
           JSON.stringify(input.scheduleDefinition), createdBy],
       );
-      return mapSchedule(result.rows[0]);
-    } finally { client.release(); }
+      const schedule = mapSchedule(result.rows[0]);
+      await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId: createdBy, action: "campaign_schedule_create", resourceId: schedule.id, operationName: "campaign.schedule.create", payload: { campaignId, triggerType: input.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus } });
+      await client.query("COMMIT");
+      return schedule;
+    } catch (error) { try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ } throw error; }
+    finally { client.release(); }
   }
 
   async listSchedules(input: {
@@ -163,6 +185,7 @@ export class PostgresCampaignSchedulerStore {
     if (!Number.isFinite(nextRunAt.getTime()) || nextRunAt.getTime() <= Date.now()) throw new Error("CAMPAIGN_NEXT_RUN_MUST_BE_FUTURE");
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_campaign_schedules
            SET approval_status='approved', status='scheduled', next_run_at=$4, updated_by=$5, updated_at=now()
@@ -171,8 +194,12 @@ export class PostgresCampaignSchedulerStore {
         [tenantId, applicationId, input.scheduleId, nextRunAt.toISOString(), actorId],
       );
       if (!result.rows[0]) throw new Error("CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_APPROVABLE");
-      return mapSchedule(result.rows[0]);
-    } finally { client.release(); }
+      const schedule = mapSchedule(result.rows[0]);
+      await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId, action: "campaign_schedule_approve", resourceId: schedule.id, operationName: "campaign.schedule.approve", payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus, nextRunAt: schedule.nextRunAt } });
+      await client.query("COMMIT");
+      return schedule;
+    } catch (error) { try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ } throw error; }
+    finally { client.release(); }
   }
 
   async pauseOrCancel(input: {
@@ -200,8 +227,10 @@ export class PostgresCampaignSchedulerStore {
           [tenantId, applicationId, input.scheduleId],
         );
       }
+      const schedule = mapSchedule(result.rows[0]);
+      await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId, action: "campaign_schedule_" + input.action, resourceId: schedule.id, operationName: "campaign.schedule." + input.action, payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus } });
       await client.query("COMMIT");
-      return mapSchedule(result.rows[0]);
+      return schedule;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
