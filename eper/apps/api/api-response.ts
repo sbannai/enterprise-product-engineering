@@ -51,17 +51,22 @@ export function sendApiError(request: IncomingMessage, response: ServerResponse,
   const requestId = resolveApiRequestId(request);
   const safeMessage = typeof message === "string" ? message.trim().slice(0, 500) : "";
   const error: Record<string, unknown> = { code, message: safeMessage || "The request could not be completed." };
-  if (Array.isArray(details) && details.length) {
-    error.details = details.slice(0, 50).map((detail) => {
-      try {
-        const field = detail && typeof detail.field === "string" ? detail.field.slice(0, 128) : "unknown";
-        const detailCode = detail && typeof detail.code === "string" ? detail.code : "";
-        return { field, code: ERROR_CODE_PATTERN.test(detailCode) ? detailCode : "INVALID_DETAIL" };
-      } catch {
-        // Treat hostile getters/proxies as malformed metadata rather than failing the response.
-        return { field: "unknown", code: "INVALID_DETAIL" };
-      }
-    });
+  try {
+    if (Array.isArray(details) && details.length) {
+      error.details = details.slice(0, 50).map((detail) => {
+        try {
+          const field = detail && typeof detail.field === "string" ? detail.field.slice(0, 128) : "unknown";
+          const detailCode = detail && typeof detail.code === "string" ? detail.code : "";
+          return { field, code: ERROR_CODE_PATTERN.test(detailCode) ? detailCode : "INVALID_DETAIL" };
+        } catch {
+          // Treat hostile getters/proxies as malformed metadata rather than failing the response.
+          return { field: "unknown", code: "INVALID_DETAIL" };
+        }
+      });
+    }
+  } catch {
+    // A hostile array proxy must not prevent the standard error envelope from being sent.
+    error.details = [{ field: "unknown", code: "INVALID_DETAIL" }];
   }
   writeEnvelope(response, statusCode, { success: false, error, meta: { requestId } }, requestId);
 }
