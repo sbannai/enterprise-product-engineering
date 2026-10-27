@@ -118,6 +118,15 @@ test("204 and 205 success responses remain bodyless while retaining request corr
   }
 });
 
+test("success responses reject malformed runtime data before writing headers or a body", () => {
+  for (const data of [null, undefined, [], "unexpected", 42]) {
+    const res = responseRecorder();
+    assert.throws(() => sendApiSuccess(request(), res, 200, data), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
+    assert.equal(res.ended, false);
+    assert.equal(res.headers.size, 0);
+  }
+});
+
 test("success responses reject non-success status codes and invalid no-content bodies", () => {
   assert.throws(() => sendApiSuccess(request(), responseRecorder(), 400, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
   assert.throws(() => sendApiSuccess(request(), responseRecorder(), 204, { unexpected: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
