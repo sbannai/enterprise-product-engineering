@@ -7,6 +7,7 @@ import { PostgresModuleEntitlementService } from "../../packages/workflows/postg
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { PostgresTicketStore, createCanonicalTicketAuditWriter } from "../../packages/ticketing/postgres-ticket-store.js";
 import { PostgresAgentDraftStore } from "../../packages/agents/postgres-agent-draft-store.js";
+import { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -120,6 +121,15 @@ if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMod
 const agentDraftStore = agentsEnabled && paymentPool ? new PostgresAgentDraftStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID) : undefined;
 if (agentDraftStore) await agentDraftStore.assertReady();
 
+const campaignSchedulerEnabled = process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED === "true";
+if (campaignSchedulerEnabled && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("CAMPAIGN_SCHEDULER_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+const campaignSchedulerStore = campaignSchedulerEnabled && paymentPool
+  ? new PostgresCampaignSchedulerStore(paymentPool)
+  : undefined;
+if (campaignSchedulerStore) await campaignSchedulerStore.assertReady();
+
 const ticketingEnabled = process.env.EPER_TICKETING_API_ENABLED === "true";
 if (ticketingEnabled && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("TICKETING_API_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
@@ -139,7 +149,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
+const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
