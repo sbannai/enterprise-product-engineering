@@ -19,6 +19,8 @@ async function withServer(t, overrides = {}) {
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const store = {
     async createSchedule(input) { return { ...schedule, ...input, id: "schedule-created", status: "draft", approvalStatus: "pending" }; },
+    async approveAndSchedule(input) { return { ...schedule, ...input, status: "scheduled", approvalStatus: "approved" }; },
+    async pauseOrCancel(input) { return { ...schedule, ...input, status: input.action === "pause" ? "paused" : "cancelled" }; },
     async listSchedules(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" ? [schedule] : []; },
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
     ...overrides,
@@ -100,4 +102,41 @@ test("campaign schedule creation rejects missing required fields", async (t) => 
     body: JSON.stringify({ campaignId: "campaign-a" }),
   });
   assert.equal(response.status, 400);
+});
+
+
+test("campaign approval requires a future timestamp and returns approved schedule", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/approve", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json" },
+    body: JSON.stringify({ nextRunAt: "2030-01-01T10:00:00+05:30" }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.schedule.status, "scheduled");
+  assert.equal(body.data.schedule.approvalStatus, "approved");
+});
+
+test("campaign pause and cancel require authenticated tenant application assignment", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-b/campaign-schedules/schedule-1/cancel", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 404);
+});
+
+test("campaign lifecycle rejects non-approver roles", async (t) => {
+  const { base } = await withServer(t);
+  const limitedToken = "campaign-api-limited-role-token-32-characters";
+  const original = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [limitedToken]: { tenantId: "tenant-a", actorId: "actor-limited", roleKey: "teacher" },
+  });
+  t.after(() => { if (original === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON; else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = original; });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/pause", {
+    method: "POST", headers: { authorization: `Bearer ${limitedToken}` },
+  });
+  assert.equal(response.status, 403);
 });
