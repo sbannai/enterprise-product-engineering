@@ -74,9 +74,10 @@ test("live PostgreSQL capability conformance: RLS, append-only audit, rollback",
       const entry = await audit.append({
         id: evidenceId, tenantId: tenantA, requirementId: "LIVE-POSTGRES-TEST",
         action: "CONFORMANCE", principalId: "ci-test", correlationId: randomUUID(),
-        occurredAt: new Date().toISOString(), payload: { source: "live-db", nested: { b: 2, a: 1 } },
+        occurredAt: "2026-10-27T12:34:56.123456+05:30",
+        payload: { source: "live-db", nested: { b: 2, a: 1 } },
       });
-      assert.equal(audit.verify(entry), true);
+      assert.equal(audit.verify(entry), true, "offset timestamps must hash in canonical UTC form");
       await assert.rejects(
         withTenantTransaction(app, tenantA, ({ client }) =>
           client.query("UPDATE audit_evidence SET action='ALTERED' WHERE tenant_id=$1 AND evidence_id=$2", [tenantA, evidenceId])),
@@ -89,7 +90,8 @@ test("live PostgreSQL capability conformance: RLS, append-only audit, rollback",
       );
       const roundTrip = await audit.get(tenantA, evidenceId);
       assert.ok(roundTrip);
-      assert.equal(audit.verify(roundTrip), true);
+      assert.equal(roundTrip.occurredAt, "2026-10-27T07:04:56.123Z", "PostgreSQL normalizes the offset and fractional precision");
+      assert.equal(audit.verify(roundTrip), true, "the integrity hash must survive timestamp and JSONB normalization");
       assert.equal(await audit.get(tenantB, evidenceId), undefined);
     });
 
