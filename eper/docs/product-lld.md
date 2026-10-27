@@ -69,3 +69,13 @@ UI: mobile viewports, keyboard/focus, empty/loading/error states, accessible sta
 ## Ticketing UI integration detail
 
 The Product Admin pricing console exposes a Feedback & Ticketing panel with a launch action to `/wireframes#support`. The wireframes workspace handles the hash by selecting the Feedback & tickets screen. The support workspace keeps its own bearer token in page memory and calls the existing authenticated admin support ticket APIs; the pricing console's token is not forwarded. API permission checks and trusted tenant context remain authoritative. The workspace is still a POC shell; verify environment flags, identity mapping, PostgreSQL store and actual API connectivity before relying on the live queue.
+
+
+## Ticketing and feedback authorization details
+- Ticket record scope: `ticket_id`, `tenant_id`, `application_id`, `created_by`, `type`, `severity`, `status`, `owner_id`, `evidence_refs`, `created_at`, `updated_at`, `version`.
+- Client policy: `ticket.own_tenant.read/write` AND `application.assigned` AND ticket.tenant_id matches trusted tenant AND ticket.application_id is assigned to that tenant. Client requests cannot override tenant/application scope in request bodies.
+- Product Admin policy: `support.queue.cross_tenant.read` for cross-client queue access; separate permissions for assignment, severity, status, comments, exports and closure. Do not grant cross-tenant access just because a principal has generic admin UI access.
+- Every detail/list/search/count/export query must include an authorization-scoped predicate before pagination/aggregation, to avoid metadata leaks through counts and search results.
+- Duplicate linking must not merge records across tenants in a way that discloses restricted content. Use a canonical internal issue with per-tenant linked reports and visibility controls where cross-client correlation is required.
+- Attachment download and comment history require the same scope checks as ticket detail. Audit sensitive reads according to policy and audit every mutation.
+- Test cases: Client A cannot enumerate Client B tickets; Client A cannot see a second application unless assigned; changing application ID in request JSON is denied; unauthorized Product Admin cannot access cross-tenant queue; authorized support role can filter within permitted scope; aggregate counts do not leak unauthorized records; attachment URLs cannot bypass scope.
