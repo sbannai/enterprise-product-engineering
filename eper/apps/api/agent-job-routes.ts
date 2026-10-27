@@ -147,6 +147,7 @@ export async function handleAgentJobRoute(
   } catch (error) {
     const message = error instanceof Error ? error.message : "AGENT_JOB_REQUEST_FAILED";
     if (message === "REQUEST_BODY_TOO_LARGE") sendError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body exceeds the permitted size.");
+    else if (error instanceof SyntaxError) sendError(request, response, 400, "INVALID_JSON_BODY", "The request body must contain valid JSON.");
     else if (message === "JSON_OBJECT_REQUIRED" || message.startsWith("INVALID_")) sendError(request, response, 400, message.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 64), "The agent job request is invalid.");
     else if (message === "AGENT_DRAFT_NOT_FOUND") sendError(request, response, 404, message, "The requested agent draft was not found.");
     else if (["AGENT_DRAFT_ALREADY_REVIEWED","AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL","STALE_DRAFT_VERSION","STALE_DRAFT_HASH","MAKER_CHECKER_SEPARATION_REQUIRED"].includes(message)) sendError(request, response, 409, message, "The draft changed or is no longer eligible for review.");
