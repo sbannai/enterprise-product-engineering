@@ -197,3 +197,16 @@ The same global entitlement-enforcement switch also protects the local capabilit
 ### Route-level entitlement regression coverage (2026-10-26)
 
 Added `eper/tests/capability-entitlement-route.test.mjs` and `eper/tests/uat-capability-entitlement-route.test.mjs` to exercise the local and UAT HTTP execution paths for missing policy configuration, denied access, and allowed policy decisions. These are committed tests, not evidence of a passing run. Execute `npm test` from `eper/` in CI or a repository environment and resolve any failures before treating the gate as verified.
+
+
+## Platform Admin boundary: commercial control plane versus customer application settings
+
+The platform Admin owns customer records, application registration/assignment, plan and tariff catalogue, commercial price snapshots, module/add-on entitlements, and tenant/application access enablement or suspension. Customer administrators configure application-level integrations and operational preferences only within the entitlement and permissions granted by Admin.
+
+- Admin path: Customers → Applications → Plans & Tariffs → Entitlements → Client Access → Audit.
+- Customer path: My Applications → select application → Settings (including Video Conferencing and Alerts & Notifications).
+- An application access state is separate from an integration enabled state; disabling one application must not unintentionally disable its siblings.
+- A tenant suspension may affect all assigned applications, but the exact behavior for in-flight work, scheduled jobs, tokens and payments must be policy-defined and tested.
+- Plan and tariff assignments use a versioned accepted-price snapshot; later catalogue edits must not silently alter an existing agreement.
+- Customer users cannot self-grant entitlements, modify tariffs, or override platform access decisions.
+- The platform admin UI's Customers & Applications, Plans & Tariffs and Client Access sections are currently preview placeholders only; runtime persistence/API enforcement remains outstanding.
