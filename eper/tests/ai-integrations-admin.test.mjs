@@ -185,3 +185,14 @@ test("AI integration policy uses the authenticated principal tenant, not deploym
   assert.equal((await response.json()).error, "ai_integration_disabled_for_application");
   assert.equal(store.calls.at(-1).tenantId, "tenant-b");
 });
+
+test("agent endpoints fail closed when authenticated principal has no tenant mapping", async (t) => {
+  const { base } = await withServer(t, fakeStore(), { EPER_AGENTS_PRINCIPAL_TENANTS_JSON: "{}" });
+  const response = await fetch(base + "/v1/agents/crm/drafts?applicationId=app-on", {
+    method: "POST",
+    headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "agents_principal_tenant_mapping_unconfigured");
+});
