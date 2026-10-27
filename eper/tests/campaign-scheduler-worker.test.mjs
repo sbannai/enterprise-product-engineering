@@ -227,3 +227,41 @@ test("worker does not call provider when the atomic dispatch fence is denied", a
   assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
     && call[1].errorCode === "CAMPAIGN_DISPATCH_POLICY_DENIED"));
 });
+
+
+test("worker preserves cancellation when dispatch fence loses a race to cancel", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.beginExecutionDispatch = async (input) => { store.calls.push(["dispatch-fence", input]); return false; };
+  store.getDispatchFenceDenialReason = async (input) => {
+    store.calls.push(["fence-denial-reason", input]);
+    controller.abort();
+    return "cancelled";
+  };
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => { dispatchCalls += 1; return { outcome: {} }; }, {
+    workerId: "worker-cancel-race", signal: controller.signal, idleDelayMs: 100, authorizeDispatch: async () => true,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fence-denial-reason"));
+  assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "fail"));
+});
+
+test("worker requeues a paused schedule after dispatch fence denial", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.beginExecutionDispatch = async (input) => { store.calls.push(["dispatch-fence", input]); return false; };
+  store.getDispatchFenceDenialReason = async (input) => {
+    store.calls.push(["fence-denial-reason", input]);
+    controller.abort();
+    return "paused";
+  };
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => { dispatchCalls += 1; return { outcome: {} }; }, {
+    workerId: "worker-pause-race", signal: controller.signal, idleDelayMs: 100, maxAttempts: 5, authorizeDispatch: async () => true,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_SCHEDULE_PAUSED_BEFORE_DISPATCH_FENCE"
+    && call[1].maxAttempts === 5));
+});
