@@ -378,7 +378,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; campaignAuditWriter?: (record: { tenantId: string; applicationId: string; actorId: string; action: string; outcome: "success" | "failure"; resourceId: string; operationName: string; requestId?: string; payload?: Record<string, unknown> }) => Promise<void> } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -458,6 +458,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         } else if (action === "pause" || action === "cancel") {
           schedule = await options.campaignSchedulerStore.pauseOrCancel({
             tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, action,
+          });
+        }
+        if (options.campaignAuditWriter) {
+          await options.campaignAuditWriter({
+            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+            action: `campaign_schedule_${action}`, outcome: "success", resourceId: scheduleId,
+            operationName: `campaign.schedule.${action}`, requestId: resolveApiRequestId(request),
+            payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus },
           });
         }
         sendApiSuccess(request, response, 200, { schedule });
