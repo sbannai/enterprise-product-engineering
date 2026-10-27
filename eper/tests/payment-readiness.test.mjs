@@ -304,3 +304,46 @@ for (const persistence of [undefined, "json-file"]) {
     }
   });
 }
+
+
+test("payment readiness recovers after PostgreSQL connectivity is restored", async () => {
+  const keys = ["EPER_PAYMENT_PERSISTENCE", "NODE_ENV", "EPER_PAYMENT_TENANT_TOKENS", "EPER_PAYMENT_API_TOKEN"];
+  const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_PAYMENT_PERSISTENCE: "postgres",
+    NODE_ENV: "test",
+    EPER_PAYMENT_TENANT_TOKENS: JSON.stringify({ tenant_recovery_test: "tenant-recovery-token-with-at-least-32-chars" }),
+    EPER_PAYMENT_API_TOKEN: "",
+  });
+  let databaseAvailable = false;
+  const paymentStore = {
+    async checkConnectivity() { return databaseAvailable; },
+    async checkSchema() { return true; },
+  };
+  try {
+    await withServer(createAppServer({
+      paymentStore,
+      invoiceAmountSource: { async findInvoice() { return null; } },
+      receiptNumberSource: async () => "TEST-RECOVERY-RECEIPT",
+      transactionSnapshotSource: { async findTransaction() { return null; } },
+    }), async (base) => {
+      const unavailable = await fetch(`${base}/readyz/payments`);
+      assert.equal(unavailable.status, 503);
+      assert.deepEqual((await unavailable.json()).blockers, ["postgres_payment_database_unreachable"]);
+
+      // Simulate the HA layer restoring connectivity. The API must re-probe rather
+      // than cache the previous failure or mark the database ready prematurely.
+      databaseAvailable = true;
+      const recovered = await fetch(`${base}/readyz/payments`);
+      assert.equal(recovered.status, 200);
+      const body = await recovered.json();
+      assert.equal(body.status, "ready");
+      assert.deepEqual(body.blockers, []);
+    });
+  } finally {
+    for (const key of keys) {
+      if (prior[key] === undefined) delete process.env[key];
+      else process.env[key] = prior[key];
+    }
+  }
+});
