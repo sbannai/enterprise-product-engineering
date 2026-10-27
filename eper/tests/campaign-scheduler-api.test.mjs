@@ -181,3 +181,21 @@ test("campaign cancellation returns explicit conflict when dispatch has already 
   const body = await response.json();
   assert.equal(body.error.code, "CAMPAIGN_DISPATCH_ALREADY_STARTED");
 });
+
+
+test("campaign resume passes a distinct audit operation to the store", async (t) => {
+  let captured;
+  const { base } = await withServer(t, {
+    async approveAndSchedule(input) {
+      captured = input;
+      return { ...schedule, status: "scheduled", approvalStatus: "approved" };
+    },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/resume", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ nextRunAt: "2030-01-01T10:00:00+05:30" }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(captured.operation, "resume");
+});
