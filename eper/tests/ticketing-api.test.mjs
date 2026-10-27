@@ -132,6 +132,36 @@ test("ticket API denies an application assigned to the tenant but not to the act
   });
 });
 
+test("ticket API fails closed for missing, empty, or malformed actor application allowlists", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  let storeCalls = 0;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { storeCalls++; return []; },
+    async create() { storeCalls++; throw new Error("must not be called"); },
+  };
+  const invalidIdentities = [
+    { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: [] },
+    { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a", 7] },
+    { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app/a"] },
+  ];
+  await withServer({ ticketStore }, async (base) => {
+    for (const identity of invalidIdentities) {
+      process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: identity });
+      const response = await fetch(base + "/customer/applications/app-a/tickets", {
+        headers: { authorization: `Bearer ${credential}`, accept: "application/vnd.eper.v1+json" },
+      });
+      assert.equal(response.status, 403);
+      const payload = await response.json();
+      assert.equal(payload.success, false);
+      assert.equal(payload.error.code, "ACTOR_NOT_ASSIGNED_TO_APPLICATION");
+    }
+    assert.equal(storeCalls, 0, "invalid or missing actor allowlists must never reach persistence");
+  });
+});
+
 test("ticket API derives tenant and actor from trusted identity and validates customer input", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
