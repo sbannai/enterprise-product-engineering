@@ -117,7 +117,7 @@ const agentsEnabled = process.env.EPER_AGENTS_API_ENABLED === "true";
 if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
   throw new Error("AGENTS_API_REQUIRES_POSTGRES_CONFIGURATION_AND_DURABLE_AUDIT");
 }
-const agentDraftStore = agentsEnabled && paymentPool ? new PostgresAgentDraftStore(paymentPool) : undefined;
+const agentDraftStore = agentsEnabled && paymentPool ? new PostgresAgentDraftStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID) : undefined;
 if (agentDraftStore) await agentDraftStore.assertReady();
 
 const ticketingEnabled = process.env.EPER_TICKETING_API_ENABLED === "true";
