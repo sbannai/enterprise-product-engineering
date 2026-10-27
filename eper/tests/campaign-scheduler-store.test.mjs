@@ -353,3 +353,32 @@ test("cancellation rolls back when a running execution has crossed the dispatch 
   assert.ok(!calls.some((call) => call.sql === "COMMIT"));
   assert.ok(!calls.some((call) => call.sql.includes("UPDATE eper_campaign_executions SET status='cancelled'")));
 });
+
+
+test("execution with dispatch started is dead-lettered rather than automatically replayed after failure", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [{ status: "dead_letter" }] : [], rowCount: 1 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const outcome = await store.failExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    workerId: "worker-a", errorCode: "provider_timeout",
+  });
+  assert.equal(outcome, "dead_letter");
+  assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
+  assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
+  assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL AND attempt_count/);
+});
+
+test("stale recovery does not automatically retry an execution whose dispatch may have reached provider", async () => {
+  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 1 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.recoverStaleExecutions(300, 5);
+  assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$2/);
+  assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
+});
+
+test("claim query excludes executions that already crossed the dispatch-start fence", async () => {
+  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.claimExecutions("worker-a", 10);
+  assert.match(calls[0].sql, /e\.dispatch_started_at IS NULL/);
+});
