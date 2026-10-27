@@ -232,13 +232,15 @@ export async function handleAgentRoute(
       const draft: Draft = { id: randomUUID(), tenantId, applicationId, createdBy: principalId, agent: draftMatch[1] as AgentKind, intent, content, status: "PENDING_APPROVAL", createdAt: new Date().toISOString() };
       if (draftStore) await draftStore.create(draft);
       else drafts.set(draft.id, draft);
-      try {
-        await recordAudit({ action: "agent.draft.create", outcome: "success", resourceType: "agent-draft",
-          resourceId: draft.id, operationName: `${request.method} ${pathname}`,
-          payload: { applicationId, agent: draft.agent, intent: draft.intent, status: draft.status } });
-      } catch {
-        if (!draftStore) drafts.delete(draft.id);
-        send(response, 503, { error: "audit_persistence_unavailable" }); return true;
+      if (!draftStore) {
+        try {
+          await recordAudit({ action: "agent.draft.create", outcome: "success", resourceType: "agent-draft",
+            resourceId: draft.id, operationName: `${request.method} ${pathname}`,
+            payload: { applicationId, agent: draft.agent, intent: draft.intent, status: draft.status } });
+        } catch {
+          drafts.delete(draft.id);
+          send(response, 503, { error: "audit_persistence_unavailable" }); return true;
+        }
       }
       send(response, 201, { draft, controls: { externalActionsExecuted: false, crmWritesExecuted: false, humanApprovalRequired: true } }); return true;
     }
@@ -280,12 +282,7 @@ export async function handleAgentRoute(
           catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
           send(response, 409, { error: "draft_already_reviewed", status: result.status }); return true;
         }
-        try {
-          await recordAudit({ action: reviewMatch[2] === "approve" ? "agent.draft.approve" : "agent.draft.reject",
-            outcome: "success", resourceType: "agent-draft", resourceId: result.draft.id,
-            operationName: request.method + " " + pathname,
-            payload: { applicationId, previousStatus: "PENDING_APPROVAL", status: result.draft.status, noteProvided: Boolean(note) } });
-        } catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
+
         send(response, 200, { draft: result.draft, execution: "NOT_EXECUTED", nextStep: "Approved drafts require a separately authorized execution adapter." }); return true;
       }
       const draft = drafts.get(reviewMatch[1]);
