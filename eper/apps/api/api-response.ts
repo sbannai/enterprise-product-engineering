@@ -46,12 +46,14 @@ export function sendApiError(request: IncomingMessage, response: ServerResponse,
     throw new TypeError("API_ERROR_CODE_INVALID");
   }
   const requestId = resolveApiRequestId(request);
-  const error: Record<string, unknown> = { code, message: message.trim() || "The request could not be completed." };
-  if (details?.length) {
-    error.details = details.slice(0, 50).map(({ field, code: detailCode }) => ({
-      field: field.slice(0, 128),
-      code: ERROR_CODE_PATTERN.test(detailCode) ? detailCode : "INVALID_DETAIL",
-    }));
+  const safeMessage = typeof message === "string" ? message.trim().slice(0, 500) : "";
+  const error: Record<string, unknown> = { code, message: safeMessage || "The request could not be completed." };
+  if (Array.isArray(details) && details.length) {
+    error.details = details.slice(0, 50).map((detail) => {
+      const field = detail && typeof detail.field === "string" ? detail.field.slice(0, 128) : "unknown";
+      const detailCode = detail && typeof detail.code === "string" ? detail.code : "";
+      return { field, code: ERROR_CODE_PATTERN.test(detailCode) ? detailCode : "INVALID_DETAIL" };
+    });
   }
   writeEnvelope(response, statusCode, { success: false, error, meta: { requestId } }, requestId);
 }
