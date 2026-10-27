@@ -71,6 +71,9 @@ test("durable draft read returns review metadata only through tenant/application
   assert.match(routes, /const allowedMethod = pathname === "\/v1\/agent-jobs" \|\| isDraftReviewRoute \? "POST" : "GET";/);
   assert.match(routes, /response\.setHeader\("allow", allowedMethod\);/);
   assert.match(routes, /This HTTP method is not supported for the agent job or draft resource/);
+  assert.match(routes, /error instanceof SyntaxError/);
+  assert.match(routes, /"INVALID_JSON_BODY"/);
+  assert.match(routes, /The request body must contain valid JSON/);
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
   assert.match(routes, /AGENT_DRAFT_NOT_FOUND/);
 });
