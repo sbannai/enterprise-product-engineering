@@ -42,7 +42,7 @@ export function sendApiError(request: IncomingMessage, response: ServerResponse,
   if (!Number.isInteger(statusCode) || statusCode < 400 || statusCode > 599) {
     throw new TypeError("API_ERROR_STATUS_INVALID");
   }
-  if (!ERROR_CODE_PATTERN.test(code)) {
+  if (typeof code !== "string" || !ERROR_CODE_PATTERN.test(code)) {
     throw new TypeError("API_ERROR_CODE_INVALID");
   }
   const requestId = resolveApiRequestId(request);
