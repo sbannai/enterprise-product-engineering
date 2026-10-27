@@ -69,9 +69,30 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       const dispatchPromise = store.beginExecutionDispatch({
         tenantId, applicationId, executionId, workerId: "race-worker",
       });
-      // Give the dispatch transaction time to reach its SELECT ... FOR UPDATE while this
-      // transaction owns the schedule row lock. No production database is used here.
-      await delay(75);
+
+      // Do not rely on a fixed sleep: prove PostgreSQL has the dispatch transaction
+      // waiting on a lock before committing the competing pause.
+      const deadline = Date.now() + 5000;
+      let dispatchIsWaiting = false;
+      while (Date.now() < deadline) {
+        const waiting = await blocker.query(`
+          SELECT 1
+          FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid <> pg_backend_pid()
+            AND wait_event_type = 'Lock'
+            AND query LIKE '%FOR UPDATE OF s, e%'
+          LIMIT 1
+        `);
+        if (waiting.rowCount > 0) {
+          dispatchIsWaiting = true;
+          break;
+        }
+        await delay(25);
+      }
+      assert.equal(dispatchIsWaiting, true,
+        "Dispatch fence never reached the expected PostgreSQL row-lock wait; race was not exercised");
+
       await blocker.query(
         "UPDATE eper_campaign_schedules SET status='paused', updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
         [tenantId, applicationId, scheduleId],
