@@ -511,6 +511,34 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /** Classify a denied dispatch fence without treating user pause/cancel as policy denial. */
+  async getDispatchFenceDenialReason(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<"cancelled" | "paused" | "denied"> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ schedule_status: string; execution_status: string; approval_status: string; locked_by: string | null; dispatch_started_at: string | null }>(
+        `SELECT s.status AS schedule_status, s.approval_status, e.status AS execution_status,
+                e.locked_by, e.dispatch_started_at
+         FROM eper_campaign_schedules s
+         JOIN eper_campaign_executions e
+           ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
+         WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 LIMIT 1`,
+        [tenantId, applicationId, input.executionId],
+      );
+      const row = result.rows[0];
+      if (row?.schedule_status === "cancelled" || row?.execution_status === "cancelled") return "cancelled";
+      if (row?.schedule_status === "paused") return "paused";
+      if (!row || row.locked_by !== workerId || row.execution_status !== "running" ||
+          row.schedule_status !== "scheduled" || row.approval_status !== "approved" || row.dispatch_started_at) return "denied";
+      return "denied";
+    } finally { client.release(); }
+  }
+
   async isExecutionAuthorizedForDispatch(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
   }): Promise<boolean> {
