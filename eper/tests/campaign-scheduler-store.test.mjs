@@ -102,7 +102,8 @@ test("enqueue accepts only approved scheduled tenant/application schedules and i
     payload: { safe: true },
   });
   assert.equal(job?.id, "job-1");
-  assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)/);
+  assert.match(calls[0].sql, /s\.approval_status='approved'/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\)/);
 });
 
@@ -386,6 +387,8 @@ test("dispatch-start fence locks live schedule and execution before marking disp
     executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a",
   });
   assert.equal(result, true);
+  assert.match(calls.find((call) => call.sql.includes("FOR UPDATE OF s, e")).sql,
+    /s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)/);
   const lockIndex = calls.findIndex((call) => call.sql.includes("FOR UPDATE OF s, e"));
   const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=now()"));
   assert.ok(lockIndex >= 0 && fenceIndex > lockIndex);
