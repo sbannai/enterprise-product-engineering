@@ -147,13 +147,14 @@ export async function handleAgentRoute(
   response: ServerResponse,
   pathname: string,
   auditWriter?: AgentAuditWriter,
-  aiIntegrationGuard?: (request: IncomingMessage, pathname: string) => Promise<{ allowed: boolean; statusCode?: number; error?: string }>,
+  aiIntegrationGuard?: (request: IncomingMessage, pathname: string, identity: { tenantId: string; principalId: string }) => Promise<{ allowed: boolean; statusCode?: number; error?: string }>,
 ): Promise<boolean> {
   if (!pathname.startsWith("/v1/agents/")) return false;
   if (process.env.EPER_AGENTS_API_ENABLED !== "true") { send(response, 404, { error: "not_found" }); return true; }
-  const tenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
+  const serviceTenantId = process.env.EPER_AGENTS_TENANT_ID?.trim() ?? "";
   // Each principal has a distinct bearer credential. Never trust a principal ID supplied by the caller.
   // Format: EPER_AGENTS_PRINCIPAL_TOKENS="maker-a=<32+ chars>;reviewer-b=<32+ chars>"
+  // Tenant ownership is resolved separately from a server-side principal map, never from the request.
   const credentials = new Map<string, string>();
   for (const entry of (process.env.EPER_AGENTS_PRINCIPAL_TOKENS ?? "").split(";")) {
     const separator = entry.indexOf("=");
@@ -162,19 +163,27 @@ export async function handleAgentRoute(
     const token = entry.slice(separator + 1).trim();
     if (/^[a-zA-Z0-9._-]{1,100}$/.test(id) && token.length >= 32) credentials.set(id, token);
   }
-  if (!tenantId || credentials.size < 2) {
-    send(response, 503, { error: "agents_api_unconfigured", required: ["EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS (at least two distinct principal=32+ character tokens separated by semicolons)"] }); return true;
+  if (credentials.size < 2) {
+    send(response, 503, { error: "agents_api_unconfigured", required: ["EPER_AGENTS_PRINCIPAL_TOKENS (at least two distinct principal=32+ character tokens separated by semicolons)"] }); return true;
   }
   const principalId = authenticatedPrincipal(request, credentials);
   if (!principalId) {
     if (auditWriter) {
       try {
-        await auditWriter({ tenantId, actorId: "anonymous", action: "agent.authentication", outcome: "denied",
+        await auditWriter({ tenantId: serviceTenantId || "unresolved", actorId: "anonymous", action: "agent.authentication", outcome: "denied",
           resourceType: "agent-api", operationName: `${request.method ?? "UNKNOWN"} ${pathname}`,
           requestId: typeof request.headers["x-request-id"] === "string" ? request.headers["x-request-id"] : undefined });
       } catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
     }
     send(response, 401, { error: "unauthorized" }); return true;
+  }
+
+  let principalTenants: unknown;
+  try { principalTenants = JSON.parse(process.env.EPER_AGENTS_PRINCIPAL_TENANTS_JSON ?? ""); } catch { principalTenants = null; }
+  const tenantId = principalTenants && typeof principalTenants === "object" && !Array.isArray(principalTenants)
+    ? (principalTenants as Record<string, unknown>)[principalId] : undefined;
+  if (typeof tenantId !== "string" || !tenantId.trim() || tenantId.length > 200) {
+    send(response, 503, { error: "agents_principal_tenant_mapping_unconfigured" }); return true;
   }
 
   const recordAudit = async (record: Omit<AgentAuditRecord, "tenantId" | "actorId" | "requestId">) => {
@@ -187,7 +196,7 @@ export async function handleAgentRoute(
 
   if (aiIntegrationGuard) {
     try {
-      const decision = await aiIntegrationGuard(request, pathname);
+      const decision = await aiIntegrationGuard(request, pathname, { tenantId, principalId });
       if (!decision.allowed) {
         send(response, decision.statusCode ?? 403, { error: decision.error ?? "ai_integration_disabled_for_application" });
         return true;
