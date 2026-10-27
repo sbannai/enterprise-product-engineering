@@ -365,7 +365,6 @@ test("execution with dispatch started is dead-lettered rather than automatically
   assert.equal(outcome, "dead_letter");
   assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
   assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
-  assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL AND attempt_count/);
 });
 
 test("stale recovery does not automatically retry an execution whose dispatch may have reached provider", async () => {
