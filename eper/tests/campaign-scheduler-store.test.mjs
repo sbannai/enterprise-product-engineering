@@ -102,8 +102,7 @@ test("enqueue accepts only approved scheduled tenant/application schedules and i
     payload: { safe: true },
   });
   assert.equal(job?.id, "job-1");
-  assert.match(calls[0].sql, /s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)/);
-  assert.match(calls[0].sql, /s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\)/);
 });
 
@@ -258,7 +257,8 @@ test("dispatch authorization re-reads current schedule approval and worker lease
     tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
   });
   assert.equal(authorized, true);
-  assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)/);
+  assert.match(calls[0].sql, /s\.approval_status='approved'/);
   assert.match(calls[0].sql, /e\.status='running' AND e\.locked_by=\$4/);
   assert.match(calls[0].sql, /WHERE e\.tenant_id=\$1 AND e\.application_id=\$2 AND e\.id=\$3/);
   assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a"]);
