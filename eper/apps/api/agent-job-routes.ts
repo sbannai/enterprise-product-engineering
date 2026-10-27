@@ -142,7 +142,7 @@ export async function handleAgentJobRoute(
     const isDraftReviewRoute = /^\/v1\/agent-drafts\/[0-9a-f-]+\/(approve|reject)$/.test(pathname);
     const allowedMethod = pathname === "/v1/agent-jobs" || isDraftReviewRoute ? "POST" : "GET";
     response.setHeader("allow", allowedMethod);
-    sendError(request, response, 405, "METHOD_NOT_ALLOWED", "This HTTP method is not supported for the agent job resource.");
+    sendError(request, response, 405, "METHOD_NOT_ALLOWED", "This HTTP method is not supported for the agent job or draft resource.");
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "AGENT_JOB_REQUEST_FAILED";
