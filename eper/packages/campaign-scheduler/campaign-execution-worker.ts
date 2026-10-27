@@ -71,6 +71,9 @@ export async function runCampaignExecutionWorker(
           // Evaluate consent, quiet-hours, and channel policy before acquiring the
           // dispatch fence; the fence then atomically rechecks the live lease and schedule.
           authorized = await options.authorizeDispatch(execution);
+          // A graceful shutdown during an async policy check must not acquire the
+          // irreversible dispatch fence or start a provider side effect.
+          if (options.signal?.aborted) return;
           if (authorized) {
             authorized = await store.beginExecutionDispatch({
               tenantId: execution.tenantId,
