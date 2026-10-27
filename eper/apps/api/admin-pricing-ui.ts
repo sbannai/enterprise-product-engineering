@@ -35,7 +35,7 @@ ${enterpriseDesignSystemCss}
 </style>
 </head>
 <body>
-<header><div class="brand"><div class="logo">E</div><div><h1>EPER Pricing & Payments</h1><p>Market price book · Resolver · Vendor controls</p></div></div><div class="header-note">Admin console · API-backed · Production charging disabled by default</div></header>
+<header><div class="brand"><div class="logo">E</div><div><h1>EPER Pricing & Payments</h1><p>Product Admin · Localized pricing · Plans · Vendor controls</p></div></div><div class="header-note">Admin console · API-backed · Production charging disabled by default</div></header>
 <main class="shell">
 <div class="notice"><strong>Controlled configuration:</strong> price-book changes are currently held in API process memory unless your deployment supplies a durable configuration adapter. Vendor credentials are read from server environment/secrets and are never displayed or saved in this browser. Do not enable production charging from this console.</div>
 <section class="toolbar">
@@ -59,7 +59,7 @@ ${enterpriseDesignSystemCss}
 <section id="pricebook" class="panel active">
 <div class="metrics"><div class="metricbox"><div class="metric" id="entryCount">—</div><div class="metric-label">Configured entries</div></div><div class="metricbox"><div class="metric" id="approvedCount">—</div><div class="metric-label">Approved entries</div></div><div class="metricbox"><div class="metric" id="marketCount">—</div><div class="metric-label">Markets represented</div></div></div>
 <div class="grid">
-<div class="card span-5"><h2>Add or update price entry</h2><p class="sub">Use a unique product + market combination for each effective price. Commercial values require business approval.</p>
+<div class="card span-5"><h2>Localized product pricing</h2><p class="sub">Product Admin owns market-specific price books, currency, effective dates and approved price versions for each product. A display-locale change must never silently convert or change the contracted charge.</p>
 <form id="priceForm"><div class="formgrid">
 <div class="field"><label for="productId">Product ID</label><input id="productId" required placeholder="e.g. COURSE-FEE-01"></div>
 <div class="field"><label for="marketId">Market ID</label><input id="marketId" required placeholder="e.g. IN, AE, US"></div>
