@@ -67,8 +67,15 @@ export async function runCampaignExecutionWorker(
         // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
         let authorized = false;
         try {
-          authorized = typeof options.authorizeDispatch === "function" &&
-            await options.authorizeDispatch(execution);
+          // Check the worker lease and current schedule approval/status first, then allow
+          // the injected policy callback to add consent, quiet-hours and channel checks.
+          authorized = await store.isExecutionAuthorizedForDispatch({
+            tenantId: execution.tenantId,
+            applicationId: execution.applicationId,
+            executionId: execution.id,
+            workerId: options.workerId,
+          });
+          if (authorized) authorized = await options.authorizeDispatch(execution);
         } catch (authorizationError) {
           // A policy service outage is not permission to dispatch. Fail closed and do not retry
           // this execution automatically; an operator can review and explicitly requeue it.
