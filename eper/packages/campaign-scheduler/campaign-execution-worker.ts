@@ -112,10 +112,11 @@ export async function runCampaignExecutionWorker(
             });
             if (fenceReason === "cancelled") return;
             if (fenceReason === "paused") {
-              await store.failExecution({
+              // A user pause is not a failed delivery attempt. Release the lease without
+              // consuming retry budget; claimExecutions excludes paused schedules until resume.
+              await store.deferExecutionForSchedulePause({
                 tenantId: execution.tenantId, applicationId: execution.applicationId,
                 executionId: execution.id, workerId: options.workerId,
-                errorCode: "CAMPAIGN_SCHEDULE_PAUSED_BEFORE_DISPATCH_FENCE", maxAttempts,
               });
               return;
             }
