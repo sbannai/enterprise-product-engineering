@@ -365,6 +365,34 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /**
+   * Re-check mutable schedule/approval state immediately before provider dispatch.
+   * This is a necessary baseline check, not a replacement for consent, quiet-hours,
+   * channel-configuration, or serialized cancellation authorization.
+   */
+  async isExecutionAuthorizedForDispatch(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ authorized: boolean }>(
+        `SELECT (e.status='running' AND e.locked_by=$4
+                  AND s.status='scheduled' AND s.approval_status='approved') AS authorized
+         FROM eper_campaign_executions e
+         JOIN eper_campaign_schedules s
+           ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
+         WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3
+         LIMIT 1`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      return result.rows[0]?.authorized === true;
+    } finally { client.release(); }
+  }
+
   async completeExecution(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string; result?: Record<string, unknown>;
   }): Promise<boolean> {
