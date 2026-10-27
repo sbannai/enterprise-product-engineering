@@ -17,15 +17,16 @@ async function withServer(t, overrides = {}) {
     ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
+  const { campaignAuditWriter, ...storeOverrides } = overrides;
   const store = {
     async createSchedule(input) { return { ...schedule, ...input, id: "schedule-created", status: "draft", approvalStatus: "pending" }; },
     async approveAndSchedule(input) { return { ...schedule, ...input, status: "scheduled", approvalStatus: "approved" }; },
     async pauseOrCancel(input) { return { ...schedule, ...input, status: input.action === "pause" ? "paused" : "cancelled" }; },
     async listSchedules(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" ? [schedule] : []; },
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
-    ...overrides,
+    ...storeOverrides,
   };
-  const server = createAppServer({ campaignSchedulerStore: store });
+  const server = createAppServer({ campaignSchedulerStore: store, campaignAuditWriter });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -198,4 +199,21 @@ test("campaign resume passes a distinct audit operation to the store", async (t)
   });
   assert.equal(response.status, 200);
   assert.equal(captured.operation, "resume");
+});
+
+test("campaign lifecycle audit records the persisted schedule state", async (t) => {
+  let capturedAudit;
+  const { base } = await withServer(t, {
+    campaignAuditWriter: async (record) => { capturedAudit = record; },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/approve", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ nextRunAt: "2030-01-01T10:00:00+05:30" }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(capturedAudit.action, "campaign_schedule_approve");
+  assert.equal(capturedAudit.operationName, "campaign.schedule.approve");
+  assert.equal(capturedAudit.payload.resultingStatus, "scheduled");
+  assert.equal(capturedAudit.payload.approvalStatus, "approved");
 });
