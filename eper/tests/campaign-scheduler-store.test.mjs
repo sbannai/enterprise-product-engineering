@@ -105,6 +105,23 @@ test("enqueue accepts only approved scheduled tenant/application schedules and i
 });
 
 
+test("pausing before dispatch releases the claim without consuming retry budget", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_executions") ? [{ id: "job-1" }] : [],
+    rowCount: sql.includes("UPDATE eper_campaign_executions") ? 1 : 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const released = await store.deferExecutionForSchedulePause({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  });
+  assert.equal(released, true);
+  assert.match(calls[0].sql, /status='retry_wait'/);
+  assert.match(calls[0].sql, /attempt_count=GREATEST\(attempt_count - 1, 0\)/);
+  assert.match(calls[0].sql, /dispatch_started_at IS NULL/);
+  assert.match(calls[0].sql, /locked_by=\$4/);
+  assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+});
+
 test("failure uses bounded exponential retry policy and returns dead-letter at max attempts", async () => {
   const outcomes = [{ status: "retry_wait" }, { status: "dead_letter" }];
   const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [outcomes.shift()] : [], rowCount: 1 }));
