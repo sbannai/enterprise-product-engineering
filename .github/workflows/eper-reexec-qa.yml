@@ -1,15 +1,9 @@
 # Re-run controlled QA after payment/receipt branch reconciliation.
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
+# Full controlled QA is available on demand; PR validation is covered by
+# the pilot matrix and the focused technical UAT workflow.
 on:
-  pull_request:
-    paths:
-      - "eper/**"
-      - ".github/workflows/eper-reexec-qa.yml"
-  push:
-    branches: ["main"]
-    paths:
-      - "eper/**"
   workflow_dispatch:
 
 concurrency:
