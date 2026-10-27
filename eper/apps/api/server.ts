@@ -448,7 +448,8 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           let body: Record<string, unknown>;
           try { body = await readJson(request); }
           catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
-          if (typeof body.nextRunAt !== "string" || !Number.isFinite(Date.parse(body.nextRunAt))) {
+          const nextRunAtMs = typeof body.nextRunAt === "string" ? Date.parse(body.nextRunAt) : Number.NaN;
+          if (!Number.isFinite(nextRunAtMs) || nextRunAtMs <= Date.now()) {
             sendApiError(request, response, 400, "INVALID_NEXT_RUN_AT", "A valid future nextRunAt timestamp is required."); return;
           }
           schedule = await options.campaignSchedulerStore.approveAndSchedule({
