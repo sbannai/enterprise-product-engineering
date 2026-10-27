@@ -149,7 +149,23 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const server = createAppServer({ paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore, adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox", serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID });
+const server = createAppServer({
+  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
+  agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
+  campaignAuditWriter: paymentPool && auditMode === "postgres" ? async (record) => {
+    await appendAuditEvent(paymentPool, {
+      tenantId: record.tenantId, applicationId: record.applicationId,
+      environment: auditEnvironment as "production" | "uat" | "sandbox",
+      actorType: "human", actorId: record.actorId, action: record.action, outcome: record.outcome,
+      resourceType: "campaign-schedule", resourceId: record.resourceId, requestId: record.requestId,
+      source: "api", operationName: record.operationName,
+      serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+      payload: record.payload,
+    });
+  } : undefined,
+  adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
+  serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+});
 
 server.listen(port, host, () => {
   console.log(`EPER API listening on ${host}:${port}`);
