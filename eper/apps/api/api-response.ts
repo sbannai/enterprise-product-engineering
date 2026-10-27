@@ -17,6 +17,9 @@ export function resolveApiRequestId(request: IncomingMessage): string {
 }
 
 function writeEnvelope(response: ServerResponse, statusCode: number, body: Record<string, unknown>, requestId: string): void {
+  // Serialize before mutating the response so circular or otherwise unserializable
+  // payloads cannot leave partially written headers behind.
+  const serializedBody = statusCode === 204 || statusCode === 205 ? undefined : JSON.stringify(body);
   response.setHeader("content-type", "application/json; charset=utf-8");
   response.setHeader("cache-control", "no-store");
   response.setHeader("x-content-type-options", "nosniff");
@@ -27,7 +30,7 @@ function writeEnvelope(response: ServerResponse, statusCode: number, body: Recor
     return;
   }
   response.writeHead(statusCode);
-  response.end(JSON.stringify(body));
+  response.end(serializedBody);
 }
 
 export function sendApiSuccess(request: IncomingMessage, response: ServerResponse, statusCode: number, data: Record<string, unknown>): void {
