@@ -58,6 +58,14 @@ test("request ID rejects unsafe caller values and generates a replacement", () =
 });
 
 
+test("request ID enforces the maximum accepted correlation ID length", () => {
+  const accepted = "a".repeat(128);
+  assert.equal(resolveApiRequestId({ headers: { "x-correlation-id": accepted } }), accepted);
+  const overLimit = resolveApiRequestId({ headers: { "x-correlation-id": "a".repeat(129) } });
+  assert.match(overLimit, /^[0-9a-f-]{36}$/i);
+  assert.notEqual(overLimit, "a".repeat(129));
+});
+
 test("API 204 success has no body while retaining standard headers", async () => {
   const server = createServer((request, response) => sendApiSuccess(request, response, 204, {}));
   try {
