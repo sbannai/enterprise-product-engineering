@@ -33,7 +33,7 @@ function fakeStore() {
   };
 }
 
-async function withServer(t, store, extraEnv = {}) {
+async function withServer(t, store, extraEnv = {}, agentDraftStore) {
   const keys = [
     "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
     "EPER_ADMIN_CONFIG_API_TOKEN", "EPER_ADMIN_CONFIG_API_ENABLED",
@@ -50,7 +50,7 @@ async function withServer(t, store, extraEnv = {}) {
     EPER_AGENTS_PRINCIPAL_TENANTS_JSON: JSON.stringify({ "maker-a": "tenant-a", "reviewer-b": "tenant-a", "maker-other": "tenant-b" }),
     ...extraEnv,
   });
-  const server = createAppServer({ adminConfigurationStore: store });
+  const server = createAppServer({ adminConfigurationStore: store, agentDraftStore });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const base = `http://127.0.0.1:${address.port}`;
@@ -216,4 +216,40 @@ test("agent drafts and approvals are isolated by application within one tenant",
   });
   assert.equal(review.status, 404);
   assert.equal((await review.json()).error, "draft_not_found");
+});
+
+
+test("agent workflow routes use injected durable draft store", async (t) => {
+  const saved = new Map();
+  const agentDraftStore = {
+    async create(draft) { saved.set(draft.id, { ...draft }); return { ...draft }; },
+    async list(tenantId, applicationId, status) {
+      return [...saved.values()].filter((d) => d.tenantId === tenantId && d.applicationId === applicationId && (!status || d.status === status));
+    },
+    async review(input) {
+      const draft = saved.get(input.id);
+      if (!draft || draft.tenantId !== input.tenantId || draft.applicationId !== input.applicationId) return { outcome: "not_found" };
+      if (draft.createdBy === input.reviewerId) return { outcome: "maker_checker" };
+      if (draft.status !== "PENDING_APPROVAL") return { outcome: "already_reviewed", status: draft.status };
+      Object.assign(draft, { status: input.status, reviewedBy: input.reviewerId, reviewedAt: new Date().toISOString(), reviewNote: input.note });
+      return { outcome: "reviewed", draft: { ...draft } };
+    },
+  };
+  const { base } = await withServer(t, fakeStore(), {}, agentDraftStore);
+  const created = await fetch(base + "/v1/agents/sales/drafts?applicationId=app-two", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "follow-up", input: { objective: "renewal" } }),
+  });
+  assert.equal(created.status, 201);
+  const draft = (await created.json()).draft;
+  const listed = await fetch(base + "/v1/agents/drafts?applicationId=app-two", { headers: { authorization: "Bearer " + AGENT_TOKEN_A } });
+  assert.equal(listed.status, 200);
+  const list = await listed.json();
+  assert.equal(list.persistence, "postgres");
+  assert.equal(list.total, 1);
+  const review = await fetch(base + "/v1/agents/drafts/" + draft.id + "/approve?applicationId=app-two", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_B, "content-type": "application/json" }, body: JSON.stringify({ note: "Reviewed" }),
+  });
+  assert.equal(review.status, 200);
+  assert.equal((await review.json()).draft.status, "APPROVED");
 });
