@@ -481,9 +481,10 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         const invalid = message === "CAMPAIGN_SCHEDULE_ID_INVALID" || message === "CAMPAIGN_NEXT_RUN_MUST_BE_FUTURE";
-        sendApiError(request, response, invalid ? 400 : message.includes("NOT_FOUND") ? 404 : 409,
-          invalid ? message : message.includes("NOT_FOUND") ? "SCHEDULE_NOT_FOUND" : "CAMPAIGN_LIFECYCLE_CONFLICT",
-          "The campaign schedule could not be updated.");
+        const auditUnavailable = message === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED";
+        sendApiError(request, response, auditUnavailable ? 503 : invalid ? 400 : message.includes("NOT_FOUND") ? 404 : 409,
+          auditUnavailable ? message : invalid ? message : message.includes("NOT_FOUND") ? "SCHEDULE_NOT_FOUND" : "CAMPAIGN_LIFECYCLE_CONFLICT",
+          auditUnavailable ? "The schedule change was rolled back because audit persistence failed." : "The campaign schedule could not be updated.");
       }
       return;
     }
@@ -546,8 +547,12 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         }
         sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
       } catch (error) {
-        const code = error instanceof Error && /^CAMPAIGN_.*INVALID$/.test(error.message) ? error.message : "CAMPAIGN_SCHEDULE_CREATE_FAILED";
-        sendApiError(request, response, code === "CAMPAIGN_SCHEDULE_CREATE_FAILED" ? 500 : 400, code, "The campaign schedule could not be created."); return;
+        const message = error instanceof Error ? error.message : "";
+        const code = message === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED" ? message
+          : /^CAMPAIGN_.*INVALID$/.test(message) ? message : "CAMPAIGN_SCHEDULE_CREATE_FAILED";
+        const status = code === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED" ? 503
+          : code === "CAMPAIGN_SCHEDULE_CREATE_FAILED" ? 500 : 400;
+        sendApiError(request, response, status, code, "The campaign schedule could not be created."); return;
       }
     }
     if ((campaignCollection || campaignDetail) && ["GET", "HEAD"].includes(request.method ?? "")) {
