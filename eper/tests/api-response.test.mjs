@@ -63,6 +63,20 @@ test("versioned error envelope normalizes details and never accepts an invalid e
   assert.throws(() => sendApiError(request(), responseRecorder(), 200, "INVALID", "bad"), /API_ERROR_STATUS_INVALID/);
 });
 
+test("throwing error-detail array proxies cannot abort response generation", () => {
+  const details = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === "length" || property === "slice") throw new Error("untrusted proxy");
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const res = responseRecorder();
+
+  assert.doesNotThrow(() => sendApiError(request(), res, 400, "INVALID_INPUT", "Invalid input.", details));
+  assert.equal(res.json().success, false);
+  assert.equal(res.json().error.code, "INVALID_INPUT");
+});
+
 test("error detail objects with throwing property getters are normalized safely", () => {
   const malformed = Object.defineProperties({}, {
     field: { enumerable: true, get() { throw new Error("untrusted getter"); } },
