@@ -78,6 +78,29 @@ test("worker records dispatch failures for bounded retry handling", async () => 
   assert.deepEqual(reported, ["provider timeout"]);
 });
 
+test("worker reports lost completion lease and records ambiguous outcome without silent success", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.completeExecution = async (input) => {
+    store.calls.push(["complete", input]);
+    return false;
+  };
+  const reported = [];
+  await runCampaignExecutionWorker(store, async () => {
+    controller.abort();
+    return { outcome: { accepted: true } };
+  }, {
+    workerId: "worker-lost-lease",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    authorizeDispatch: async () => true,
+    onError: (error) => reported.push(error.message),
+  });
+  assert.deepEqual(reported, ["CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST"]);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST"));
+});
+
 test("worker rejects invalid configuration before touching the store", async () => {
   const store = fakeStore();
   await assert.rejects(
