@@ -32,3 +32,11 @@
 
 ## Honest implementation boundary
 These artifacts update product documentation and static POC wireframes. They do not by themselves implement the placeholder admin APIs, make pricing persistence durable, activate live payment gateways, validate tax compliance, or prove production security/availability. The static marketing deck and flyers are positioning drafts, not approved claims of certifications, SLA, integrations or completed capabilities. Business UAT remains subject to its entry gates.
+
+
+## Product manual and Product Admin ticketing update (2026-10-27)
+
+- [Product User Manual](product-user-manual.md) now covers Product Admin localized pricing, plans/tariffs and access boundaries; Customer Admin application settings; Feedback & Ticketing triage; governed AI drafts; payment/receipt checks; troubleshooting; and current POC limitations.
+- Product Admin pricing console includes a **Feedback & Ticketing** tab and launch action to the separate support workspace at `/wireframes#support`.
+- The wireframes workspace now opens the Feedback & tickets screen when that hash is present. Ticketing still uses its own authorized token and server-side authorization; the pricing-console token is not forwarded.
+- Ticket access and workflow remain subject to environment configuration and live API readiness. Do not treat a preview screen as proof of a connected production queue.
