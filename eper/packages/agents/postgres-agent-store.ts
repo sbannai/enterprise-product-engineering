@@ -98,6 +98,7 @@ function mapJob(row: Record<string, unknown>): StoredAgentJob {
     createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
     ...(row.failure_code ? { failureCode: String(row.failure_code) } : {}),
     ...(row.result_ref ? { resultRef: String(row.result_ref) } : {}),
+    ...(row.input ? { input: (typeof row.input === "string" ? JSON.parse(row.input) : row.input) as Record<string, unknown> } : {}),
   };
 }
 
