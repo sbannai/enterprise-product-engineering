@@ -156,3 +156,31 @@ test("recurring materialization is concurrency-safe and advances missed interval
   assert.match(calls[0].sql, /interval_seconds/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
 });
+
+
+test("event trigger fan-out is tenant/application scoped and idempotent", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("RETURNING id") ? [{ id: "execution-1" }] : [], rowCount: 1 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const count = await store.enqueueEventExecutions({
+    tenantId: "tenant-a", applicationId: "app-a", eventType: "lead.created",
+    eventId: "evt-123", occurredAt: "2026-10-27T03:30:00.000Z",
+    payload: { leadId: "lead-9" },
+  });
+  assert.equal(count, 1);
+  assert.match(calls[0].sql, /s\.tenant_id=\$1 AND s\.application_id=\$2/);
+  assert.match(calls[0].sql, /trigger_type='event'/);
+  assert.match(calls[0].sql, /schedule_definition->>'eventType'=\$6/);
+  assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
+  assert.equal(calls[0].values[3], "evt-123");
+  assert.equal(calls[0].values[4], "evt-123");
+});
+
+test("event trigger rejects invalid occurrence timestamp before database access", async () => {
+  const { pool, calls } = fakePool();
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.enqueueEventExecutions({
+    tenantId: "tenant-a", applicationId: "app-a", eventType: "lead.created",
+    eventId: "evt-123", occurredAt: "not-a-date",
+  }), /CAMPAIGN_EVENT_OCCURRED_AT_INVALID/);
+  assert.equal(calls.length, 0);
+});
