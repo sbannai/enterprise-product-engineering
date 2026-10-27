@@ -126,7 +126,7 @@ if (campaignSchedulerEnabled && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CAMPAIGN_SCHEDULER_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
 const campaignSchedulerStore = campaignSchedulerEnabled && paymentPool
-  ? new PostgresCampaignSchedulerStore(paymentPool)
+  ? new PostgresCampaignSchedulerStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
 if (campaignSchedulerStore) await campaignSchedulerStore.assertReady();
 
@@ -152,17 +152,6 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 const server = createAppServer({
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
   agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
-  campaignAuditWriter: paymentPool && auditMode === "postgres" ? async (record) => {
-    await appendAuditEvent(paymentPool, {
-      tenantId: record.tenantId, applicationId: record.applicationId,
-      environment: auditEnvironment as "production" | "uat" | "sandbox",
-      actorType: "human", actorId: record.actorId, action: record.action, outcome: record.outcome,
-      resourceType: "campaign-schedule", resourceId: record.resourceId, requestId: record.requestId,
-      source: "api", operationName: record.operationName,
-      serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-      payload: record.payload,
-    });
-  } : undefined,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
 });
