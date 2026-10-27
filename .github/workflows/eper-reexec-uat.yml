@@ -13,6 +13,10 @@ on:
     paths:
       - 'eper/**'
 
+concurrency:
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   controlled-uat-simulation:
     runs-on: ubuntu-latest

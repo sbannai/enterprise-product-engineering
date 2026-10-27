@@ -13,6 +13,10 @@ on:
       - "eper/**"
   workflow_dispatch:
 
+concurrency:
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   controlled-qa-reexecution:
     runs-on: ubuntu-latest
