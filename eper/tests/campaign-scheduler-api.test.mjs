@@ -18,6 +18,7 @@ async function withServer(t, overrides = {}) {
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const { campaignAuditWriter, ...storeOverrides } = overrides;
+  const auditWriter = campaignAuditWriter === null ? undefined : campaignAuditWriter ?? (async () => {});
   const store = {
     async createSchedule(input) { return { ...schedule, ...input, id: "schedule-created", status: "draft", approvalStatus: "pending" }; },
     async approveAndSchedule(input) { return { ...schedule, ...input, status: "scheduled", approvalStatus: "approved" }; },
@@ -26,7 +27,7 @@ async function withServer(t, overrides = {}) {
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
     ...storeOverrides,
   };
-  const server = createAppServer({ campaignSchedulerStore: store, campaignAuditWriter });
+  const server = createAppServer({ campaignSchedulerStore: store, campaignAuditWriter: auditWriter });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -230,4 +231,24 @@ test("campaign lifecycle returns explicit unavailable when audit persistence fai
   assert.equal(response.status, 503);
   const body = await response.json();
   assert.equal(body.error.code, "CAMPAIGN_AUDIT_UNAVAILABLE");
+});
+
+test("campaign lifecycle fails closed before mutation when audit persistence is not configured", async (t) => {
+  let mutated = false;
+  const { base } = await withServer(t, {
+    campaignAuditWriter: null,
+    async approveAndSchedule(input) {
+      mutated = true;
+      return { ...schedule, ...input, status: "scheduled", approvalStatus: "approved" };
+    },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/approve", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json" },
+    body: JSON.stringify({ nextRunAt: "2030-01-01T10:00:00+05:30" }),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error.code, "CAMPAIGN_AUDIT_UNAVAILABLE");
+  assert.equal(mutated, false);
 });
