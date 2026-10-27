@@ -1846,7 +1846,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
-    const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;\n    if (await handleAgentJobRoute(request, response, requestUrl.pathname, {\n      store: agentStore, resolveIdentity: resolveAgentJobIdentity,\n      environment: options.adminConfigEnvironment ?? "sandbox",\n    })) return;\n\n    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
+    const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;
+    if (await handleAgentJobRoute(request, response, requestUrl.pathname, {
+      store: agentStore, resolveIdentity: resolveAgentJobIdentity,
+      environment: options.adminConfigEnvironment ?? "sandbox",
+    })) return;
+
+    if (await handleAgentRoute(request, response, requestUrl.pathname, options.auditWriter)) return;
 
     sendJson(request, response, 404, { error: "not_found" });
   });
