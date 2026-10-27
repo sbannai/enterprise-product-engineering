@@ -181,3 +181,10 @@ Long-running work should return a job/correlation ID and status instead of block
 ## 12. User manual maintenance
 
 This manual covers the intended product workflows and current POC boundaries. Update it alongside changes to the BRD, HLD, LLD, SRS, wireframes, API contracts and role/permission matrix. Treat proposed APIs and static previews as design guidance until their implementation and environment evidence are verified.
+
+
+## Role-derived ticket API scope (implementation note, 2026-10-27)
+
+Product Admin and client views reuse `GET /admin/support/tickets`; the authenticated role controls the result scope. Configure `EPER_TICKETING_ADMIN_ROLE_KEYS_JSON` for roles allowed to use the admin ticket API and `EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON` only for roles approved to see the cross-client queue (for example, a platform Product Admin role). Keep the cross-tenant list empty unless explicitly authorized. The endpoint returns `scope: "authorized_platform"` for the configured cross-tenant role and `scope: "tenant"` plus the authenticated tenant ID otherwise. A role must be in the admin API allowlist as well as the cross-tenant list to receive broader results.
+
+This currently describes list-result scope only. Cross-client ticket status/assignment mutations and their audit tenant resolution require separate verification before Product Admin can be considered fully enabled to manage tickets across clients. Do not claim Business UAT acceptance based on this change alone.
