@@ -186,7 +186,7 @@ export class PostgresCampaignSchedulerStore {
          SELECT $1, s.id, s.tenant_id, s.application_id, $5, $6, $7::jsonb
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$2 AND s.application_id=$3 AND s.id=$4
-           AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
+           AND s.status='scheduled' AND s.approval_status='approved'
          ON CONFLICT (tenant_id, application_id, idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
          RETURNING *`,
         [randomUUID(), tenantId, applicationId, input.scheduleId, scheduledFor.toISOString(), idempotencyKey, JSON.stringify(payload)],
@@ -253,7 +253,7 @@ export class PostgresCampaignSchedulerStore {
            JOIN eper_campaign_schedules s
              ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
            WHERE e.status IN ('queued','retry_wait') AND e.available_at <= now()
-             AND s.status='scheduled' AND s.approval_status='approved'
+             AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
            ORDER BY e.available_at, e.created_at
            FOR UPDATE OF e SKIP LOCKED
            LIMIT $2
