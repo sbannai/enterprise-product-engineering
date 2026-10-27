@@ -92,7 +92,7 @@ const auditWriter = auditMode === "postgres" && paymentPool
   ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord): Promise<void> => {
       await appendAuditEvent(paymentPool, {
         tenantId: record.tenantId,
-        applicationId: "eper",
+        applicationId: record.applicationId ?? "eper",
         environment: auditEnvironment as "production" | "uat" | "sandbox",
         actorType: record.actorId === "anonymous" ? "system" : "human",
         actorId: record.actorId,
