@@ -64,3 +64,8 @@ Unit tests: currency/locale independence, price selection/effective windows, ove
 Integration: cross-tenant/customer app isolation, price approval, quote→payment→invoice→receipt invariants, durable audit, restart persistence, concurrent updates.
 Resilience: DB outage fails closed, recovery reconciles uncertain transactions, worker restart/stale lease recovery, backup restore and controlled failover drill.
 UI: mobile viewports, keyboard/focus, empty/loading/error states, accessible status messages and disabled/unavailable controls.
+
+
+## Ticketing UI integration detail
+
+The Product Admin pricing console exposes a Feedback & Ticketing panel with a launch action to `/wireframes#support`. The wireframes workspace handles the hash by selecting the Feedback & tickets screen. The support workspace keeps its own bearer token in page memory and calls the existing authenticated admin support ticket APIs; the pricing console's token is not forwarded. API permission checks and trusted tenant context remain authoritative. The workspace is still a POC shell; verify environment flags, identity mapping, PostgreSQL store and actual API connectivity before relying on the live queue.
