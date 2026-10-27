@@ -89,6 +89,14 @@ test("error response detail count is capped at fifty entries", () => {
   assert.equal(body.error.details[49].field, "field49");
 });
 
+test("malformed runtime error codes are rejected without serializing a response", () => {
+  for (const code of [null, 17, {}, "A", "lower_case", "X".repeat(65)]) {
+    const res = responseRecorder();
+    assert.throws(() => sendApiError(request(), res, 400, code, "Invalid input."));
+    assert.equal(res.ended, false);
+  }
+});
+
 test("invalid correlation IDs are replaced with safe generated request IDs", () => {
   const resolved = resolveApiRequestId(request({ "x-correlation-id": "bad correlation id" }));
   assert.match(resolved, /^[0-9a-f-]{36}$/i);
