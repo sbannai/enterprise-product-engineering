@@ -370,8 +370,8 @@ test("pause cannot mutate a completed one-time schedule", async () => {
   });
   const scheduleUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_schedules"));
   assert.ok(scheduleUpdate);
-  assert.match(scheduleUpdate.sql, /status IN \\('draft','scheduled','paused'\\)/);
-  assert.doesNotMatch(scheduleUpdate.sql, /status IN \\('draft','scheduled','paused','completed'\\)/);
+  assert.match(scheduleUpdate.sql, /status IN \('draft','scheduled','paused'\)/);
+  assert.doesNotMatch(scheduleUpdate.sql, /status IN \('draft','scheduled','paused','completed'\)/);
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
