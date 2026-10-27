@@ -123,6 +123,10 @@ interface TrustedCustomerAccessIdentity {
   roleKey: string;
 }
 
+interface TrustedAgentJobIdentity extends TrustedCustomerAccessIdentity {
+  applicationIds: string[];
+}
+
 /** Resolve customer identity only from server-side credential mapping; never from request JSON. */
 function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustomerAccessIdentity | null {
   const match = /^Bearer (.+)$/i.exec(request.headers.authorization ?? "");
