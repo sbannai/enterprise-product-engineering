@@ -29,6 +29,7 @@ function fakeStore(claimed = []) {
     async isExecutionAuthorizedForDispatch(input) { calls.push(["authorize-current", input]); return true; },
     async beginExecutionDispatch(input) { calls.push(["dispatch-fence", input]); return true; },
     async getDispatchFenceDenialReason(input) { calls.push(["fence-denial-reason", input]); return "denied"; },
+    async deferExecutionForSchedulePause(input) { calls.push(["defer-paused", input]); return true; },
     async completeExecution(input) { calls.push(["complete", input]); return true; },
     async failExecution(input) { calls.push(["fail", input]); return "retry_wait"; },
   };
@@ -261,7 +262,6 @@ test("worker requeues a paused schedule after dispatch fence denial", async () =
     workerId: "worker-pause-race", signal: controller.signal, idleDelayMs: 100, maxAttempts: 5, authorizeDispatch: async () => true,
   });
   assert.equal(dispatchCalls, 0);
-  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
-    && call[1].errorCode === "CAMPAIGN_SCHEDULE_PAUSED_BEFORE_DISPATCH_FENCE"
-    && call[1].maxAttempts === 5));
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "defer-paused"));
+  assert.equal(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"), false);
 });
