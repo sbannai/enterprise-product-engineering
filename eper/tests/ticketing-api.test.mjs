@@ -77,8 +77,8 @@ test("ticket API is disabled by default", async () => {
 test("ticket API rejects untrusted identity and cross-tenant application assignment", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [otherCredential]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [otherCredential]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const ticketStore = { async assertReady() {}, async list() { return []; }, async create() { throw new Error("must not be called"); } };
@@ -108,10 +108,34 @@ test("ticket API rejects untrusted identity and cross-tenant application assignm
   });
 });
 
+test("ticket API denies an application assigned to the tenant but not to the actor", async () => {
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-b"] },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-b"] });
+  let storeCalled = false;
+  const ticketStore = {
+    async assertReady() {},
+    async list() { storeCalled = true; return []; },
+    async create() { storeCalled = true; throw new Error("must not be called"); },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/customer/applications/app-a/tickets", {
+      headers: { authorization: `Bearer ${credential}`, accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(response.status, 403);
+    const payload = await response.json();
+    assert.equal(payload.success, false);
+    assert.equal(payload.error.code, "ACTOR_NOT_ASSIGNED_TO_APPLICATION");
+    assert.equal(storeCalled, false);
+  });
+});
+
 test("ticket API derives tenant and actor from trusted identity and validates customer input", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   let captured;
@@ -150,7 +174,7 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
 test("ticket creation returns a stable conflict when an idempotency key is reused with a different payload", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const ticketStore = {
@@ -179,7 +203,7 @@ test("ticket creation returns a stable conflict when an idempotency key is reuse
 test("ticket creation rejects malformed idempotency keys", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   let called = false;
@@ -198,7 +222,7 @@ test("ticket creation rejects malformed idempotency keys", async () => {
 test("malformed admin ticket lifecycle JSON returns a safe client error without mutation", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let mutationCalled = false;
@@ -232,7 +256,7 @@ test("malformed admin ticket lifecycle JSON returns a safe client error without 
 test("oversized admin ticket lifecycle JSON is rejected before mutation", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let mutationCalled = false;
@@ -266,7 +290,7 @@ test("oversized admin ticket lifecycle JSON is rejected before mutation", async 
 test("support admin queue and status updates remain scoped to the trusted admin tenant", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
   const calls = [];
@@ -315,7 +339,7 @@ test("support admin queue and status updates remain scoped to the trusted admin 
 test("support admin queue rejects invalid filters and pagination before querying the store", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let storeCalls = 0;
@@ -371,7 +395,7 @@ test("support admin triage console is feature-gated and calls protected tenant-s
 test("customer ticket list uses the versioned success envelope and preserves pagination metadata", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const ticket = {
@@ -411,7 +435,7 @@ test("customer ticket list uses the versioned success envelope and preserves pag
 test("customer ticket validation errors use the versioned envelope and secure response headers", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   let storeCalled = false;
@@ -448,7 +472,7 @@ test("customer ticket validation errors use the versioned envelope and secure re
 test("malformed customer ticket JSON returns a safe versioned error without persistence", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   let storeCalled = false;
@@ -482,7 +506,7 @@ test("malformed customer ticket JSON returns a safe versioned error without pers
 test("oversized customer ticket JSON is rejected with the standardized 413 envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   let storeCalled = false;
@@ -516,7 +540,7 @@ test("oversized customer ticket JSON is rejected with the standardized 413 envel
 test("customer ticket creation storage failures use the standardized safe error envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const ticketStore = {
@@ -554,7 +578,7 @@ test("customer ticket creation storage failures use the standardized safe error 
 test("customer ticket-list storage failures return a stable non-disclosing API envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const ticketStore = {
@@ -587,7 +611,7 @@ test("customer ticket-list storage failures return a stable non-disclosing API e
 test("support admin queue returns the versioned success envelope with trusted tenant metadata", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
   const ticket = {
@@ -630,7 +654,7 @@ test("support admin queue returns the versioned success envelope with trusted te
 test("support admin queue storage failures use the same safe response contract", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   const ticketStore = {
@@ -660,7 +684,7 @@ test("support admin queue storage failures use the same safe response contract",
 test("support admin lifecycle storage failures use the standardized safe error envelope", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   const ticketStore = {
@@ -702,7 +726,7 @@ test("support admin lifecycle storage failures use the standardized safe error e
 test("support admin lifecycle mutations reject malformed and over-posted payloads before storage", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let mutationCalls = 0;
@@ -736,7 +760,7 @@ test("support admin lifecycle mutations reject malformed and over-posted payload
 test("support admin queue trims its lookahead row and reports hasMore accurately", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let receivedFilter;
@@ -769,7 +793,7 @@ test("support admin queue trims its lookahead row and reports hasMore accurately
 test("support admin queue rejects search terms longer than the documented bound", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let listCalled = false;
@@ -786,7 +810,7 @@ test("support admin queue rejects search terms longer than the documented bound"
 test("support admin maximum page size uses one bounded lookahead row", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let receivedFilter;
@@ -818,7 +842,7 @@ test("support admin maximum page size uses one bounded lookahead row", async () 
 test("support admin full page without an extra row reports hasMore false", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   let receivedFilter;
@@ -852,7 +876,7 @@ test.after(restoreEnv);
 test("ticket admin endpoints reject customer roles before calling the store", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
@@ -886,7 +910,7 @@ test("ticket admin endpoints reject customer roles before calling the store", as
 test("support admin cannot mutate a ticket outside its tenant and receives non-disclosing not-found", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-admin-a", actorId: "support-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-admin-a", actorId: "support-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin", "super_admin"]);
   const calls = [];
@@ -941,7 +965,7 @@ test("customer ticket API fails closed when Tickets & Feedback is not enabled fo
   };
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   let storeCalled = false;
@@ -979,7 +1003,7 @@ test("ticket admin APIs fail closed when the admin role allowlist is missing or 
   };
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   let storeCalls = 0;
   const ticketStore = {
@@ -1012,7 +1036,7 @@ test("ticket admin APIs fail closed when the admin role allowlist is missing or 
 test("support admin can read and post ticket replies through the tenant-scoped API", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin" },
+    [credential]: { tenantId: "tenant-support-a", actorId: "support-actor-a", roleKey: "support_admin", applicationIds: ["app-a"] },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
   const ticketId = "00000000-0000-4000-8000-000000000001";
@@ -1062,8 +1086,8 @@ test("support admin can read and post ticket replies through the tenant-scoped A
 test("customer can read and post replies only for an assigned application's ticket", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-customer-a", actorId: "customer-actor-a", roleKey: "customer" },
-    [otherCredential]: { tenantId: "tenant-customer-b", actorId: "customer-actor-b", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-customer-a", actorId: "customer-actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [otherCredential]: { tenantId: "tenant-customer-b", actorId: "customer-actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
     "tenant-customer-a": ["app-a"],
@@ -1121,7 +1145,7 @@ test("customer can read and post replies only for an assigned application's tick
 test("customer ticket reply endpoint rejects empty, oversized, and over-posted bodies", async () => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-customer-a", actorId: "customer-actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-customer-a", actorId: "customer-actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-customer-a": ["app-a"] });
   let storeCalls = 0;
