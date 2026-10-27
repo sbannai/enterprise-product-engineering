@@ -52,6 +52,16 @@ test("schedule creation rejects malformed timezone before database access", asyn
   assert.equal(calls.length, 0);
 });
 
+test("schedule creation rejects unknown but syntactically valid timezone before database access", async () => {
+  const { pool, calls } = fakePool();
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.createSchedule({
+    tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
+    triggerType: "once", timezone: "Mars/Olympus", scheduleDefinition: {}, createdBy: "actor-a",
+  }), /CAMPAIGN_TIMEZONE_INVALID/);
+  assert.equal(calls.length, 0);
+});
+
 test("approval requires a future next-run time", async () => {
   const { pool, calls } = fakePool();
   const store = new PostgresCampaignSchedulerStore(pool);
