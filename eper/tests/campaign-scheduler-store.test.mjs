@@ -357,6 +357,26 @@ test("cancellation invalidates queued, retrying, and running executions in the s
 
 
 
+
+test("completed one-time schedule cannot be cancelled when no pending execution remains", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: [],
+    rowCount: 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.pauseOrCancel({
+    tenantId: "tenant-a", applicationId: "app-a",
+    scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    actorId: "actor-a", action: "cancel",
+  }), /CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_MUTABLE/);
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_schedules"));
+  assert.ok(update);
+  assert.match(update.sql, /status='completed' AND trigger_type='once' AND EXISTS/);
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
+});
+
+
 test("pause cannot mutate a completed one-time schedule", async () => {
   const { pool, calls } = fakePool(async (sql) => ({
     rows: sql.includes("UPDATE eper_campaign_schedules") ? [scheduleRow({ status: "paused" })] : [],
