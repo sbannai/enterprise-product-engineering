@@ -15,3 +15,5 @@ Generated implementation baseline for 228 requirements. This commit is source ge
 - Sales flyers: [marketing/eper-sales-flyers.html](marketing/eper-sales-flyers.html)
 
 These artifacts describe the product baseline and POC. Their presence does not imply runtime implementation, passing tests, production readiness, or Business UAT acceptance.
+
+- Product User Manual: [docs/product-user-manual.md](docs/product-user-manual.md)
