@@ -83,6 +83,8 @@ test("worker claim uses SKIP LOCKED and caps batch size", async () => {
   assert.match(calls[0].sql, /s\.status NOT IN \('paused','cancelled'\)/);
   assert.match(calls[0].sql, /s\.approval_status='approved'/);
   assert.match(calls[0].sql, /e\.status IN \('queued','retry_wait'\)/);
+  assert.match(calls[0].sql, /e\.scheduled_for <= now\(\)/);
+  assert.match(calls[0].sql, /e\.available_at <= now\(\)/);
   assert.deepEqual(calls[0].values, ["worker-a", 5]);
 });
 
