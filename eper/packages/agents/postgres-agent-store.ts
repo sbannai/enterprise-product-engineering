@@ -240,6 +240,95 @@ export class PostgresAgentStore {
     } finally { client.release(); }
   }
 
+  /** Records a worker failure and schedules bounded exponential retry, or closes the job. */
+  async failOrRetryJob(input: {
+    tenantId: string; applicationId: string; jobId: string; workerId: string;
+    failureCode: string; retryable: boolean; maxAttempts?: number; baseDelaySeconds?: number;
+    environment: AuditEnvironment; correlationId: string;
+  }): Promise<{ status: "queued" | "failed"; attempt: number; retryAt?: string }> {
+    requireId(input.workerId, "worker_id");
+    requireId(input.failureCode, "failure_code");
+    requireId(input.correlationId, "correlation_id");
+    if (!/^[A-Z0-9_:-]{2,80}$/.test(input.failureCode)) throw new Error("INVALID_AGENT_FAILURE_CODE");
+    const maxAttempts = input.maxAttempts ?? 4;
+    const baseDelaySeconds = input.baseDelaySeconds ?? 5;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10 ||
+        !Number.isInteger(baseDelaySeconds) || baseDelaySeconds < 1 || baseDelaySeconds > 300) {
+      throw new Error("INVALID_AGENT_RETRY_POLICY");
+    }
+    const client = await this.scopedClient(input.tenantId, input.applicationId);
+    try {
+      const selected = await client.query<Record<string, unknown>>(
+        "SELECT job_id,status,attempt,lease_owner,deadline_at FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3 FOR UPDATE",
+        [input.tenantId, input.applicationId, input.jobId],
+      );
+      const job = selected.rows[0];
+      if (!job) throw new Error("AGENT_JOB_NOT_FOUND");
+      if (job.status !== "running" || job.lease_owner !== input.workerId) throw new Error("AGENT_JOB_LEASE_NOT_OWNED");
+      const attempt = Number(job.attempt);
+      const retry = input.retryable && attempt < maxAttempts && new Date(String(job.deadline_at)).getTime() > Date.now();
+      const delay = Math.min(300, baseDelaySeconds * (2 ** Math.max(0, attempt - 1)));
+      const result = await client.query<Record<string, unknown>>(
+        `UPDATE eper_agent_jobs
+            SET status=$4, failure_code=$5, available_at=CASE WHEN $4='queued' THEN NOW()+($6::text || ' seconds')::interval ELSE available_at END,
+                lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW(), version=version+1
+          WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3
+          RETURNING status,available_at`,
+        [input.tenantId, input.applicationId, input.jobId, retry ? "queued" : "failed", input.failureCode, delay],
+      );
+      await appendAuditEventInTransaction(client, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "service", actorId: input.workerId, action: retry ? "agent.job.retry_scheduled" : "agent.job.failed",
+        outcome: retry ? "success" : "failure", reasonCode: input.failureCode,
+        resourceType: "agent-job", resourceId: input.jobId, correlationId: input.correlationId,
+        source: "job", operationName: "agent worker failure handling",
+        payload: { attempt, maxAttempts, retryable: input.retryable, nextStatus: retry ? "queued" : "failed", retryDelaySeconds: retry ? delay : null },
+      });
+      await client.query("COMMIT");
+      return retry
+        ? { status: "queued", attempt, retryAt: new Date(String(result.rows[0].available_at)).toISOString() }
+        : { status: "failed", attempt };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Cancels a queued/running job; running workers must stop when their lease is next checked. */
+  async cancelJob(input: {
+    tenantId: string; applicationId: string; jobId: string; actorId: string;
+    environment: AuditEnvironment; correlationId: string;
+  }): Promise<boolean> {
+    requireId(input.actorId, "actor_id");
+    requireId(input.correlationId, "correlation_id");
+    const client = await this.scopedClient(input.tenantId, input.applicationId);
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `UPDATE eper_agent_jobs
+            SET status='cancelled', lease_owner=NULL, lease_expires_at=NULL,
+                updated_at=NOW(), version=version+1
+          WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3
+            AND status IN ('queued','running')
+          RETURNING job_id`,
+        [input.tenantId, input.applicationId, input.jobId],
+      );
+      if (result.rows[0]) {
+        await appendAuditEventInTransaction(client, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "human", actorId: input.actorId, action: "agent.job.cancel", outcome: "success",
+          resourceType: "agent-job", resourceId: input.jobId, correlationId: input.correlationId,
+          source: "api", operationName: "POST /v1/agent-jobs/:jobId/cancel",
+          payload: { status: "cancelled" },
+        });
+      }
+      await client.query("COMMIT");
+      return Boolean(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async persistDraft(input: PersistAgentDraftInput): Promise<{ draftId: string; contentHash: string; version: number }> {
     requireId(input.createdBy, "created_by");
     requireId(input.correlationId, "correlation_id");
