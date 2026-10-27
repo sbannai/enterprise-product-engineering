@@ -122,6 +122,7 @@ test.after(async () => {
   for (const [key, value] of Object.entries({
     EPER_AGENTS_API_ENABLED: original.enabled,
     EPER_AGENTS_PRINCIPAL_TOKENS: original.principalTokens,
+    EPER_AGENTS_PRINCIPAL_TENANTS_JSON: original.principalTenants,
     EPER_AGENTS_TENANT_ID: original.tenant,
     EPER_ADMIN_CONFIG_PERSISTENCE: original.adminPersistence,
   })) {
