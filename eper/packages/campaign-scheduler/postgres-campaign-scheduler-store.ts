@@ -179,7 +179,7 @@ export class PostgresCampaignSchedulerStore {
   }
 
   async approveAndSchedule(input: {
-    tenantId: string; applicationId: string; scheduleId: string; actorId: string; nextRunAt: string;
+    tenantId: string; applicationId: string; scheduleId: string; actorId: string; nextRunAt: string; operation?: "approve" | "resume";
   }): Promise<CampaignScheduleRecord> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
@@ -199,7 +199,12 @@ export class PostgresCampaignSchedulerStore {
       );
       if (!result.rows[0]) throw new Error("CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_APPROVABLE");
       const schedule = mapSchedule(result.rows[0]);
-      await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId, action: "campaign_schedule_approve", resourceId: schedule.id, operationName: "campaign.schedule.approve", payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus, nextRunAt: schedule.nextRunAt } });
+      const operation = input.operation ?? "approve";
+      await this.appendLifecycleAudit(client, {
+        tenantId, applicationId, actorId, action: "campaign_schedule_" + operation,
+        resourceId: schedule.id, operationName: "campaign.schedule." + operation,
+        payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus, nextRunAt: schedule.nextRunAt },
+      });
       await client.query("COMMIT");
       return schedule;
     } catch (error) { try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ } throw error; }
