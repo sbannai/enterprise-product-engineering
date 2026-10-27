@@ -75,7 +75,7 @@ export async function handleAgentJobRoute(
       sendApiSuccess(request, response, result.kind === "created" ? 202 : 200, {
         job: result.job,
         replayed: result.kind === "existing",
-        statusUrl: "/v1/agent-jobs/" + result.job.jobId,
+        statusUrl: "/v1/agent-jobs/" + result.job.jobId + "?applicationId=" + encodeURIComponent(validated.applicationId),
       });
       return true;
     }
@@ -91,7 +91,7 @@ export async function handleAgentJobRoute(
         sendError(request, response, 404, "AGENT_JOB_NOT_FOUND", "The requested job was not found.");
         return true;
       }
-      sendApiSuccess(request, response, 200, { job, statusUrl: "/v1/agent-jobs/" + job.jobId });
+      sendApiSuccess(request, response, 200, { job, statusUrl: "/v1/agent-jobs/" + job.jobId + "?applicationId=" + encodeURIComponent(applicationId) });
       return true;
     }
     response.setHeader("allow", pathname === "/v1/agent-jobs" ? "POST" : "GET");
