@@ -54,3 +54,41 @@ These names currently drive readiness indicators only. They do not imply a worki
 Price-book entries and vendor selections changed through the admin UI are currently held in the API process memory. They are lost on process restart and are not a durable system of record. The UI/API is an admin/UAT foundation, not a production configuration control plane.
 
 Before production use, add durable transactional storage, role-based authorization and audit logging, maker-checker approval for price publication, CSRF/CSP hardening appropriate to the deployment, a managed secrets integration, provider-specific adapters and signed webhooks, payment reconciliation/refund handling, and Business UAT evidence. Production mode is intentionally locked and productionEnabled remains false.
+
+
+## Platform-admin ownership: customers, applications, plans, tariffs and access
+
+The platform Admin workspace is the control plane for commercial setup and client lifecycle. Customer-facing application settings (for example video conferencing, alerts, messaging, storage and application workflows) remain in the customer portal under the selected application.
+
+### Admin responsibilities
+
+1. **Customer registry:** create/update customer (tenant) identity, lifecycle state, authorized contacts and tenant-wide policy.
+2. **Customer applications:** register applications under a customer, manage assignment/ownership and application lifecycle. Every application must map to exactly one owning tenant unless a deliberate, audited shared-ownership model is introduced.
+3. **Plans and tariffs:** maintain versioned plans, modules/add-ons, currency, decimal amount, billing interval, per-customer/per-application/usage basis, effective dates, quotas, dependencies, approval state and price snapshots.
+4. **Entitlements:** assign an approved plan and explicit module/add-on entitlements to a customer and, where required, an individual application. A plan or payment status must not silently enable unrelated modules.
+5. **Client access enable/disable:** enable, suspend or disable the customer and/or one application. The API and background workers must enforce the effective state; hiding a navigation item is insufficient.
+6. **Audit and approvals:** record actor, target tenant/application, old/new state digests, reason, timestamp, correlation ID and outcome. Apply maker-checker approval to price publication and high-impact access changes where policy requires it.
+
+### Access enforcement
+
+- Effective access requires: active tenant, active assigned application, active module/plan entitlement for the effective period, active module, role permission, and any required billing/grace policy.
+- Suspension/disable must block new API operations and scheduled/background execution for the affected scope. Session/token revocation and treatment of in-flight operations must follow a documented policy.
+- Never delete customer/application records to disable access; preserve foreign-key relationships, payment/receipt history and audit evidence.
+- Do not let customer administrators alter their own plan price, commercial entitlements or platform-level access state.
+- All writes must be tenant-scoped, role-authorized, version-checked where appropriate, and durably audited.
+
+### Implementation status boundary
+
+The admin UI now contains clearly labelled **Customers & Applications**, **Plans & Tariffs**, and **Client Access** preview sections. They are currently disabled placeholders because their live APIs and durable workflows are not connected. They do not create or change real records. The existing price-book/vendor console also documents that some configuration is held in process memory; it is not yet a durable production control plane. Do not represent these screens as completed functionality or as Business UAT evidence.
+
+### Acceptance tests
+
+- Platform admin can create/assign a customer application only through the authorized registry API.
+- A customer cannot see or alter another tenant's application, plan or access status.
+- Application-level disable blocks its APIs and asynchronous jobs without disabling sibling applications unless the tenant itself is disabled.
+- Tenant-level suspension blocks all tenant applications according to the documented suspension policy.
+- Price/tariff changes are versioned and do not rewrite accepted price snapshots.
+- Expired, suspended, disabled, or unentitled modules fail closed.
+- Access and commercial changes create durable, correlated audit events with a mandatory reason where required.
+- Failed writes, stale versions, and unauthorized attempts return standardized errors and do not partially mutate state.
+- Test both access enforcement and UI behavior; a disabled control in the preview is not an authorization test.
