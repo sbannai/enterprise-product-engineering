@@ -296,3 +296,37 @@ test("cancellation invalidates queued, retrying, and running executions in the s
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
+
+
+test("dispatch-start fence locks live schedule and execution before marking dispatch started", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) return { rows: [{ id: "schedule-1" }], rowCount: 1 };
+    return { rows: [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const result = await store.beginExecutionDispatch({
+    tenantId: "tenant-a", applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a",
+  });
+  assert.equal(result, true);
+  const lockIndex = calls.findIndex((call) => call.sql.includes("FOR UPDATE OF s, e"));
+  const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=COALESCE"));
+  assert.ok(lockIndex >= 0 && fenceIndex > lockIndex);
+  assert.equal(calls[0].sql, "BEGIN");
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
+
+test("dispatch-start fence denies jobs whose live schedule is cancelled", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) return { rows: [], rowCount: 0 };
+    return { rows: [], rowCount: 0 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const result = await store.beginExecutionDispatch({
+    tenantId: "tenant-a", applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a",
+  });
+  assert.equal(result, false);
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some((call) => call.sql.includes("SET dispatch_started_at=COALESCE")));
+});
