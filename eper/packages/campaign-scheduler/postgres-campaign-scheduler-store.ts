@@ -233,7 +233,7 @@ export class PostgresCampaignSchedulerStore {
       const result = await client.query(
         `INSERT INTO eper_campaign_executions
           (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
-         SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $4,
+         SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $3,
            'event:' || $5 || ':' || s.id::text,
            jsonb_build_object('campaignId', s.campaign_id, 'eventType', $6, 'eventId', $5, 'eventPayload', $7::jsonb)
          FROM eper_campaign_schedules s
