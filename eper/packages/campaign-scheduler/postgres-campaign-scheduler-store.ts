@@ -225,6 +225,14 @@ export class PostgresCampaignSchedulerStore {
       );
       if (!result.rows[0]) throw new Error("CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_MUTABLE");
       if (input.action === "cancel") {
+        const dispatchStarted = await client.query(
+          `SELECT id FROM eper_campaign_executions
+           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3
+             AND status='running' AND dispatch_started_at IS NOT NULL
+           FOR UPDATE`,
+          [tenantId, applicationId, input.scheduleId],
+        );
+        if (dispatchStarted.rows.length) throw new Error("CAMPAIGN_DISPATCH_ALREADY_STARTED");
         await client.query(
           `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now(), locked_at=NULL, locked_by=NULL
            WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')`,
@@ -441,6 +449,47 @@ export class PostgresCampaignSchedulerStore {
    * This is a necessary baseline check, not a replacement for consent, quiet-hours,
    * channel-configuration, or serialized cancellation authorization.
    */
+  /**
+   * Atomically establishes the dispatch-start fence while holding the schedule row lock.
+   * Cancellation takes the same schedule lock and is rejected once this fence exists.
+   */
+  async beginExecutionDispatch(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string }>(
+        `SELECT s.id
+         FROM eper_campaign_schedules s
+         JOIN eper_campaign_executions e
+           ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
+         WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
+           AND e.locked_by=$4 AND s.status='scheduled' AND s.approval_status='approved'
+         FOR UPDATE OF s, e`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      if (!result.rows.length) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      await client.query(
+        `UPDATE eper_campaign_executions SET dispatch_started_at=COALESCE(dispatch_started_at, now()), updated_at=now()
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async isExecutionAuthorizedForDispatch(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
   }): Promise<boolean> {
