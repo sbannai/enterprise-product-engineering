@@ -126,6 +126,23 @@ test("pausing before dispatch releases the claim without consuming retry budget"
   assert.ok(calls.some((call) => call.sql === "COMMIT"), "execution update and audit must commit together");
 });
 
+test("pause deferral rolls back when durable audit append fails", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("INSERT INTO eper_audit_events")) throw new Error("audit storage unavailable");
+    return {
+      rows: sql.includes("UPDATE eper_campaign_executions") ? [{ id: "job-1" }] : [],
+      rowCount: sql.includes("UPDATE eper_campaign_executions") ? 1 : 0,
+    };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.deferExecutionForSchedulePause({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
+  assert.ok(calls.some((call) => call.sql === "BEGIN"));
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
+});
+
 test("failure uses bounded exponential retry policy and returns dead-letter at max attempts", async () => {
   const outcomes = [{ status: "retry_wait" }, { status: "dead_letter" }];
   const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [outcomes.shift()] : [], rowCount: 1 }));
