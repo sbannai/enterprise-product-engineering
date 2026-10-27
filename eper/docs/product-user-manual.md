@@ -152,3 +152,32 @@ Long-running work should return a job/correlation ID and status instead of block
 - [Customer/application settings architecture](customer-application-settings-architecture.md)
 - [Ticketing and feedback P1 register](product-ticketing-feedback-p1-register.md)
 - [Product Admin localized-pricing wireframe](../wireframes/product-admin-localization-wireframe.html)
+
+
+## 11. Product Admin and client ticketing/feedback scope
+
+### Product Admin: client-wide support oversight
+1. Open the Product Admin console and select **Feedback & Ticketing**. Use the separate authenticated support workspace and confirm that the live queue is connected.
+2. Filter the central queue by customer/tenant, application, record type, severity, status, owner and date, limited to the support scopes granted to your platform role.
+3. Review client-reported defects, feedback, feature requests and questions. These categories must remain distinct; a request is not a defect merely because it is urgent to a client.
+4. Deduplicate reports by linking duplicates to a canonical ticket. Assign an owner, capture impact/evidence, record status and next action, and verify linked fix evidence before closure.
+5. Use cross-client visibility only when your role explicitly grants platform support access. All cross-tenant reads and changes must be authorized and audited. Do not export or disclose another client's ticket to unauthorized users.
+6. Restrict security/privacy tickets to approved responders and escalate immediately. Never wait for a P1 count threshold when active security or privacy risk is suspected.
+
+### Client: application-scoped support
+1. Sign in to the customer portal and open **My Applications**.
+2. Select the application that is affected, then open **Tickets & Feedback** in that application's context.
+3. Submit a ticket with type, title, impact/description and safe evidence references. The application selector must list only applications assigned to the authenticated tenant; the server must validate that relationship regardless of what the browser submits.
+4. View and follow up only on tickets associated with the same tenant and permitted application scope. Switching to another assigned application changes the queue context; it does not grant access to other tenants or unrelated applications.
+5. Do not include passwords, bearer tokens, payment-card details, raw secrets or unnecessary personal information in ticket text or attachments.
+
+### Scope and audit rules
+- Ticket identity includes a canonical ticket ID plus trusted tenant ID and application ID; never infer scope solely from a client-provided application label.
+- Client access is tenant- and application-scoped. Product Admin's cross-client visibility is a separate privileged support permission, not the default permission of every customer-facing role.
+- Ticket create, read where sensitive, assignment, severity/status change, comments, duplicate linking, attachment access and closure should be authorized and auditable.
+- A ticket's visibility must not broaden because it is linked to a duplicate, attached to a campaign, or mentioned in a report.
+- The customer portal and admin wireframes are POC surfaces. Verify the authenticated APIs, tenant/application membership checks, durable store and audit events before relying on them in production.
+
+## 12. User manual maintenance
+
+This manual covers the intended product workflows and current POC boundaries. Update it alongside changes to the BRD, HLD, LLD, SRS, wireframes, API contracts and role/permission matrix. Treat proposed APIs and static previews as design guidance until their implementation and environment evidence are verified.
