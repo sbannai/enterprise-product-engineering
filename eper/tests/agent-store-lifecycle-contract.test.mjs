@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../packages/agents/postgres-agent-store.ts", import.meta.url), "utf8");
+const routes = await readFile(new URL("../apps/api/agent-job-routes.ts", import.meta.url), "utf8");
 
 test("agent store scopes each transaction with tenant and application RLS context", () => {
   assert.match(source, /set_config\('eper\.tenant_id', \$1, true\)/);
@@ -48,4 +49,12 @@ test("rejecting an agent draft fails its job instead of reporting success", () =
   assert.match(source, /status=CASE WHEN \$4='approve' THEN 'succeeded' ELSE 'failed' END/);
   assert.match(source, /AGENT_DRAFT_REJECTED/);
   assert.match(source, /status='awaiting_approval'/);
+});
+
+test("durable draft review requires trusted reviewer role and assigned application", () => {
+  assert.match(routes, /EPER_AGENT_REVIEWER_ROLE_KEYS/);
+  assert.match(routes, /AGENT_REVIEWER_ROLE_REQUIRED/);
+  assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
+  assert.match(routes, /expectedContentHash/);
+  assert.match(routes, /options\.store\.reviewDraft/);
 });
