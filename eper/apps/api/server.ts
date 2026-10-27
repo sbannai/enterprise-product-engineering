@@ -121,6 +121,8 @@ interface TrustedCustomerAccessIdentity {
   tenantId: string;
   actorId: string;
   roleKey: string;
+  /** Optional in the shared identity resolver; customer application routes fail closed without it. */
+  applicationIds?: string[];
 }
 
 interface TrustedAgentJobIdentity extends TrustedCustomerAccessIdentity {
@@ -143,7 +145,13 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
     if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId !== record.tenantId.trim() || record.tenantId.length > 128 ||
         typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId !== record.actorId.trim() || record.actorId.length > 128 ||
         typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey !== record.roleKey.trim() || record.roleKey.length > 128) return null;
-    return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey };
+    const rawApplicationIds = record.applicationIds;
+    const applicationIds = Array.isArray(rawApplicationIds) &&
+      rawApplicationIds.length > 0 &&
+      rawApplicationIds.every((id) => typeof id === "string" && /^[a-zA-Z0-9._-]{2,100}$/.test(id))
+      ? [...new Set(rawApplicationIds as string[])]
+      : undefined;
+    return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey, applicationIds };
   }
   return null;
 }
@@ -1179,6 +1187,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           !Array.isArray((assignments as Record<string, unknown>)[identity.tenantId]) ||
           !((assignments as Record<string, unknown[]>)[identity.tenantId] as unknown[]).includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      // Tenant ownership alone is not actor authorization. Require the credential's
+      // explicit application allow-list before reading, creating, or replying to tickets.
+      if (!identity.applicationIds?.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
       const correlationHeader = request.headers["x-correlation-id"];
