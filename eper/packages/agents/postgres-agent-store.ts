@@ -395,6 +395,21 @@ export class PostgresAgentStore {
     } finally { client.release(); }
   }
 
+  async getDraft(input: { tenantId: string; applicationId: string; draftId: string }): Promise<Record<string, unknown> | null> {
+    const client = await this.scopedClient(input.tenantId, input.applicationId);
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        "SELECT draft_id,job_id,agent_id,intent,status,payload,source_references,validation_findings,content_hash,version,created_by,created_at,expires_at FROM eper_agent_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3",
+        [input.tenantId, input.applicationId, input.draftId],
+      );
+      await client.query("COMMIT");
+      return result.rows[0] ?? null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async reviewDraft(input: ReviewAgentDraftInput): Promise<{ draftId: string; status: "approved" | "rejected"; approvalId: string }> {
     requireId(input.reviewerId, "reviewer_id");
     requireId(input.reviewerRole, "reviewer_role");
