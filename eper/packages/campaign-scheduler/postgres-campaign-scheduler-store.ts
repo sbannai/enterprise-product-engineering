@@ -591,6 +591,7 @@ export class PostgresCampaignSchedulerStore {
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       const result = await client.query<{ id: string }>(
         `UPDATE eper_campaign_executions
          SET status='retry_wait', attempt_count=GREATEST(attempt_count - 1, 0),
@@ -601,7 +602,27 @@ export class PostgresCampaignSchedulerStore {
          RETURNING id`,
         [tenantId, applicationId, input.executionId, workerId],
       );
+      if (result.rows.length === 1) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId, applicationId, environment: this.auditEnvironment,
+            actorType: "service", actorId: workerId,
+            action: "campaign_execution_deferred_paused", outcome: "success",
+            reasonCode: "CAMPAIGN_SCHEDULE_PAUSED_BEFORE_DISPATCH_FENCE",
+            resourceType: "campaign-execution", resourceId: input.executionId,
+            source: "job", operationName: "campaign.execution.defer_paused",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: "retry_wait", retryBudgetPreserved: true },
+          });
+        } catch {
+          throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED");
+        }
+      }
+      await client.query("COMMIT");
       return result.rows.length === 1;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally { client.release(); }
   }
 
