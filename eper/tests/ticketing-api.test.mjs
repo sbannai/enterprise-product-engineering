@@ -182,10 +182,12 @@ test("ticket API derives tenant and actor from trusted identity and validates cu
     });
     assert.equal(bad.status, 400);
     const created = await fetch(base + "/customer/applications/app-a/tickets", {
-      method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-submit-key-001", "x-tenant-id": "tenant-b", "x-actor-id": "actor-b", "x-role-key": "super-admin" },
+      method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "idempotency-key": "ticket-submit-key-001", "x-tenant-id": "tenant-b", "x-actor-id": "actor-b", "x-role-key": "super-admin", "x-correlation-id": "invalid correlation id" },
       body: JSON.stringify({ type: "feedback", title: " UI ", description: " Issue ", businessImpact: " Impact " }),
     });
     assert.equal(created.status, 201);
+    assert.match(created.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/i);
+    assert.equal(captured.identity.correlationId, created.headers.get("x-request-id"), "durable ticket audit correlation must match the response request ID even when caller correlation input is invalid");
     assert.equal(captured.identity.tenantId, "tenant-a");
     assert.equal(captured.identity.actorId, "actor-a");
     assert.equal(captured.identity.applicationId, "app-a");
