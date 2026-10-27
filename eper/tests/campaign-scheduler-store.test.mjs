@@ -80,6 +80,9 @@ test("worker claim uses SKIP LOCKED and caps batch size", async () => {
   await store.claimExecutions("worker-a", 5);
   assert.match(calls[0].sql, /FOR UPDATE(?: OF e)? SKIP LOCKED/);
   assert.match(calls[0].sql, /attempt_count=e\.attempt_count\+1/);
+  assert.match(calls[0].sql, /s\.status NOT IN \('paused','cancelled'\)/);
+  assert.match(calls[0].sql, /s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /e\.status IN \('queued','retry_wait'\)/);
   assert.deepEqual(calls[0].values, ["worker-a", 5]);
 });
 
