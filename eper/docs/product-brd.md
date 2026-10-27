@@ -53,3 +53,10 @@ Canonical identity provider, customer/application registry source, tax treatment
 Product Admin requires authorized access to the consolidated ticket and feedback queue to review product-wide trends, triage duplicates, confirm severity, monitor P1 candidates, assign accountable owners, and verify closure evidence. Customer-facing submissions remain tenant-scoped; cross-tenant visibility is available only to explicitly authorized platform support/admin roles and must be audited. Feedback, feature requests, questions and confirmed defects remain distinct record types. Security/privacy reports require restricted visibility and immediate escalation.
 
 Product Admin's pricing console now includes a Feedback & Ticketing entry point to the separate authenticated support workspace. This is navigation, not a new ticketing data store; runtime access remains governed by the support API's identity, role, tenant scope and environment configuration.
+
+
+## Ticketing and feedback scope requirements
+- Product Admin/support roles may review the consolidated client ticket/feedback queue across tenants only when explicitly authorized; access and mutations must be audited.
+- Customer users may submit and follow up on tickets only for their own tenant and selected application. The application list must come from trusted membership and the server must revalidate scope on every operation.
+- Product Admin queue filters must include customer, application, type, severity, status and owner. Customer-facing queue views must not reveal other applications or tenants outside the actor's permitted scope.
+- Ticketing/feedback is available to both client and Product Admin roles but presents different scope: client = own application; Product Admin = authorized client-wide oversight.
