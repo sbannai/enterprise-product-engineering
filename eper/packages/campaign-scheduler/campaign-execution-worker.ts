@@ -12,8 +12,16 @@ export interface CampaignWorkerOptions {
 }
 const sleep = (milliseconds: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
   if (signal?.aborted) return resolve();
-  const timer = setTimeout(resolve, milliseconds);
-  signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", finish);
+    resolve();
+  };
+  const timer = setTimeout(finish, milliseconds);
+  signal?.addEventListener("abort", finish, { once: true });
 });
 
 /**
