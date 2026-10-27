@@ -179,14 +179,14 @@ test("worker records authorization service failures distinctly and never dispatc
     workerId: "worker-auth-outage",
     signal: controller.signal,
     idleDelayMs: 100,
-    authorizeDispatch: async () => { throw new Error("policy service unavailable"); },
+    authorizeDispatch: async () => { controller.abort(); throw new Error("policy service unavailable"); },
     onError: (error) => reported.push(error.message),
   });
   assert.equal(dispatchCalls, 0);
   assert.deepEqual(reported, ["policy service unavailable"]);
   assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
     && call[1].errorCode === "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE"
-    && call[1].maxAttempts === 1));
+    && call[1].maxAttempts === 5));
   assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "dispatch-fence"));
 });
 
