@@ -176,6 +176,13 @@ export async function handleAgentRoute(
     send(response, 401, { error: "unauthorized" }); return true;
   }
 
+  // Reviewer authorization is separate from authentication: a valid token alone is not enough.
+  // Format: EPER_AGENTS_REVIEWER_PRINCIPALS="reviewer-a;reviewer-b"
+  const reviewerPrincipals = new Set(
+    (process.env.EPER_AGENTS_REVIEWER_PRINCIPALS ?? "")
+      .split(";").map((id) => id.trim()).filter((id) => /^[a-zA-Z0-9._-]{1,100}$/.test(id)),
+  );
+
   const recordAudit = async (record: Omit<AgentAuditRecord, "tenantId" | "actorId" | "requestId">) => {
     if (!auditWriter) return;
     await auditWriter({
@@ -215,6 +222,12 @@ export async function handleAgentRoute(
     }
     const reviewMatch = /^\/v1\/agents\/drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
     if (request.method === "POST" && reviewMatch) {
+      if (!reviewerPrincipals.has(principalId)) {
+        try { await recordAudit({ action: "agent.draft.review", outcome: "denied", resourceType: "agent-api",
+          operationName: `${request.method} ${pathname}`, payload: { reason: "reviewer_role_required" } }); }
+        catch { send(response, 503, { error: "audit_persistence_unavailable" }); return true; }
+        send(response, 403, { error: "reviewer_role_required" }); return true;
+      }
       const draft = drafts.get(reviewMatch[1]);
       if (!draft || draft.tenantId !== tenantId) {
         try { await recordAudit({ action: "agent.draft.review", outcome: "denied", resourceType: "agent-draft",
