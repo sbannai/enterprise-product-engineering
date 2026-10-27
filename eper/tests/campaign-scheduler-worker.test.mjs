@@ -28,6 +28,7 @@ function fakeStore(claimed = []) {
     async claimExecutions(workerId, batchSize) { calls.push(["claim", workerId, batchSize]); return claimed.splice(0); },
     async isExecutionAuthorizedForDispatch(input) { calls.push(["authorize-current", input]); return true; },
     async beginExecutionDispatch(input) { calls.push(["dispatch-fence", input]); return true; },
+    async getDispatchFenceDenialReason(input) { calls.push(["fence-denial-reason", input]); return "denied"; },
     async completeExecution(input) { calls.push(["complete", input]); return true; },
     async failExecution(input) { calls.push(["fail", input]); return "retry_wait"; },
   };
