@@ -434,10 +434,6 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      // Do not mutate a schedule unless durable audit confirmation is configured.
-      if (!options.campaignAuditWriter) {
-        sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "Campaign audit persistence is not configured."); return;
-      }
       let assignments: unknown;
       try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
       const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
@@ -523,23 +519,6 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           scheduleDefinition: scheduleDefinition as Record<string, unknown>,
           createdBy: identity.actorId,
         });
-        try {
-          if (options.campaignAuditWriter) {
-            await options.campaignAuditWriter({
-              tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
-              action: "campaign_schedule_create", outcome: "success", resourceId: schedule.id,
-              operationName: "campaign.schedule.create", requestId: resolveApiRequestId(request),
-              payload: { campaignId: schedule.campaignId, triggerType: schedule.triggerType, status: schedule.status, approvalStatus: schedule.approvalStatus },
-            });
-          }
-        } catch (auditError) {
-          console.error("Campaign schedule created but audit persistence failed", {
-            requestId: resolveApiRequestId(request), scheduleId: schedule.id,
-            error: auditError instanceof Error ? auditError.message : "unknown",
-          });
-          sendApiError(request, response, 503, "CAMPAIGN_AUDIT_UNAVAILABLE", "The schedule was created but audit confirmation is unavailable; check its status before retrying.");
-          return;
-        }
         sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
