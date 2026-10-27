@@ -210,6 +210,44 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /** Fan an approved tenant-scoped domain event into matching durable campaign executions. */
+  async enqueueEventExecutions(input: {
+    tenantId: string;
+    applicationId: string;
+    eventType: string;
+    eventId: string;
+    occurredAt: string;
+    payload?: Record<string, unknown>;
+  }): Promise<number> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const eventType = required(input.eventType, "CAMPAIGN_EVENT_TYPE_REQUIRED");
+    const eventId = required(input.eventId, "CAMPAIGN_EVENT_ID_REQUIRED");
+    if (eventType.length > 128 || eventId.length > 256) throw new Error("CAMPAIGN_EVENT_IDENTITY_INVALID");
+    const occurredAt = new Date(input.occurredAt);
+    if (!Number.isFinite(occurredAt.getTime())) throw new Error("CAMPAIGN_EVENT_OCCURRED_AT_INVALID");
+    const payload = input.payload ?? {};
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("CAMPAIGN_EVENT_PAYLOAD_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `INSERT INTO eper_campaign_executions
+          (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
+         SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $4,
+           'event:' || $5 || ':' || s.id::text,
+           jsonb_build_object('campaignId', s.campaign_id, 'eventType', $6, 'eventId', $5, 'eventPayload', $7::jsonb)
+         FROM eper_campaign_schedules s
+         WHERE s.tenant_id=$1 AND s.application_id=$2
+           AND s.trigger_type='event' AND s.status='scheduled' AND s.approval_status='approved'
+           AND s.schedule_definition->>'eventType'=$6
+         ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
+         RETURNING id`,
+        [tenantId, applicationId, occurredAt.toISOString(), eventId, eventId, eventType, JSON.stringify(payload)],
+      );
+      return result.rowCount ?? result.rows.length;
+    } finally { client.release(); }
+  }
+
   /** Materialize one due interval per recurring schedule and advance to the next future interval. */
   async materializeDueRecurringSchedules(limit = 50): Promise<number> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error("CAMPAIGN_MATERIALIZE_LIMIT_INVALID");
