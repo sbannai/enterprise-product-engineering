@@ -311,11 +311,15 @@ async function handleDurableAdminConfig(
   if (path === "/admin/config/ai-integrations" && request.method === "PUT") {
     const body = await readJson(request);
     const candidate = body.config;
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
-        !candidate.applications || typeof candidate.applications !== "object" || Array.isArray(candidate.applications)) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
       sendJson(request, response, 400, { error: "ai_integrations_config_invalid" }); return;
     }
-    const applications = candidate.applications as Record<string, unknown>;
+    const candidateRecord = candidate as Record<string, unknown>;
+    const applicationConfig = candidateRecord.applications;
+    if (!applicationConfig || typeof applicationConfig !== "object" || Array.isArray(applicationConfig)) {
+      sendJson(request, response, 400, { error: "ai_integrations_config_invalid" }); return;
+    }
+    const applications = applicationConfig as Record<string, unknown>;
     if (Object.keys(applications).length > 500) { sendJson(request, response, 400, { error: "ai_integrations_application_limit_exceeded" }); return; }
     const normalized: Record<string, { enabled: boolean; provider: string }> = {};
     for (const [applicationId, raw] of Object.entries(applications)) {
