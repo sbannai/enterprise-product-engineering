@@ -73,7 +73,7 @@ export class PostgresAgentDraftStore {
     } finally { client.release(); }
   }
 
-  async list(tenantId: string, applicationId: string, status?: DurableAgentDraftStatus): Promise<DurableAgentDraft[]> {
+  async list(tenantId: string, applicationId: string, status?: string): Promise<DurableAgentDraft[]> {
     const client = await this.pool.connect();
     try {
       const result = await client.query<DraftRow>(
