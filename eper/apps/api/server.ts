@@ -444,7 +444,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       }
       try {
         let schedule;
-        if (action === "approve") {
+        if (action === "approve" || action === "resume") {
           let body: Record<string, unknown>;
           try { body = await readJson(request); }
           catch { sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return; }
@@ -458,8 +458,6 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           schedule = await options.campaignSchedulerStore.pauseOrCancel({
             tenantId: identity.tenantId, applicationId, scheduleId, actorId: identity.actorId, action,
           });
-        } else {
-          sendApiError(request, response, 501, "CAMPAIGN_RESUME_NOT_IMPLEMENTED", "Resume is not available yet; create a new approval action after review."); return;
         }
         sendApiSuccess(request, response, 200, { schedule });
       } catch (error) {
