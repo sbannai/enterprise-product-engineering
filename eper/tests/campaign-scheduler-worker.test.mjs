@@ -137,6 +137,9 @@ test("worker shutdown during authorization does not acquire dispatch fence", asy
   });
   assert.equal(dispatchCalls, 0);
   assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "dispatch-fence"));
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+    && call[1].maxAttempts === 5));
 });
 
 test("worker shutdown after dispatch fence dead-letters without calling provider", async () => {
