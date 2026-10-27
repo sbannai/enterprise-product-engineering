@@ -68,7 +68,7 @@ export async function runCampaignExecutionWorker(
         });
       } catch (error) {
         options.onError?.(error);
-        const code = error instanceof Error ? error.name || "CAMPAIGN_DISPATCH_FAILED" : "CAMPAIGN_DISPATCH_FAILED";
+        const code = error instanceof Error && error.name !== "Error" ? error.name : "CAMPAIGN_DISPATCH_FAILED";
         await store.failExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
           executionId: execution.id, workerId: options.workerId, errorCode: code, maxAttempts,
