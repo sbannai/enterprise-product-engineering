@@ -107,6 +107,20 @@ test("invalid correlation IDs are replaced with safe generated request IDs", () 
   assert.match(res.headers.get("x-request-id"), /^[0-9a-f-]{36}$/i);
 });
 
+test("array and oversized correlation headers are replaced with generated IDs", () => {
+  const headers = [
+    { "x-correlation-id": ["first", "second"] },
+    { "x-correlation-id": "x".repeat(129) },
+  ];
+
+  for (const requestHeaders of headers) {
+    const req = request(requestHeaders);
+    const resolved = resolveApiRequestId(req);
+    assert.match(resolved, /^[0-9a-f-]{36}$/i);
+    assert.equal(resolveApiRequestId(req), resolved);
+  }
+});
+
 test("204 and 205 success responses remain bodyless while retaining request correlation", () => {
   for (const statusCode of [204, 205]) {
     const res = responseRecorder();
