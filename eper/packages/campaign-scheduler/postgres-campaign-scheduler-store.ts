@@ -226,8 +226,8 @@ export class PostgresCampaignSchedulerStore {
       if (!result.rows[0]) throw new Error("CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_MUTABLE");
       if (input.action === "cancel") {
         await client.query(
-          `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now()
-           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait')`,
+          `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now(), locked_at=NULL, locked_by=NULL
+           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')`,
           [tenantId, applicationId, input.scheduleId],
         );
       }
