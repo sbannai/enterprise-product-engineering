@@ -134,36 +134,41 @@ export class PostgresAgentStore {
     const fingerprint = sha256({ applicationId: input.applicationId, agentId: input.agentId, intent: input.intent, input: input.input, requestedBy: input.requestedBy });
     const client = await this.scopedClient(input.tenantId, input.applicationId);
     try {
-      const prior = await client.query<Record<string, unknown>>(
-        "SELECT * FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3 FOR UPDATE",
-        [input.tenantId, input.applicationId, input.idempotencyKey],
-      );
-      if (prior.rows[0]) {
-        const row = prior.rows[0];
-        await appendAuditEventInTransaction(client, {
-          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
-          actorType: "human", actorId: input.requestedBy, action: "agent.job.idempotency_replay",
-          outcome: row.request_fingerprint === fingerprint ? "success" : "denied",
-          reasonCode: row.request_fingerprint === fingerprint ? undefined : "IDEMPOTENCY_KEY_CONFLICT",
-          resourceType: "agent-job", resourceId: String(row.job_id), correlationId: input.correlationId,
-          source: "api", operationName: "POST /v1/agent-jobs",
-          payload: { agentId: input.agentId, intent: input.intent },
-        });
-        await client.query("COMMIT");
-        return row.request_fingerprint === fingerprint
-          ? { kind: "existing", job: mapJob(row) }
-          : { kind: "idempotency_conflict" };
-      }
+      // The unique constraint, not a preflight SELECT, arbitrates concurrent retries.
+      // A SELECT-then-INSERT alone races when two transactions see no prior row.
       const jobId = randomUUID();
       const result = await client.query<Record<string, unknown>>(
         `INSERT INTO eper_agent_jobs
           (tenant_id,application_id,job_id,requested_by,agent_id,intent,status,idempotency_key,request_fingerprint,input,deadline_at)
          VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9::jsonb,NOW()+($10::text || ' seconds')::interval)
+         ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
          RETURNING *`,
         [input.tenantId, input.applicationId, jobId, input.requestedBy, input.agentId, input.intent, input.idempotencyKey, fingerprint, JSON.stringify(input.input), deadlineSeconds],
       );
+      if (!result.rows[0]) {
+        // Under READ COMMITTED this statement sees the row committed by the winner.
+        const existing = await client.query<Record<string, unknown>>(
+          "SELECT * FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3 FOR UPDATE",
+          [input.tenantId, input.applicationId, input.idempotencyKey],
+        );
+        const row = existing.rows[0];
+        if (!row) throw new Error("AGENT_JOB_IDEMPOTENCY_LOOKUP_FAILED");
+        const sameRequest = row.request_fingerprint === fingerprint;
+        await appendAuditEventInTransaction(client, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "human", actorId: input.requestedBy, action: "agent.job.idempotency_replay",
+          outcome: sameRequest ? "success" : "denied",
+          reasonCode: sameRequest ? undefined : "IDEMPOTENCY_KEY_CONFLICT",
+          resourceType: "agent-job", resourceId: String(row.job_id), correlationId: input.correlationId,
+          source: "api", operationName: "POST /v1/agent-jobs",
+          payload: { agentId: input.agentId, intent: input.intent },
+        });
+        await client.query("COMMIT");
+        return sameRequest
+          ? { kind: "existing", job: mapJob(row) }
+          : { kind: "idempotency_conflict" };
+      }
       const row = result.rows[0];
-      if (!row) throw new Error("AGENT_JOB_INSERT_RETURNED_NO_ROW");
       await appendAuditEventInTransaction(client, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.requestedBy, action: "agent.job.enqueue", outcome: "success",
