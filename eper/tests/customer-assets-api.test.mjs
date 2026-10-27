@@ -47,6 +47,13 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.ok(address && typeof address === "object");
     const base = "http://127.0.0.1:" + address.port;
     const endpoint = base + "/customer/assets";
+    const legacyMethodNotAllowed = await fetch(endpoint, {
+      method: "POST",
+      headers: { accept: "application/vnd.eper.v1+json; q=0" },
+    });
+    assert.equal(legacyMethodNotAllowed.status, 405);
+    assert.equal(legacyMethodNotAllowed.headers.get("allow"), "GET");
+    assert.equal(await legacyMethodNotAllowed.text(), "", "q=0 must preserve the legacy bodyless 405 response");
     assert.equal((await fetch(endpoint)).status, 401);
     const response = await fetch(endpoint, { headers: { authorization: "Bearer " + tokenA } });
     assert.equal(response.status, 200);
