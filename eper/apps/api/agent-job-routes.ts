@@ -37,7 +37,7 @@ export async function handleAgentJobRoute(
   pathname: string,
   options: { store?: PostgresAgentStore; resolveIdentity: AgentJobIdentityResolver; environment: AuditEnvironment },
 ): Promise<boolean> {
-  if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname)) return false;
+  if (pathname !== "/v1/agent-jobs" && !/^\\/v1\\/agent-jobs\\/[0-9a-f-]+$/.test(pathname) && !/^\\/v1\\/agent-drafts\\/[0-9a-f-]+\\/(approve|reject)$/.test(pathname)) return false;
   if (!options.store) {
     sendError(request, response, 503, "AGENT_PERSISTENCE_UNAVAILABLE", "Durable agent job storage is not configured.");
     return true;
@@ -49,6 +49,36 @@ export async function handleAgentJobRoute(
   }
   const requestId = resolveApiRequestId(request);
   try {
+    const reviewMatch = /^\\/v1\\/agent-drafts\\/([0-9a-f-]+)\\/(approve|reject)$/.exec(pathname);
+    if (request.method === "POST" && reviewMatch) {
+      const reviewerRoles = new Set((process.env.EPER_AGENT_REVIEWER_ROLE_KEYS ?? "")
+        .split(";").map((role) => role.trim()).filter(Boolean));
+      if (!reviewerRoles.has(identity.roleKey)) {
+        sendError(request, response, 403, "AGENT_REVIEWER_ROLE_REQUIRED", "This role is not authorized to review agent drafts.");
+        return true;
+      }
+      const body = await readBody(request);
+      const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+        sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
+        return true;
+      }
+      if (!Number.isSafeInteger(body.expectedVersion) || (body.expectedVersion as number) < 1 ||
+          typeof body.expectedContentHash !== "string" || !/^[a-f0-9]{64}$/.test(body.expectedContentHash)) {
+        sendError(request, response, 400, "INVALID_DRAFT_REVIEW_VERSION_OR_HASH", "A valid expectedVersion and expectedContentHash are required.");
+        return true;
+      }
+      const result = await options.store.reviewDraft({
+        tenantId: identity.tenantId, applicationId, draftId: reviewMatch[1],
+        reviewerId: identity.actorId, reviewerRole: identity.roleKey,
+        action: reviewMatch[2] === "approve" ? "approve" : "reject",
+        expectedVersion: body.expectedVersion as number, expectedContentHash: body.expectedContentHash,
+        note: typeof body.note === "string" ? body.note : undefined,
+        correlationId: requestId, environment: options.environment,
+      });
+      sendApiSuccess(request, response, 200, { review: result, execution: "NOT_EXECUTED" });
+      return true;
+    }
     if (request.method === "POST" && pathname === "/v1/agent-jobs") {
       const body = await readBody(request);
       const validated = validateCreateAgentJobRequest(body);
@@ -101,6 +131,8 @@ export async function handleAgentJobRoute(
     const message = error instanceof Error ? error.message : "AGENT_JOB_REQUEST_FAILED";
     if (message === "REQUEST_BODY_TOO_LARGE") sendError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body exceeds the permitted size.");
     else if (message === "JSON_OBJECT_REQUIRED" || message.startsWith("INVALID_")) sendError(request, response, 400, message.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 64), "The agent job request is invalid.");
+    else if (message === "AGENT_DRAFT_NOT_FOUND") sendError(request, response, 404, message, "The requested agent draft was not found.");
+    else if (["AGENT_DRAFT_ALREADY_REVIEWED","STALE_DRAFT_VERSION","STALE_DRAFT_HASH","MAKER_CHECKER_SEPARATION_REQUIRED"].includes(message)) sendError(request, response, 409, message, "The draft changed or is no longer eligible for review.");
     else sendError(request, response, 503, "AGENT_JOB_SERVICE_UNAVAILABLE", "The agent job service could not complete the request.");
     return true;
   }
