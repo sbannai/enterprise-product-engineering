@@ -581,6 +581,30 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /** Release a claimed execution when its schedule was paused before dispatch; pausing is not a failed attempt. */
+  async deferExecutionForSchedulePause(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ id: string }>(
+        `UPDATE eper_campaign_executions
+         SET status='retry_wait', attempt_count=GREATEST(attempt_count - 1, 0),
+             available_at=now(), last_error_code=NULL, updated_at=now(),
+             locked_at=NULL, locked_by=NULL, completed_at=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
+           AND locked_by=$4 AND dispatch_started_at IS NULL
+         RETURNING id`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      return result.rows.length === 1;
+    } finally { client.release(); }
+  }
+
   async failExecution(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
     errorCode: string; maxAttempts?: number; baseDelaySeconds?: number;
