@@ -47,10 +47,19 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       tenantId, applicationId, scheduleId, actorId,
       nextRunAt: new Date(Date.now() + 60_000).toISOString(),
     });
+    const futureExecution = await store.enqueueExecution({
+      tenantId, applicationId, scheduleId,
+      scheduledFor: new Date(Date.now() + 60_000).toISOString(),
+      idempotencyKey: "race:future:" + randomUUID(), payload: { integrationTest: true },
+    });
+    assert.ok(futureExecution, "Expected a durable future execution");
+    assert.deepEqual(await store.claimExecutions("early-worker", 1), [],
+      "A worker must not claim an execution before scheduled_for");
+
     const execution = await store.enqueueExecution({
       tenantId, applicationId, scheduleId,
       scheduledFor: new Date(Date.now() - 1000).toISOString(),
-      idempotencyKey: "race:" + randomUUID(), payload: { integrationTest: true },
+      idempotencyKey: "race:due:" + randomUUID(), payload: { integrationTest: true },
     });
     assert.ok(execution, "Expected a durable execution for the approved schedule");
     executionId = execution.id;
