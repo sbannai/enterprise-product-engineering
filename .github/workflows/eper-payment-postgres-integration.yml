@@ -81,10 +81,8 @@ jobs:
         run: node --test tests/payment-production-guard.test.mjs
       - name: Test payment readiness blockers and production review gate
         run: node --test tests/payment-readiness.test.mjs
-      - name: Test gateway signature and receipt safety regressions
-        run: node --test tests/payment-gateway.test.mjs
-      - name: Test trusted invoice amount authority contract
-        run: node --test tests/invoice-amount-authority.test.mjs
+      # Gateway and invoice-authority contracts run in the dedicated
+      # EPER payment gateway contract workflow to avoid duplicate execution.
       - name: Test HTTP invoice authority response validation
         run: node --test tests/http-invoice-amount-source.test.mjs
       - name: Test generic transaction and receipt contract
