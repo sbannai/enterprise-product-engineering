@@ -224,6 +224,11 @@ test("actor application authorization blocks ticket listing, history, and replie
     };
     const requests = [
       fetch(base + "/customer/applications/app-a/tickets", { headers }),
+      fetch(base + "/customer/applications/app-a/tickets", {
+        method: "POST", headers, body: JSON.stringify({
+          type: "feedback", title: "Unauthorized", description: "Should be denied", businessImpact: "Authorization test",
+        }),
+      }),
       fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", { headers }),
       fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
         method: "POST", headers, body: JSON.stringify({ body: "unauthorized reply" }),
