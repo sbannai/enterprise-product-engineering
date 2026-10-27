@@ -48,6 +48,8 @@ test("agent job idempotency is safe when concurrent requests race on a new key",
 test("rejecting an agent draft fails its job instead of reporting success", () => {
   assert.match(source, /status=CASE WHEN \$4='approve' THEN 'succeeded' ELSE 'failed' END/);
   assert.match(source, /AGENT_DRAFT_REJECTED/);
+  assert.match(source, /AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL/);
+  assert.match(source, /SELECT status FROM eper_agent_jobs WHERE tenant_id=\\$1 AND application_id=\\$2 AND job_id=\\$3 FOR UPDATE/);
   assert.match(source, /status='awaiting_approval'/);
 });
 
