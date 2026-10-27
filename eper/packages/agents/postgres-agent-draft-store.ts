@@ -1,4 +1,4 @@
-import { type AuditSqlPool } from "../audit/audit-event-store.js";
+import { appendAuditEventInTransaction, type AuditEnvironment, type AuditSqlPool } from "../audit/audit-event-store.js";
 
 export type DurableAgentKind = "crm" | "sales" | "marketing";
 export type DurableAgentDraftStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -41,7 +41,7 @@ function mapDraft(row: DraftRow): DurableAgentDraft {
 
 /** PostgreSQL persistence for agent drafts. Every query is scoped by trusted tenant and application identity. */
 export class PostgresAgentDraftStore {
-  constructor(private readonly pool: AuditSqlPool) {}
+  constructor(private readonly pool: AuditSqlPool, private readonly environment: AuditEnvironment = "uat", private readonly serviceVersion?: string) {}
 
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
@@ -59,6 +59,7 @@ export class PostgresAgentDraftStore {
   async create(input: CreateAgentDraftInput): Promise<DurableAgentDraft> {
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       const result = await client.query<DraftRow>(
         `INSERT INTO eper_agent_drafts
           (id, tenant_id, application_id, created_by, agent, intent, content, status, created_at)
@@ -69,7 +70,19 @@ export class PostgresAgentDraftStore {
           JSON.stringify(input.content), input.status, input.createdAt],
       );
       if (!result.rows[0]) throw new Error("AGENT_DRAFT_CREATE_FAILED");
-      return mapDraft(result.rows[0]);
+      const draft = mapDraft(result.rows[0]);
+      await appendAuditEventInTransaction(client, {
+        tenantId: draft.tenantId, applicationId: draft.applicationId, environment: this.environment,
+        actorType: "human", actorId: draft.createdBy, action: "agent.draft.create", outcome: "success",
+        resourceType: "agent-draft", resourceId: draft.id, source: "api",
+        operationName: "POST /v1/agents/" + draft.agent + "/drafts", serviceVersion: this.serviceVersion,
+        payload: { applicationId: draft.applicationId, agent: draft.agent, intent: draft.intent, status: draft.status },
+      });
+      await client.query("COMMIT");
+      return draft;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch {}
+      throw error;
     } finally { client.release(); }
   }
 
@@ -119,8 +132,18 @@ export class PostgresAgentDraftStore {
         [input.id, input.tenantId, input.applicationId, input.status, input.reviewerId, input.note],
       );
       if (!updated.rows[0]) throw new Error("AGENT_DRAFT_REVIEW_RACE");
+      const draft = mapDraft(updated.rows[0]);
+      await appendAuditEventInTransaction(client, {
+        tenantId: draft.tenantId, applicationId: draft.applicationId, environment: this.environment,
+        actorType: "human", actorId: input.reviewerId,
+        action: input.status === "APPROVED" ? "agent.draft.approve" : "agent.draft.reject", outcome: "success",
+        resourceType: "agent-draft", resourceId: draft.id, source: "api",
+        operationName: "POST /v1/agents/drafts/" + draft.id + "/" + (input.status === "APPROVED" ? "approve" : "reject"),
+        serviceVersion: this.serviceVersion,
+        payload: { applicationId: draft.applicationId, previousStatus: "PENDING_APPROVAL", status: draft.status, noteProvided: Boolean(input.note) },
+      });
       await client.query("COMMIT");
-      return { outcome: "reviewed", draft: mapDraft(updated.rows[0]) };
+      return { outcome: "reviewed", draft };
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch {}
       throw error;
