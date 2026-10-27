@@ -10,7 +10,13 @@ const requestIds = new WeakMap<IncomingMessage, string>();
 export function resolveApiRequestId(request: IncomingMessage): string {
   const existing = requestIds.get(request);
   if (existing) return existing;
-  const supplied = request.headers["x-correlation-id"];
+  let supplied: string | string[] | undefined;
+  try {
+    supplied = request.headers["x-correlation-id"];
+  } catch {
+    // If a custom request/header accessor is hostile, generate a server-owned ID.
+    supplied = undefined;
+  }
   const requestId = typeof supplied === "string" && REQUEST_ID_PATTERN.test(supplied) ? supplied : randomUUID();
   requestIds.set(request, requestId);
   return requestId;
