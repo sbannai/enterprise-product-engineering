@@ -356,6 +356,27 @@ test("cancellation invalidates queued, retrying, and running executions in the s
 });
 
 
+
+test("pause cannot mutate a completed one-time schedule", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_schedules") ? [scheduleRow({ status: "paused" })] : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.pauseOrCancel({
+    tenantId: "tenant-a", applicationId: "app-a",
+    scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    actorId: "actor-a", action: "pause",
+  });
+  const scheduleUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_schedules"));
+  assert.ok(scheduleUpdate);
+  assert.match(scheduleUpdate.sql, /status IN \\('draft','scheduled','paused'\\)/);
+  assert.doesNotMatch(scheduleUpdate.sql, /status IN \\('draft','scheduled','paused','completed'\\)/);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
+
+
 for (const [label, row, expected] of [
   ["cancelled", { schedule_status: "cancelled", execution_status: "cancelled", approval_status: "approved", locked_by: "worker-a", dispatch_started_at: null }, "cancelled"],
   ["paused", { schedule_status: "paused", execution_status: "running", approval_status: "approved", locked_by: "worker-a", dispatch_started_at: null }, "paused"],
