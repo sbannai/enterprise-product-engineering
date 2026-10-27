@@ -1,7 +1,7 @@
 # Per-application AI integration controls
 
 ## Purpose
-Tenant administrators can independently enable or disable AI integrations for each EPER application. An application with no saved entry is OFF by default. A disabled application must not reach an AI agent route when enforcement is enabled.
+Tenant administrators can independently enable or disable AI integrations for each EPER application. An application with no saved entry is OFF by default. A disabled application must not reach an AI agent route. Enforcement is unconditional for agent endpoints; the customer OFF switch cannot be bypassed by omitting an environment flag.
 
 ## Admin UI and API
 - UI: `GET /admin/ai-integrations`
@@ -26,7 +26,7 @@ PUT body:
 Supported provider identifiers are `none`, `openai`, `azure-openai`, `google`, `anthropic`, and `provider-neutral`. Enabling requires a non-`none` provider. Provider credentials remain server-side and are never stored in this configuration.
 
 ## Enforcing OFF/ON at the agent boundary
-Set `EPER_AI_INTEGRATION_ENFORCEMENT=true` only after durable admin configuration and migration are ready. Each `/v1/agents/*` request must include the application scope as `?applicationId=<application-id>`. The request is authenticated first; then the tenant-scoped setting is checked. Missing/disabled settings return 403; missing application scope returns 400; missing durable policy storage returns 503. With enforcement enabled, a provider outage or unavailable policy store must not silently bypass the OFF setting.
+Each `/v1/agents/*` request must include the application scope as `?applicationId=<application-id>`. The request is authenticated first; then the tenant-scoped setting is checked. Missing/disabled settings return 403; missing application scope returns 400; missing durable policy storage returns 503. An unavailable policy store fails closed; it never silently bypasses the OFF setting. Deploy the durable admin configuration migration and PostgreSQL store before enabling agent endpoints.
 
 ## Persistence and audit
 Run the existing audit migration runner after deploying the change; it discovers migrations in `eper/packages/audit/migrations`, including `003_ai_integration_admin_config.sql`. Configuration writes use the existing optimistic version check and durable hash-chained audit event transaction.
