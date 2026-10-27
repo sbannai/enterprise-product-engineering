@@ -59,20 +59,13 @@ jobs:
         run: npm run migrate:ticketing
       - name: Verify capability migrations are safely repeatable
         run: npm run migrate:capabilities
-      - name: Test
-        run: npm test
+      # The same-commit integrated-validation workflow owns the full EPER
+      # suite and payment/receipt contracts. Keep capability-specific live
+      # PostgreSQL conformance here because it is unique to this CI lane.
       - name: Live PostgreSQL capability conformance (RLS, audit immutability, rollback)
         env:
           EPER_CAPABILITY_LIVE_TESTS: "1"
         run: node --test tests/postgres-capability-live.integration.test.mjs
-      - name: Payment gateway contract tests
-        run: node --test tests/payment-gateway.test.mjs
-      - name: Trusted invoice amount authority tests
-        run: node --test tests/invoice-amount-authority.test.mjs
-      - name: PostgreSQL payment-store integration tests
-        run: node --test tests/postgres-payment-store.test.mjs tests/postgres-payment-runtime.test.mjs tests/postgres-payment-api-route.test.mjs tests/postgres-payment-store.integration.test.mjs
-      - name: Generic transaction and receipt contract tests
-        run: node --test tests/transaction-receipt-contract.test.mjs
       - name: UAT preflight regression tests
         run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
       - name: Read-only business UAT readiness audit
