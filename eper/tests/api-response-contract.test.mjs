@@ -75,6 +75,25 @@ test("API 205 success has no body and rejects payload data", async () => {
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
 
+test("API error details are bounded and machine-readable", async () => {
+  const server = createServer((request, response) => sendApiError(
+    request, response, 422, "VALIDATION_FAILED", "   ",
+    [{ field: "x".repeat(200), code: "INVALID_FIELD" }, { field: "amount", code: "bad code" }],
+  ));
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port);
+    const payload = await response.json();
+    assert.equal(response.status, 422);
+    assert.equal(payload.error.message, "The request could not be completed.");
+    assert.deepEqual(payload.error.details, [
+      { field: "x".repeat(128), code: "INVALID_FIELD" },
+      { field: "amount", code: "INVALID_DETAIL" },
+    ]);
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
 test("API success helper rejects a 205 response with content", () => {
   assert.throws(() => sendApiSuccess({ headers: {} }, {}, 205, { changed: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
 });
