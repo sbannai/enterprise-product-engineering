@@ -438,7 +438,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
       const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
         ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
-      const applicationId = campaignLifecycle[1], scheduleId = campaignLifecycle[2], action = campaignLifecycle[3];
+      const applicationId = campaignLifecycle[1]!, scheduleId = campaignLifecycle[2]!, action = campaignLifecycle[3]!;
       if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
@@ -465,13 +465,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         if (!schedule) {
           sendApiError(request, response, 400, "CAMPAIGN_ACTION_INVALID", "The requested campaign lifecycle action is not supported."); return;
         }
+        const savedSchedule = schedule;
         try {
           if (options.campaignAuditWriter) {
             await options.campaignAuditWriter({
               tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
               action: `campaign_schedule_${action}`, outcome: "success", resourceId: scheduleId,
               operationName: `campaign.schedule.${action}`, requestId: resolveApiRequestId(request),
-              payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus },
+              payload: { resultingStatus: savedSchedule.status, approvalStatus: savedSchedule.approvalStatus },
             });
           }
         } catch (auditError) {
