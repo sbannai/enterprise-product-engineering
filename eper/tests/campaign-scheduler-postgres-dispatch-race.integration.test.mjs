@@ -45,11 +45,11 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
     scheduleId = schedule.id;
     await store.approveAndSchedule({
       tenantId, applicationId, scheduleId, actorId,
-      nextRunAt: new Date(Date.now() + 60_000).toISOString(),
+      nextRunAt: new Date(Date.now() - 1000).toISOString(),
     });
     const execution = await store.enqueueExecution({
       tenantId, applicationId, scheduleId,
-      scheduledFor: new Date(Date.now() + 60_000).toISOString(),
+      scheduledFor: new Date(Date.now() - 1000).toISOString(),
       idempotencyKey: "race:" + randomUUID(), payload: { integrationTest: true },
     });
     assert.ok(execution, "Expected a durable execution for the approved schedule");
