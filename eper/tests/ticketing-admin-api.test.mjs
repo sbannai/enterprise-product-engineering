@@ -7,6 +7,7 @@ const previous = {
   enabled: process.env.EPER_TICKETING_API_ENABLED,
   identities: process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON,
   roles: process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON,
+  crossTenantRoles: process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON,
 };
 test.before(() => {
   process.env.EPER_TICKETING_API_ENABLED = "true";
@@ -14,12 +15,14 @@ test.before(() => {
     [credential]: { tenantId: "tenant-a", actorId: "support-1", roleKey: "support_admin" },
   });
   process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["support_admin"]);
+  process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON = JSON.stringify(["product_admin"]);
 });
 test.after(() => {
   for (const [key, value] of [
     ["EPER_TICKETING_API_ENABLED", previous.enabled],
     ["EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", previous.identities],
     ["EPER_TICKETING_ADMIN_ROLE_KEYS_JSON", previous.roles],
+    ["EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON", previous.crossTenantRoles],
   ]) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -115,5 +118,44 @@ test("admin assignment rejects extra fields and keeps trusted tenant identity", 
     assert.equal(args.identity.tenantId, "tenant-a");
     assert.equal(args.id, ticket.id);
     assert.equal(args.assignedTo, "support-2");
+  });
+});
+
+
+test("same admin ticket API derives result scope from the authenticated role", async () => {
+  const clientCredential = "d".repeat(48);
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "admin-1", roleKey: "product_admin" },
+    [clientCredential]: { tenantId: "tenant-a", actorId: "client-1", roleKey: "support_admin" },
+  });
+  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["product_admin", "support_admin"]);
+  process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON = JSON.stringify(["product_admin"]);
+  const calls = [];
+  const ticketStore = {
+    async list(scope, filter) {
+      calls.push({ scope, filter });
+      return scope.tenantId
+        ? [ticket]
+        : [ticket, { ...ticket, id: "223e4567-e89b-12d3-a456-426614174000", tenantId: "tenant-b" }];
+    },
+    async changeStatus() { return ticket; },
+    async assign() { return ticket; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const product = await fetch(base + "/admin/support/tickets", { headers: auth });
+    assert.equal(product.status, 200);
+    const productBody = await product.json();
+    assert.equal(productBody.scope, "authorized_platform");
+    assert.equal("tenantId" in productBody, false);
+    assert.equal(calls[0].scope.tenantId, undefined);
+
+    const client = await fetch(base + "/admin/support/tickets", {
+      headers: { authorization: "Bearer " + clientCredential },
+    });
+    assert.equal(client.status, 200);
+    const clientBody = await client.json();
+    assert.equal(clientBody.scope, "tenant");
+    assert.equal(clientBody.tenantId, "tenant-a");
+    assert.equal(calls[1].scope.tenantId, "tenant-a");
   });
 });
