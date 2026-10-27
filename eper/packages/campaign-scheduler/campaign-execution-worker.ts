@@ -92,10 +92,16 @@ export async function runCampaignExecutionWorker(
           return;
         }
         const dispatched = await dispatch(execution);
-        await store.completeExecution({
+        const completed = await store.completeExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
           executionId: execution.id, workerId: options.workerId, result: dispatched.outcome,
         });
+        if (!completed) {
+          // The provider may have accepted the request, but this worker no longer owns
+          // the lease. Treat the outcome as ambiguous; failExecution will dead-letter
+          // because the dispatch fence has already been crossed, never auto-replay it.
+          throw new Error("CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST");
+        }
       } catch (error) {
         options.onError?.(error);
         const code = error instanceof Error && error.name !== "Error" ? error.name : "CAMPAIGN_DISPATCH_FAILED";
