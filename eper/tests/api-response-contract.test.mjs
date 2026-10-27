@@ -25,6 +25,9 @@ test("API error envelope is stable and omits absent details", async () => {
     const response = await fetch("http://127.0.0.1:" + address.port);
     const payload = await response.json();
     assert.equal(response.status, 401);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.match(response.headers.get("content-type") ?? "", /application\/json; charset=utf-8/);
     assert.equal(payload.success, false);
     assert.deepEqual(payload.error, { code: "UNAUTHENTICATED", message: "Authentication is required." });
     assert.equal(payload.meta.requestId, response.headers.get("x-request-id"));
