@@ -32,12 +32,22 @@ import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 
 
+function acceptsVersionedJson(request: IncomingMessage): boolean {
+  return (request.headers.accept ?? "").split(",").some((value) => {
+    const [mediaType, ...parameters] = value.split(";");
+    if (mediaType.trim().toLowerCase() !== "application/vnd.eper.v1+json") return false;
+    const qualityParameter = parameters.map((parameter) => parameter.trim())
+      .find((parameter) => /^q\s*=/i.test(parameter));
+    if (!qualityParameter) return true;
+    const quality = Number(qualityParameter.split("=")[1]?.trim());
+    return Number.isFinite(quality) && quality > 0 && quality <= 1;
+  });
+}
+
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
-  // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
+  // A positively weighted versioned Accept value opts into the complete JSON envelope.
   // Without it, legacy bodies stay byte-shape compatible for existing consumers.
-  const acceptsV1 = (request.headers.accept ?? "")
-    .split(",")
-    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  const acceptsV1 = acceptsVersionedJson(request);
 
   if (acceptsV1 && statusCode >= 400 && statusCode <= 599) {
     const legacyCode = typeof body.error === "string" ? body.error : "request_failed";
@@ -73,9 +83,7 @@ function sendJson(request: IncomingMessage, response: ServerResponse, statusCode
 
 
 function sendMethodNotAllowed(request: IncomingMessage, response: ServerResponse, allow: string): void {
-  const acceptsV1 = (request.headers.accept ?? "")
-    .split(",")
-    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  const acceptsV1 = acceptsVersionedJson(request);
   if (acceptsV1) {
     response.setHeader("allow", allow);
     sendJson(request, response, 405, { error: "method_not_allowed" });
