@@ -184,3 +184,32 @@ test("event trigger rejects invalid occurrence timestamp before database access"
   }), /CAMPAIGN_EVENT_OCCURRED_AT_INVALID/);
   assert.equal(calls.length, 0);
 });
+
+
+test("dispatch authorization re-reads current schedule approval and worker lease in tenant scope", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("AS authorized") ? [{ authorized: true }] : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const authorized = await store.isExecutionAuthorizedForDispatch({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  });
+  assert.equal(authorized, true);
+  assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /e\.status='running' AND e\.locked_by=\$4/);
+  assert.match(calls[0].sql, /WHERE e\.tenant_id=\$1 AND e\.application_id=\$2 AND e\.id=\$3/);
+  assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+});
+
+test("dispatch authorization denies when current schedule is paused or approval is revoked", async () => {
+  const { pool } = fakePool(async (sql) => ({
+    rows: sql.includes("AS authorized") ? [{ authorized: false }] : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const authorized = await store.isExecutionAuthorizedForDispatch({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  });
+  assert.equal(authorized, false);
+});
