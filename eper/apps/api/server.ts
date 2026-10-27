@@ -219,9 +219,7 @@ async function handleDurableAdminConfig(
   serviceVersion?: string,
   initialPriceEntries: MarketPriceEntry[] = [],
 ): Promise<void> {
-  const correlationHeader = request.headers["x-correlation-id"];
-  const correlationId = typeof correlationHeader === "string" &&
-    /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+  const correlationId = resolveApiRequestId(request);
   const loadedConfigVersions = new Map<AdminConfigurationResource, number>();
   const getConfig = async (resource: AdminConfigurationResource) => {
     const saved = await store.get(identity.tenantId, resource);
@@ -1195,9 +1193,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
-      const correlationHeader = request.headers["x-correlation-id"];
-      const correlationId = typeof correlationHeader === "string" &&
-        /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      const correlationId = resolveApiRequestId(request);
       try {
         if (request.method === "POST" && !ticketPathMatch[2]) {
           const body = await readJson(request);
@@ -1305,9 +1301,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 403, { error: "ticket_admin_permission_required" });
         return;
       }
-      const correlationHeader = request.headers["x-correlation-id"];
-      const correlationId = typeof correlationHeader === "string" &&
-        /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      const correlationId = resolveApiRequestId(request);
       const trustedIdentity = {
         tenantId: identity.tenantId,
         applicationId: "eper",
