@@ -32,6 +32,19 @@ test("API error envelope is stable and omits absent details", async () => {
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
 
+test("API envelope uses the same generated ID in header and metadata for unsafe correlation input", async () => {
+  const server = createServer((request, response) => sendApiError(request, response, 400, "INVALID_REQUEST", "Invalid request."));
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port, { headers: { "x-correlation-id": "unsafe value" } });
+    const payload = await response.json();
+    const headerId = response.headers.get("x-request-id");
+    assert.match(headerId ?? "", /^[0-9a-f-]{36}$/i);
+    assert.equal(payload.meta.requestId, headerId);
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
 test("request ID rejects unsafe caller values and generates a replacement", () => {
   assert.equal(resolveApiRequestId({ headers: { "x-correlation-id": "safe.id-123" } }), "safe.id-123");
   const request = { headers: { "x-correlation-id": "bad value" } };
