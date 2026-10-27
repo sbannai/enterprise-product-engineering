@@ -57,4 +57,5 @@ test("durable draft review requires trusted reviewer role and assigned applicati
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
   assert.match(routes, /expectedContentHash/);
   assert.match(routes, /options\.store\.reviewDraft/);
+  assert.match(routes, /pathname\.startsWith\("\/v1\/agent-drafts\/"\) \? "POST" : "GET"/);
 });
