@@ -67,7 +67,7 @@
 .
 - The actor's `applicationIds` allowlist is separate from `EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON`, which verifies that the application belongs to the tenant. Both checks must pass; tenant ownership does not grant every actor access to every application.
 - Missing, empty, or malformed actor allowlists fail closed with `403 ACTOR_NOT_ASSIGNED_TO_APPLICATION` before the ticket store is called. Do not infer application access from role names or request headers.
-- Ticket route tests cover denial for list/history/reply and malformed allowlists. They are committed, but remain **NOT RUN / NOT VERIFIED** until a CI run for the exact current commit completes.
+- Ticket route tests cover denial for create/list/history/reply and malformed allowlists. They are committed, but remain **NOT RUN / NOT VERIFIED** until a CI run for the exact current commit completes.
 
 ## Ticket visibility and role boundary
 
