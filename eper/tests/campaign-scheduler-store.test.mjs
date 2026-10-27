@@ -316,6 +316,30 @@ test("dispatch-start fence locks live schedule and execution before marking disp
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
+test("dispatch-start fence is single-use and rejects a second acquisition", async () => {
+  let alreadyStarted = false;
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) {
+      if (alreadyStarted || !sql.includes("e.dispatch_started_at IS NULL")) return { rows: [], rowCount: 0 };
+      return { rows: [{ id: "schedule-1" }], rowCount: 1 };
+    }
+    if (sql.includes("SET dispatch_started_at=now()")) {
+      alreadyStarted = true;
+      return { rows: [], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const input = {
+    tenantId: "tenant-a", applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a",
+  };
+  assert.equal(await store.beginExecutionDispatch(input), true);
+  assert.equal(await store.beginExecutionDispatch(input), false);
+  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\\.dispatch_started_at IS NULL/);
+  assert.ok(calls.some((call) => call.sql.includes("SET dispatch_started_at=now()") && call.sql.includes("dispatch_started_at IS NULL")));
+});
+
 test("dispatch-start fence denies jobs whose live schedule is cancelled", async () => {
   const { pool, calls } = fakePool(async (sql) => {
     if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) return { rows: [], rowCount: 0 };
