@@ -122,6 +122,47 @@ test("worker treats explicit policy denial as terminal and never acquires dispat
     && call[1].maxAttempts === 1));
 });
 
+test("worker shutdown during authorization does not acquire dispatch fence", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => {
+    dispatchCalls += 1;
+    return { outcome: {} };
+  }, {
+    workerId: "worker-shutdown-auth",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    authorizeDispatch: async () => { controller.abort(); return true; },
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "dispatch-fence"));
+});
+
+test("worker shutdown after dispatch fence dead-letters without calling provider", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.beginExecutionDispatch = async (input) => {
+    store.calls.push(["dispatch-fence", input]);
+    controller.abort();
+    return true;
+  };
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => {
+    dispatchCalls += 1;
+    return { outcome: {} };
+  }, {
+    workerId: "worker-shutdown-fenced",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    authorizeDispatch: async () => true,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_WORKER_SHUTDOWN_AFTER_DISPATCH_FENCE"
+    && call[1].maxAttempts === 1));
+});
+
 test("worker records authorization service failures distinctly and never dispatches", async () => {
   const controller = new AbortController();
   const store = fakeStore([execution()]);
