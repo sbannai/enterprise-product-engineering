@@ -140,3 +140,17 @@ test("campaign lifecycle rejects non-approver roles", async (t) => {
   });
   assert.equal(response.status, 403);
 });
+
+
+test("campaign resume requires a new future run time and uses the approval path", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/resume", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json" },
+    body: JSON.stringify({ nextRunAt: "2030-01-01T10:00:00+05:30" }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.schedule.status, "scheduled");
+  assert.equal(body.data.schedule.approvalStatus, "approved");
+});
