@@ -46,3 +46,8 @@ Trace each requirement to implementation path, automated test, CI run, deploymen
 - **SRS-F-022:** Ticket management shall distinguish defects, feedback, feature requests and questions; only confirmed evidence-backed issues may count toward P1 tracking.
 - **SRS-F-023:** Admin ticket access shall be role-authorized, audited and scoped to the permitted tenant/support boundary; the Product Admin console shall not forward its bearer token into the support workspace.
 - **SRS-F-024:** The product shall provide a user manual describing Product Admin commercial workflows, customer application settings, ticket triage, AI approval, payment/receipt checks and POC limitations.
+
+- **SRS-F-025:** Customer users shall create and view tickets only for their authenticated tenant and a selected application assigned to that tenant.
+- **SRS-F-026:** Product Admin users shall access the client-wide ticket/feedback queue only with an explicit platform-support permission; queue reads and mutations shall be audited.
+- **SRS-F-027:** Ticket list, search, count, export, comment and attachment endpoints shall enforce tenant/application scope server-side and shall not disclose unauthorized records through metadata.
+- **SRS-F-028:** The Product Admin and customer ticketing interfaces shall clearly show their different scope: authorized cross-client oversight for Product Admin and selected-application-only access for clients.
