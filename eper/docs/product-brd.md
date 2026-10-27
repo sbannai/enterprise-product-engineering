@@ -46,3 +46,10 @@ Provide organizations with a modular, tenant-isolated platform to configure appl
 
 ## 6. Assumptions and open decisions
 Canonical identity provider, customer/application registry source, tax treatment by market, supported locales/markets, entitlement grace-period rules, cancellation/refund policy, and production SLO/RPO/RTO require product/business owner confirmation. This BRD is a proposed product baseline, not evidence of complete implementation or approval.
+
+
+## Product Admin ticketing and feedback
+
+Product Admin requires authorized access to the consolidated ticket and feedback queue to review product-wide trends, triage duplicates, confirm severity, monitor P1 candidates, assign accountable owners, and verify closure evidence. Customer-facing submissions remain tenant-scoped; cross-tenant visibility is available only to explicitly authorized platform support/admin roles and must be audited. Feedback, feature requests, questions and confirmed defects remain distinct record types. Security/privacy reports require restricted visibility and immediate escalation.
+
+Product Admin's pricing console now includes a Feedback & Ticketing entry point to the separate authenticated support workspace. This is navigation, not a new ticketing data store; runtime access remains governed by the support API's identity, role, tenant scope and environment configuration.
