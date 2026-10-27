@@ -345,6 +345,9 @@ test("cancellation invalidates queued, retrying, and running executions in the s
     scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
     actorId: "actor-a", action: "cancel",
   });
+  const scheduleUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_schedules"));
+  assert.ok(scheduleUpdate);
+  assert.match(scheduleUpdate.sql, /status IN \\('draft','scheduled','paused','completed'\\)/);
   const cancellation = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions SET status='cancelled'"));
   assert.ok(cancellation);
   assert.match(cancellation.sql, /'queued','retry_wait','running'/);
