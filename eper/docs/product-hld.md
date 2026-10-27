@@ -60,3 +60,7 @@ The repository contains implemented components and design/preview-only surfaces.
 ## Product Admin ticketing and feedback
 
 Product Admin has an administrative entry point into the existing ticketing/feedback workspace. Ticket storage and support API remain a separate domain service; the pricing console must not duplicate ticket records or bypass ticket-specific authorization. The admin opens the support workspace and authenticates there independently. Support queries must be authorized and auditable, and cross-tenant views are allowed only for explicitly privileged platform roles. Ticketing unavailability must be surfaced rather than replaced by misleading sample data.
+
+
+## Ticketing and feedback scope architecture
+The support domain is shared as a service, not as a shared authorization scope. Client ticket create/read/comment operations require trusted tenant membership plus an application assignment and are restricted to the selected application. Product Admin access uses a distinct platform-support permission that can authorize client-wide queue oversight. All list, detail, search, export, attachment, comment, assignment and status operations must enforce scope server-side. The UI filters are convenience only. Audit cross-tenant access and mutations; do not forward pricing-console credentials to the separate support workspace.
