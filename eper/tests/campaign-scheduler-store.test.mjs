@@ -213,3 +213,24 @@ test("dispatch authorization denies when current schedule is paused or approval 
   });
   assert.equal(authorized, false);
 });
+
+
+test("schedule listing is tenant/application scoped and pagination is bounded", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("SELECT * FROM eper_campaign_schedules") ? [scheduleRow()] : [], rowCount: 1 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.listSchedules({ tenantId: "tenant-a", applicationId: "app-a", limit: 101 }), /CAMPAIGN_LIST_LIMIT_INVALID/);
+  assert.equal(calls.length, 0);
+  const rows = await store.listSchedules({ tenantId: "tenant-a", applicationId: "app-a", limit: 10, offset: 20 });
+  assert.equal(rows.length, 1);
+  assert.match(calls[0].sql, /WHERE tenant_id=\$1 AND application_id=\$2/);
+  assert.deepEqual(calls[0].values, ["tenant-a", "app-a", 10, 20]);
+});
+
+test("schedule detail lookup returns no record outside the supplied tenant/application scope", async () => {
+  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const row = await store.getSchedule({ tenantId: "tenant-b", applicationId: "app-b", scheduleId: "schedule-1" });
+  assert.equal(row, null);
+  assert.match(calls[0].sql, /WHERE tenant_id=\$1 AND application_id=\$2 AND id=\$3/);
+  assert.deepEqual(calls[0].values, ["tenant-b", "app-b", "schedule-1"]);
+});
