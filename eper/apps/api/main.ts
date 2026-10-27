@@ -114,31 +114,6 @@ if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
 
-const campaignAuditWriter = auditMode === "postgres" && paymentPool
-  ? async (record: {
-      tenantId: string; applicationId: string; actorId: string; action: string;
-      outcome: "success" | "failure"; resourceId: string; operationName: string;
-      requestId?: string; payload?: Record<string, unknown>;
-    }): Promise<void> => {
-      await appendAuditEvent(paymentPool, {
-        tenantId: record.tenantId,
-        applicationId: record.applicationId,
-        environment: auditEnvironment as "production" | "uat" | "sandbox",
-        actorType: "human",
-        actorId: record.actorId,
-        action: record.action,
-        outcome: record.outcome,
-        resourceType: "campaign_schedule",
-        resourceId: record.resourceId,
-        requestId: record.requestId,
-        source: "api",
-        operationName: record.operationName,
-        serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-        payload: record.payload,
-      });
-    }
-  : undefined;
-
 const agentsEnabled = process.env.EPER_AGENTS_API_ENABLED === "true";
 if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
   throw new Error("AGENTS_API_REQUIRES_POSTGRES_CONFIGURATION_AND_DURABLE_AUDIT");
@@ -177,7 +152,6 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 const server = createAppServer({
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
   agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
-  campaignAuditWriter,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
 });
