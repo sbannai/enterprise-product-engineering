@@ -400,7 +400,7 @@ test("execution with dispatch started is dead-lettered rather than automatically
   assert.equal(outcome, "dead_letter");
   assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
   assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
-  assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= \\$5 THEN now\(\) ELSE NULL END/);
+  assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\(\) ELSE NULL END/);
 });
 
 test("stale recovery does not automatically retry an execution whose dispatch may have reached provider", async () => {
@@ -409,7 +409,7 @@ test("stale recovery does not automatically retry an execution whose dispatch ma
   await store.recoverStaleExecutions(300, 5);
   assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$2/);
   assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
-  assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= \\$2 THEN now\(\) ELSE NULL END/);
+  assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]2 THEN now\(\) ELSE NULL END/);
 });
 
 test("claim query excludes executions that already crossed the dispatch-start fence", async () => {
