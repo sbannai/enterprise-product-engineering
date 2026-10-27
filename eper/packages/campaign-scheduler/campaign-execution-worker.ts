@@ -103,13 +103,14 @@ export async function runCampaignExecutionWorker(
           return;
         }
         if (!authorized) {
+          const authorizationErrorMessage = authorizationError instanceof Error ? authorizationError.message : "";
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
             executionId: execution.id, workerId: options.workerId,
-            errorCode: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+            errorCode: authorizationErrorMessage === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               ? "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               : authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
-            maxAttempts: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+            maxAttempts: authorizationErrorMessage === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               ? maxAttempts : 1,
           });
           return;
