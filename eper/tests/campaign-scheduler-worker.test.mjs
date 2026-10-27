@@ -101,6 +101,30 @@ test("worker reports lost completion lease and records ambiguous outcome without
     && call[1].errorCode === "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST"));
 });
 
+test("worker records authorization service failures distinctly and never dispatches", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  let dispatchCalls = 0;
+  const reported = [];
+  await runCampaignExecutionWorker(store, async () => {
+    dispatchCalls += 1;
+    controller.abort();
+    return { outcome: { accepted: true } };
+  }, {
+    workerId: "worker-auth-outage",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    authorizeDispatch: async () => { throw new Error("policy service unavailable"); },
+    onError: (error) => reported.push(error.message),
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.deepEqual(reported, ["policy service unavailable"]);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
+    && call[1].errorCode === "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE"
+    && call[1].maxAttempts === 1));
+  assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "dispatch-fence"));
+});
+
 test("worker rejects invalid configuration before touching the store", async () => {
   const store = fakeStore();
   await assert.rejects(
