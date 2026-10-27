@@ -5,6 +5,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 const original = {
   enabled: process.env.EPER_AGENTS_API_ENABLED,
   principalTokens: process.env.EPER_AGENTS_PRINCIPAL_TOKENS,
+  principalTenants: process.env.EPER_AGENTS_PRINCIPAL_TENANTS_JSON,
   tenant: process.env.EPER_AGENTS_TENANT_ID,
   adminPersistence: process.env.EPER_ADMIN_CONFIG_PERSISTENCE,
 };
@@ -17,6 +18,7 @@ const auditEvents = [];
 test("governed CRM, sales and marketing agent draft workflow", async (t) => {
   process.env.EPER_AGENTS_API_ENABLED = "true";
   process.env.EPER_AGENTS_PRINCIPAL_TOKENS = `maker-test=${makerToken};reviewer-test=${reviewerToken}`;
+  process.env.EPER_AGENTS_PRINCIPAL_TENANTS_JSON = JSON.stringify({ "maker-test": "tenant-test", "reviewer-test": "tenant-test" });
   process.env.EPER_AGENTS_TENANT_ID = "tenant-test";
   process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
   const adminConfigurationStore = {
