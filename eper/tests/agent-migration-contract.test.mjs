@@ -24,7 +24,7 @@ test("agent workflow migration restricts states and requires content integrity f
   const sql = await readFile(migrationUrl, "utf8");
   assert.match(sql, /'queued','running','awaiting_approval','succeeded','failed','cancelled'/);
   assert.match(sql, /'pending_approval','approved','rejected','expired'/);
-  assert.match(sql, /request_fingerprint char\\(64\\) NOT NULL CHECK/);
+  assert.match(sql, /request_fingerprint char\(64\) NOT NULL CHECK/);
   assert.match(sql, /content_hash char\(64\)/);
   assert.match(sql, /jsonb_typeof\(input\) = 'object'/);
   assert.match(sql, /jsonb_typeof\(payload\) = 'object'/);
