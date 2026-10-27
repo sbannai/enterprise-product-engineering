@@ -5,7 +5,14 @@ import { PostgresCampaignSchedulerStore } from "../dist/packages/campaign-schedu
 function fakePool(onQuery = async () => ({ rows: [], rowCount: 0 })) {
   const calls = [];
   const client = {
-    async query(sql, values = []) { calls.push({ sql, values }); return onQuery(sql, values); },
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      const result = await onQuery(sql, values);
+      if (sql.includes("SELECT last_event_hash FROM eper_audit_chain_head") && result.rows.length === 0) {
+        return { rows: [{ last_event_hash: null }], rowCount: 1 };
+      }
+      return result;
+    },
     release() {},
   };
   return { calls, pool: { async connect() { return client; } } };
@@ -233,4 +240,40 @@ test("schedule detail lookup returns no record outside the supplied tenant/appli
   assert.equal(row, null);
   assert.match(calls[0].sql, /WHERE tenant_id=\$1 AND application_id=\$2 AND id=\$3/);
   assert.deepEqual(calls[0].values, ["tenant-b", "app-b", "schedule-1"]);
+});
+
+
+test("schedule creation commits the mutation and audit event in one transaction", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("INSERT INTO eper_campaign_schedules") ? [scheduleRow()] : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.createSchedule({
+    tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
+    triggerType: "once", timezone: "Asia/Kolkata",
+    scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" }, createdBy: "actor-a",
+  });
+  const sql = calls.map((call) => call.sql);
+  assert.equal(sql[0], "BEGIN");
+  assert.ok(sql.some((query) => query.includes("INSERT INTO eper_campaign_schedules")));
+  assert.ok(sql.some((query) => query.includes("INSERT INTO eper_audit_events")));
+  assert.ok(sql.some((query) => query.includes("UPDATE eper_audit_chain_head")));
+  assert.equal(sql.at(-1), "COMMIT");
+});
+
+test("schedule creation rolls back when durable audit insertion fails", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("INSERT INTO eper_audit_events")) throw new Error("audit storage unavailable");
+    return { rows: sql.includes("INSERT INTO eper_campaign_schedules") ? [scheduleRow()] : [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(() => store.createSchedule({
+    tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
+    triggerType: "once", timezone: "Asia/Kolkata",
+    scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" }, createdBy: "actor-a",
+  }), /audit storage unavailable/);
+  const sql = calls.map((call) => call.sql);
+  assert.ok(sql.includes("ROLLBACK"));
+  assert.ok(!sql.includes("COMMIT"));
 });
