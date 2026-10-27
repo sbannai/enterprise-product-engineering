@@ -134,3 +134,25 @@ test("due one-time schedules are materialized atomically with stable idempotency
   assert.match(calls[0].sql, /trigger_type='once' AND next_run_at <= now\(\)/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
 });
+
+
+test("recurring schedules require a bounded interval", async () => {
+  const { pool, calls } = fakePool();
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.createSchedule({
+    tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
+    triggerType: "recurring", timezone: "Asia/Kolkata", scheduleDefinition: { intervalSeconds: 5 }, createdBy: "actor-a",
+  }), /CAMPAIGN_RECURRING_INTERVAL_SECONDS_INVALID/);
+  assert.equal(calls.length, 0);
+});
+
+test("recurring materialization is concurrency-safe and advances missed intervals", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("materialized_count") ? [{ materialized_count: 1 }] : [], rowCount: 1 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const count = await store.materializeDueRecurringSchedules(10);
+  assert.equal(count, 1);
+  assert.match(calls[0].sql, /trigger_type='recurring' AND next_run_at <= now\(\)/);
+  assert.match(calls[0].sql, /FOR UPDATE SKIP LOCKED/);
+  assert.match(calls[0].sql, /interval_seconds/);
+  assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
+});
