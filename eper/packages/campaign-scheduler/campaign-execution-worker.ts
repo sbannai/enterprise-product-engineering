@@ -38,6 +38,7 @@ export async function runCampaignExecutionWorker(
     try {
       await store.recoverStaleExecutions();
       await store.materializeDueOneTimeSchedules();
+      await store.materializeDueRecurringSchedules();
       executions = await store.claimExecutions(options.workerId, batchSize);
     } catch (error) {
       options.onError?.(error);
