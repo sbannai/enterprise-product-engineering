@@ -13,7 +13,7 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
 }, async () => {
   const parsed = new URL(databaseUrl);
   const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  assert.match(databaseName, /(test|ci|sandbox)/i,
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
     "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
 
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 5 });
