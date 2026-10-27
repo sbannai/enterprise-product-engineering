@@ -157,3 +157,16 @@ test("AI integration settings reject unsupported providers and malformed applica
   });
   assert.equal(badId.status, 400);
 });
+
+test("AI agent requests fail closed when the policy store is unavailable", async (t) => {
+  const store = fakeStore();
+  store.get = async () => { throw new Error("simulated policy database outage"); };
+  const { base } = await withServer(t, store);
+  const response = await fetch(base + "/v1/agents/crm/drafts?applicationId=app-on", {
+    method: "POST",
+    headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "ai_integration_policy_unavailable");
+});
