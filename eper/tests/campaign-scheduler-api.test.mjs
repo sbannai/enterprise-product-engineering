@@ -18,6 +18,7 @@ async function withServer(t, overrides = {}) {
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const store = {
+    async createSchedule(input) { return { ...schedule, ...input, id: "schedule-created", status: "draft", approvalStatus: "pending" }; },
     async listSchedules(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" ? [schedule] : []; },
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
     ...overrides,
@@ -74,4 +75,29 @@ test("campaign schedule detail returns 404 when the schedule is outside the tena
     headers: { authorization: `Bearer ${token}` },
   });
   assert.equal(response.status, 404);
+});
+
+
+test("campaign schedule creation creates a draft and returns a durable schedule ID", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json" },
+    body: JSON.stringify({ campaignId: "campaign-a", triggerType: "once", timezone: "Asia/Kolkata", scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" } }),
+  });
+  assert.equal(response.status, 202);
+  const body = await response.json();
+  assert.equal(body.data.scheduleId, "schedule-created");
+  assert.equal(body.data.status, "draft");
+  assert.equal(body.data.approvalStatus, "pending");
+});
+
+test("campaign schedule creation rejects missing required fields", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ campaignId: "campaign-a" }),
+  });
+  assert.equal(response.status, 400);
 });
