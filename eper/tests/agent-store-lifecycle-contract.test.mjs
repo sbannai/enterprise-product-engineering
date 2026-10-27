@@ -13,7 +13,7 @@ test("agent store scopes each transaction with tenant and application RLS contex
 test("agent worker claims jobs without blocking concurrent workers", () => {
   assert.match(source, /FOR UPDATE SKIP LOCKED LIMIT 1/);
   assert.match(source, /lease_owner=\$3/);
-  assert.match(source, /lease_expires_at=NOW\+/);
+  assert.match(source, /lease_expires_at=NOW\(\)\+/);
 });
 
 test("agent failures use bounded retry and enforce worker lease ownership", () => {
