@@ -99,6 +99,17 @@ test("invalid correlation IDs are replaced with safe generated request IDs", () 
   assert.match(res.headers.get("x-request-id"), /^[0-9a-f-]{36}$/i);
 });
 
+test("204 and 205 success responses remain bodyless while retaining request correlation", () => {
+  for (const statusCode of [204, 205]) {
+    const res = responseRecorder();
+    sendApiSuccess(request({ "x-correlation-id": "no-content-" + statusCode }), res, statusCode, {});
+    assert.equal(res.statusCode, statusCode);
+    assert.equal(res.body, undefined);
+    assert.equal(res.headers.get("x-request-id"), "no-content-" + statusCode);
+    assert.equal(res.headers.get("cache-control"), "no-store");
+  }
+});
+
 test("success responses reject non-success status codes and invalid no-content bodies", () => {
   assert.throws(() => sendApiSuccess(request(), responseRecorder(), 400, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
   assert.throws(() => sendApiSuccess(request(), responseRecorder(), 204, { unexpected: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
