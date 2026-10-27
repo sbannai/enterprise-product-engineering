@@ -110,8 +110,9 @@ export async function runCampaignExecutionWorker(
             errorCode: authorizationErrorMessage === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               ? "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               : authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
-            maxAttempts: authorizationErrorMessage === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
-              ? maxAttempts : 1,
+            // Explicit policy denial is terminal. Authorization outages and shutdown
+            // before the fence are retryable because no external side effect occurred.
+            maxAttempts: authorizationError ? maxAttempts : 1,
           });
           return;
         }
