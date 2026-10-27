@@ -122,6 +122,15 @@ test("malformed runtime error codes are rejected without serializing a response"
   }
 });
 
+test("request ID generation survives throwing header accessors", () => {
+  const req = Object.defineProperty({}, "headers", {
+    get() { throw new Error("untrusted header accessor"); },
+  });
+  const resolved = resolveApiRequestId(req);
+  assert.match(resolved, /^[0-9a-f-]{36}$/i);
+  assert.equal(resolveApiRequestId(req), resolved);
+});
+
 test("invalid correlation IDs are replaced with safe generated request IDs", () => {
   const resolved = resolveApiRequestId(request({ "x-correlation-id": "bad correlation id" }));
   assert.match(resolved, /^[0-9a-f-]{36}$/i);
