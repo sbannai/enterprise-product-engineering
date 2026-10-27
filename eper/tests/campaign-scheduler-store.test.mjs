@@ -277,3 +277,22 @@ test("schedule creation rolls back when durable audit insertion fails", async ()
   assert.ok(sql.includes("ROLLBACK"));
   assert.ok(!sql.includes("COMMIT"));
 });
+
+
+test("cancellation invalidates queued, retrying, and running executions in the same transaction", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_schedules") ? [scheduleRow({ status: "cancelled" })] : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.pauseOrCancel({
+    tenantId: "tenant-a", applicationId: "app-a",
+    scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    actorId: "actor-a", action: "cancel",
+  });
+  const cancellation = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions SET status='cancelled'"));
+  assert.ok(cancellation);
+  assert.match(cancellation.sql, /'queued','retry_wait','running'/);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
