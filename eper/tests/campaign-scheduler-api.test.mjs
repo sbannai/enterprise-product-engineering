@@ -167,3 +167,17 @@ test("campaign resume rejects a timestamp that is no longer in the future", asyn
   const body = await response.json();
   assert.equal(body.error.code, "INVALID_NEXT_RUN_AT");
 });
+
+
+test("campaign cancellation returns explicit conflict when dispatch has already started", async (t) => {
+  const { base } = await withServer(t, {
+    async pauseOrCancel() { throw new Error("CAMPAIGN_DISPATCH_ALREADY_STARTED"); },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/cancel", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.eper.v1+json" },
+  });
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.equal(body.error.code, "CAMPAIGN_DISPATCH_ALREADY_STARTED");
+});
