@@ -92,11 +92,20 @@ export class PostgresCampaignSchedulerStore {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ schedules_table: string | null; executions_table: string | null }>(
-        "SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table, to_regclass('public.eper_campaign_executions')::text AS executions_table",
+      const result = await client.query<{
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null;
+      }>(
+        `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
+                to_regclass('public.eper_campaign_executions')::text AS executions_table,
+                (SELECT column_name FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                   AND column_name='dispatch_started_at') AS dispatch_started_column`,
       );
       if (!result.rows[0]?.schedules_table || !result.rows[0]?.executions_table) {
         throw new Error("EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED");
+      }
+      if (!result.rows[0]?.dispatch_started_column) {
+        throw new Error("EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED");
       }
     } catch (error) {
       if (error instanceof Error && error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED") throw error;
