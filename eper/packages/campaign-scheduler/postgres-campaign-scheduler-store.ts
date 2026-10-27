@@ -233,12 +233,17 @@ export class PostgresCampaignSchedulerStore {
     const actorId = required(input.actorId, "CAMPAIGN_ACTOR_REQUIRED");
     if (!ID_PATTERN.test(input.scheduleId)) throw new Error("CAMPAIGN_SCHEDULE_ID_INVALID");
     const status = input.action === "pause" ? "paused" : "cancelled";
+    // A one-time schedule is marked completed when its execution is materialized.
+    // Still allow cancellation while that execution is queued or retrying.
+    const mutableStatuses = input.action === "cancel"
+      ? "'draft','scheduled','paused','completed'"
+      : "'draft','scheduled','paused'";
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_campaign_schedules SET status=$4, updated_by=$5, updated_at=now()
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status IN ('draft','scheduled','paused')
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status IN (${mutableStatuses})
          RETURNING *`,
         [tenantId, applicationId, input.scheduleId, status, actorId],
       );
