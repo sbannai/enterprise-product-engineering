@@ -67,6 +67,7 @@ export async function runCampaignExecutionWorker(
         // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
         let authorized = false;
         let authorizationError: unknown;
+        let dispatchFenceDenied = false;
         try {
           // Evaluate consent, quiet-hours, and channel policy before acquiring the
           // dispatch fence; the fence then atomically rechecks the live lease and schedule.
@@ -84,6 +85,7 @@ export async function runCampaignExecutionWorker(
               executionId: execution.id,
               workerId: options.workerId,
             });
+            dispatchFenceDenied = !authorized;
           }
         } catch (error) {
           // A policy service outage is not permission to dispatch. Preserve the distinction
@@ -103,6 +105,21 @@ export async function runCampaignExecutionWorker(
           return;
         }
         if (!authorized) {
+          if (dispatchFenceDenied) {
+            const fenceReason = await store.getDispatchFenceDenialReason({
+              tenantId: execution.tenantId, applicationId: execution.applicationId,
+              executionId: execution.id, workerId: options.workerId,
+            });
+            if (fenceReason === "cancelled") return;
+            if (fenceReason === "paused") {
+              await store.failExecution({
+                tenantId: execution.tenantId, applicationId: execution.applicationId,
+                executionId: execution.id, workerId: options.workerId,
+                errorCode: "CAMPAIGN_SCHEDULE_PAUSED_BEFORE_DISPATCH_FENCE", maxAttempts,
+              });
+              return;
+            }
+          }
           const authorizationErrorMessage = authorizationError instanceof Error ? authorizationError.message : "";
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
