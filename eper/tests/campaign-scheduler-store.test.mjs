@@ -350,6 +350,29 @@ test("cancellation invalidates queued, retrying, and running executions in the s
 });
 
 
+for (const [label, row, expected] of [
+  ["cancelled", { schedule_status: "cancelled", execution_status: "cancelled", approval_status: "approved", locked_by: "worker-a", dispatch_started_at: null }, "cancelled"],
+  ["paused", { schedule_status: "paused", execution_status: "running", approval_status: "approved", locked_by: "worker-a", dispatch_started_at: null }, "paused"],
+  ["approval revoked", { schedule_status: "scheduled", execution_status: "running", approval_status: "rejected", locked_by: "worker-a", dispatch_started_at: null }, "denied"],
+  ["lease lost", { schedule_status: "scheduled", execution_status: "running", approval_status: "approved", locked_by: "worker-b", dispatch_started_at: null }, "denied"],
+]) {
+  test(`dispatch-fence denial classifier returns ${expected} when ${label}`, async () => {
+    const { pool, calls } = fakePool(async (sql) => sql.includes("SELECT s.status AS schedule_status")
+      ? { rows: [row], rowCount: 1 }
+      : { rows: [], rowCount: 0 });
+    const store = new PostgresCampaignSchedulerStore(pool);
+    const reason = await store.getDispatchFenceDenialReason({
+      tenantId: "tenant-a", applicationId: "app-a",
+      executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a",
+    });
+    assert.equal(reason, expected);
+    const query = calls.find((call) => call.sql.includes("SELECT s.status AS schedule_status"));
+    assert.ok(query);
+    assert.match(query.sql, /e\.tenant_id=\$1 AND e\.application_id=\$2 AND e\.id=\$3/);
+    assert.deepEqual(query.values, ["tenant-a", "app-a", "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31"]);
+  });
+}
+
 test("dispatch-start fence locks live schedule and execution before marking dispatch started", async () => {
   const { pool, calls } = fakePool(async (sql) => {
     if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) return { rows: [{ id: "schedule-1" }], rowCount: 1 };
