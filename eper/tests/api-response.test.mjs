@@ -165,6 +165,24 @@ test("success responses reject malformed runtime data before writing headers or 
   }
 });
 
+test("success responses reject non-integer and non-finite status codes", () => {
+  for (const statusCode of [NaN, Infinity, 200.5, "200", null]) {
+    const res = responseRecorder();
+    assert.throws(() => sendApiSuccess(request(), res, statusCode, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
+    assert.equal(res.ended, false);
+    assert.equal(res.headers.size, 0);
+  }
+});
+
+test("error responses reject non-integer and non-finite status codes", () => {
+  for (const statusCode of [NaN, Infinity, 400.5, "400", null]) {
+    const res = responseRecorder();
+    assert.throws(() => sendApiError(request(), res, statusCode, "INVALID_INPUT", "Invalid input."), /API_ERROR_STATUS_INVALID/);
+    assert.equal(res.ended, false);
+    assert.equal(res.headers.size, 0);
+  }
+});
+
 test("success responses reject non-success status codes and invalid no-content bodies", () => {
   assert.throws(() => sendApiSuccess(request(), responseRecorder(), 400, {}), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
   assert.throws(() => sendApiSuccess(request(), responseRecorder(), 204, { unexpected: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
