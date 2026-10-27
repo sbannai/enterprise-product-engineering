@@ -118,6 +118,17 @@ test("204 and 205 success responses remain bodyless while retaining request corr
   }
 });
 
+test("circular success payloads fail before mutating the response", () => {
+  const data = {};
+  data.self = data;
+  const res = responseRecorder();
+
+  assert.throws(() => sendApiSuccess(request(), res, 200, data), /circular|cyclic/i);
+  assert.equal(res.ended, false);
+  assert.equal(res.headers.size, 0);
+  assert.equal(res.statusCode, undefined);
+});
+
 test("success responses reject malformed runtime data before writing headers or a body", () => {
   for (const data of [null, undefined, [], "unexpected", 42]) {
     const res = responseRecorder();
