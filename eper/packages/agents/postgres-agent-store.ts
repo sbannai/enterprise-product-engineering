@@ -181,6 +181,21 @@ export class PostgresAgentStore {
     }
   }
 
+  async getJob(input: { tenantId: string; applicationId: string; jobId: string }): Promise<StoredAgentJob | null> {
+    const client = await this.scopedClient(input.tenantId, input.applicationId);
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        "SELECT * FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3",
+        [input.tenantId, input.applicationId, input.jobId],
+      );
+      await client.query("COMMIT");
+      return result.rows[0] ? mapJob(result.rows[0]) : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   /** Claims the oldest eligible job for this tenant/application; use a worker lease. */
   async claimNextJob(input: { tenantId: string; applicationId: string; workerId: string; environment: AuditEnvironment; leaseSeconds?: number }): Promise<StoredAgentJob | null> {
     requireId(input.workerId, "worker_id");
