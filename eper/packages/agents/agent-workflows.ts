@@ -147,6 +147,7 @@ export async function handleAgentRoute(
   response: ServerResponse,
   pathname: string,
   auditWriter?: AgentAuditWriter,
+  aiIntegrationGuard?: (request: IncomingMessage, pathname: string) => Promise<{ allowed: boolean; statusCode?: number; error?: string }>,
 ): Promise<boolean> {
   if (!pathname.startsWith("/v1/agents/")) return false;
   if (process.env.EPER_AGENTS_API_ENABLED !== "true") { send(response, 404, { error: "not_found" }); return true; }
@@ -183,6 +184,19 @@ export async function handleAgentRoute(
       requestId: typeof request.headers["x-request-id"] === "string" ? request.headers["x-request-id"] : undefined,
     });
   };
+
+  if (aiIntegrationGuard) {
+    try {
+      const decision = await aiIntegrationGuard(request, pathname);
+      if (!decision.allowed) {
+        send(response, decision.statusCode ?? 403, { error: decision.error ?? "ai_integration_disabled_for_application" });
+        return true;
+      }
+    } catch {
+      send(response, 503, { error: "ai_integration_policy_unavailable" });
+      return true;
+    }
+  }
 
   try {
     const draftMatch = /^\/v1\/agents\/(crm|sales|marketing)\/drafts$/.exec(pathname);
