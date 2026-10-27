@@ -121,3 +121,16 @@ test("stale worker recovery validates policy and requeues or dead-letters expire
   assert.match(calls[0].sql, /WORKER_LEASE_EXPIRED/);
   assert.match(calls[0].sql, /status='running' AND locked_at < now\(\)/);
 });
+
+
+test("due one-time schedules are materialized atomically with stable idempotency keys", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("materialized_count") ? [{ materialized_count: 2 }] : [], rowCount: 2 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.materializeDueOneTimeSchedules(0), /CAMPAIGN_MATERIALIZE_LIMIT_INVALID/);
+  assert.equal(calls.length, 0);
+  const count = await store.materializeDueOneTimeSchedules(25);
+  assert.equal(count, 2);
+  assert.match(calls[0].sql, /FOR UPDATE SKIP LOCKED/);
+  assert.match(calls[0].sql, /trigger_type='once' AND next_run_at <= now\(\)/);
+  assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
+});
