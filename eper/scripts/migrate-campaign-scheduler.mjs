@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runMigrations } from "../migrate-payments.mjs";
+import { runMigrations } from "./migrate-payments.mjs";
 import { selectCampaignSchedulerDatabaseUrl } from "./select-campaign-scheduler-database-url.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
