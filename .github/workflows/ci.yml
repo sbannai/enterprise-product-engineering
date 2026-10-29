@@ -11,8 +11,14 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main", "reconcile/payment-153-168-integration"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/ci.yml"
 
 jobs:
   build-and-test:
