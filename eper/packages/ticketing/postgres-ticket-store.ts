@@ -63,7 +63,7 @@ function mapReply(row: Record<string, unknown>): TicketReplyRecord {
   };
 }
 
-/** PostgreSQL persistence. All reads and mutations are scoped by trusted tenant identity. */
+/** PostgreSQL persistence. Reads require tenant scope or an explicit privileged cross-tenant scope; mutations use trusted identity. */
 export class PostgresTicketStore {
   constructor(private readonly pool: TicketSqlPool, private readonly audit: TicketAuditWriter) {}
 
