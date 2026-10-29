@@ -11,6 +11,88 @@ type Draft = {
 const drafts = new Map<string, Draft>();
 const MAX_DRAFTS = 2000;
 
+export function buildAgentDraft(agent: AgentKind, intent: string, input: Record<string, unknown>): Record<string, unknown> {
+  const context = typeof input.context === "string" ? input.context.trim().slice(0, 4000) : "";
+  const objective = typeof input.objective === "string" ? input.objective.trim().slice(0, 1000) : intent;
+  const audience = typeof input.audience === "string" ? input.audience.trim().slice(0, 300) : "the intended customer";
+  const offer = typeof input.offer === "string" ? input.offer.trim().slice(0, 500) : "";
+  if (agent === "crm") {
+    if (intent === "lead-qualification") return {
+      title: "Lead qualification draft",
+      qualification: { fit: "REVIEW_REQUIRED", intent: "REVIEW_REQUIRED", timing: "REVIEW_REQUIRED", authority: "REVIEW_REQUIRED" },
+      recommendedNextStep: "Confirm missing qualification fields with the owner before changing lead status.",
+      suggestedCrmChanges: [],
+      evidenceUsed: context ? ["User-supplied context"] : [],
+      warnings: ["No CRM records were read or modified; verify facts against the system of record."],
+    };
+    if (intent === "contact-summary") return {
+      title: "Contact/account summary draft", summary: context || "No source context supplied.",
+      openQuestions: ["Confirm current owner", "Confirm last interaction and next commitment"],
+      suggestedCrmChanges: [], warnings: ["Summary is based only on user-supplied context."],
+    };
+    if (intent === "next-action") return {
+      title: "CRM next-action draft", recommendedAction: objective,
+      ownerConfirmationRequired: true, dueDate: null, suggestedCrmChanges: [],
+      warnings: ["No CRM write was performed; owner and due date require confirmation."],
+    };
+    throw new Error("AGENT_INTENT_UNSUPPORTED");
+  }
+  if (agent === "sales") {
+    if (intent === "follow-up") return {
+      title: "Sales follow-up draft", subject: `Following up on ${objective}`,
+      message: `Hi ${audience},\n\nI wanted to follow up on ${objective}.${context ? ` Based on our notes: ${context}` : ""}\n\nWould a short discussion to confirm priorities and next steps be useful?\n\nBest,\nYour team`,
+      nextStep: "Review customer facts, personalize, and obtain approval before sending.",
+      sendEnabled: false, warnings: ["Draft only; no email, message, quote, or CRM update was sent."],
+    };
+    if (intent === "opportunity-plan") return {
+      title: "Opportunity plan draft", objective,
+      stages: ["Confirm needs and decision process", "Validate fit and stakeholders", "Prepare reviewed proposal", "Confirm decision and next step"],
+      discoveryQuestions: ["What outcome matters most?", "Who participates in the decision?", "What timing and constraints apply?"],
+      risksToValidate: context ? [context] : ["Budget, timeline, authority, and solution fit are unverified"],
+      crmChanges: [], warnings: ["Stages and questions are suggestions, not authoritative CRM stage changes."],
+    };
+    if (intent === "proposal-outline") return {
+      title: "Proposal outline draft", objective, customerContext: context || "Needs confirmation",
+      sections: ["Customer goals", "Proposed scope", "Deliverables and exclusions", "Implementation approach", "Commercial terms (owner approval required)", "Risks and assumptions", "Acceptance criteria", "Next steps"],
+      commercialTermsApproved: false, warnings: ["No price, discount, commitment, or contractual term has been invented."],
+    };
+    throw new Error("AGENT_INTENT_UNSUPPORTED");
+  }
+  if (intent === "campaign-brief") return {
+    title: "Marketing campaign brief draft", objective, audience,
+    offer: offer || "Offer requires owner confirmation",
+    channels: ["Email (draft only)", "Website content (draft only)", "Social content (draft only)"],
+    successMetrics: ["Reach", "Qualified engagement", "Conversion"], budget: null,
+    complianceChecks: ["Audience consent", "Claims substantiation", "Brand review", "Unsubscribe/privacy requirements"],
+    warnings: ["No campaign was scheduled or published; budget and metrics targets require approval."],
+  };
+  if (intent === "email-copy") return {
+    title: "Marketing email draft", subject: objective,
+    body: `Hello ${audience},\n\n${context || objective}\n\n${offer ? `Learn more: ${offer}\n\n` : ""}If this is relevant to your needs, we'd be happy to share more information.\n\nRegards,\nYour team`,
+    requiresConsentCheck: true, sendEnabled: false,
+    warnings: ["Confirm claims, audience consent, sender identity, and unsubscribe handling before use."],
+  };
+  if (intent === "social-copy") return {
+    title: "Social content draft", variants: [
+      { tone: "informative", copy: `${objective}. Share what matters to ${audience}, with clear evidence and a useful next step.` },
+      { tone: "conversational", copy: `Working on ${objective}? Here's one idea worth considering. What would you add?` },
+    ],
+    publishEnabled: false, warnings: ["Review factual claims, brand voice, and platform requirements before publishing."],
+  };
+  throw new Error("AGENT_INTENT_UNSUPPORTED");
+}
+function errorStatus(message: string): number {
+  return message === "REQUEST_BODY_TOO_LARGE" ? 413
+    : message === "JSON_OBJECT_REQUIRED" || message.startsWith("INVALID_") || message === "AGENT_INTENT_UNSUPPORTED" ? 400
+    : 422;
+}
+
+/**
+ * Opt-in, provider-neutral agent workflow API. Drafts are tenant-scoped, volatile,
+ * and never send messages, publish campaigns, or write CRM records. Approval is a
+ * separate human action by a different allowlisted principal.
+ */
+
 export interface AgentDraftStore {
   create(draft: Draft): Promise<Draft>;
   list(tenantId: string, applicationId: string, status?: string): Promise<Draft[]>;
