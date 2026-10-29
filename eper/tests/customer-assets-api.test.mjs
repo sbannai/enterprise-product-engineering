@@ -149,6 +149,7 @@ test("asset download rechecks tenant/application access and requires an audited 
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a", "app-c", "app-empty"] },
     [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
+    [tokenUnscoped]: { tenantId: "tenant-a", actorId: "actor-unscoped", roleKey: "customer" },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"], "tenant-b": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
