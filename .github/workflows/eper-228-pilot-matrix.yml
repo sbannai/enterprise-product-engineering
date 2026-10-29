@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - 'eper/**'
+      - '.github/workflows/eper-228-pilot-matrix.yml'
   push:
     paths:
       - 'eper/**'
@@ -20,7 +21,7 @@ permissions:
 jobs:
   chapter-pilot-matrix:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
