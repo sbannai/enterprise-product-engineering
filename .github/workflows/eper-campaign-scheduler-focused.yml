@@ -1,0 +1,41 @@
+name: EPER Campaign Scheduler Focused Regression
+
+on:
+  push:
+    branches: ["feat/campaign-scheduler-foundation"]
+    paths:
+      - "eper/packages/campaign-scheduler/**"
+      - "eper/apps/api/**"
+      - "eper/tests/campaign-scheduler-*.test.mjs"
+      - "eper/tests/campaign-dispatch-authorization.test.mjs"
+      - "eper/scripts/migrate-campaign-scheduler.mjs"
+      - "eper/package.json"
+      - ".github/workflows/eper-campaign-scheduler-focused.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: eper-scheduler-focused-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Test scheduler API, persistence logic, worker, routing and authorization
+        run: node --test tests/campaign-scheduler-*.test.mjs tests/campaign-dispatch-authorization.test.mjs
