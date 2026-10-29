@@ -531,6 +531,7 @@ test("execution with dispatch started is dead-lettered rather than automatically
   });
   assert.equal(outcome, "dead_letter");
   assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
+  assert.match(calls[0].sql, /AND \(locked_by=\$4 OR dispatch_started_at IS NOT NULL\)/);
   assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
   assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\(\) ELSE NULL END/);
 });
