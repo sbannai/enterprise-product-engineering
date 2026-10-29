@@ -1,6 +1,6 @@
 name: EPER payment gateway contract tests
-# PR synchronization deliberately reruns this focused suite when its workflow definition changes.
-
+# Focused API contract and scheduler URL checks are grouped here to ensure they run on feature branches.
+ 
 on:
   push:
     branches: ["reconcile/payment-stack-with-receipt-contract"]
@@ -12,6 +12,10 @@ on:
       - "eper/packages/pricing/market-price-book.ts"
       - "eper/tests/payment-gateway.test.mjs"
       - "eper/tests/invoice-amount-authority.test.mjs"
+      - "eper/scripts/select-campaign-scheduler-database-url.mjs"
+      - "eper/scripts/migrate-campaign-scheduler.mjs"
+      - "eper/tests/campaign-scheduler-database-url.test.mjs"
+      - "eper/packages/campaign-scheduler/**"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -46,3 +50,5 @@ jobs:
         run: node --test tests/payment-gateway.test.mjs
       - name: Test trusted invoice amount authority
         run: node --test tests/invoice-amount-authority.test.mjs
+      - name: Test campaign scheduler database URL selection and fail-closed migration
+        run: npm run test:campaign-scheduler-url
