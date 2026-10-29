@@ -19,6 +19,7 @@ test("single-call client assets API returns tenant/application-scoped asset meta
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a", "app-c", "app-empty"] },
     [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
+    [tokenUnscoped]: { tenantId: "tenant-a", actorId: "actor-unscoped", roleKey: "customer" },
     [tokenNarrow]: { tenantId: "tenant-a", actorId: "actor-narrow", roleKey: "customer", applicationIds: ["app-a"] },
     [tokenUnscoped]: { tenantId: "tenant-a", actorId: "actor-unscoped", roleKey: "customer" },
   });
@@ -142,6 +143,7 @@ test("asset download rechecks tenant/application access and requires an audited 
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const tokenA = "client-assets-download-tenant-a-token-000000000000";
   const tokenB = "client-assets-download-tenant-b-token-000000000000";
+  const tokenUnscoped = "client-assets-download-tenant-a-unscoped-token-000000000000";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
@@ -200,6 +202,10 @@ test("asset download rechecks tenant/application access and requires an audited 
     assert.equal(audit[1].outcome, "denied");
     assert.equal(audit[1].tenantId, "tenant-a");
     assert.equal(audit[1].requestId, "asset-download-denied-002");
+    const unscopedDownload = await fetch(base + "/customer/applications/app-a/assets/doc-1/download", { headers: { authorization: "Bearer " + tokenUnscoped, "x-correlation-id": "asset-download-unscoped-003" } });
+    assert.equal(unscopedDownload.status, 404, "credentials without application scope cannot download assets");
+    assert.equal(audit[2].outcome, "denied");
+    assert.equal(audit[2].actorId, "actor-unscoped");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
