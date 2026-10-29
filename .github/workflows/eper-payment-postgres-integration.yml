@@ -12,6 +12,7 @@ on:
     branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract", "reconcile/payment-153-168-integration", "reconcile/payment-stack-with-receipt-contract"]
   pull_request:
     paths:
+      - ".github/workflows/eper-payment-postgres-integration.yml"
       - "eper/packages/payments/**"
       - "eper/packages/pricing/**"
       - "eper/apps/api/main.ts"
