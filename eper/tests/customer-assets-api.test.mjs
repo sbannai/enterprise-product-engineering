@@ -260,10 +260,11 @@ test("asset download fails closed when durable audit persistence fails", async (
   }
 });
 test("asset download rejects unsafe or overlong provider URLs and audits the failure", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const credential = "client-assets-invalid-provider-token-123456789";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
@@ -271,7 +272,8 @@ test("asset download rejects unsafe or overlong provider URLs and audits the fai
   try {
     for (const descriptor of [
       { url: "http://storage.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
-      { url: "https://storage.example.test/file", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() },\n      { url: "https://untrusted.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      { url: "https://storage.example.test/file", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() },
+      { url: "https://untrusted.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
     ]) {
       const audit = [];
       const server = createAppServer({
