@@ -11,7 +11,8 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "migrate:audit": "node scripts/migrate-audit.mjs",
     "migrate:ticketing": "node scripts/migrate-ticketing.mjs",
-    "migrate:campaign-scheduler": "node scripts/migrate-campaign-scheduler.mjs"
+    "migrate:campaign-scheduler": "node scripts/migrate-campaign-scheduler.mjs",
+    "test:campaign-scheduler-url": "node --test tests/campaign-scheduler-database-url.test.mjs"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
