@@ -69,6 +69,8 @@ jobs:
         run: npm test
 
   requirement-matrix:
+    # Keep the expensive full matrix off PR fan-out; run on main or manual dispatch.
+    if: github.event_name != 'pull_request'
     name: 228 requirements / 38 chapter pilot matrix
     runs-on: ubuntu-latest
     timeout-minutes: 25
