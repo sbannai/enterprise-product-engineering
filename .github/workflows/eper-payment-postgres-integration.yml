@@ -36,6 +36,7 @@ on:
 jobs:
   postgres-payment-store:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
