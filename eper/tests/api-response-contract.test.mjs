@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { sendApiSuccess, sendApiError, sendApiLegacyJson, resolveApiRequestId } from "../dist/apps/api/api-response.js";
 
 test("API success envelope standardizes headers and request correlation", async () => {
@@ -100,5 +100,25 @@ test("legacy JSON writer preserves ordinary payloads and suppresses 204/205 bodi
       assert.equal(response.headers.get("x-request-id")?.length > 0, true);
       assert.equal(await response.text(), "");
     }
+
+    const notModified = await new Promise((resolve, reject) => {
+      const request = httpRequest(base + "/304", { method: "GET" }, (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => resolve({
+          status: response.statusCode,
+          headers: response.headers,
+          body: Buffer.concat(chunks).toString(),
+        }));
+      });
+      request.on("error", reject);
+      request.end();
+    });
+    assert.equal(notModified.status, 304);
+    assert.equal(notModified.headers["content-type"], "application/json; charset=utf-8");
+    assert.equal(notModified.headers["cache-control"], "no-store");
+    assert.equal(notModified.headers["x-content-type-options"], "nosniff");
+    assert.equal(typeof notModified.headers["x-request-id"], "string");
+    assert.equal(notModified.body, "");
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
