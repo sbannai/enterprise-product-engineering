@@ -233,12 +233,17 @@ export class PostgresCampaignSchedulerStore {
     const actorId = required(input.actorId, "CAMPAIGN_ACTOR_REQUIRED");
     if (!ID_PATTERN.test(input.scheduleId)) throw new Error("CAMPAIGN_SCHEDULE_ID_INVALID");
     const status = input.action === "pause" ? "paused" : "cancelled";
+    // A one-time schedule is marked completed when its execution is materialized.
+    // Still allow cancellation while that execution is queued or retrying.
+    const mutableStatusPredicate = input.action === "cancel"
+      ? "status IN ('draft','scheduled','paused') OR (status='completed' AND trigger_type='once' AND EXISTS (SELECT 1 FROM eper_campaign_executions e WHERE e.tenant_id=eper_campaign_schedules.tenant_id AND e.application_id=eper_campaign_schedules.application_id AND e.schedule_id=eper_campaign_schedules.id AND e.status IN ('queued','retry_wait','running') AND e.dispatch_started_at IS NULL))"
+      : "status IN ('draft','scheduled','paused')";
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_campaign_schedules SET status=$4, updated_by=$5, updated_at=now()
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status IN ('draft','scheduled','paused')
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND (${mutableStatusPredicate})
          RETURNING *`,
         [tenantId, applicationId, input.scheduleId, status, actorId],
       );
@@ -437,7 +442,8 @@ export class PostgresCampaignSchedulerStore {
            SELECT e.id FROM eper_campaign_executions e
            JOIN eper_campaign_schedules s
              ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
-           WHERE e.status IN ('queued','retry_wait') AND e.dispatch_started_at IS NULL AND e.available_at <= now()
+           WHERE e.status IN ('queued','retry_wait') AND e.dispatch_started_at IS NULL
+             AND e.scheduled_for <= now() AND e.available_at <= now()
              AND s.status NOT IN ('paused','cancelled') AND s.approval_status='approved'
            ORDER BY e.available_at, e.created_at
            FOR UPDATE OF e SKIP LOCKED
@@ -489,7 +495,8 @@ export class PostgresCampaignSchedulerStore {
            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
            AND e.locked_by=$4 AND e.dispatch_started_at IS NULL
-           AND s.status='scheduled' AND s.approval_status='approved'
+           AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
+           AND s.approval_status='approved'
          FOR UPDATE OF s, e`,
         [tenantId, applicationId, input.executionId, workerId],
       );
@@ -511,6 +518,34 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /** Classify a denied dispatch fence without treating user pause/cancel as policy denial. */
+  async getDispatchFenceDenialReason(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<"cancelled" | "paused" | "denied"> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ schedule_status: string; execution_status: string; approval_status: string; locked_by: string | null; dispatch_started_at: string | null }>(
+        `SELECT s.status AS schedule_status, s.approval_status, e.status AS execution_status,
+                e.locked_by, e.dispatch_started_at
+         FROM eper_campaign_schedules s
+         JOIN eper_campaign_executions e
+           ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
+         WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 LIMIT 1`,
+        [tenantId, applicationId, input.executionId],
+      );
+      const row = result.rows[0];
+      if (row?.schedule_status === "cancelled" || row?.execution_status === "cancelled") return "cancelled";
+      if (row?.schedule_status === "paused") return "paused";
+      if (!row || row.locked_by !== workerId || row.execution_status !== "running" ||
+          row.schedule_status !== "scheduled" || row.approval_status !== "approved" || row.dispatch_started_at) return "denied";
+      return "denied";
+    } finally { client.release(); }
+  }
+
   async isExecutionAuthorizedForDispatch(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
   }): Promise<boolean> {
@@ -522,7 +557,8 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query<{ authorized: boolean }>(
         `SELECT (e.status='running' AND e.locked_by=$4
-                  AND s.status='scheduled' AND s.approval_status='approved') AS authorized
+                  AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
+                  AND s.approval_status='approved') AS authorized
          FROM eper_campaign_executions e
          JOIN eper_campaign_schedules s
            ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
@@ -550,6 +586,51 @@ export class PostgresCampaignSchedulerStore {
         [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {})],
       );
       return result.rowCount === 1;
+    } finally { client.release(); }
+  }
+
+  /** Release a claimed execution when its schedule was paused before dispatch; pausing is not a failed attempt. */
+  async deferExecutionForSchedulePause(input: {
+    tenantId: string; applicationId: string; executionId: string; workerId: string;
+  }): Promise<boolean> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string }>(
+        `UPDATE eper_campaign_executions
+         SET status='retry_wait', attempt_count=GREATEST(attempt_count - 1, 0),
+             available_at=now(), last_error_code=NULL, updated_at=now(),
+             locked_at=NULL, locked_by=NULL, completed_at=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
+           AND locked_by=$4 AND dispatch_started_at IS NULL
+         RETURNING id`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      if (result.rows.length === 1) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId, applicationId, environment: this.auditEnvironment,
+            actorType: "service", actorId: workerId,
+            action: "campaign_execution_deferred_paused", outcome: "success",
+            reasonCode: "CAMPAIGN_SCHEDULE_PAUSED_BEFORE_DISPATCH_FENCE",
+            resourceType: "campaign-execution", resourceId: input.executionId,
+            source: "job", operationName: "campaign.execution.defer_paused",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: "retry_wait", retryBudgetPreserved: true },
+          });
+        } catch {
+          throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED");
+        }
+      }
+      await client.query("COMMIT");
+      return result.rows.length === 1;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally { client.release(); }
   }
 
