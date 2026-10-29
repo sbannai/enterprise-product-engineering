@@ -1,5 +1,9 @@
 name: EPER Integrated Validation (same-commit end-to-end)
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   pull_request:
     branches: ["main"]
