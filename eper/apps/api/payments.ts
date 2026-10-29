@@ -2,7 +2,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { sendApiSuccess, sendApiError, resolveApiRequestId } from "./api-response.js";
+import { sendApiSuccess, sendApiError, sendApiLegacyJson, resolveApiRequestId } from "./api-response.js";
 import { resolveTrustedInvoiceAmount, type TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
 import type { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { resolveTrustedTransactionSnapshot, type TrustedTransactionSnapshot, type TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
@@ -51,14 +51,7 @@ function json(req: IncomingMessage, res: ServerResponse, status: number, body: R
     sendApiSuccess(req, res, status, status === 204 || status === 205 ? {} : body);
     return;
   }
-  const requestId = resolveApiRequestId(req);
-  res.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-    "x-request-id": requestId,
-  });
-  res.end(JSON.stringify(body));
+  sendApiLegacyJson(req, res, status, body);
 }
 async function body(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = []; let size = 0;
