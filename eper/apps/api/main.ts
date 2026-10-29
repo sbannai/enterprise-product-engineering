@@ -154,7 +154,6 @@ let agentWorkerPromise: Promise<void> | undefined;
 if (agentWorkerEnabled && agentWorkerStore) {
   agentWorkerPromise = (async () => {
     while (agentWorkerRunning) {
-      let processed = false;
       for (const target of agentWorkerTargets) {
         if (!agentWorkerRunning) break;
         try {
@@ -166,7 +165,6 @@ if (agentWorkerEnabled && agentWorkerStore) {
             environment: auditEnvironment as "production" | "uat" | "sandbox",
           });
           if (result.outcome !== "idle") {
-            processed = true;
             console.log("EPER agent worker outcome", { outcome: result.outcome, jobId: result.jobId });
           }
         } catch (error) {
@@ -175,7 +173,8 @@ if (agentWorkerEnabled && agentWorkerStore) {
           console.error("EPER agent worker iteration failed", { code });
         }
       }
-      if (agentWorkerRunning && !processed) {
+      // Always yield between polling cycles, including when the queue is busy.
+      if (agentWorkerRunning) {
         await new Promise<void>((resolve) => setTimeout(resolve, agentWorkerPollMs));
       }
     }
