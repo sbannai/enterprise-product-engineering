@@ -9,12 +9,10 @@ on:
   pull_request:
     paths:
       - "eper/**"
-      - ".github/workflows/eper-reexec-uat.yml"
   workflow_dispatch:
   push:
     paths:
       - 'eper/**'
-      - '.github/workflows/eper-reexec-uat.yml'
 
 jobs:
   controlled-uat-simulation:

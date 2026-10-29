@@ -29,7 +29,6 @@ on:
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
-      - '.github/workflows/eper-payment-postgres-integration.yml'
   workflow_dispatch:
 
 jobs:
