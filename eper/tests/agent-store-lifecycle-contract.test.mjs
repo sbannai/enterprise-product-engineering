@@ -121,7 +121,7 @@ test("agent job enqueue fails closed when no worker is configured", () => {
 
 test("agent worker runtime is opt-in, readiness-checked, tenant/application scoped, and shut down before the DB pool", () => {
   assert.match(main, /EPER_AGENT_JOB_WORKER_ENABLED === "true"/);
-  assert.match(main, /AGENT_WORKER_REQUIRES_ENABLED_AGENT_API_POSTGRES_AND_DURABLE_AUDIT/);
+  assert.match(main, /AGENT_WORKER_REQUIRES_AGENT_API_CAPABILITY_POSTGRES_ADMIN_CONFIG_AND_DURABLE_AUDIT/);
   assert.match(main, /readApplicationAssignments\(\)/);
   assert.match(main, /agentWorkerStore\.assertReady\(\)/);
   assert.match(main, /processAgentJobOnce\(/);
