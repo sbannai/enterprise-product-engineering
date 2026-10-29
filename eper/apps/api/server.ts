@@ -2076,6 +2076,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    if (requestUrl.pathname.startsWith("/v1/agent-jobs") || requestUrl.pathname.startsWith("/v1/agent-drafts")) {
+      if (process.env.EPER_AGENTS_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+    }
     const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;
     if (await handleAgentJobRoute(request, response, requestUrl.pathname, {
       store: agentStore, resolveIdentity: resolveAgentJobIdentity,
