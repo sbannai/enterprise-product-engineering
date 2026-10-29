@@ -5,11 +5,13 @@ on:
     branches: ["feat/campaign-scheduler-foundation"]
     paths:
       - "eper/packages/campaign-scheduler/**"
+      - "eper/packages/audit/**"
       - "eper/apps/api/**"
       - "eper/tests/campaign-scheduler-*.test.mjs"
       - "eper/tests/campaign-domain-event-router.test.mjs"
       - "eper/tests/campaign-dispatch-authorization.test.mjs"
       - "eper/scripts/migrate-campaign-scheduler.mjs"
+      - "eper/scripts/migrate-audit.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - ".github/workflows/eper-campaign-scheduler-focused.yml"
@@ -23,6 +25,25 @@ jobs:
   focused-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_test_password
+          POSTGRES_DB: eper_scheduler_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_scheduler_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://eper:eper_test_password@localhost:5432/eper_scheduler_test
+      EPER_AUDIT_DATABASE_URL: postgresql://eper:eper_test_password@localhost:5432/eper_scheduler_test
+      EPER_CAMPAIGN_SCHEDULER_DATABASE_URL: postgresql://eper:eper_test_password@localhost:5432/eper_scheduler_test
+      EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: postgresql://eper:eper_test_password@localhost:5432/eper_scheduler_test
     defaults:
       run:
         working-directory: eper
@@ -39,5 +60,9 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-      - name: Test scheduler API, persistence logic, worker, routing and authorization
+      - name: Apply audit schema to disposable PostgreSQL
+        run: npm run migrate:audit
+      - name: Apply campaign scheduler schema to disposable PostgreSQL
+        run: npm run migrate:campaign-scheduler
+      - name: Test scheduler API, persistence logic, worker, routing, authorization and PostgreSQL dispatch race
         run: node --test tests/campaign-scheduler-*.test.mjs tests/campaign-domain-event-router.test.mjs tests/campaign-dispatch-authorization.test.mjs
