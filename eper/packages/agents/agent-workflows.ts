@@ -81,17 +81,6 @@ export function buildAgentDraft(agent: AgentKind, intent: string, input: Record<
   };
   throw new Error("AGENT_INTENT_UNSUPPORTED");
 }
-function errorStatus(message: string): number {
-  return message === "REQUEST_BODY_TOO_LARGE" ? 413
-    : message === "JSON_OBJECT_REQUIRED" || message.startsWith("INVALID_") || message === "AGENT_INTENT_UNSUPPORTED" ? 400
-    : 422;
-}
-
-/**
- * Opt-in, provider-neutral agent workflow API. Drafts are tenant-scoped, volatile,
- * and never send messages, publish campaigns, or write CRM records. Approval is a
- * separate human action by a different allowlisted principal.
- */
 
 export interface AgentDraftStore {
   create(draft: Draft): Promise<Draft>;
