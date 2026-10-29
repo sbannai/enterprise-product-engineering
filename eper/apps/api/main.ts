@@ -129,8 +129,8 @@ if (agentDraftStore) await agentDraftStore.assertReady();
 // The worker is opt-in and stays disabled by default. Its scope comes exclusively
 // from the operator-managed tenant/application assignment map, never request data.
 const agentWorkerEnabled = process.env.EPER_AGENT_JOB_WORKER_ENABLED === "true";
-if (agentWorkerEnabled && (!agentsEnabled || !paymentPool || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
-  throw new Error("AGENT_WORKER_REQUIRES_ENABLED_AGENT_API_POSTGRES_AND_DURABLE_AUDIT");
+if (agentWorkerEnabled && (!agentsEnabled || !paymentPool || !postgresCapabilityMode || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
+  throw new Error("AGENT_WORKER_REQUIRES_AGENT_API_CAPABILITY_POSTGRES_ADMIN_CONFIG_AND_DURABLE_AUDIT");
 }
 const agentWorkerStore = agentWorkerEnabled && paymentPool ? new PostgresAgentStore(paymentPool) : undefined;
 if (agentWorkerStore) await agentWorkerStore.assertReady();
