@@ -545,3 +545,80 @@ test("pausing a schedule after execution claim prevents dispatch-fence acquisiti
   assert.equal(dispatchStarted, false);
   assert.ok(calls.some((call) => call.sql.includes("FOR UPDATE OF s, e")));
 });
+
+// Restored regression coverage retained from the scheduler foundation.
+
+test("pausing before dispatch releases the claim without consuming retry budget", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_executions") ? [{ id: "job-1" }] : [],
+    rowCount: sql.includes("UPDATE eper_campaign_executions") ? 1 : 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const released = await store.deferExecutionForSchedulePause({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  });
+  assert.equal(released, true);
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.ok(update, "must update the claimed execution");
+  assert.match(update.sql, /status='retry_wait'/);
+  assert.match(update.sql, /attempt_count=GREATEST\(attempt_count - 1, 0\)/);
+  assert.match(update.sql, /dispatch_started_at IS NULL/);
+  assert.match(update.sql, /locked_by=\$4/);
+  assert.deepEqual(update.values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")), "pause deferral must be audited");
+  assert.ok(calls.some((call) => call.sql === "COMMIT"), "execution update and audit must commit together");
+});
+
+test("pause deferral rolls back when durable audit append fails", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("INSERT INTO eper_audit_events")) throw new Error("audit storage unavailable");
+    return {
+      rows: sql.includes("UPDATE eper_campaign_executions") ? [{ id: "job-1" }] : [],
+      rowCount: sql.includes("UPDATE eper_campaign_executions") ? 1 : 0,
+    };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.deferExecutionForSchedulePause({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
+  assert.ok(calls.some((call) => call.sql === "BEGIN"));
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
+});
+
+test("completed one-time schedule cannot be cancelled when no pending execution remains", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: [],
+    rowCount: 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.pauseOrCancel({
+    tenantId: "tenant-a", applicationId: "app-a",
+    scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    actorId: "actor-a", action: "cancel",
+  }), /CAMPAIGN_SCHEDULE_NOT_FOUND_OR_NOT_MUTABLE/);
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_schedules"));
+  assert.ok(update);
+  assert.match(update.sql, /status='completed' AND trigger_type='once' AND EXISTS/);
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
+});
+
+test("pause cannot mutate a completed one-time schedule", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_schedules") ? [scheduleRow({ status: "paused" })] : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.pauseOrCancel({
+    tenantId: "tenant-a", applicationId: "app-a",
+    scheduleId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    actorId: "actor-a", action: "pause",
+  });
+  const scheduleUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_schedules"));
+  assert.ok(scheduleUpdate);
+  assert.match(scheduleUpdate.sql, /status IN \('draft','scheduled','paused'\)/);
+  assert.doesNotMatch(scheduleUpdate.sql, /status IN \('draft','scheduled','paused','completed'\)/);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
