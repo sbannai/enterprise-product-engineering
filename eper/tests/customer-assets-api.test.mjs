@@ -274,6 +274,7 @@ test("asset download rejects unsafe or overlong provider URLs and audits the fai
       { url: "http://storage.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
       { url: "https://storage.example.test/file", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() },
       { url: "https://untrusted.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      { url: "https://user:pass@storage.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
     ]) {
       const audit = [];
       const server = createAppServer({
