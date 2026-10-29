@@ -126,6 +126,34 @@ if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMod
 const agentDraftStore = agentsEnabled && paymentPool ? new PostgresAgentDraftStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID) : undefined;
 if (agentDraftStore) await agentDraftStore.assertReady();
 
+const campaignSchedulerEnabled = process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED === "true";
+if (campaignSchedulerEnabled && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("CAMPAIGN_SCHEDULER_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+const campaignSchedulerStore = campaignSchedulerEnabled && paymentPool
+  ? new PostgresCampaignSchedulerStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (campaignSchedulerStore) await campaignSchedulerStore.assertReady();
+
+const ticketingEnabled = process.env.EPER_TICKETING_API_ENABLED === "true";
+if (ticketingEnabled && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("TICKETING_API_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+const ticketStore = ticketingEnabled && paymentPool
+  ? new PostgresTicketStore(
+      paymentPool,
+      createCanonicalTicketAuditWriter(
+        auditEnvironment as "production" | "uat" | "sandbox",
+        process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+      ),
+    )
+  : undefined;
+if (ticketStore) await ticketStore.assertReady();
+
+if (adminConfigMode === "postgres" && adminConfigurationStore) {
+  await adminConfigurationStore.assertReady();
+}
+
 // The worker is opt-in and stays disabled by default. Its scope comes exclusively
 // from the operator-managed tenant/application assignment map, never request data.
 const agentWorkerEnabled = process.env.EPER_AGENT_JOB_WORKER_ENABLED === "true";
@@ -181,33 +209,6 @@ if (agentWorkerEnabled && agentWorkerStore) {
   })();
 }
 
-const campaignSchedulerEnabled = process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED === "true";
-if (campaignSchedulerEnabled && (!paymentPool || auditMode !== "postgres")) {
-  throw new Error("CAMPAIGN_SCHEDULER_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
-}
-const campaignSchedulerStore = campaignSchedulerEnabled && paymentPool
-  ? new PostgresCampaignSchedulerStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
-  : undefined;
-if (campaignSchedulerStore) await campaignSchedulerStore.assertReady();
-
-const ticketingEnabled = process.env.EPER_TICKETING_API_ENABLED === "true";
-if (ticketingEnabled && (!paymentPool || auditMode !== "postgres")) {
-  throw new Error("TICKETING_API_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
-}
-const ticketStore = ticketingEnabled && paymentPool
-  ? new PostgresTicketStore(
-      paymentPool,
-      createCanonicalTicketAuditWriter(
-        auditEnvironment as "production" | "uat" | "sandbox",
-        process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-      ),
-    )
-  : undefined;
-if (ticketStore) await ticketStore.assertReady();
-
-if (adminConfigMode === "postgres" && adminConfigurationStore) {
-  await adminConfigurationStore.assertReady();
-}
 
 const server = createAppServer({
   capabilityPool: postgresCapabilityMode ? paymentPool as unknown as Pool : undefined,
