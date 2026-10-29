@@ -8,6 +8,8 @@ import { PostgresModuleEntitlementService } from "../../packages/workflows/postg
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { PostgresTicketStore, createCanonicalTicketAuditWriter } from "../../packages/ticketing/postgres-ticket-store.js";
 import { PostgresAgentDraftStore } from "../../packages/agents/postgres-agent-draft-store.js";
+import { PostgresAgentStore } from "../../packages/agents/postgres-agent-store.js";
+import { processAgentJobOnce } from "../../packages/agents/agent-worker.js";
 import { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
@@ -124,6 +126,62 @@ if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMod
 const agentDraftStore = agentsEnabled && paymentPool ? new PostgresAgentDraftStore(paymentPool, auditEnvironment as "production" | "uat" | "sandbox", process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID) : undefined;
 if (agentDraftStore) await agentDraftStore.assertReady();
 
+// The worker is opt-in and stays disabled by default. Its scope comes exclusively
+// from the operator-managed tenant/application assignment map, never request data.
+const agentWorkerEnabled = process.env.EPER_AGENT_JOB_WORKER_ENABLED === "true";
+if (agentWorkerEnabled && (!agentsEnabled || !paymentPool || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
+  throw new Error("AGENT_WORKER_REQUIRES_ENABLED_AGENT_API_POSTGRES_AND_DURABLE_AUDIT");
+}
+const agentWorkerStore = agentWorkerEnabled && paymentPool ? new PostgresAgentStore(paymentPool) : undefined;
+if (agentWorkerStore) await agentWorkerStore.assertReady();
+const agentWorkerAssignments = agentWorkerEnabled ? readApplicationAssignments() : {};
+const agentWorkerTargets = Object.entries(agentWorkerAssignments).flatMap(([tenantId, applicationIds]) =>
+  applicationIds.map((applicationId) => ({ tenantId, applicationId })),
+);
+if (agentWorkerEnabled && agentWorkerTargets.length === 0) {
+  throw new Error("AGENT_WORKER_APPLICATION_ASSIGNMENTS_REQUIRED");
+}
+const agentWorkerPollMs = Number.parseInt(process.env.EPER_AGENT_WORKER_POLL_MS ?? "1000", 10);
+if (agentWorkerEnabled && (!Number.isInteger(agentWorkerPollMs) || agentWorkerPollMs < 250 || agentWorkerPollMs > 5000)) {
+  throw new Error("AGENT_WORKER_POLL_INTERVAL_INVALID");
+}
+const agentWorkerId = (process.env.EPER_AGENT_WORKER_ID ?? `eper-api-${process.pid}`).trim();
+if (agentWorkerEnabled && (!agentWorkerId || agentWorkerId.length > 128)) {
+  throw new Error("AGENT_WORKER_ID_INVALID");
+}
+let agentWorkerRunning = true;
+let agentWorkerPromise: Promise<void> | undefined;
+if (agentWorkerEnabled && agentWorkerStore) {
+  agentWorkerPromise = (async () => {
+    while (agentWorkerRunning) {
+      let processed = false;
+      for (const target of agentWorkerTargets) {
+        if (!agentWorkerRunning) break;
+        try {
+          const result = await processAgentJobOnce({
+            store: agentWorkerStore,
+            tenantId: target.tenantId,
+            applicationId: target.applicationId,
+            workerId: agentWorkerId,
+            environment: auditEnvironment as "production" | "uat" | "sandbox",
+          });
+          if (result.outcome !== "idle") {
+            processed = true;
+            console.log("EPER agent worker outcome", { outcome: result.outcome, jobId: result.jobId });
+          }
+        } catch (error) {
+          const code = error instanceof Error && /^[A-Z0-9_:-]{2,80}$/.test(error.message)
+            ? error.message : "AGENT_WORKER_POLL_FAILED";
+          console.error("EPER agent worker iteration failed", { code });
+        }
+      }
+      if (agentWorkerRunning && !processed) {
+        await new Promise<void>((resolve) => setTimeout(resolve, agentWorkerPollMs));
+      }
+    }
+  })();
+}
+
 const campaignSchedulerEnabled = process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED === "true";
 if (campaignSchedulerEnabled && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CAMPAIGN_SCHEDULER_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
@@ -166,6 +224,8 @@ server.listen(port, host, () => {
 
 async function shutdown(signal: string): Promise<void> {
   try {
+    agentWorkerRunning = false;
+    if (agentWorkerPromise) await agentWorkerPromise;
     await new Promise<void>((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());
       server.closeIdleConnections?.();
