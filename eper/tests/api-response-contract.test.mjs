@@ -95,6 +95,8 @@ test("legacy JSON writer preserves ordinary payloads and suppresses 204/205 bodi
       const response = await fetch(base + "/" + status);
       assert.equal(response.status, status);
       assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.equal(response.headers.get("x-content-type-options"), "nosniff");
       assert.equal(response.headers.get("x-request-id")?.length > 0, true);
       assert.equal(await response.text(), "");
     }
