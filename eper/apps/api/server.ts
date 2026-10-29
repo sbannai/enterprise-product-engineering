@@ -799,7 +799,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         let url: URL; const expiresAt = Date.parse(result.expiresAt); const now = Date.now();
         try { url = new URL(result.url); } catch { url = new URL("about:blank"); }
-        if (url.protocol !== "https:" || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
+        if (url.protocol !== "https:" || url.username || url.password || !configuredAssetStorageHosts.some((host) => host.toLowerCase() === url.hostname.toLowerCase()) || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
         await audit("success");
