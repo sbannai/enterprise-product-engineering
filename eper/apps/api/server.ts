@@ -1541,7 +1541,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
-          const scope = canViewCrossTenant ? {} : { tenantId: identity.tenantId };
+          const scope = canViewCrossTenant ? { crossTenant: true as const } : { tenantId: identity.tenantId };
           const page = await options.ticketStore.list(scope, {
           // Fetch one extra row so the UI can know whether another page truly exists.
             status: status as typeof TICKET_STATUSES[number] | undefined,
