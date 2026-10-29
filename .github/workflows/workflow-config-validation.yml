@@ -1,5 +1,10 @@
 name: Workflow Configuration Validation
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:
