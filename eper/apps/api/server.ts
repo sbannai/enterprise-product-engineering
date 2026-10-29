@@ -1,6 +1,6 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
-import { sendApiSuccess, sendApiError, resolveApiRequestId } from "./api-response.js";
+import { sendApiSuccess, sendApiError, sendApiLegacyJson, resolveApiRequestId } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
@@ -72,14 +72,7 @@ function sendJson(request: IncomingMessage, response: ServerResponse, statusCode
     return;
   }
 
-  const requestId = resolveApiRequestId(request);
-  response.writeHead(statusCode, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-    "x-request-id": requestId,
-  });
-  response.end(JSON.stringify(body));
+  sendApiLegacyJson(request, response, statusCode, body);
 }
 
 
