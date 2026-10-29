@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS eper_agent_jobs_claim_idx
 CREATE INDEX IF NOT EXISTS eper_agent_jobs_scope_idx
   ON eper_agent_jobs (tenant_id, application_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS eper_agent_drafts (
+CREATE TABLE IF NOT EXISTS eper_agent_job_drafts (
   tenant_id varchar(128) NOT NULL,
   application_id varchar(128) NOT NULL,
   draft_id uuid NOT NULL,
@@ -54,8 +54,8 @@ CREATE TABLE IF NOT EXISTS eper_agent_drafts (
     REFERENCES eper_agent_jobs (tenant_id, application_id, job_id)
     ON DELETE RESTRICT
 );
-CREATE INDEX IF NOT EXISTS eper_agent_drafts_queue_idx
-  ON eper_agent_drafts (tenant_id, application_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS eper_agent_job_drafts_queue_idx
+  ON eper_agent_job_drafts (tenant_id, application_id, status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS eper_agent_approvals (
   tenant_id varchar(128) NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS eper_agent_approvals (
   decided_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, application_id, approval_id),
   FOREIGN KEY (tenant_id, application_id, draft_id)
-    REFERENCES eper_agent_drafts (tenant_id, application_id, draft_id)
+    REFERENCES eper_agent_job_drafts (tenant_id, application_id, draft_id)
     ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS eper_agent_approvals_draft_idx
@@ -95,7 +95,7 @@ DO $$
 DECLARE table_name text;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
-    'eper_agent_jobs','eper_agent_drafts','eper_agent_approvals','eper_agent_configurations'
+    'eper_agent_jobs','eper_agent_job_drafts','eper_agent_approvals','eper_agent_configurations'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);

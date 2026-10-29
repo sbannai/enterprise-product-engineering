@@ -366,7 +366,7 @@ export class PostgresAgentStore {
       if (!row) throw new Error("AGENT_JOB_NOT_FOUND");
       if (row.status !== "running") throw new Error("AGENT_JOB_NOT_RUNNING");
       const inserted = await client.query<Record<string, unknown>>(
-        `INSERT INTO eper_agent_drafts
+        `INSERT INTO eper_agent_job_drafts
           (tenant_id,application_id,draft_id,job_id,agent_id,intent,status,payload,source_references,validation_findings,content_hash,version,created_by,expires_at)
          VALUES ($1,$2,$3,$4,$5,$6,'pending_approval',$7::jsonb,$8::jsonb,$9::jsonb,$10,1,$11,$12)
          RETURNING draft_id,content_hash,version`,
@@ -399,7 +399,7 @@ export class PostgresAgentStore {
     const client = await this.scopedClient(input.tenantId, input.applicationId);
     try {
       const result = await client.query<Record<string, unknown>>(
-        "SELECT draft_id,job_id,agent_id,intent,status,payload,source_references,validation_findings,content_hash,version,created_by,created_at,expires_at FROM eper_agent_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3",
+        "SELECT draft_id,job_id,agent_id,intent,status,payload,source_references,validation_findings,content_hash,version,created_by,created_at,expires_at FROM eper_agent_job_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3",
         [input.tenantId, input.applicationId, input.draftId],
       );
       await client.query("COMMIT");
@@ -418,7 +418,7 @@ export class PostgresAgentStore {
     const client = await this.scopedClient(input.tenantId, input.applicationId);
     try {
       const result = await client.query<Record<string, unknown>>(
-        "SELECT draft_id,job_id,status,version,content_hash,created_by FROM eper_agent_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3 FOR UPDATE",
+        "SELECT draft_id,job_id,status,version,content_hash,created_by FROM eper_agent_job_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3 FOR UPDATE",
         [input.tenantId, input.applicationId, input.draftId],
       );
       const draft = result.rows[0];
@@ -451,7 +451,7 @@ export class PostgresAgentStore {
         [input.tenantId, input.applicationId, approvalId, input.draftId, input.expectedVersion, input.expectedContentHash, input.action, input.reviewerId, input.reviewerRole, input.note?.trim() || null],
       );
       await client.query(
-        "UPDATE eper_agent_drafts SET status=$4,version=version+1 WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3",
+        "UPDATE eper_agent_job_drafts SET status=$4,version=version+1 WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3",
         [input.tenantId, input.applicationId, input.draftId, status],
       );
       const jobUpdate = await client.query(

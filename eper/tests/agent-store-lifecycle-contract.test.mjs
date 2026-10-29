@@ -84,3 +84,10 @@ test("durable draft read returns review metadata only through tenant/application
   assert.match(routes, /identity\.applicationIds\.includes\(applicationId\)/);
   assert.match(routes, /AGENT_DRAFT_NOT_FOUND/);
 });
+
+
+test("durable agent job drafts use their dedicated table", async () => {
+  const source = await readFile(new URL("../packages/agents/postgres-agent-store.ts", import.meta.url), "utf8");
+  assert.match(source, /eper_agent_job_drafts/);
+  assert.doesNotMatch(source, /eper_agent_drafts/);
+});

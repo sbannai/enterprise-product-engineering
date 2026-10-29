@@ -8,7 +8,7 @@ test("agent workflow migration defines durable tenant/application-scoped records
   const sql = await readFile(migrationUrl, "utf8");
   for (const table of [
     "eper_agent_jobs",
-    "eper_agent_drafts",
+    "eper_agent_job_drafts",
     "eper_agent_approvals",
     "eper_agent_configurations",
   ]) {
@@ -38,4 +38,13 @@ test("agent workflow migration enables forced row-level security with tenant and
   assert.match(sql, /current_setting\(''eper\.application_id'', true\)/);
   assert.match(sql, /WITH CHECK/);
   assert.match(sql, /003_agent_workflows/);
+});
+
+
+test("workflow drafts and API approval drafts use separate tables", async () => {
+  const workflowSql = await readFile(migrationUrl, "utf8");
+  const apiDraftMigration = await readFile(new URL("../packages/audit/migrations/006_agent_drafts.sql", import.meta.url), "utf8");
+  assert.match(workflowSql, /CREATE TABLE IF NOT EXISTS eper_agent_job_drafts/);
+  assert.doesNotMatch(workflowSql, /CREATE TABLE IF NOT EXISTS eper_agent_drafts/);
+  assert.match(apiDraftMigration, /CREATE TABLE IF NOT EXISTS eper_agent_drafts/);
 });
