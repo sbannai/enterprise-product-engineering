@@ -220,3 +220,20 @@ test("campaign schedule console serves responsive UI and lifecycle controls", as
   assert.doesNotMatch(html, /<option value="event">|<option value="condition">/);
   assert.match(html, /aria-live="polite"/);
 });
+
+test("campaign schedule creation rejects trigger types without verified execution paths", async (t) => {
+  const { base } = await withServer(t);
+  for (const triggerType of ["event", "condition"]) {
+    const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        campaignId: "campaign-a",
+        triggerType,
+        timezone: "Asia/Kolkata",
+        scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" },
+      }),
+    });
+    assert.equal(response.status, 400, `${triggerType} trigger must fail closed until its execution path is implemented`);
+  }
+});
