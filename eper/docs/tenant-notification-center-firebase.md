@@ -56,7 +56,11 @@ Enforce tenant/application ownership in data access, not merely by filtering the
 Every route requires trusted customer identity and application assignment checks. Secret values are write-only references; GET returns masked/configured metadata only. Test-send is sandbox-only by default and must not become an arbitrary-message relay.
 
 ## UI placement
-Customer login → select application → Notifications:
+Customer login → My Applications → select application → Settings → Alerts & Notifications:
+
+This is a customer application-admin capability, not a platform-admin global settings page. Do not expose a single global alert configuration that controls multiple applications. Even when a Firebase project is reused, application-level event subscriptions, templates, recipients, consent, delivery logs and audit events remain separate.
+
+Customer login → My Applications → select application → Settings → Alerts & Notifications:
 - Overview and delivery health
 - Firebase connection and topology (shared or dedicated)
 - Event/alert rules and templates

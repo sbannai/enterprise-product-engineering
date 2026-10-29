@@ -1,0 +1,255 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createAppServer } from "../dist/apps/api/server.js";
+
+const ADMIN_TOKEN = "ai-integration-admin-token-with-more-than-32-characters";
+const AGENT_TOKEN_A = "ai-agent-maker-token-with-more-than-32-characters";
+const AGENT_TOKEN_B = "ai-agent-reviewer-token-with-more-than-32-characters";
+const AGENT_TOKEN_C = "ai-agent-other-tenant-token-with-more-than-32-characters";
+
+function fakeStore() {
+  let config = { applications: { "app-off": { enabled: false, provider: "none" }, "app-on": { enabled: true, provider: "openai" }, "app-two": { enabled: true, provider: "openai" }, "app-no-provider": { enabled: true, provider: "none" } } };
+  let version = 1;
+  const calls = [];
+  return {
+    calls,
+    async assertReady() {},
+    async get(tenantId, resourceType) {
+      calls.push({ method: "get", tenantId, resourceType });
+      if (resourceType !== "ai-integrations" || tenantId !== "tenant-a") return null;
+      return { tenantId, resourceType, config, version, updatedAt: new Date().toISOString(), updatedBy: "admin-a" };
+    },
+    async replace(input) {
+      calls.push({ method: "replace", input });
+      if (input.expectedVersion !== version) {
+        const error = new Error("ADMIN_CONFIGURATION_VERSION_CONFLICT");
+        error.currentVersion = version;
+        throw error;
+      }
+      config = input.config;
+      version += 1;
+      return { tenantId: input.tenantId, resourceType: input.resourceType, config, version, updatedAt: new Date().toISOString(), updatedBy: input.actorId };
+    },
+  };
+}
+
+async function withServer(t, store, extraEnv = {}, agentDraftStore) {
+  const keys = [
+    "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
+    "EPER_ADMIN_CONFIG_API_TOKEN", "EPER_ADMIN_CONFIG_API_ENABLED",
+    "EPER_AGENTS_API_ENABLED", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS", "EPER_AGENTS_PRINCIPAL_TENANTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
+    EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({ [ADMIN_TOKEN]: { tenantId: "tenant-a", actorId: "admin-a" } }),
+    EPER_AGENTS_API_ENABLED: "true",
+    EPER_AGENTS_TENANT_ID: "tenant-a",
+    EPER_AGENTS_PRINCIPAL_TOKENS: "maker-a=" + AGENT_TOKEN_A + ";reviewer-b=" + AGENT_TOKEN_B + ";maker-other=" + AGENT_TOKEN_C,
+    EPER_AGENTS_PRINCIPAL_TENANTS_JSON: JSON.stringify({ "maker-a": "tenant-a", "reviewer-b": "tenant-a", "maker-other": "tenant-b" }),
+    ...extraEnv,
+  });
+  const server = createAppServer({ adminConfigurationStore: store, agentDraftStore });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const base = `http://127.0.0.1:${address.port}`;
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  });
+  return { base };
+}
+
+test("AI integration admin UI is responsive page served on same origin", async (t) => {
+  const { base } = await withServer(t, fakeStore());
+  const response = await fetch(base + "/admin/ai-integrations");
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /AI Integration Controls/);
+  assert.match(html, /Switch OFF/);
+  assert.match(html, /Application ID/);
+  assert.match(html, /Configuration version/);
+});
+
+test("AI integration config requires mapped admin identity and saves versioned tenant config", async (t) => {
+  const store = fakeStore();
+  const { base } = await withServer(t, store);
+  const unauthorized = await fetch(base + "/admin/config/ai-integrations");
+  assert.equal(unauthorized.status, 401);
+
+  const headers = { authorization: "Bearer " + ADMIN_TOKEN, "content-type": "application/json" };
+  const loaded = await fetch(base + "/admin/config/ai-integrations", { headers });
+  assert.equal(loaded.status, 200);
+  const current = await loaded.json();
+  assert.equal(current.config.applications["app-off"].enabled, false);
+
+  const saved = await fetch(base + "/admin/config/ai-integrations", {
+    method: "PUT", headers,
+    body: JSON.stringify({ expectedVersion: current.version, config: { applications: {
+      "app-off": { enabled: true, provider: "openai" },
+    } } }),
+  });
+  assert.equal(saved.status, 200);
+  const result = await saved.json();
+  assert.equal(result.config.applications["app-off"].enabled, true);
+  assert.equal(result.version, current.version + 1);
+  assert.equal(store.calls.at(-1).input.resourceType, "ai-integrations");
+  assert.equal(store.calls.at(-1).input.tenantId, "tenant-a");
+});
+
+test("AI Integration package switch governs CRM, Sales, and Marketing together", async (t) => {
+  const store = fakeStore();
+  const { base } = await withServer(t, store);
+  const cases = [
+    { agent: "crm", intent: "lead-qualification" },
+    { agent: "sales", intent: "follow-up" },
+    { agent: "marketing", intent: "campaign-brief" },
+  ];
+  const request = (agent, intent, applicationId, token = AGENT_TOKEN_A) => fetch(
+    base + "/v1/agents/" + agent + "/drafts?applicationId=" + applicationId,
+    { method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+      body: JSON.stringify({ intent, input: {} }) },
+  );
+
+  const unauthorized = await fetch(base + "/v1/agents/sales/drafts?applicationId=app-off", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ intent: "follow-up", input: {} }),
+  });
+  assert.equal(unauthorized.status, 401);
+
+  for (const item of cases) {
+    const off = await request(item.agent, item.intent, "app-off");
+    assert.equal(off.status, 403, item.agent + " must be blocked when the AI Integration package is OFF");
+    assert.equal((await off.json()).error, "ai_integration_disabled_for_application");
+  }
+
+  const missingApp = await fetch(base + "/v1/agents/sales/drafts", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "follow-up", input: {} }),
+  });
+  assert.equal(missingApp.status, 400);
+
+  const providerMissing = await request("crm", "lead-qualification", "app-no-provider");
+  assert.equal(providerMissing.status, 403);
+  assert.equal((await providerMissing.json()).error, "ai_integration_provider_not_configured");
+
+  for (const item of cases) {
+    const on = await request(item.agent, item.intent, "app-on");
+    assert.equal(on.status, 201, item.agent + " should be available when the AI Integration package is ON");
+    const result = await on.json();
+    assert.equal(result.controls.externalActionsExecuted, false);
+    assert.equal(result.controls.humanApprovalRequired, true);
+  }
+});
+
+test("AI integration settings reject unsupported providers and malformed applications", async (t) => {
+  const { base } = await withServer(t, fakeStore());
+  const headers = { authorization: "Bearer " + ADMIN_TOKEN, "content-type": "application/json" };
+  const badProvider = await fetch(base + "/admin/config/ai-integrations", {
+    method: "PUT", headers,
+    body: JSON.stringify({ expectedVersion: 1, config: { applications: { "app-a": { enabled: true, provider: "unknown" } } } }),
+  });
+  assert.equal(badProvider.status, 400);
+  const badId = await fetch(base + "/admin/config/ai-integrations", {
+    method: "PUT", headers,
+    body: JSON.stringify({ expectedVersion: 1, config: { applications: { "../app": { enabled: false, provider: "none" } } } }),
+  });
+  assert.equal(badId.status, 400);
+});
+
+test("AI agent requests fail closed when the policy store is unavailable", async (t) => {
+  const store = fakeStore();
+  store.get = async () => { throw new Error("simulated policy database outage"); };
+  const { base } = await withServer(t, store);
+  const response = await fetch(base + "/v1/agents/crm/drafts?applicationId=app-on", {
+    method: "POST",
+    headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "ai_integration_policy_unavailable");
+});
+
+test("AI integration policy uses the authenticated principal tenant, not deployment default", async (t) => {
+  const store = fakeStore();
+  const { base } = await withServer(t, store);
+  const response = await fetch(base + "/v1/agents/crm/drafts?applicationId=app-on", {
+    method: "POST",
+    headers: { authorization: "Bearer " + AGENT_TOKEN_C, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "ai_integration_disabled_for_application");
+  assert.equal(store.calls.at(-1).tenantId, "tenant-b");
+});
+
+test("agent endpoints fail closed when authenticated principal has no tenant mapping", async (t) => {
+  const { base } = await withServer(t, fakeStore(), { EPER_AGENTS_PRINCIPAL_TENANTS_JSON: "{}" });
+  const response = await fetch(base + "/v1/agents/crm/drafts?applicationId=app-on", {
+    method: "POST",
+    headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "agents_principal_tenant_mapping_unconfigured");
+});
+
+test("agent drafts and approvals are isolated by application within one tenant", async (t) => {
+  const { base } = await withServer(t, fakeStore());
+  const make = async (applicationId) => fetch(base + "/v1/agents/crm/drafts?applicationId=" + applicationId, {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "lead-qualification", input: {} }),
+  });
+  const created = await make("app-two");
+  assert.equal(created.status, 201);
+  const draft = (await created.json()).draft;
+  assert.equal(draft.applicationId, "app-two");
+  const listed = await fetch(base + "/v1/agents/drafts?applicationId=app-on", { headers: { authorization: "Bearer " + AGENT_TOKEN_A } });
+  assert.equal(listed.status, 200);
+  const list = await listed.json();
+  assert.ok(list.drafts.every((item) => item.applicationId === "app-on"));
+  const review = await fetch(base + "/v1/agents/drafts/" + draft.id + "/approve?applicationId=app-on", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_B, "content-type": "application/json" }, body: JSON.stringify({}),
+  });
+  assert.equal(review.status, 404);
+  assert.equal((await review.json()).error, "draft_not_found");
+});
+
+
+test("agent workflow routes use injected durable draft store", async (t) => {
+  const saved = new Map();
+  const agentDraftStore = {
+    async create(draft) { saved.set(draft.id, { ...draft }); return { ...draft }; },
+    async list(tenantId, applicationId, status) {
+      return [...saved.values()].filter((d) => d.tenantId === tenantId && d.applicationId === applicationId && (!status || d.status === status));
+    },
+    async review(input) {
+      const draft = saved.get(input.id);
+      if (!draft || draft.tenantId !== input.tenantId || draft.applicationId !== input.applicationId) return { outcome: "not_found" };
+      if (draft.createdBy === input.reviewerId) return { outcome: "maker_checker" };
+      if (draft.status !== "PENDING_APPROVAL") return { outcome: "already_reviewed", status: draft.status };
+      Object.assign(draft, { status: input.status, reviewedBy: input.reviewerId, reviewedAt: new Date().toISOString(), reviewNote: input.note });
+      return { outcome: "reviewed", draft: { ...draft } };
+    },
+  };
+  const { base } = await withServer(t, fakeStore(), {}, agentDraftStore);
+  const created = await fetch(base + "/v1/agents/sales/drafts?applicationId=app-two", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_A, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "follow-up", input: { objective: "renewal" } }),
+  });
+  assert.equal(created.status, 201);
+  const draft = (await created.json()).draft;
+  const listed = await fetch(base + "/v1/agents/drafts?applicationId=app-two", { headers: { authorization: "Bearer " + AGENT_TOKEN_A } });
+  assert.equal(listed.status, 200);
+  const list = await listed.json();
+  assert.equal(list.persistence, "postgres");
+  assert.equal(list.total, 1);
+  const review = await fetch(base + "/v1/agents/drafts/" + draft.id + "/approve?applicationId=app-two", {
+    method: "POST", headers: { authorization: "Bearer " + AGENT_TOKEN_B, "content-type": "application/json" }, body: JSON.stringify({ note: "Reviewed" }),
+  });
+  assert.equal(review.status, 200);
+  assert.equal((await review.json()).draft.status, "APPROVED");
+});

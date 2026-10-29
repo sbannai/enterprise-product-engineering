@@ -1,7 +1,7 @@
 import { applicationToastMarkup } from "./app-toast.js";
 /**
- * Customer portal navigation prototype.
- * Static design preview only: it is not an authenticated customer session and makes no API calls.
+ * Customer portal workspace prototype. API-backed sections require tenant-scoped customer access;
+ * the preview itself is not proof of a deployed or accepted customer session.
  */
 export const customerPortalPreviewHtml = String.raw`<!doctype html>
 <html lang="en">
@@ -73,7 +73,9 @@ help:{title:"Help Center",headline:"Find answers and get support",description:"P
 growth:{title:"Growth Hub",headline:"Your growth resources",description:"Growth content available to your customer tenant.",cards:[]},
 apps:{title:"My Applications",headline:"Your applications",description:"Application-specific information is shown only when an authorized application API is available.",cards:[]},
  assets:{title:"Client Assets",headline:"All your assets, in one place",description:"Documents, videos and shared files across your assigned applications, loaded through one tenant-scoped API call.",cards:[]},
-settings:{title:"Settings",headline:"Your workspace settings",description:"Workspace settings remain separate from administration controls.",cards:[]},
+settings:{title:"Application Settings",headline:"Configure each application independently",description:"Select an application, then manage its own integrations and alert policies. Video conferencing and alerts belong in the customer admin workspace—not the platform admin panel.",cards:[["▦","Select an application","Choose an application assigned to your customer before editing its settings. Each application has an isolated configuration scope.","apps"],["▣","Video conferencing","Configure this application’s meeting provider, connection reference, meeting defaults, and connection health independently.","video"],["♧","Alerts & notifications","Configure this application’s alert events, channels, recipients, quiet hours, and delivery history independently.","alerts"],["⚙","Application preferences","Manage locale, currency display, workflow preferences, and other settings for this application.","settings"]]},
+video:{title:"Video Conferencing",headline:"Video conferencing · selected application",description:"Preview only. Provider credentials and connection tests must be handled by authorized application-scoped APIs.",cards:[["▣","Meeting provider","Choose Google Meet, Zoom, or another approved provider for this application only.","video"],["⚿","Connection & defaults","Store only a server-side credential reference; configure meeting defaults and inspect sanitized connection health.","video"],["↩","Back to settings","Return to the application settings overview.","settings"]]},
+alerts:{title:"Alerts & Notifications",headline:"Alerts for the selected application",description:"Each application owns its alert rules, templates, audiences, channels, and delivery history—even when a provider project is shared.",cards:[["♧","Alert rules","Select event subscriptions, severity, templates, locale, timezone, and quiet hours for this application.","alerts"],["◎","Recipients & channels","Manage application-member audiences and approved in-app, push, email, or WhatsApp channels with consent controls.","alerts"],["▤","Delivery history","Review retries, failures, idempotency outcomes, and audit references for this application only.","alerts"],["↩","Back to settings","Return to the application settings overview.","settings"]]},
 tickets:{title:"Tickets & Feedback",headline:"Support, without the clutter",description:"Ticket submission is enabled only when ticketing and application assignment are configured for your tenant.",cards:[]}
 };
 function safeText(value){return String(value??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
