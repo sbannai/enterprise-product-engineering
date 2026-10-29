@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { sendApiSuccess, sendApiError, resolveApiRequestId } from "../dist/apps/api/api-response.js";
+import { sendApiSuccess, sendApiError, sendApiLegacyJson, resolveApiRequestId } from "../dist/apps/api/api-response.js";
 
 test("API success envelope standardizes headers and request correlation", async () => {
   const server = createServer((request, response) => sendApiSuccess(request, response, 200, { items: [1, 2] }));
@@ -74,4 +74,29 @@ test("API 205 success has no body and rejects payload data", async () => {
 
 test("API success helper rejects a 205 response with content", () => {
   assert.throws(() => sendApiSuccess({ headers: {} }, {}, 205, { changed: true }), /API_SUCCESS_STATUS_OR_BODY_INVALID/);
+});
+
+
+test("legacy JSON writer preserves ordinary payloads and suppresses 204/205 bodies", async () => {
+  const server = createServer((request, response) => {
+    const status = Number(new URL(request.url ?? "/", "http://localhost").pathname.slice(1));
+    sendApiLegacyJson(request, response, status, { legacy: true });
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const legacy = await fetch(base + "/200", { headers: { "x-correlation-id": "legacy-body-test" } });
+    assert.equal(legacy.status, 200);
+    assert.deepEqual(await legacy.json(), { legacy: true });
+    assert.equal(legacy.headers.get("x-request-id"), "legacy-body-test");
+
+    for (const status of [204, 205]) {
+      const response = await fetch(base + "/" + status);
+      assert.equal(response.status, status);
+      assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+      assert.equal(response.headers.get("x-request-id")?.length > 0, true);
+      assert.equal(await response.text(), "");
+    }
+  } finally { await new Promise((resolve) => server.close(resolve)); }
 });
