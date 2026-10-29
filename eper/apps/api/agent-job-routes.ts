@@ -127,6 +127,10 @@ export async function handleAgentJobRoute(
       return true;
     }
     if (request.method === "POST" && pathname === "/v1/agent-jobs") {
+      if (process.env.EPER_AGENT_JOB_WORKER_ENABLED !== "true") {
+        sendError(request, response, 503, "AGENT_JOB_WORKER_UNAVAILABLE", "Agent job enqueueing is disabled until a worker is configured and enabled.");
+        return true;
+      }
       const body = await readBody(request);
       const validated = validateCreateAgentJobRequest(body);
       if (!identity.applicationIds.includes(validated.applicationId)) {
