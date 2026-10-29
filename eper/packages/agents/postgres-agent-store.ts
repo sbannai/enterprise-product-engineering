@@ -71,7 +71,7 @@ export interface ReviewAgentDraftInput {
   environment: AuditEnvironment;
 }
 export class AgentDraftConflictError extends Error {
-  constructor(code: "AGENT_DRAFT_NOT_FOUND" | "AGENT_DRAFT_ALREADY_REVIEWED" | "AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL" | "STALE_DRAFT_VERSION" | "STALE_DRAFT_HASH" | "MAKER_CHECKER_SEPARATION_REQUIRED") {
+  constructor(code: "AGENT_DRAFT_NOT_FOUND" | "AGENT_DRAFT_ALREADY_REVIEWED" | "AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL" | "AGENT_DRAFT_EXPIRED" | "STALE_DRAFT_VERSION" | "STALE_DRAFT_HASH" | "MAKER_CHECKER_SEPARATION_REQUIRED") {
     super(code);
     this.name = "AgentDraftConflictError";
   }
@@ -418,12 +418,25 @@ export class PostgresAgentStore {
     const client = await this.scopedClient(input.tenantId, input.applicationId);
     try {
       const result = await client.query<Record<string, unknown>>(
-        "SELECT draft_id,job_id,status,version,content_hash,created_by FROM eper_agent_job_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3 FOR UPDATE",
+        "SELECT draft_id,job_id,status,version,content_hash,created_by,expires_at FROM eper_agent_job_drafts WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3 FOR UPDATE",
         [input.tenantId, input.applicationId, input.draftId],
       );
       const draft = result.rows[0];
       if (!draft) throw new AgentDraftConflictError("AGENT_DRAFT_NOT_FOUND");
       if (draft.status !== "pending_approval") throw new AgentDraftConflictError("AGENT_DRAFT_ALREADY_REVIEWED");
+      if (new Date(String(draft.expires_at)).getTime() <= Date.now()) {
+        await client.query("UPDATE eper_agent_job_drafts SET status='expired',version=version+1 WHERE tenant_id=$1 AND application_id=$2 AND draft_id=$3 AND status='pending_approval'", [input.tenantId, input.applicationId, input.draftId]);
+        await client.query("UPDATE eper_agent_jobs SET status='failed',failure_code='AGENT_DRAFT_EXPIRED',version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3 AND status='awaiting_approval'", [input.tenantId, input.applicationId, String(draft.job_id)]);
+        await appendAuditEventInTransaction(client, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "human", actorId: input.reviewerId, action: "agent.draft.review_expired", outcome: "denied",
+          reasonCode: "AGENT_DRAFT_EXPIRED", resourceType: "agent-draft", resourceId: input.draftId,
+          correlationId: input.correlationId, source: "api", operationName: "POST /v1/agent-drafts/:draftId/review",
+          payload: { execution: "NOT_EXECUTED" },
+        });
+        await client.query("COMMIT");
+        throw new AgentDraftConflictError("AGENT_DRAFT_EXPIRED");
+      }
       const jobState = await client.query<Record<string, unknown>>(
         "SELECT status FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3 FOR UPDATE",
         [input.tenantId, input.applicationId, String(draft.job_id)],
