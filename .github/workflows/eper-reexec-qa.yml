@@ -8,6 +8,7 @@ on:
       - "eper/**"
       - ".github/workflows/**"
   push:
+    branches: ["main"]
     paths:
       - "eper/**"
       - ".github/workflows/**"
