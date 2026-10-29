@@ -69,30 +69,61 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Test market price-book contract
-        run: node --test tests/market-price-book.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/market-price-book.test.mjs 2>&1 | tee reexec-evidence/ci-logs/market-price-book.log
       - name: Test PostgreSQL runtime pool configuration
-        run: node --test tests/postgres-payment-runtime.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/postgres-payment-runtime.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-payment-runtime.log
       - name: Test PostgreSQL-backed payment and receipt API flow
-        run: node --test tests/postgres-payment-api-route.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/postgres-payment-api-route.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-payment-api-route.log
       - name: Test legacy orders without immutable transaction snapshots fail closed
-        run: node --test tests/postgres-legacy-order-snapshot-gate.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/postgres-legacy-order-snapshot-gate.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-legacy-order-snapshot-gate.log
       - name: Test payment-store validation and transaction rollback cases
-        run: node --test tests/postgres-payment-store.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/postgres-payment-store.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-payment-store.log
       - name: Test production payment routes remain fail-closed
-        run: node --test tests/payment-production-guard.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/payment-production-guard.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-production-guard.log
       - name: Test payment readiness blockers and production review gate
-        run: node --test tests/payment-readiness.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/payment-readiness.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-readiness.log
       - name: Test gateway signature and receipt safety regressions
-        run: node --test tests/payment-gateway.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/payment-gateway.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-gateway.log
       - name: Test trusted invoice amount authority contract
-        run: node --test tests/invoice-amount-authority.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/invoice-amount-authority.test.mjs 2>&1 | tee reexec-evidence/ci-logs/invoice-amount-authority.log
       - name: Test HTTP invoice authority response validation
-        run: node --test tests/http-invoice-amount-source.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/http-invoice-amount-source.test.mjs 2>&1 | tee reexec-evidence/ci-logs/http-invoice-amount-source.log
       - name: Test generic transaction and receipt contract
-        run: node --test tests/transaction-receipt-contract.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/transaction-receipt-contract.test.mjs 2>&1 | tee reexec-evidence/ci-logs/transaction-receipt-contract.log
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply all payment migrations through the deployment runner
         run: npm run migrate:payments
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
+
+      - name: Upload payment diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-PAYMENT-POSTGRES-DIAGNOSTICS-${{ github.run_id }}
+          path: eper/reexec-evidence/ci-logs/
+          if-no-files-found: warn
+          retention-days: 14
