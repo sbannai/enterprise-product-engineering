@@ -22,7 +22,7 @@ function fakeStore({ job = baseJob, saved = { draftId: "draft-0001", contentHash
       if (persistError) throw persistError;
       return saved;
     },
-    async failOrRetryJob(input) { calls.fail.push(input); return retry; },
+    async failOrRetryJob(input) { calls.fail.push(input); return input.retryable ? retry : { status: "failed" }; },
   };
 }
 
@@ -76,7 +76,8 @@ test("worker schedules bounded retry when draft persistence fails", async () => 
 test("worker does not retry unsupported intents", async () => {
   const store = fakeStore({ job: { ...baseJob, intent: "unknown-intent" } });
   const result = await processAgentJobOnce(options(store));
-  assert.equal(result.outcome, "retry_scheduled");
+  assert.equal(result.outcome, "failed");
+  assert.equal(result.failureCode, "AGENT_INTENT_UNSUPPORTED");
   assert.equal(store.calls.fail[0].failureCode, "AGENT_INTENT_UNSUPPORTED");
   assert.equal(store.calls.fail[0].retryable, false);
 });
