@@ -44,11 +44,13 @@ jobs:
           cache-dependency-path: eper/package-lock.json
       - name: Install locked dependencies
         run: npm ci
+      # Run the isolated scheduler URL/fail-closed contract before the shared TypeScript build,
+      # so a build failure does not hide whether this focused regression suite passes.
+      - name: Test campaign scheduler database URL selection and fail-closed migration
+        run: npm run test:campaign-scheduler-url
       - name: Build EPER
         run: npm run build
       - name: Test payment gateway verification, tenant isolation, and receipt access
         run: node --test tests/payment-gateway.test.mjs
       - name: Test trusted invoice amount authority
         run: node --test tests/invoice-amount-authority.test.mjs
-      - name: Test campaign scheduler database URL selection and fail-closed migration
-        run: npm run test:campaign-scheduler-url
