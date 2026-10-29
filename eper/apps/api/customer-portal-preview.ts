@@ -49,6 +49,8 @@ main{padding:30px;min-width:0}.top{display:flex;justify-content:space-between;ga
  <button data-view="assets"><span class="nav-icon">▧</span>Client Assets</button>
 <button data-view="tickets"><span class="nav-icon">✉</span>Tickets &amp; Feedback</button>
 <button data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+<button data-view="video"><span class="nav-icon">▣</span>Video Conferencing</button>
+<button data-view="alerts"><span class="nav-icon">♧</span>Alerts &amp; Notifications</button>
 </nav></aside>
 <main><div class="top"><div><div class="eyebrow">EPER / Customer workspace</div><h1 id="pageTitle">Your workspace</h1></div><span class="preview">NOT CONNECTED</span></div>
 <section class="intro"><h2 id="headline">Welcome to your customer workspace</h2><p id="description">Your application tools, help resources, and growth resources belong in the customer experience—not in the administration workspace.</p></section>
