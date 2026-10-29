@@ -622,3 +622,25 @@ test("pause cannot mutate a completed one-time schedule", async () => {
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
+
+
+test("event execution idempotency key stays within the database limit for maximum-length event identities", async () => {
+  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const input = {
+    tenantId: "tenant-a",
+    applicationId: "app-a",
+    eventType: "e".repeat(128),
+    eventId: "i".repeat(256),
+    occurredAt: "2030-01-01T00:00:00.000Z",
+    payload: {},
+  };
+  await store.enqueueEventExecutions(input);
+  const insert = calls.find((call) => call.sql.includes("INSERT INTO eper_campaign_executions"));
+  assert.ok(insert);
+  assert.match(insert.sql, /'event:' \|\| \$7 \|\| ':' \|\| s\.id::text/);
+  assert.equal(insert.values[6].length, 64, "SHA-256 identity digest must be bounded");
+  assert.match(insert.values[6], /^[a-f0-9]{64}$/);
+  assert.equal(insert.values[3], input.eventId);
+  assert.equal(insert.values[4], input.eventType);
+});
