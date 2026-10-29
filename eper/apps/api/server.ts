@@ -520,7 +520,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           scheduleDefinition: scheduleDefinition as Record<string, unknown>,
           createdBy: identity.actorId,
         });
-        sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule });
+        sendApiSuccess(request, response, 202, { scheduleId: schedule.id, status: schedule.status, approvalStatus: schedule.approvalStatus, schedule }); return;
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         const code = message === "CAMPAIGN_AUDIT_PERSISTENCE_FAILED" ? message
