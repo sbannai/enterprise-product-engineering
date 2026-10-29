@@ -214,5 +214,8 @@ test("campaign schedule console serves responsive UI and lifecycle controls", as
   assert.match(html, /Pause/);
   assert.match(html, /Resume/);
   assert.match(html, /Cancel/);
+  assert.match(html, /configuredOnceAt/);
+  assert.match(html, /<option value="once">Once<\/option><option value="recurring">Recurring<\/option>/);
+  assert.doesNotMatch(html, /<option value="event">|<option value="condition">/);
   assert.match(html, /aria-live="polite"/);
 });
