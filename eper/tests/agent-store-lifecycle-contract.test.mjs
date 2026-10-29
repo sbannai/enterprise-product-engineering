@@ -91,3 +91,23 @@ test("durable agent job drafts use their dedicated table", async () => {
   assert.match(source, /eper_agent_job_drafts/);
   assert.doesNotMatch(source, /eper_agent_drafts/);
 });
+
+test("agent job creation and cancellation fail closed on explicit role allowlists", () => {
+  assert.ok(routes.includes("EPER_AGENT_JOB_CREATOR_ROLE_KEYS"));
+  assert.ok(routes.includes("AGENT_JOB_CREATOR_ROLE_REQUIRED"));
+  assert.ok(routes.includes("EPER_AGENT_JOB_CANCELLER_ROLE_KEYS"));
+  assert.ok(routes.includes("AGENT_JOB_CANCELLER_ROLE_REQUIRED"));
+  assert.ok(routes.includes("options.store.cancelJob"));
+  assert.ok(routes.includes("AGENT_JOB_NOT_CANCELLABLE"));
+});
+test("expired drafts cannot be approved and are terminally marked with an audit event", () => {
+  assert.ok(source.includes("draft.expires_at"));
+  assert.ok(source.includes("status='expired'"));
+  assert.ok(source.includes("AGENT_DRAFT_EXPIRED"));
+  assert.ok(source.includes("agent.draft.review_expired"));
+});
+test("durable draft read maps database fields to public camelCase contract", () => {
+  assert.ok(routes.includes("draftId: draft.draft_id"));
+  assert.ok(routes.includes("contentHash: draft.content_hash"));
+  assert.ok(routes.includes("expiresAt: draft.expires_at"));
+});
