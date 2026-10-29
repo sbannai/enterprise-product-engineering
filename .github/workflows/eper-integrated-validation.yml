@@ -1,20 +1,20 @@
 name: EPER Integrated Validation (same-commit end-to-end)
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 on:
   pull_request:
     branches: ["main"]
     paths:
       - "eper/**"
-      - ".github/workflows/eper-integrated-validation.yml"
+      - ".github/workflows/**"
   push:
     branches: ["main"]
     paths:
       - "eper/**"
-      - ".github/workflows/eper-integrated-validation.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
