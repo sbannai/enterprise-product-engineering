@@ -9,12 +9,17 @@ on:
       - '.github/workflows/eper-228-pilot-matrix.yml'
       - '.github/workflows/**'
   push:
+    branches: ["main"]
     paths:
       - 'eper/**'
-      - '.github/workflows/eper-228-pilot-matrix.yml'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
+
+concurrency:
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   chapter-pilot-matrix:
