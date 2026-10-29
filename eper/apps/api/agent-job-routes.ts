@@ -37,7 +37,8 @@ export async function handleAgentJobRoute(
   pathname: string,
   options: { store?: PostgresAgentStore; resolveIdentity: AgentJobIdentityResolver; environment: AuditEnvironment },
 ): Promise<boolean> {
-  if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname) && !/^\/v1\/agent-drafts\/[0-9a-f-]+(?:\/(approve|reject))?$/.test(pathname)) return false;
+  const cancelMatch = /^\/v1\/agent-jobs\/([0-9a-f-]+)\/cancel$/.exec(pathname);
+  if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname) && !cancelMatch && !/^\/v1\/agent-drafts\/[0-9a-f-]+(?:\/(approve|reject))?$/.test(pathname)) return false;
   if (!options.store) {
     sendError(request, response, 503, "AGENT_PERSISTENCE_UNAVAILABLE", "Durable agent job storage is not configured.");
     return true;
@@ -51,6 +52,32 @@ export async function handleAgentJobRoute(
   try {
     const reviewMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
     const draftMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)$/.exec(pathname);
+    if (request.method === "POST" && pathname === "/v1/agent-jobs") {
+      const creatorRoles = new Set((process.env.EPER_AGENT_JOB_CREATOR_ROLE_KEYS ?? "").split(";").map((role) => role.trim()).filter(Boolean));
+      if (!creatorRoles.has(identity.roleKey)) {
+        sendError(request, response, 403, "AGENT_JOB_CREATOR_ROLE_REQUIRED", "This role is not authorized to create agent jobs.");
+        return true;
+      }
+    }
+    if (request.method === "POST" && cancelMatch) {
+      const cancelRoles = new Set((process.env.EPER_AGENT_JOB_CANCELLER_ROLE_KEYS ?? "").split(";").map((role) => role.trim()).filter(Boolean));
+      if (!cancelRoles.has(identity.roleKey)) {
+        sendError(request, response, 403, "AGENT_JOB_CANCELLER_ROLE_REQUIRED", "This role is not authorized to cancel agent jobs.");
+        return true;
+      }
+      const applicationId = new URL(request.url ?? pathname, "http://localhost").searchParams.get("applicationId") ?? "";
+      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+        sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
+        return true;
+      }
+      const cancelled = await options.store.cancelJob({ tenantId: identity.tenantId, applicationId, jobId: cancelMatch[1], actorId: identity.actorId, environment: options.environment, correlationId: requestId });
+      if (!cancelled) {
+        sendError(request, response, 409, "AGENT_JOB_NOT_CANCELLABLE", "The job is missing or is no longer queued or running.");
+        return true;
+      }
+      sendApiSuccess(request, response, 200, { jobId: cancelMatch[1], status: "cancelled" });
+      return true;
+    }
     if (request.method === "GET" && draftMatch) {
       const applicationId = new URL(request.url ?? pathname, "http://localhost").searchParams.get("applicationId") ?? "";
       if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
@@ -62,7 +89,12 @@ export async function handleAgentJobRoute(
         sendError(request, response, 404, "AGENT_DRAFT_NOT_FOUND", "The requested draft was not found.");
         return true;
       }
-      sendApiSuccess(request, response, 200, { draft, execution: "NOT_EXECUTED" });
+      sendApiSuccess(request, response, 200, { draft: {
+        draftId: draft.draft_id, jobId: draft.job_id, agentId: draft.agent_id, intent: draft.intent,
+        status: draft.status, payload: draft.payload, sourceReferences: draft.source_references,
+        validationFindings: draft.validation_findings, contentHash: draft.content_hash,
+        version: draft.version, createdBy: draft.created_by, createdAt: draft.created_at, expiresAt: draft.expires_at,
+      }, execution: "NOT_EXECUTED" });
       return true;
     }
     if (request.method === "POST" && reviewMatch) {
@@ -140,7 +172,7 @@ export async function handleAgentJobRoute(
       return true;
     }
     const isDraftReviewRoute = /^\/v1\/agent-drafts\/[0-9a-f-]+\/(approve|reject)$/.test(pathname);
-    const allowedMethod = pathname === "/v1/agent-jobs" || isDraftReviewRoute ? "POST" : "GET";
+    const allowedMethod = pathname === "/v1/agent-jobs" || isDraftReviewRoute || cancelMatch ? "POST" : "GET";
     response.setHeader("allow", allowedMethod);
     sendError(request, response, 405, "METHOD_NOT_ALLOWED", "This HTTP method is not supported for the agent job or draft resource.");
     return true;
@@ -150,7 +182,7 @@ export async function handleAgentJobRoute(
     else if (error instanceof SyntaxError) sendError(request, response, 400, "INVALID_JSON_BODY", "The request body must contain valid JSON.");
     else if (message === "JSON_OBJECT_REQUIRED" || message.startsWith("INVALID_")) sendError(request, response, 400, message.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 64), "The agent job request is invalid.");
     else if (message === "AGENT_DRAFT_NOT_FOUND") sendError(request, response, 404, message, "The requested agent draft was not found.");
-    else if (["AGENT_DRAFT_ALREADY_REVIEWED","AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL","STALE_DRAFT_VERSION","STALE_DRAFT_HASH","MAKER_CHECKER_SEPARATION_REQUIRED"].includes(message)) sendError(request, response, 409, message, "The draft changed or is no longer eligible for review.");
+    else if (["AGENT_DRAFT_ALREADY_REVIEWED","AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL","AGENT_DRAFT_EXPIRED","STALE_DRAFT_VERSION","STALE_DRAFT_HASH","MAKER_CHECKER_SEPARATION_REQUIRED"].includes(message)) sendError(request, response, 409, message, "The draft changed or is no longer eligible for review.");
     else sendError(request, response, 503, "AGENT_JOB_SERVICE_UNAVAILABLE", "The agent job service could not complete the request.");
     return true;
   }
