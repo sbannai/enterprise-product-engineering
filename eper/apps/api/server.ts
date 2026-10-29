@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { sendApiSuccess, sendApiError, sendApiLegacyJson } from "./api-response.js";
+import { sendApiSuccess, sendApiError, sendApiLegacyJson, resolveApiRequestId } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
 import { createCapabilityServices } from "../../packages/capabilities/index.js";
