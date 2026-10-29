@@ -50,3 +50,19 @@ export function sendApiError(request: IncomingMessage, response: ServerResponse,
   }
   writeEnvelope(response, statusCode, { success: false, error, meta: { requestId } }, requestId);
 }
+
+/** Writes the unchanged legacy JSON body, except HTTP statuses that forbid response content. */
+export function sendApiLegacyJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+  const requestId = resolveApiRequestId(request);
+  response.setHeader("content-type", "application/json; charset=utf-8");
+  response.setHeader("cache-control", "no-store");
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-request-id", requestId);
+  if (statusCode === 204 || statusCode === 205) {
+    response.statusCode = statusCode;
+    response.end();
+    return;
+  }
+  response.writeHead(statusCode);
+  response.end(JSON.stringify(body));
+}
