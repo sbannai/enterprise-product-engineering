@@ -9,7 +9,7 @@
 - `X-Correlation-ID` is accepted only for 1–128 ASCII letters, digits, dot, underscore, colon, or hyphen; otherwise the server generates a UUID.
 - JSON success: `{ "success": true, "data": {}, "meta": { "requestId": "..." } }`.
 - JSON error: `{ "success": false, "error": { "code": "UPPER_SNAKE_CASE", "message": "..." }, "meta": { "requestId": "..." } }`. Include `error.details` only for safe, field-level validation issues.
-- Use real HTTP status codes. Responses with status `204`, `205`, or `304` must have an empty body; `304 Not Modified` remains a legacy HTTP response and is not represented as a JSON success/error envelope.
+- Use real HTTP status codes. Responses with status `204`, `205`, or `304` must have an empty body; `304 Not Modified` remains a legacy HTTP response and is not represented as a JSON envelope.
 - Do not expose stack traces, SQL, credentials, internal exception messages, or tenant secrets.
 - Existing successful legacy payloads are not silently wrapped; migrate each family with its clients and tests in the same change.
 - Routes using shared `sendJson()` can opt into standardized success and error envelopes by sending `Accept: application/vnd.eper.v1+json`; without it, legacy payloads remain unchanged.
