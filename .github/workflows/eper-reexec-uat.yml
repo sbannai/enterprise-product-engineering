@@ -3,14 +3,13 @@ name: EPER REEXEC-002 Controlled UAT Technical Simulation
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 on:
   pull_request:
     paths:
       - "eper/**"
       - ".github/workflows/eper-reexec-uat.yml"
-      - ".github/workflows/**"
   workflow_dispatch:
   push:
     paths:
@@ -20,6 +19,7 @@ on:
 jobs:
   controlled-uat-simulation:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
