@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendAuditEventInTransaction, type AuditEnvironment, type AuditSqlPool, type AuditSqlClient } from "../audit/audit-event-store.js";
 
 export type CampaignTriggerType = "once" | "recurring" | "event" | "condition";
@@ -337,7 +337,7 @@ export class PostgresCampaignSchedulerStore {
         `INSERT INTO eper_campaign_executions
           (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
          SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $3,
-           'event:' || $5 || ':' || $4 || ':' || s.id::text,
+           'event:' || $7 || ':' || s.id::text,
            jsonb_build_object('campaignId', s.campaign_id, 'eventType', $5, 'eventId', $4, 'eventPayload', $6::jsonb)
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$1 AND s.application_id=$2
@@ -345,7 +345,8 @@ export class PostgresCampaignSchedulerStore {
            AND s.schedule_definition->>'eventType'=$5
          ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
          RETURNING id`,
-        [tenantId, applicationId, occurredAt.toISOString(), eventId, eventType, JSON.stringify(payload)],
+        [tenantId, applicationId, occurredAt.toISOString(), eventId, eventType, JSON.stringify(payload),
+          createHash("sha256").update(eventType).update("\0").update(eventId).digest("hex")],
       );
       return result.rowCount ?? result.rows.length;
     } finally { client.release(); }
