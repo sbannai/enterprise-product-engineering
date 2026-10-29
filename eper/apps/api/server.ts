@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import type { Pool } from "pg";
 import { sendApiSuccess, sendApiError, resolveApiRequestId } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { executeIntegratedRequirement } from "../../packages/capability-router.js";
@@ -12,6 +13,7 @@ import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
+import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
@@ -20,18 +22,34 @@ import type { TrustedReceiptNumberSource } from "./payments.js";
 import type { TrustedTransactionSnapshotSource } from "../../packages/payments/transaction-receipt-contract.js";
 import { requirementBindings } from "../../packages/requirements/registry.js";
 import { handleAgentRoute, type AgentAuditWriter, type AgentDraftStore } from "../../packages/agents/agent-workflows.js";
+import { PostgresAgentStore, type AgentSqlPool } from "../../packages/agents/postgres-agent-store.js";
+import { handleAgentJobRoute } from "./agent-job-routes.js";
+import { appendAuditEvent, type AuditSqlPool } from "../../packages/audit/audit-event-store.js";
 import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import type { IntegrationPort } from "../../packages/integration/index.js";
+import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
+
+
+function acceptsVersionedJson(request: IncomingMessage): boolean {
+  return (request.headers.accept ?? "").split(",").some((value) => {
+    const [mediaType, ...parameters] = value.split(";");
+    if (mediaType.trim().toLowerCase() !== "application/vnd.eper.v1+json") return false;
+    const qualityParameter = parameters.map((parameter) => parameter.trim())
+      .find((parameter) => /^q\s*=/i.test(parameter));
+    if (!qualityParameter) return true;
+    const quality = Number(qualityParameter.split("=")[1]?.trim());
+    return Number.isFinite(quality) && quality > 0 && quality <= 1;
+  });
+}
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
-  // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
+  // A positively weighted versioned Accept value opts into the complete JSON envelope.
   // Without it, legacy bodies stay byte-shape compatible for existing consumers.
-  const acceptsV1 = (request.headers.accept ?? "")
-    .split(",")
-    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  const acceptsV1 = acceptsVersionedJson(request);
 
   if (acceptsV1 && statusCode >= 400 && statusCode <= 599) {
     const legacyCode = typeof body.error === "string" ? body.error : "request_failed";
@@ -67,9 +85,7 @@ function sendJson(request: IncomingMessage, response: ServerResponse, statusCode
 
 
 function sendMethodNotAllowed(request: IncomingMessage, response: ServerResponse, allow: string): void {
-  const acceptsV1 = (request.headers.accept ?? "")
-    .split(",")
-    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  const acceptsV1 = acceptsVersionedJson(request);
   if (acceptsV1) {
     response.setHeader("allow", allow);
     sendJson(request, response, 405, { error: "method_not_allowed" });
@@ -115,6 +131,12 @@ interface TrustedCustomerAccessIdentity {
   tenantId: string;
   actorId: string;
   roleKey: string;
+  /** Optional in the shared identity resolver; customer application routes fail closed without it. */
+  applicationIds?: string[];
+}
+
+interface TrustedAgentJobIdentity extends TrustedCustomerAccessIdentity {
+  applicationIds: string[];
 }
 
 /** Resolve customer identity only from server-side credential mapping; never from request JSON. */
@@ -130,13 +152,46 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
     if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
     if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
     const record = identity as Record<string, unknown>;
-    if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId.length > 128 ||
-        typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId.length > 128 ||
-        typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey.length > 128) return null;
-    return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey };
+    if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId !== record.tenantId.trim() || record.tenantId.length > 128 ||
+        typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId !== record.actorId.trim() || record.actorId.length > 128 ||
+        typeof record.roleKey !== "string" || !record.roleKey.trim() || record.roleKey !== record.roleKey.trim() || record.roleKey.length > 128) return null;
+    const rawApplicationIds = record.applicationIds;
+    const applicationIds = Array.isArray(rawApplicationIds) &&
+      rawApplicationIds.length > 0 &&
+      rawApplicationIds.every((id) => typeof id === "string" && /^[a-zA-Z0-9._-]{2,100}$/.test(id))
+      ? [...new Set(rawApplicationIds as string[])]
+      : undefined;
+    return { tenantId: record.tenantId, actorId: record.actorId, roleKey: record.roleKey, applicationIds };
   }
   return null;
 }
+
+/** Agent job access additionally requires an explicit server-side application assignment. */
+function resolveAgentJobIdentity(request: IncomingMessage): TrustedAgentJobIdentity | null {
+  const base = resolveCustomerAccessIdentity(request);
+  if (!base) return null;
+  const match = /^Bearer (.+)$/i.exec(request.headers.authorization ?? "");
+  if (!match) return null;
+  let mapping: unknown;
+  try { mapping = JSON.parse(process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON ?? ""); } catch { return null; }
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) return null;
+  const supplied = Buffer.from(match[1], "utf8");
+  for (const [credential, identity] of Object.entries(mapping as Record<string, unknown>)) {
+    const expected = Buffer.from(credential, "utf8");
+    if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
+    if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
+    const applications = (identity as Record<string, unknown>).applicationIds;
+    if (!Array.isArray(applications) || applications.length === 0 ||
+        applications.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9._-]{2,100}$/.test(id))) return null;
+    return { ...base, applicationIds: [...new Set(applications as string[])] };
+  }
+  return null;
+}
+
+export type CustomerAssetDownloadRequest = { tenantId: string; actorId: string; applicationId: string; assetId: string; accessReference: string; fileName: string; mimeType?: string };
+export type CustomerAssetDownloadResolver = (input: CustomerAssetDownloadRequest, requestId: string) => Promise<{ url: string; expiresAt: string } | null>;
+export type CustomerAssetAuditRecord = { tenantId: string; actorId: string; action: "customer.asset.download"; outcome: "success" | "denied" | "failure"; applicationId: string; assetId: string; requestId: string };
+export type CustomerAssetAuditWriter = (record: CustomerAssetAuditRecord) => Promise<void>;
 
 interface TrustedAdminConfigIdentity {
   tenantId: string;
@@ -174,9 +229,7 @@ async function handleDurableAdminConfig(
   serviceVersion?: string,
   initialPriceEntries: MarketPriceEntry[] = [],
 ): Promise<void> {
-  const correlationHeader = request.headers["x-correlation-id"];
-  const correlationId = typeof correlationHeader === "string" &&
-    /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+  const correlationId = resolveApiRequestId(request);
   const loadedConfigVersions = new Map<AdminConfigurationResource, number>();
   const getConfig = async (resource: AdminConfigurationResource) => {
     const saved = await store.get(identity.tenantId, resource);
@@ -363,10 +416,17 @@ async function handleDurableAdminConfig(
  * The local route is disabled by default and is not a production identity system.
  * Do not enable it on a publicly reachable deployment.
  */
-function createConfiguredCapabilityServices() {
+function createConfiguredCapabilityServices(postgresPool?: Pool) {
   const persistence = process.env.EPER_CAPABILITY_PERSISTENCE;
   if (persistence === undefined || persistence === "memory") {
     return createCapabilityServices();
+  }
+  if (persistence === "postgres") {
+    if (!postgresPool) throw new Error("EPER_CAPABILITY_POSTGRES_POOL_REQUIRED");
+    if (process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+      throw new Error("EPER_CAPABILITY_POSTGRES_REQUIRES_DURABLE_AUDIT");
+    }
+    return createCapabilityServices({ persistence: "postgres", postgresPool });
   }
   if (persistence !== "json-file") {
     throw new Error("EPER_CAPABILITY_PERSISTENCE_UNSUPPORTED");
@@ -378,8 +438,8 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
-  const services = createConfiguredCapabilityServices();
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+  const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
   let marketPriceEntries: MarketPriceEntry[] = [];
@@ -396,6 +456,48 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
     sandboxEnabled: process.env.EPER_PAYMENT_SANDBOX_ENABLED === "true",
   };
   const workflowConfig = new WorkflowConfigurationService();
+  let configuredAssetStorageHosts: string[] = [];
+  try {
+    const parsedHosts: unknown = JSON.parse(process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON ?? "null");
+    if (Array.isArray(parsedHosts) && parsedHosts.every((host) => typeof host === "string" && host.trim() === host && host.length > 0)) {
+      configuredAssetStorageHosts = parsedHosts;
+    }
+  } catch {
+    configuredAssetStorageHosts = [];
+  }
+  const assetDownloadResolver: CustomerAssetDownloadResolver | undefined = options.assetDownloadResolver ?? (
+    options.assetStoragePort && configuredAssetStorageHosts.length > 0
+      ? createStorageDownloadAdapter(options.assetStoragePort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
+  const assetAuditWriter: CustomerAssetAuditWriter | undefined = options.assetAuditWriter ?? (
+    process.env.EPER_AUDIT_PERSISTENCE === "postgres" && options.capabilityPool
+      ? async (record) => {
+          const configuredEnvironment = process.env.EPER_AUDIT_ENVIRONMENT;
+          if (configuredEnvironment !== "production" && configuredEnvironment !== "uat" && configuredEnvironment !== "sandbox") {
+            throw new Error("EPER_AUDIT_ENVIRONMENT_REQUIRED");
+          }
+          await appendAuditEvent(options.capabilityPool as unknown as AuditSqlPool, {
+            tenantId: record.tenantId,
+            applicationId: record.applicationId,
+            environment: configuredEnvironment,
+            actorType: "human",
+            actorId: record.actorId,
+            action: record.action,
+            outcome: record.outcome,
+            reasonCode: record.outcome === "denied" ? "ASSET_ACCESS_DENIED" : record.outcome === "failure" ? "ASSET_DOWNLOAD_FAILED" : undefined,
+            resourceType: "client-asset",
+            resourceId: record.assetId,
+            operationId: record.requestId,
+            requestId: record.requestId,
+            source: "api",
+            operationName: "customer.asset.download",
+            serviceVersion: process.env.EPER_BUILD_ID,
+            payload: { applicationId: record.applicationId },
+          });
+        }
+      : undefined
+  );
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
@@ -570,6 +672,152 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       sendMethodNotAllowed(request, response, "GET, HEAD"); return;
     }
 
+
+    // Single-call client asset manifest across every application assigned to this customer.
+    // Returns safe metadata and opaque storage references only; binary content is fetched separately.
+    if (requestUrl.pathname === "/customer/assets") {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      let modulesConfig: unknown;
+      let assignmentsConfig: unknown;
+      let assetsConfig: unknown;
+      try {
+        modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+        assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+        assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+      } catch {
+        sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+      }
+      const tenantModules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+        ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantModules) || !tenantModules.includes("client-assets")) {
+        sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
+      }
+      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantAssignments) || tenantAssignments.some((id) =>
+        typeof id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(id))) {
+        sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+      }
+      const tenantAssets = assetsConfig && typeof assetsConfig === "object" && !Array.isArray(assetsConfig)
+        ? (assetsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!tenantAssets || typeof tenantAssets !== "object" || Array.isArray(tenantAssets)) {
+        sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+      }
+      const allAssets: Record<string, unknown>[] = [];
+      const applicationsWithAssets = new Set<string>();
+      for (const assignedId of [...new Set(tenantAssignments as string[])]) {
+        const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
+        if (applicationAssets === undefined) continue;
+        if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
+          sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+        }
+        for (const item of applicationAssets) {
+          if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+          const asset = item as Record<string, unknown>;
+          if (typeof asset.id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(asset.id) ||
+              typeof asset.name !== "string" || !asset.name.trim() || asset.name.length > 200 ||
+              typeof asset.type !== "string" || !["document", "video", "image", "audio", "other"].includes(asset.type) ||
+              typeof asset.accessReference !== "string" || !asset.accessReference.trim() || asset.accessReference.length > 2048) continue;
+          if (requestUrl.searchParams.get("all") === "true" && allAssets.length >= 10000) {
+            sendJson(request, response, 413, { error: "customer_asset_manifest_too_large" }); return;
+          }
+          applicationsWithAssets.add(assignedId);
+          allAssets.push({
+            id: asset.id, applicationId: assignedId, name: asset.name, type: asset.type,
+            ...(typeof asset.mimeType === "string" && asset.mimeType.length <= 128 ? { mimeType: asset.mimeType } : {}),
+            ...(typeof asset.sizeBytes === "number" && Number.isSafeInteger(asset.sizeBytes) && asset.sizeBytes >= 0 ? { sizeBytes: asset.sizeBytes } : {}),
+            ...(typeof asset.updatedAt === "string" && asset.updatedAt.length <= 40 ? { updatedAt: asset.updatedAt } : {}),
+            ...(Array.isArray(asset.tags) ? { tags: asset.tags.filter((tag): tag is string => typeof tag === "string" && tag.length <= 64).slice(0, 20) } : {}),
+            // Storage references stay server-side until an authorized download endpoint exists.
+          });
+        }
+      }
+      const includeAll = requestUrl.searchParams.get("all") === "true";
+      const pageSize = 100;
+      const rawCursor = requestUrl.searchParams.get("cursor") ?? "0";
+      if (!/^(0|[1-9][0-9]{0,5})$/.test(rawCursor)) {
+        sendJson(request, response, 400, { error: "invalid_cursor" }); return;
+      }
+      if (includeAll && requestUrl.searchParams.has("cursor")) {
+        sendJson(request, response, 400, { error: "cursor_not_allowed_with_all" }); return;
+      }
+      const offset = Number(rawCursor);
+      if (offset > allAssets.length) { sendJson(request, response, 400, { error: "invalid_cursor" }); return; }
+      const assets = includeAll ? allAssets : allAssets.slice(offset, offset + pageSize);
+      const nextOffset = offset + pageSize;
+      sendJson(request, response, 200, {
+        assets, total: allAssets.length,
+        applicationCount: applicationsWithAssets.size,
+        nextCursor: !includeAll && nextOffset < allAssets.length ? String(nextOffset) : null,
+      });
+      return;
+    }
+
+    // A download is authorized independently of the manifest request. Storage access is
+    // delegated to an injected provider adapter; missing provider/audit adapters fail closed.
+    const assetDownloadMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/download$/.exec(requestUrl.pathname);
+    if (assetDownloadMatch) {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      const [applicationId, assetId] = [assetDownloadMatch[1], assetDownloadMatch[2]];
+      const requestId = resolveApiRequestId(request);
+      const audit = async (outcome: CustomerAssetAuditRecord["outcome"]) => {
+        if (!assetAuditWriter) throw new Error("ASSET_AUDIT_UNAVAILABLE");
+        await assetAuditWriter({ tenantId: identity.tenantId, actorId: identity.actorId, action: "customer.asset.download", outcome, applicationId, assetId, requestId });
+      };
+      try {
+        if (!assetAuditWriter) {
+          // Downloads are high-risk reads: never issue a URL when audit persistence is unavailable.
+          sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" }); return;
+        }
+        if (!assetDownloadResolver) {
+          // Preserve the failed attempt in the audit trail even when no provider is configured.
+          await audit("failure");
+          sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
+        try {
+          modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+          assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+          assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+        } catch { sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return; }
+        const objectRecord = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+        const modules = objectRecord(modulesConfig)?.[identity.tenantId];
+        const assignments = objectRecord(assignmentsConfig)?.[identity.tenantId];
+        const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
+        if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) || !assignments.includes(applicationId) || !tenantAssets) {
+          await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
+        }
+        const applicationAssets = tenantAssets[applicationId];
+        const asset = Array.isArray(applicationAssets) ? applicationAssets.find((item) => item && typeof item === "object" && !Array.isArray(item) && (item as Record<string, unknown>).id === assetId) as Record<string, unknown> | undefined : undefined;
+        if (!asset || typeof asset.accessReference !== "string" || !asset.accessReference.trim() || typeof asset.name !== "string") {
+          await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
+        }
+        const result = await assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) }, requestId);
+        if (!result || typeof result.url !== "string" || !result.url || typeof result.expiresAt !== "string") {
+          await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        let url: URL; const expiresAt = Date.parse(result.expiresAt); const now = Date.now();
+        try { url = new URL(result.url); } catch { url = new URL("about:blank"); }
+        if (url.protocol !== "https:" || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
+          await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        await audit("success");
+        sendJson(request, response, 200, { downloadUrl: url.toString(), expiresAt: new Date(expiresAt).toISOString(), fileName: asset.name });
+      } catch {
+        try { await audit("failure"); } catch { /* Audit failure is intentionally fail-closed. */ }
+        sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" });
+      }
+      return;
+    }
+
     // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.
     if (requestUrl.pathname === "/customer/workspace/modules" && request.method === "GET") {
       const identity = resolveCustomerAccessIdentity(request);
@@ -581,7 +829,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendApiSuccess(request, response, 200, { modules: [] }); return;
       }
       const configured = (tenantModules as Record<string, unknown>)[identity.tenantId];
-      const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings"]);
+      const allowed = new Set(["help-center", "growth-hub", "my-applications", "tickets-feedback", "settings", "client-assets"]);
       if (!Array.isArray(configured) || configured.some((item) => typeof item !== "string")) {
         sendApiSuccess(request, response, 200, { modules: [] }); return;
       }
@@ -628,7 +876,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
         "referrer-policy": "no-referrer",
-        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
       });
       response.end(customerPortalPreviewHtml);
       return;
@@ -643,6 +891,24 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         "referrer-policy": "no-referrer",
       });
       response.end(wireframesUiHtml);
+      return;
+    }
+
+    if (isAdminSupportTicketUiRequest(request)) {
+      if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(adminSupportTicketUiHtml);
       return;
     }
 
@@ -1082,7 +1348,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
 
     // Tenant-scoped customer ticket API. Disabled unless explicitly enabled and backed by
     // PostgreSQL plus the canonical transactional audit writer configured at startup.
-    const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+))?$/.exec(requestUrl.pathname);
+    const ticketPathMatch = /^\/customer\/applications\/([^/]+)\/tickets(?:\/([^/]+)(?:\/(replies))?)?$/.exec(requestUrl.pathname);
     if (ticketPathMatch && (request.method === "GET" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
@@ -1095,6 +1361,18 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) {
         sendJson(request, response, 401, { error: "unauthorized" });
+        return;
+      }
+      // Global ticketing enablement is insufficient: the tenant must have the
+      // customer-facing Tickets & Feedback module enabled as well.
+      let workspaceModules: unknown;
+      try { workspaceModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { workspaceModules = null; }
+      const tenantModules = workspaceModules && typeof workspaceModules === "object" && !Array.isArray(workspaceModules)
+        ? (workspaceModules as Record<string, unknown>)[identity.tenantId]
+        : undefined;
+      if (!Array.isArray(tenantModules) || !tenantModules.includes("tickets-feedback")) {
+        sendJson(request, response, 403, { error: "customer_ticketing_not_enabled" });
         return;
       }
       let applicationId: string;
@@ -1113,9 +1391,13 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
       }
-      const correlationHeader = request.headers["x-correlation-id"];
-      const correlationId = typeof correlationHeader === "string" &&
-        /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      // Tenant ownership alone is not actor authorization. Require the credential's
+      // explicit application allow-list before reading, creating, or replying to tickets.
+      if (!identity.applicationIds?.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
+        return;
+      }
+      const correlationId = resolveApiRequestId(request);
       try {
         if (request.method === "POST" && !ticketPathMatch[2]) {
           const body = await readJson(request);
@@ -1124,9 +1406,15 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             sendJson(request, response, 400, { error: "invalid_ticket_input", details: validated.errors });
             return;
           }
+          const idempotencyHeader = request.headers["idempotency-key"];
+          const idempotencyKey = typeof idempotencyHeader === "string" ? idempotencyHeader : undefined;
+          if (idempotencyKey !== undefined && !/^[a-zA-Z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+            sendJson(request, response, 400, { error: "invalid_idempotency_key" });
+            return;
+          }
           const ticket = await options.ticketStore.create({
             tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId,
-          }, validated.value);
+          }, validated.value, idempotencyKey);
           sendJson(request, response, 201, { ticket });
           return;
         }
@@ -1153,17 +1441,48 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           sendJson(request, response, 200, { tickets, limit, offset });
           return;
         }
+        if (ticketPathMatch[2] && ticketPathMatch[3] === "replies" &&
+            (request.method === "GET" || request.method === "POST")) {
+          let ticketId: string;
+          try { ticketId = decodeURIComponent(ticketPathMatch[2]); }
+          catch { sendJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
+          if (!/^[0-9a-f-]{36}$/i.test(ticketId)) {
+            sendJson(request, response, 400, { error: "invalid_ticket_id" }); return;
+          }
+          const scopedIdentity = { tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId };
+          if (request.method === "GET") {
+            const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId);
+            if (!replies) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 200, { replies }); return;
+          }
+          const body = await readJson(request);
+          if (typeof body.body !== "string" || !body.body.trim() || body.body.trim().length > 8000 ||
+              Object.keys(body).some((key) => key !== "body")) {
+            sendJson(request, response, 400, { error: "invalid_ticket_reply" }); return;
+          }
+          const reply = await options.ticketStore.addReply(scopedIdentity, ticketId, body.body.trim(), "customer");
+          if (!reply) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+          sendJson(request, response, 201, { reply }); return;
+        }
         sendJson(request, response, 405, { error: "method_not_allowed" });
-      } catch {
-        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+      } catch (error) {
+        if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_CONFLICT") {
+          sendJson(request, response, 409, { error: "idempotency_key_conflict" });
+        } else if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
+          sendJson(request, response, 400, { error: "invalid_json" });
+        } else if (error instanceof Error && error.message === "REQUEST_BODY_TOO_LARGE") {
+          sendJson(request, response, 413, { error: "request_body_too_large" });
+        } else {
+          sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+        }
       }
       return;
     }
 
 
     // Tenant-scoped support-admin ticket queue and controlled lifecycle mutations.
-    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment))?$/.exec(requestUrl.pathname);
-    if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH")) {
+    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment|replies))?$/.exec(requestUrl.pathname);
+    if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
         return;
@@ -1186,9 +1505,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(request, response, 403, { error: "ticket_admin_permission_required" });
         return;
       }
-      const correlationHeader = request.headers["x-correlation-id"];
-      const correlationId = typeof correlationHeader === "string" &&
-        /^[a-zA-Z0-9._:-]{1,128}$/.test(correlationHeader) ? correlationHeader : randomUUID();
+      const correlationId = resolveApiRequestId(request);
       let crossTenantRoles: unknown;
       try { crossTenantRoles = JSON.parse(process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON ?? "[]"); }
       catch { crossTenantRoles = null; }
@@ -1211,31 +1528,37 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           const severity = query.get("severity") ?? undefined;
           const type = query.get("type") ?? undefined;
           const applicationId = query.get("applicationId") ?? undefined;
+          const search = query.get("search")?.trim() || undefined;
           const limit = query.has("limit") ? Number(query.get("limit")) : 50;
           const offset = query.has("offset") ? Number(query.get("offset")) : 0;
           if ((status && !(TICKET_STATUSES as readonly string[]).includes(status)) ||
               (severity && !(TICKET_SEVERITIES as readonly string[]).includes(severity)) ||
               (type && !(TICKET_TYPES as readonly string[]).includes(type)) ||
               (applicationId && (!/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId))) ||
+              (search !== undefined && search.length > 200) ||
               !Number.isInteger(limit) || limit < 1 || limit > 100 ||
               !Number.isInteger(offset) || offset < 0) {
             sendJson(request, response, 400, { error: "invalid_ticket_filters" });
             return;
           }
-          const scope = canViewCrossTenant ? {} : { tenantId: identity.tenantId };
-          const tickets = await options.ticketStore.list(scope, {
+          const scope = canViewCrossTenant ? { crossTenant: true as const } : { tenantId: identity.tenantId };
+          const page = await options.ticketStore.list(scope, {
+          // Fetch one extra row so the UI can know whether another page truly exists.
             status: status as typeof TICKET_STATUSES[number] | undefined,
             severity: severity as typeof TICKET_SEVERITIES[number] | undefined,
-            type: type as typeof TICKET_TYPES[number] | undefined, applicationId, limit, offset,
+            type: type as typeof TICKET_TYPES[number] | undefined, applicationId,
+            ...(search !== undefined ? { search } : {}), limit: limit + 1, offset,
           });
+          const hasMore = page.length > limit;
+          const tickets = hasMore ? page.slice(0, limit) : page;
           sendJson(request, response, 200, {
-            tickets, limit, offset,
+            tickets, limit, offset, hasMore,
             scope: canViewCrossTenant ? "authorized_platform" : "tenant",
             ...(canViewCrossTenant ? {} : { tenantId: identity.tenantId }),
           });
           return;
         }
-        if (request.method === "PATCH" && adminTicketMatch[1]) {
+        if ((request.method === "PATCH" || request.method === "POST" || request.method === "GET") && adminTicketMatch[1]) {
           let ticketId: string;
           try { ticketId = decodeURIComponent(adminTicketMatch[1]); }
           catch { sendJson(request, response, 400, { error: "invalid_ticket_id_encoding" }); return; }
@@ -1243,6 +1566,23 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             sendJson(request, response, 400, { error: "invalid_ticket_id" });
             return;
           }
+          if (adminTicketMatch[2] === "replies" && (request.method === "GET" || request.method === "POST")) {
+            const scopedIdentity = { ...trustedIdentity, applicationId: "eper" };
+            if (request.method === "GET") {
+              const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId);
+              if (!replies) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+              sendJson(request, response, 200, { replies }); return;
+            }
+            const replyBody = await readJson(request);
+            if (typeof replyBody.body !== "string" || !replyBody.body.trim() || replyBody.body.trim().length > 8000 ||
+                Object.keys(replyBody).some((key) => key !== "body")) {
+              sendJson(request, response, 400, { error: "invalid_ticket_reply" }); return;
+            }
+            const reply = await options.ticketStore.addReply(scopedIdentity, ticketId, replyBody.body.trim(), "support");
+            if (!reply) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 201, { reply }); return;
+          }
+          if (request.method !== "PATCH") { sendJson(request, response, 405, { error: "method_not_allowed" }); return; }
           const body = await readJson(request);
           if (adminTicketMatch[2] === "status") {
             if (typeof body.status !== "string" || !(TICKET_STATUSES as readonly string[]).includes(body.status) ||
@@ -1268,9 +1608,119 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           }
         }
         sendJson(request, response, 405, { error: "method_not_allowed" });
-      } catch {
-        sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+      } catch (error) {
+        if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
+          sendJson(request, response, 400, { error: "invalid_json" });
+        } else if (error instanceof Error && error.message === "REQUEST_BODY_TOO_LARGE") {
+          sendJson(request, response, 413, { error: "request_body_too_large" });
+        } else {
+          sendJson(request, response, 503, { error: "ticket_operation_unavailable" });
+        }
       }
+      return;
+    }
+
+    // Authenticated customer application list. Assignment data is server-managed and tenant-scoped.
+    if (request.method === "GET" && requestUrl.pathname === "/customer/applications") {
+      if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(request, response, 401, { error: "unauthorized" });
+        return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+      catch { assignments = null; }
+      if (!assignments || typeof assignments !== "object" || Array.isArray(assignments)) {
+        sendJson(request, response, 503, { error: "customer_applications_unavailable" });
+        return;
+      }
+      const tenantAssignments = (assignments as Record<string, unknown>)[identity.tenantId];
+      if (!Array.isArray(tenantAssignments) || tenantAssignments.some((item) =>
+        typeof item !== "string" || item !== item.trim() || item.length < 1 || item.length > 128 ||
+        !/^[a-zA-Z0-9._:-]+$/.test(item))) {
+        sendJson(request, response, 503, { error: "customer_applications_unavailable" });
+        return;
+      }
+      sendJson(request, response, 200, {
+        applications: [...new Set(tenantAssignments as string[])].map((applicationId) => ({ applicationId })),
+      });
+      return;
+    }
+
+    // Read-only, tenant- and application-scoped customer settings. Only explicitly safe
+    // presentation preferences are returned; secrets and administrative configuration never leave the server.
+    if (request.method === "GET" && requestUrl.pathname === "/customer/settings") {
+      if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) {
+        sendJson(request, response, 401, { error: "unauthorized" });
+        return;
+      }
+      let modulesConfig: unknown;
+      try { modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { modulesConfig = null; }
+      const tenantModules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+        ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantModules) || !tenantModules.includes("settings")) {
+        sendJson(request, response, 403, { error: "customer_settings_not_enabled" });
+        return;
+      }
+      const applicationId = requestUrl.searchParams.get("applicationId") ?? "";
+      if (!applicationId || applicationId !== applicationId.trim() || applicationId.length > 128 ||
+          !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" });
+        return;
+      }
+      let assignmentsConfig: unknown;
+      try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+      catch { assignmentsConfig = null; }
+      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      let settingsConfig: unknown;
+      try { settingsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON ?? ""); }
+      catch { settingsConfig = null; }
+      if (!settingsConfig || typeof settingsConfig !== "object" || Array.isArray(settingsConfig)) {
+        sendJson(request, response, 503, { error: "customer_settings_unavailable" });
+        return;
+      }
+      const tenantSettings = (settingsConfig as Record<string, unknown>)[identity.tenantId];
+      const applicationSettings = tenantSettings && typeof tenantSettings === "object" && !Array.isArray(tenantSettings)
+        ? (tenantSettings as Record<string, unknown>)[applicationId] : null;
+      if (!applicationSettings || typeof applicationSettings !== "object" || Array.isArray(applicationSettings)) {
+        sendJson(request, response, 503, { error: "customer_settings_unavailable" });
+        return;
+      }
+      const source = applicationSettings as Record<string, unknown>;
+      const safeSettings: Record<string, string> = {};
+      const displayName = source.displayName;
+      if (typeof displayName === "string" && displayName.length >= 1 && displayName.length <= 80 && displayName === displayName.trim()) {
+        safeSettings.displayName = displayName;
+      }
+      const locale = source.locale;
+      if (typeof locale === "string" && /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(locale)) safeSettings.locale = locale;
+      const currency = source.currency;
+      if (typeof currency === "string" && /^[A-Z]{3}$/.test(currency)) safeSettings.currency = currency;
+      const timeZone = source.timeZone;
+      if (typeof timeZone === "string" && timeZone.length <= 100 && timeZone === timeZone.trim()) {
+        try {
+          new Intl.DateTimeFormat("en", { timeZone }).format(0);
+          safeSettings.timeZone = timeZone;
+        } catch { /* Invalid time zones are omitted rather than exposed as usable preferences. */ }
+      }
+      const theme = source.theme;
+      if (theme === "light" || theme === "dark" || theme === "system") safeSettings.theme = theme;
+      sendJson(request, response, 200, { applicationId, settings: safeSettings });
       return;
     }
 
@@ -1285,19 +1735,35 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
         sendJson(request, response, 401, { error: "unauthorized" });
         return;
       }
+      // Navigation is derived from the same server-side tenant module allowlist used by
+      // customer content routes. A missing or malformed configuration fails closed to Home.
+      let tenantModules: unknown;
+      try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+      catch { tenantModules = null; }
+      const configured = tenantModules && typeof tenantModules === "object" && !Array.isArray(tenantModules)
+        ? (tenantModules as Record<string, unknown>)[identity.tenantId] : null;
+      const enabledModules = new Set(
+        Array.isArray(configured)
+          ? configured.filter((item): item is string => typeof item === "string")
+          : [],
+      );
+      const availableNavigation = [
+        { key: "home", label: "Home", path: "/customer-portal-preview", module: null },
+        { key: "help-center", label: "Help Center", path: "/customer/help", module: "help-center" },
+        { key: "growth-hub", label: "Growth Hub", path: "/customer/growth", module: "growth-hub" },
+        { key: "applications", label: "My Applications", path: "/customer/applications", module: "my-applications" },
+        { key: "tickets-feedback", label: "Tickets & Feedback", path: "/customer/tickets", module: "tickets-feedback" },
+        { key: "settings", label: "Settings", path: "/customer/settings", module: "settings" },
+      ];
       sendJson(request, response, 200, {
         tenantId: identity.tenantId,
         actorId: identity.actorId,
         roleKey: identity.roleKey,
-        navigation: [
-          { key: "home", label: "Home", path: "/customer-portal-preview" },
-          { key: "help-center", label: "Help Center", path: "/customer/help" },
-          { key: "growth-hub", label: "Growth Hub", path: "/customer/growth" },
-          { key: "applications", label: "My Applications", path: "/customer/applications" },
-          { key: "settings", label: "Settings", path: "/customer/settings" }
-        ],
+        navigation: availableNavigation
+          .filter((item) => item.module === null || enabledModules.has(item.module))
+          .map(({ key, label, path }) => ({ key, label, path })),
         status: "identity_resolved_navigation_only",
-        note: "Navigation contract only; feature routes and tenant-scoped data must be implemented before customer UAT."
+        note: "Navigation is tenant-module scoped; routes and data must still enforce authorization independently."
       });
       return;
     }
@@ -1609,6 +2075,18 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       response.end(renderAgentToolsConfiguration());
       return;
     }
+
+    if (requestUrl.pathname.startsWith("/v1/agent-jobs") || requestUrl.pathname.startsWith("/v1/agent-drafts")) {
+      if (process.env.EPER_AGENTS_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+    }
+    const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;
+    if (await handleAgentJobRoute(request, response, requestUrl.pathname, {
+      store: agentStore, resolveIdentity: resolveAgentJobIdentity,
+      environment: options.adminConfigEnvironment ?? "sandbox",
+    })) return;
 
     // Application-level AI controls are always enforced for agent endpoints. Do not make
     // the customer's OFF switch depend on a deployment opt-in environment variable.
