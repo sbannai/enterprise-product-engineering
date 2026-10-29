@@ -2,8 +2,8 @@
 name: EPER 228 Requirement Pilot Test Matrix
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
     paths:
       - 'eper/**'
       - '.github/workflows/eper-228-pilot-matrix.yml'
-
+      - '.github/workflows/**'
   push:
     paths:
       - 'eper/**'
