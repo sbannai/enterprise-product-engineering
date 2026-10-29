@@ -7,12 +7,10 @@ concurrency:
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'eper/**'
   push:
+    branches: ["main"]
     paths:
-      - 'eper/**'
+      - "eper/**"
 
 permissions:
   contents: read

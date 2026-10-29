@@ -6,11 +6,8 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request:
-    paths:
-      - "eper/**"
-
   push:
+    branches: ["main"]
     paths:
       - "eper/**"
   workflow_dispatch:
