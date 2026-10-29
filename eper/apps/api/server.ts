@@ -505,7 +505,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       const timezone = body.timezone;
       const scheduleDefinition = body.scheduleDefinition;
       if (typeof campaignId !== "string" || !campaignId.trim() || campaignId.length > 128 ||
-          !["once", "recurring", "event", "condition"].includes(String(triggerType)) ||
+          !["once", "recurring"].includes(String(triggerType)) ||
           typeof timezone !== "string" || !timezone.trim() || timezone.length > 128 ||
           !scheduleDefinition || typeof scheduleDefinition !== "object" || Array.isArray(scheduleDefinition)) {
         sendApiError(request, response, 400, "INVALID_CAMPAIGN_SCHEDULE", "Required schedule fields are missing or invalid."); return;
@@ -515,7 +515,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           tenantId: identity.tenantId,
           applicationId,
           campaignId: campaignId.trim(),
-          triggerType: triggerType as "once" | "recurring" | "event" | "condition",
+          triggerType: triggerType as "once" | "recurring",
           timezone,
           scheduleDefinition: scheduleDefinition as Record<string, unknown>,
           createdBy: identity.actorId,
