@@ -111,3 +111,8 @@ test("durable draft read maps database fields to public camelCase contract", () 
   assert.ok(routes.includes("contentHash: draft.content_hash"));
   assert.ok(routes.includes("expiresAt: draft.expires_at"));
 });
+
+test("agent job enqueue fails closed when no worker is configured", () => {
+  assert.ok(routes.includes("EPER_AGENT_JOB_WORKER_ENABLED !== \"true\""));
+  assert.ok(routes.includes("AGENT_JOB_WORKER_UNAVAILABLE"));
+});
