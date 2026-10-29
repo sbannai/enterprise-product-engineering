@@ -7,6 +7,10 @@ concurrency:
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-228-pilot-matrix.yml"
   push:
     branches: ["main"]
     paths:
