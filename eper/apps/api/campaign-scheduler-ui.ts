@@ -20,7 +20,7 @@ main{max-width:1100px;margin:auto;padding:clamp(16px,4vw,36px)}h1{font-size:clam
 </div><p class="muted">The token is kept only in this page's memory and is not persisted to browser storage.</p><div class="actions"><button id="loadButton">Load schedules</button></div></section>
 <section class="panel" aria-labelledby="create-heading"><h2 id="create-heading">Create schedule draft</h2><form id="createForm" class="grid">
 <div class="field"><label for="campaignId">Campaign ID</label><input id="campaignId" required maxlength="128"></div>
-<div class="field"><label for="triggerType">Trigger type</label><select id="triggerType"><option value="once">Once</option><option value="recurring">Recurring</option><option value="event">Event</option><option value="condition">Condition</option></select></div>
+<div class="field"><label for="triggerType">Trigger type</label><select id="triggerType"><option value="once">Once</option><option value="recurring">Recurring</option></select></div>
 <div class="field"><label for="timezone">Time zone</label><input id="timezone" required maxlength="128" value="Asia/Kolkata"></div>
 <div class="field full"><label for="scheduleDefinition">Schedule definition (JSON)</label><textarea id="scheduleDefinition" required>{"at":"2030-01-01T10:00:00+05:30"}</textarea></div>
 <div class="field full"><div class="actions"><button type="submit">Create draft</button></div></div>
@@ -75,8 +75,12 @@ main{max-width:1100px;margin:auto;padding:clamp(16px,4vw,36px)}h1{font-size:clam
     try {
       let body;
       if (action === 'approve' || action === 'resume') {
+        const selected = state.schedules.find((schedule) => schedule.id === id);
+        const configuredOnceAt = selected?.triggerType === 'once' && typeof selected?.scheduleDefinition?.at === 'string'
+          ? selected.scheduleDefinition.at : '';
         const suggested = new Date(Date.now() + 5 * 60 * 1000); suggested.setSeconds(0,0);
-        const next = prompt('Enter the next run time in ISO format (must be in the future):', suggested.toISOString());
+        const defaultRunAt = configuredOnceAt || suggested.toISOString();
+        const next = prompt('Enter the next run time in ISO format (must be in the future). For one-time schedules, the configured time is prefilled:', defaultRunAt);
         if (!next) return;
         body = { nextRunAt: next };
       }
