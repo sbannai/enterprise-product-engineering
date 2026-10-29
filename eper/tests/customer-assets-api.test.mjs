@@ -13,10 +13,12 @@ test("single-call client assets API returns tenant/application-scoped asset meta
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const tokenA = "client-assets-tenant-a-token-000000000000000001";
   const tokenB = "client-assets-tenant-b-token-000000000000000002";
+  const tokenNarrow = "client-assets-tenant-a-narrow-token-000000000000000001";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a", "app-c", "app-empty"] },
     [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
+    [tokenNarrow]: { tenantId: "tenant-a", actorId: "actor-narrow", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
     "tenant-a": ["client-assets"],
@@ -63,6 +65,11 @@ test("single-call client assets API returns tenant/application-scoped asset meta
     assert.deepEqual(body.assets.map((asset) => asset.id), ["doc-1", "vid-1", "img-1"]);
     assert.deepEqual(body.assets.map((asset) => asset.applicationId), ["app-a", "app-a", "app-c"]);
     assert.equal(body.applicationCount, 2);
+    const narrowManifestResponse = await fetch(endpoint + "?all=true", { headers: { authorization: "Bearer " + tokenNarrow } });
+    assert.equal(narrowManifestResponse.status, 200);
+    const narrowManifest = await narrowManifestResponse.json();
+    assert.deepEqual(narrowManifest.assets.map((asset) => asset.applicationId), ["app-a", "app-a"]);
+    assert.equal(narrowManifest.applicationCount, 1, "actor sees only applications explicitly assigned to their credential");
     const versionedResponse = await fetch(endpoint + "?all=true", {
       headers: { authorization: "Bearer " + tokenA, accept: "application/vnd.eper.v1+json", "x-correlation-id": "assets-contract-001" },
     });
