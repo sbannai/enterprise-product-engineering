@@ -11,6 +11,7 @@ on:
       - "eper/tests/campaign-dispatch-authorization.test.mjs"
       - "eper/scripts/migrate-campaign-scheduler.mjs"
       - "eper/package.json"
+      - "eper/package-lock.json"
       - ".github/workflows/eper-campaign-scheduler-focused.yml"
   workflow_dispatch:
 
