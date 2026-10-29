@@ -21,6 +21,20 @@
 5. Confirm the API uses the existing PostgreSQL pool and `EPER_AUDIT_PERSISTENCE=postgres`. Startup readiness must verify both scheduler tables and the `dispatch_started_at` column.
 6. Confirm CI results and inspect any failures before enabling the API flag.
 
+
+## PostgreSQL dispatch-race integration test
+
+The opt-in race test is `tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs`. It exercises a real row-lock wait while a competing transaction pauses the schedule, then verifies that the dispatch fence is not crossed.
+
+1. Provision or reuse only an isolated disposable PostgreSQL database whose name contains a distinct `test`, `ci`, or `sandbox` token (for example, `eper_scheduler_test`). Do not point this test at shared UAT or production data.
+2. Apply the reviewed audit and campaign-scheduler migrations, including `002_campaign_dispatch_fence.sql`, to that disposable database.
+3. From `eper/`, set `EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL` to the disposable database connection string and run:
+   `node --test tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs`
+4. Confirm the test is reported as passed, not skipped. The test polls `pg_stat_activity` for the expected lock wait; if that wait is not observed, it fails instead of claiming the race was exercised.
+5. Preserve the commit SHA, run output, database/migration identity (without credentials), and CI result as technical evidence. A skipped test or a mocked unit test is not proof of PostgreSQL race behavior and is not Business UAT acceptance.
+
+When `EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL` is unset, the test intentionally skips. The regular `npm test` suite can therefore run without a database, but that run alone does not validate the real PostgreSQL race.
+
 ## Dispatch and cancellation semantics
 
 - A schedule must be approved and scheduled, and the worker must pass its current policy authorization, before the atomic dispatch-start fence is acquired.
