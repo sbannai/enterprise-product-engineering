@@ -81,3 +81,16 @@ A route may use a narrower status code when its contract explicitly requires it.
 ## Required contract tests
 
 For every API family, cover versioned success and errors, invalid JSON and oversized bodies where applicable, authentication/authorization denial, missing resources, conflicts/idempotency, dependency failures, correlation IDs, security headers, and proof that rejected requests do not reach persistence or external side effects. Record current commit and CI run before marking the family PASS.
+
+
+## Regression verification
+
+Run from the `eper` directory:
+
+```sh
+npm ci
+npm run build
+node --test tests/api-response-contract.test.mjs
+```
+
+The contract suite checks success and error envelopes, `x-request-id` consistency and safe replacement of untrusted correlation IDs, bounded request-ID length and error details, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, bodyless 204/205 responses, and rejection of invalid status codes or machine-readable error codes. A source test or a queued workflow is not a pass; retain the test output and exact commit SHA as evidence.
