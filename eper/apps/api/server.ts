@@ -25,6 +25,7 @@ import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import { renderCampaignSchedulerConsole } from "./campaign-scheduler-ui.js";
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
   // A versioned Accept value opts into the complete JSON envelope on shared sendJson routes.
@@ -1595,6 +1596,18 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
           : 422;
         sendJson(request, response, status, { error: status === 422 ? "capability_execution_failed" : message });
       }
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/customer/campaign-schedules-ui") {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+      });
+      response.end(renderCampaignSchedulerConsole());
       return;
     }
 

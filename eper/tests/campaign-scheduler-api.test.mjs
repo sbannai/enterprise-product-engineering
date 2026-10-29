@@ -199,3 +199,23 @@ test("campaign resume passes a distinct audit operation to the store", async (t)
   assert.equal(response.status, 200);
   assert.equal(captured.operation, "resume");
 });
+
+test("campaign schedule console serves responsive UI and lifecycle controls", async (t) => {
+  const { base } = await withServer(t);
+  const response = await fetch(base + "/customer/campaign-schedules-ui");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /text\/html/);
+  const html = await response.text();
+  assert.match(html, /name="viewport"/);
+  assert.match(html, /Create schedule draft/);
+  assert.match(html, /Load schedules/);
+  assert.match(html, /\/customer\/applications\//);
+  assert.match(html, /Approve/);
+  assert.match(html, /Pause/);
+  assert.match(html, /Resume/);
+  assert.match(html, /Cancel/);
+  assert.match(html, /configuredOnceAt/);
+  assert.match(html, /<option value="once">Once<\/option><option value="recurring">Recurring<\/option>/);
+  assert.doesNotMatch(html, /<option value="event">|<option value="condition">/);
+  assert.match(html, /aria-live="polite"/);
+});
