@@ -1,11 +1,11 @@
 name: EPER CI
 
-# Focused CI lane: schema/migration safety, capability conformance, and runtime checks.
+# Focused CI lane: schema/migration safety, capability conformance, and UAT preflight.
 # Full-suite and same-commit end-to-end validation live in eper-integrated-validation.yml.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 on:
   workflow_dispatch:
