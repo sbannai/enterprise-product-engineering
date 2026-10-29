@@ -88,6 +88,7 @@ test("campaign schedule creation creates a draft and returns a durable schedule 
     body: JSON.stringify({ campaignId: "campaign-a", triggerType: "once", timezone: "Asia/Kolkata", scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" } }),
   });
   assert.equal(response.status, 202);
+  assert.equal(response.headers.get("allow"), null, "successful creation must not fall through to the method-not-allowed handler");
   const body = await response.json();
   assert.equal(body.data.scheduleId, "schedule-created");
   assert.equal(body.data.status, "draft");
