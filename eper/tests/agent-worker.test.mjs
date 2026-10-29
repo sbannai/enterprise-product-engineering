@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import pg from "pg";
 import { processAgentJobOnce } from "../dist/packages/agents/agent-worker.js";
+import { PostgresAgentStore } from "../dist/packages/agents/postgres-agent-store.js";
+
+const { Pool } = pg;
 
 const baseJob = {
   jobId: "job-0001",
@@ -86,4 +91,55 @@ test("worker sanitizes unexpected failure text before recording retry", async ()
   const store = fakeStore({ persistError: new Error("database password is secret!") });
   await processAgentJobOnce(options(store));
   assert.equal(store.calls.fail[0].failureCode, "AGENT_WORKER_UNEXPECTED_FAILURE");
+});
+
+
+test("PostgreSQL-backed worker persists a tenant-scoped human-review draft", {
+  skip: !process.env.DATABASE_URL,
+}, async () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+  const store = new PostgresAgentStore(pool);
+  const suffix = randomUUID();
+  const tenantId = "worker-test-" + suffix;
+  const applicationId = "growth-hub";
+  const jobIdempotencyKey = "worker-test-" + suffix;
+  try {
+    await store.assertReady();
+    const queued = await store.enqueueJob({
+      tenantId,
+      applicationId,
+      requestedBy: "maker-" + suffix,
+      agentId: "sales",
+      intent: "follow-up",
+      input: { objective: "validate the database-backed worker path" },
+      idempotencyKey: jobIdempotencyKey,
+      correlationId: "worker-test-" + suffix,
+      environment: "sandbox",
+    });
+    assert.equal(queued.kind, "created");
+    const result = await processAgentJobOnce({
+      store,
+      tenantId,
+      applicationId,
+      workerId: "worker-" + suffix,
+      environment: "sandbox",
+    });
+    assert.equal(result.outcome, "draft_created");
+    if (result.outcome !== "draft_created") return;
+    const job = await store.getJob({ tenantId, applicationId, jobId: result.jobId });
+    assert.equal(job?.status, "awaiting_approval");
+    assert.equal(job?.resultRef, result.draftId);
+    const draft = await store.getDraft({ tenantId, applicationId, draftId: result.draftId });
+    assert.equal(draft?.status, "pending_approval");
+    assert.equal(draft?.created_by, queued.job.requestedBy);
+    assert.equal(draft?.content_hash, result.contentHash);
+    const crossTenantDraft = await store.getDraft({
+      tenantId: "other-tenant-" + suffix,
+      applicationId,
+      draftId: result.draftId,
+    });
+    assert.equal(crossTenantDraft, null);
+  } finally {
+    await pool.end();
+  }
 });
