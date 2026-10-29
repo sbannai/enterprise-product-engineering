@@ -7,6 +7,7 @@ on:
       - "eper/packages/campaign-scheduler/**"
       - "eper/apps/api/**"
       - "eper/tests/campaign-scheduler-*.test.mjs"
+      - "eper/tests/campaign-domain-event-router.test.mjs"
       - "eper/tests/campaign-dispatch-authorization.test.mjs"
       - "eper/scripts/migrate-campaign-scheduler.mjs"
       - "eper/package.json"
@@ -38,4 +39,4 @@ jobs:
       - name: Build
         run: npm run build
       - name: Test scheduler API, persistence logic, worker, routing and authorization
-        run: node --test tests/campaign-scheduler-*.test.mjs tests/campaign-dispatch-authorization.test.mjs
+        run: node --test tests/campaign-scheduler-*.test.mjs tests/campaign-domain-event-router.test.mjs tests/campaign-dispatch-authorization.test.mjs
