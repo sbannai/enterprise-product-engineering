@@ -1,8 +1,8 @@
 name: EPER Integrated Validation (same-commit end-to-end)
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 on:
   pull_request:
