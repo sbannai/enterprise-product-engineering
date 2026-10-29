@@ -1,10 +1,6 @@
 # Re-run this gate on the reconciled payment/receipt branch before integration sign-off.
 name: EPER PostgreSQL payment-store integration
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
-
 # Keep this gate enabled on both payment persistence and generic receipt-contract branches.
 on:
   push:
@@ -34,13 +30,12 @@ on:
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
       - ".github/workflows/eper-payment-postgres-integration.yml"
-
+      - ".github/workflows/**"
   workflow_dispatch:
 
 jobs:
   postgres-payment-store:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
