@@ -28,6 +28,8 @@ function fakeStore(claimed = []) {
     async claimExecutions(workerId, batchSize) { calls.push(["claim", workerId, batchSize]); return claimed.splice(0); },
     async isExecutionAuthorizedForDispatch(input) { calls.push(["authorize-current", input]); return true; },
     async beginExecutionDispatch(input) { calls.push(["dispatch-fence", input]); return true; },
+    async getDispatchFenceDenialReason(input) { calls.push(["fence-denial-reason", input]); return "denied"; },
+    async deferExecutionForSchedulePause(input) { calls.push(["defer-paused", input]); return true; },
     async completeExecution(input) { calls.push(["complete", input]); return true; },
     async failExecution(input) { calls.push(["fail", input]); return "retry_wait"; },
   };
@@ -179,14 +181,14 @@ test("worker records authorization service failures distinctly and never dispatc
     workerId: "worker-auth-outage",
     signal: controller.signal,
     idleDelayMs: 100,
-    authorizeDispatch: async () => { throw new Error("policy service unavailable"); },
+    authorizeDispatch: async () => { controller.abort(); throw new Error("policy service unavailable"); },
     onError: (error) => reported.push(error.message),
   });
   assert.equal(dispatchCalls, 0);
   assert.deepEqual(reported, ["policy service unavailable"]);
   assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
     && call[1].errorCode === "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE"
-    && call[1].maxAttempts === 1));
+    && call[1].maxAttempts === 5));
   assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "dispatch-fence"));
 });
 
@@ -225,4 +227,41 @@ test("worker does not call provider when the atomic dispatch fence is denied", a
   assert.equal(dispatchCalls, 0);
   assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"
     && call[1].errorCode === "CAMPAIGN_DISPATCH_POLICY_DENIED"));
+});
+
+
+test("worker preserves cancellation when dispatch fence loses a race to cancel", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.beginExecutionDispatch = async (input) => { store.calls.push(["dispatch-fence", input]); return false; };
+  store.getDispatchFenceDenialReason = async (input) => {
+    store.calls.push(["fence-denial-reason", input]);
+    controller.abort();
+    return "cancelled";
+  };
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => { dispatchCalls += 1; return { outcome: {} }; }, {
+    workerId: "worker-cancel-race", signal: controller.signal, idleDelayMs: 100, authorizeDispatch: async () => true,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "fence-denial-reason"));
+  assert.ok(!store.calls.some((call) => Array.isArray(call) && call[0] === "fail"));
+});
+
+test("worker requeues a paused schedule after dispatch fence denial", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  store.beginExecutionDispatch = async (input) => { store.calls.push(["dispatch-fence", input]); return false; };
+  store.getDispatchFenceDenialReason = async (input) => {
+    store.calls.push(["fence-denial-reason", input]);
+    controller.abort();
+    return "paused";
+  };
+  let dispatchCalls = 0;
+  await runCampaignExecutionWorker(store, async () => { dispatchCalls += 1; return { outcome: {} }; }, {
+    workerId: "worker-pause-race", signal: controller.signal, idleDelayMs: 100, maxAttempts: 5, authorizeDispatch: async () => true,
+  });
+  assert.equal(dispatchCalls, 0);
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "defer-paused"));
+  assert.equal(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"), false);
 });

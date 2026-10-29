@@ -67,6 +67,7 @@ export async function runCampaignExecutionWorker(
         // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
         let authorized = false;
         let authorizationError: unknown;
+        let dispatchFenceDenied = false;
         try {
           // Evaluate consent, quiet-hours, and channel policy before acquiring the
           // dispatch fence; the fence then atomically rechecks the live lease and schedule.
@@ -84,6 +85,7 @@ export async function runCampaignExecutionWorker(
               executionId: execution.id,
               workerId: options.workerId,
             });
+            dispatchFenceDenied = !authorized;
           }
         } catch (error) {
           // A policy service outage is not permission to dispatch. Preserve the distinction
@@ -103,14 +105,32 @@ export async function runCampaignExecutionWorker(
           return;
         }
         if (!authorized) {
+          if (dispatchFenceDenied) {
+            const fenceReason = await store.getDispatchFenceDenialReason({
+              tenantId: execution.tenantId, applicationId: execution.applicationId,
+              executionId: execution.id, workerId: options.workerId,
+            });
+            if (fenceReason === "cancelled") return;
+            if (fenceReason === "paused") {
+              // A user pause is not a failed delivery attempt. Release the lease without
+              // consuming retry budget; claimExecutions excludes paused schedules until resume.
+              await store.deferExecutionForSchedulePause({
+                tenantId: execution.tenantId, applicationId: execution.applicationId,
+                executionId: execution.id, workerId: options.workerId,
+              });
+              return;
+            }
+          }
+          const authorizationErrorMessage = authorizationError instanceof Error ? authorizationError.message : "";
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
             executionId: execution.id, workerId: options.workerId,
-            errorCode: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
+            errorCode: authorizationErrorMessage === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               ? "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               : authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
-            maxAttempts: authorizationError?.message === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
-              ? maxAttempts : 1,
+            // Explicit policy denial is terminal. Authorization outages and shutdown
+            // before the fence are retryable because no external side effect occurred.
+            maxAttempts: authorizationError ? maxAttempts : 1,
           });
           return;
         }
