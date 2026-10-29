@@ -6,6 +6,10 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  pull_request:
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-reexec-uat.yml"
   workflow_dispatch:
   push:
     branches: ["main"]
