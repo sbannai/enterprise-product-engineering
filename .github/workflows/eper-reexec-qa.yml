@@ -1,14 +1,14 @@
 # Re-run controlled QA after payment/receipt branch reconciliation.
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
-# Controlled QA runs on EPER and workflow changes, and remains manually dispatchable.
+# Controlled QA runs on main, the active scheduler integration branch, and relevant PRs.
 on:
   pull_request:
     paths:
       - "eper/**"
       - ".github/workflows/**"
   push:
-    branches: ["main"]
+    branches: ["main", "feat/campaign-scheduler-foundation"]
     paths:
       - "eper/**"
       - ".github/workflows/**"
