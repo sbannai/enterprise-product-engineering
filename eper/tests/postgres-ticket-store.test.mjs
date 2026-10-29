@@ -97,7 +97,7 @@ test("cross-tenant ticket listing requires the explicit privileged scope marker"
   const { calls, pool } = fakePool();
   const store = new PostgresTicketStore(pool, async () => {});
   await store.list({ crossTenant: true }, { limit: 10, offset: 0 });
-  const query = calls.find((x) => /SELECT \\* FROM eper_support_tickets/.test(x.sql));
+  const query = calls.find((x) => /SELECT \* FROM eper_support_tickets/.test(x.sql));
   assert.ok(query);
   assert.doesNotMatch(query.sql, /WHERE tenant_id/);
   assert.deepEqual(query.values, [10, 0]);
