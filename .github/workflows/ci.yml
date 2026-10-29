@@ -8,7 +8,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main", "reconcile/payment-153-168-integration"]
+    branches: ["main", "reconcile/payment-153-168-integration", "feature/postgres-capability-persistence"]
 
 jobs:
   build-and-test:

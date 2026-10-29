@@ -110,6 +110,23 @@ function mapJob(row: Record<string, unknown>): StoredAgentJob {
 export class PostgresAgentStore {
   constructor(private readonly pool: AgentSqlPool) {}
 
+  async assertReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ jobs_table: string | null; drafts_table: string | null }>(
+        "SELECT to_regclass('public.eper_agent_jobs')::text AS jobs_table, to_regclass('public.eper_agent_job_drafts')::text AS drafts_table",
+      );
+      if (!result.rows[0]?.jobs_table || !result.rows[0]?.drafts_table) {
+        throw new Error("EPER_AGENT_JOB_SCHEMA_NOT_APPLIED");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_AGENT_JOB_SCHEMA_NOT_APPLIED") throw error;
+      throw new Error("EPER_AGENT_JOB_READINESS_CHECK_FAILED", { cause: error });
+    } finally {
+      client.release();
+    }
+  }
+
   private async scopedClient(tenantId: string, applicationId: string): Promise<AgentSqlClient> {
     requireId(tenantId, "tenant_id");
     requireId(applicationId, "application_id");

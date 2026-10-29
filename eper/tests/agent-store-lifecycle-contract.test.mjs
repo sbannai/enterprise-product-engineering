@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../packages/agents/postgres-agent-store.ts", import.meta.url), "utf8");
 const routes = await readFile(new URL("../apps/api/agent-job-routes.ts", import.meta.url), "utf8");
 const apiResponse = await readFile(new URL("../apps/api/api-response.ts", import.meta.url), "utf8");
+const main = await readFile(new URL("../apps/api/main.ts", import.meta.url), "utf8");
 
 test("agent store scopes each transaction with tenant and application RLS context", () => {
   assert.match(source, /set_config\('eper\.tenant_id', \$1, true\)/);
@@ -115,4 +116,25 @@ test("durable draft read maps database fields to public camelCase contract", () 
 test("agent job enqueue fails closed when no worker is configured", () => {
   assert.ok(routes.includes("EPER_AGENT_JOB_WORKER_ENABLED !== \"true\""));
   assert.ok(routes.includes("AGENT_JOB_WORKER_UNAVAILABLE"));
+});
+
+
+test("agent worker runtime is opt-in, readiness-checked, tenant/application scoped, and shut down before the DB pool", () => {
+  assert.match(main, /EPER_AGENT_JOB_WORKER_ENABLED === "true"/);
+  assert.match(main, /AGENT_WORKER_REQUIRES_AGENT_API_CAPABILITY_POSTGRES_ADMIN_CONFIG_AND_DURABLE_AUDIT/);
+  assert.match(main, /readApplicationAssignments\(\)/);
+  assert.match(main, /agentWorkerStore\.assertReady\(\)/);
+  assert.match(main, /processAgentJobOnce\(/);
+  assert.match(main, /agentWorkerRunning = false/);
+  assert.match(main, /if \(agentWorkerPromise\) await agentWorkerPromise/);
+  assert.match(main, /await paymentPool\.end\(\)/);
+  assert.match(main, /AGENT_WORKER_APPLICATION_ASSIGNMENTS_REQUIRED/);
+  assert.match(main, /AGENT_WORKER_POLL_INTERVAL_INVALID/);
+});
+
+test("agent worker readiness verifies the durable job and draft tables", () => {
+  assert.match(source, /async assertReady\(\): Promise<void>/);
+  assert.match(source, /to_regclass\('public\.eper_agent_jobs'\)/);
+  assert.match(source, /to_regclass\('public\.eper_agent_job_drafts'\)/);
+  assert.match(source, /EPER_AGENT_JOB_SCHEMA_NOT_APPLIED/);
 });
