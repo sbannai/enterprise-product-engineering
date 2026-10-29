@@ -161,6 +161,23 @@ test("failure uses bounded exponential retry policy and returns dead-letter at m
   assert.equal(second, "dead_letter");
 });
 
+test("fenced ambiguous outcomes can be dead-lettered after the worker loses its lease", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_executions") ? [{ status: "dead_letter" }] : [],
+    rowCount: sql.includes("UPDATE eper_campaign_executions") ? 1 : 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const outcome = await store.failExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1",
+    workerId: "stale-worker", errorCode: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+  });
+  assert.equal(outcome, "dead_letter");
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.ok(update);
+  assert.ok(update.sql.includes("locked_by=$4 OR dispatch_started_at IS NOT NULL"));
+  assert.ok(update.sql.includes("DISPATCH_OUTCOME_UNKNOWN"));
+});
+
 test("execution completion requires the current worker lease", async () => {
   const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
   const store = new PostgresCampaignSchedulerStore(pool);
@@ -514,6 +531,7 @@ test("execution with dispatch started is dead-lettered rather than automatically
   });
   assert.equal(outcome, "dead_letter");
   assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
+  assert.match(calls[0].sql, /AND \(locked_by=\$4 OR dispatch_started_at IS NOT NULL\)/);
   assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
   assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\(\) ELSE NULL END/);
 });

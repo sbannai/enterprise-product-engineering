@@ -659,7 +659,8 @@ export class PostgresCampaignSchedulerStore {
                ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN now() ELSE NULL END
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
+            AND (locked_by=$4 OR dispatch_started_at IS NOT NULL)
          RETURNING status`,
         [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds],
       );
