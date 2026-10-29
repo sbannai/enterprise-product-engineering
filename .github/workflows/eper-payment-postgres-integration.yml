@@ -30,7 +30,7 @@ on:
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
       - ".github/workflows/eper-payment-postgres-integration.yml"
-      - ".github/workflows/**"
+
   workflow_dispatch:
 
 jobs:
