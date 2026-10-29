@@ -58,7 +58,7 @@ export function sendApiLegacyJson(request: IncomingMessage, response: ServerResp
   response.setHeader("cache-control", "no-store");
   response.setHeader("x-content-type-options", "nosniff");
   response.setHeader("x-request-id", requestId);
-  if (statusCode === 204 || statusCode === 205) {
+  if (statusCode === 204 || statusCode === 205 || statusCode === 304) {
     response.statusCode = statusCode;
     response.end();
     return;
