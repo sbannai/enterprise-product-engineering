@@ -2,7 +2,7 @@ name: EPER Integrated Validation (same-commit end-to-end)
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feature/postgres-capability-persistence"]
     paths:
       - "eper/**"
       - ".github/workflows/**"
