@@ -76,3 +76,19 @@ export function sendApiError(request: IncomingMessage, response: ServerResponse,
   }
   writeEnvelope(response, statusCode, { success: false, error, meta: { requestId } }, requestId);
 }
+
+/** Writes legacy JSON while honoring HTTP statuses that prohibit a response body. */
+export function sendApiLegacyJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+  const requestId = resolveApiRequestId(request);
+  response.setHeader("content-type", "application/json; charset=utf-8");
+  response.setHeader("cache-control", "no-store");
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-request-id", requestId);
+  if (statusCode === 204 || statusCode === 205 || statusCode === 304) {
+    response.statusCode = statusCode;
+    response.end();
+    return;
+  }
+  response.writeHead(statusCode);
+  response.end(JSON.stringify(body));
+}
