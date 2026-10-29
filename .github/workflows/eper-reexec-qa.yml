@@ -35,8 +35,13 @@ jobs:
         run: npm ci
       - name: Build candidate
         run: npm run build
+      - name: Initialize QA evidence
+        if: always()
+        run: mkdir -p reexec-evidence
       - name: Execute 228 requirement test suite serially for isolation
-        run: node --test --test-concurrency=1 tests/*.test.mjs
+        run: |
+          set -o pipefail
+          node --test --test-concurrency=1 tests/*.test.mjs 2>&1 | tee reexec-evidence/qa-test-output.log
       - name: Record execution metadata
         if: always()
         run: |
@@ -60,5 +65,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EPER-REEXEC-001-${{github.run_id}}
-          path: eper/reexec-evidence/execution-metadata.txt
+          path: eper/reexec-evidence/
           if-no-files-found: error
