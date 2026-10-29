@@ -2,8 +2,8 @@
 name: EPER 228 Requirement Pilot Test Matrix
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 on:
   workflow_dispatch:
