@@ -84,6 +84,25 @@ test("ticket listing always scopes by trusted tenant and selected application", 
 });
 
 
+test("ticket listing fails closed without an explicit tenant or authorized cross-tenant scope", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresTicketStore(pool, async () => {});
+  await assert.rejects(() => store.list({}), /ticket_tenant_scope_required/);
+  await assert.rejects(() => store.list({ tenantId: "" }), /ticket_tenant_scope_required/);
+  await assert.rejects(() => store.list({ tenantId: " tenant-a" }), /ticket_tenant_scope_required/);
+  assert.equal(calls.length, 0, "invalid scope must fail before issuing SQL");
+});
+
+test("cross-tenant ticket listing requires the explicit privileged scope marker", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresTicketStore(pool, async () => {});
+  await store.list({ crossTenant: true }, { limit: 10, offset: 0 });
+  const query = calls.find((x) => /SELECT \\* FROM eper_support_tickets/.test(x.sql));
+  assert.ok(query);
+  assert.doesNotMatch(query.sql, /WHERE tenant_id/);
+  assert.deepEqual(query.values, [10, 0]);
+});
+
 test("ticket store accepts the bounded pagination lookahead row and binds it as a parameter", async () => {
   const { calls, pool } = fakePool();
   const store = new PostgresTicketStore(pool, async () => {});
