@@ -15,6 +15,7 @@ on:
       - "reconcile/payment-stack-with-receipt-contract"
   pull_request:
     paths:
+      - ".github/workflows/eper-payment-gateway-tests.yml"
       - "eper/apps/api/payments.ts"
       - "eper/apps/api/server.ts"
       - "eper/packages/payments/invoice-amount-authority.ts"
