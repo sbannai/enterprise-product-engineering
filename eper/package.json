@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "start": "node dist/apps/api/main.js",
     "migrate:payments": "node scripts/migrate-payments.mjs",
+    "migrate:capabilities": "node scripts/migrate-capabilities.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "migrate:audit": "node scripts/migrate-audit.mjs",
     "migrate:ticketing": "node scripts/migrate-ticketing.mjs",

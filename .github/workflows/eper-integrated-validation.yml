@@ -56,24 +56,15 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration schema to ephemeral PostgreSQL
         run: npm run migrate:audit
+      - name: Apply ticketing schema to ephemeral PostgreSQL
+        run: npm run migrate:ticketing
+      - name: Verify ticketing schema migrations are repeatable
+        run: npm run migrate:ticketing
+      # npm test already discovers every tests/*.test.mjs file, including
+      # payment, PostgreSQL, invoice-authority, and receipt contracts. Avoid
+      # rerunning those same test files as separate steps.
       - name: Run full EPER test suite with PostgreSQL enabled
         run: npm test
-      - name: Run payment gateway and invoice authority regressions
-        run: |
-          node --test tests/payment-gateway.test.mjs
-          node --test tests/invoice-amount-authority.test.mjs
-      - name: Run PostgreSQL runtime, route, store, and real-database integration
-        run: |
-          node --test tests/postgres-payment-runtime.test.mjs
-          node --test tests/postgres-payment-api-route.test.mjs
-          node --test tests/postgres-legacy-order-snapshot-gate.test.mjs
-          node --test tests/postgres-payment-store.test.mjs
-          node --test tests/postgres-payment-store.integration.test.mjs
-      - name: Run trusted transaction and receipt contracts
-        run: |
-          node --test tests/http-invoice-amount-source.test.mjs
-          node --test tests/http-transaction-snapshot-source.test.mjs
-          node --test tests/transaction-receipt-contract.test.mjs
 
   requirement-matrix:
     name: 228 requirements / 38 chapter pilot matrix

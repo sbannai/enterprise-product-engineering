@@ -17,13 +17,14 @@ async function withServer(t, overrides = {}) {
     ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
+  const storeOverrides = overrides;
   const store = {
     async createSchedule(input) { return { ...schedule, ...input, id: "schedule-created", status: "draft", approvalStatus: "pending" }; },
     async approveAndSchedule(input) { return { ...schedule, ...input, status: "scheduled", approvalStatus: "approved" }; },
     async pauseOrCancel(input) { return { ...schedule, ...input, status: input.action === "pause" ? "paused" : "cancelled" }; },
     async listSchedules(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" ? [schedule] : []; },
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
-    ...overrides,
+    ...storeOverrides,
   };
   const server = createAppServer({ campaignSchedulerStore: store });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));

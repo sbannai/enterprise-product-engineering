@@ -41,6 +41,9 @@ test("admin UI, price-book management, resolver and vendor configuration are API
     assert.equal(ui.status, 200);
     assert.match(ui.headers.get("content-type") ?? "", /text\/html/);
     const html = await ui.text();
+    assert.match(html, /name="viewport" content="width=device-width, initial-scale=1"/i);
+    assert.match(html, /@media\s*\(max-width:\s*780px\)/i, "pricing grids must collapse at tablet widths");
+    assert.match(html, /\.formgrid\{grid-template-columns:1fr\}/i, "pricing forms must stack on mobile");
     assert.match(html, /Price Book/);
     assert.match(html, /Market Resolver/);
     assert.match(html, /Payment Vendor/);

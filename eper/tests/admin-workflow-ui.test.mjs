@@ -30,6 +30,9 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(uiResponse.headers.get("content-security-policy") ?? "", /default-src 'none'/);
     assert.equal(uiResponse.headers.get("cache-control"), "no-store");
     const html = await uiResponse.text();
+    assert.match(html, /name="viewport" content="width=device-width,initial-scale=1"/i);
+    assert.match(html, /@media\s*\(max-width:\s*850px\)/i, "workflow layout must collapse at tablet widths");
+    assert.match(html, /@media\s*\(max-width:\s*540px\)/i, "workflow forms must stack on narrow phones");
     assert.match(html, /Workflow designer/);
     assert.match(html, /Roles &amp; access|Roles & access/);
     assert.match(html, /Generated activities/);

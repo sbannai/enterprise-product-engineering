@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Pool } from "pg";
 import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
@@ -19,8 +20,10 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
-const paymentPool = postgresPaymentMode ? createPostgresPaymentPool() : null;
-const paymentStore = paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
+const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode;
+const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
+const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
 const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
 if (adminConfigMode !== "memory" && adminConfigMode !== "postgres") {
   throw new Error("EPER_ADMIN_CONFIG_PERSISTENCE_UNSUPPORTED");
@@ -150,6 +153,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 }
 
 const server = createAppServer({
+  capabilityPool: postgresCapabilityMode ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
   agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",

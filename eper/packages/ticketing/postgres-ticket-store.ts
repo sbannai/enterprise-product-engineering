@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendAuditEventInTransaction, type AuditEnvironment } from "../audit/audit-event-store.js";
 import type { TicketIdentity, TicketRecord, CreateTicketInput, TicketStatus, TicketSeverity } from "./ticketing-contract.js";
 
@@ -13,7 +13,7 @@ export interface TicketAuditEvent {
   applicationId: string;
   actorId: string;
   correlationId: string;
-  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned";
+  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned" | "ticket.replied";
   ticketId: string;
   outcome: "success";
   payload: Record<string, unknown>;
@@ -26,6 +26,7 @@ export interface TicketListFilter {
   severity?: TicketSeverity;
   type?: TicketRecord["type"];
   applicationId?: string;
+  search?: string;
   limit?: number;
   offset?: number;
 }
@@ -42,30 +43,65 @@ function mapRecord(row: Record<string, unknown>): TicketRecord {
   };
 }
 
-/** PostgreSQL persistence. All reads and mutations are scoped by trusted tenant identity. */
+export interface TicketReplyRecord {
+  id: string;
+  tenantId: string;
+  applicationId: string;
+  ticketId: string;
+  authorId: string;
+  authorRole: "customer" | "support";
+  body: string;
+  createdAt: string;
+}
+
+function mapReply(row: Record<string, unknown>): TicketReplyRecord {
+  return {
+    id: String(row.id), tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+    ticketId: String(row.ticket_id), authorId: String(row.author_id),
+    authorRole: row.author_role as TicketReplyRecord["authorRole"], body: String(row.body),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+/** PostgreSQL persistence. Reads require tenant scope or an explicit privileged cross-tenant scope; mutations use trusted identity. */
 export class PostgresTicketStore {
   constructor(private readonly pool: TicketSqlPool, private readonly audit: TicketAuditWriter) {}
 
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      await client.query("SELECT id FROM eper_support_tickets LIMIT 0");
+      await client.query("SELECT id, idempotency_key, request_hash FROM eper_support_tickets LIMIT 0");
     } finally { client.release(); }
   }
 
-  async create(identity: TicketIdentity, input: CreateTicketInput): Promise<TicketRecord> {
+  async create(identity: TicketIdentity, input: CreateTicketInput, idempotencyKey?: string): Promise<TicketRecord> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const id = randomUUID();
+      const requestHash = createHash("sha256").update(JSON.stringify({
+        type: input.type, title: input.title, description: input.description,
+        businessImpact: input.businessImpact, evidenceReference: input.evidenceReference ?? null,
+      })).digest("hex");
       const result = await client.query<Record<string, unknown>>(
         `INSERT INTO eper_support_tickets
-          (id, tenant_id, application_id, created_by, type, title, description, business_impact, evidence_reference, status, severity, assigned_to)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'new','p3',NULL)
+          (id, tenant_id, application_id, created_by, type, title, description, business_impact, evidence_reference, status, severity, assigned_to, idempotency_key, request_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'new','p3',NULL,$10,$11)
+         ${idempotencyKey ? "ON CONFLICT (tenant_id, application_id, created_by, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING" : ""}
          RETURNING *`,
         [id, identity.tenantId, identity.applicationId, identity.actorId, input.type, input.title, input.description,
-          input.businessImpact, input.evidenceReference ?? null],
+          input.businessImpact, input.evidenceReference ?? null, idempotencyKey ?? null, idempotencyKey ? requestHash : null],
       );
+      if (!result.rows[0] && idempotencyKey) {
+        const existing = await client.query<Record<string, unknown>>(
+          "SELECT *, request_hash FROM eper_support_tickets WHERE tenant_id=$1 AND application_id=$2 AND created_by=$3 AND idempotency_key=$4 FOR UPDATE",
+          [identity.tenantId, identity.applicationId, identity.actorId, idempotencyKey],
+        );
+        if (!existing.rows[0]) throw new Error("ticket_idempotency_lookup_failed");
+        if (existing.rows[0].request_hash !== requestHash) throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+        await client.query("COMMIT");
+        return mapRecord(existing.rows[0]);
+      }
       if (!result.rows[0]) throw new Error("ticket_insert_returned_no_row");
       await this.audit({
         tenantId: identity.tenantId, applicationId: identity.applicationId, actorId: identity.actorId,
@@ -80,20 +116,30 @@ export class PostgresTicketStore {
     } finally { client.release(); }
   }
 
-  async list(identity: Partial<Pick<TicketIdentity, "tenantId">>, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
+  async list(scope: { tenantId: string } | { crossTenant: true }, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
+    const tenantId = "tenantId" in scope ? scope.tenantId : undefined;
+    if ("tenantId" in scope && (typeof tenantId !== "string" || !tenantId.trim() || tenantId !== tenantId.trim())) {
+      throw new Error("ticket_tenant_scope_required");
+    }
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 101 || !Number.isInteger(offset) || offset < 0) {
       throw new Error("invalid_ticket_pagination");
     }
     const values: unknown[] = [];
     const clauses: string[] = [];
-    if (identity.tenantId) { values.push(identity.tenantId); clauses.push("tenant_id = $1"); }
+    if (tenantId !== undefined) { values.push(tenantId); clauses.push("tenant_id = $1"); }
+    else if (!("crossTenant" in scope && scope.crossTenant === true)) throw new Error("ticket_tenant_scope_required");
     const add = (column: string, value: unknown) => { values.push(value); clauses.push(column + " = $" + values.length); };
     if (filter.status) add("status", filter.status);
     if (filter.severity) add("severity", filter.severity);
     if (filter.type) add("type", filter.type);
     if (filter.applicationId) add("application_id", filter.applicationId);
+    if (filter.search?.trim()) {
+      values.push(filter.search.trim());
+      const searchParam = "$" + values.length;
+      clauses.push("(position(lower(" + searchParam + ") in lower(id::text)) > 0 OR position(lower(" + searchParam + ") in lower(title)) > 0 OR position(lower(" + searchParam + ") in lower(description)) > 0 OR position(lower(" + searchParam + ") in lower(business_impact)) > 0 OR position(lower(" + searchParam + ") in lower(application_id)) > 0 OR position(lower(" + searchParam + ") in lower(coalesce(assigned_to, ''))) > 0)");
+    }
     values.push(limit, offset);
     const result = await this.pool.connect().then(async client => {
       try {
@@ -103,6 +149,57 @@ export class PostgresTicketStore {
       } finally { client.release(); }
     });
     return result.rows.map(mapRecord);
+  }
+
+  /** Lists the thread only when the ticket is inside the trusted tenant/application scope. */
+  async listReplies(identity: TicketIdentity, ticketId: string): Promise<TicketReplyRecord[] | null> {
+    const client = await this.pool.connect();
+    try {
+      const ticket = await client.query<Record<string, unknown>>(
+        "SELECT id FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 AND ($3 = 'eper' OR application_id = $3)",
+        [identity.tenantId, ticketId, identity.applicationId],
+      );
+      if (!ticket.rows[0]) return null;
+      const result = await client.query<Record<string, unknown>>(
+        "SELECT * FROM eper_support_ticket_replies WHERE tenant_id = $1 AND ticket_id = $2 ORDER BY created_at ASC, id ASC",
+        [identity.tenantId, ticketId],
+      );
+      return result.rows.map(mapReply);
+    } finally { client.release(); }
+  }
+
+  /** Persists a reply and its audit event atomically; role and identity are server-derived. */
+  async addReply(
+    identity: TicketIdentity,
+    ticketId: string,
+    body: string,
+    authorRole: "customer" | "support",
+  ): Promise<TicketReplyRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const ticket = await client.query<Record<string, unknown>>(
+        "SELECT application_id FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 AND ($3 = 'eper' OR application_id = $3) FOR UPDATE",
+        [identity.tenantId, ticketId, identity.applicationId],
+      );
+      if (!ticket.rows[0]) { await client.query("ROLLBACK"); return null; }
+      const applicationId = String(ticket.rows[0].application_id);
+      const result = await client.query<Record<string, unknown>>(
+        "INSERT INTO eper_support_ticket_replies (id, tenant_id, application_id, ticket_id, author_id, author_role, body) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        [randomUUID(), identity.tenantId, applicationId, ticketId, identity.actorId, authorRole, body],
+      );
+      if (!result.rows[0]) throw new Error("ticket_reply_insert_returned_no_row");
+      await this.audit({
+        tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.replied", ticketId, outcome: "success",
+        payload: { replyId: String(result.rows[0].id), authorRole },
+      }, client);
+      await client.query("COMMIT");
+      return mapReply(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
   }
 
   async changeStatus(identity: TicketIdentity, ticketId: string, status: TicketStatus): Promise<TicketRecord | null> {
@@ -132,7 +229,7 @@ export class PostgresTicketStore {
     try {
       await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
-        "UPDATE eper_support_tickets SET assigned_to = $3, status = CASE WHEN $3 IS NULL THEN status ELSE 'assigned' END, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *",
+        "UPDATE eper_support_tickets SET assigned_to = $3::text, status = CASE WHEN $3::text IS NULL THEN status ELSE 'assigned' END, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *",
         [identity.tenantId, ticketId, assignedTo],
       );
       if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
