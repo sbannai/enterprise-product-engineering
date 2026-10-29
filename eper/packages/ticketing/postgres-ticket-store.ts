@@ -116,7 +116,11 @@ export class PostgresTicketStore {
     } finally { client.release(); }
   }
 
-  async list(identity: Partial<Pick<TicketIdentity, "tenantId">>, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
+  async list(scope: { tenantId: string } | { crossTenant: true }, filter: TicketListFilter = {}): Promise<TicketRecord[]> {
+    const tenantId = "tenantId" in scope ? scope.tenantId : undefined;
+    if ("tenantId" in scope && (typeof tenantId !== "string" || !tenantId.trim() || tenantId !== tenantId.trim())) {
+      throw new Error("ticket_tenant_scope_required");
+    }
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
     if (!Number.isInteger(limit) || limit < 1 || limit > 101 || !Number.isInteger(offset) || offset < 0) {
@@ -124,7 +128,8 @@ export class PostgresTicketStore {
     }
     const values: unknown[] = [];
     const clauses: string[] = [];
-    if (identity.tenantId) { values.push(identity.tenantId); clauses.push("tenant_id = $1"); }
+    if (tenantId !== undefined) { values.push(tenantId); clauses.push("tenant_id = $1"); }
+    else if (!("crossTenant" in scope && scope.crossTenant === true)) throw new Error("ticket_tenant_scope_required");
     const add = (column: string, value: unknown) => { values.push(value); clauses.push(column + " = $" + values.length); };
     if (filter.status) add("status", filter.status);
     if (filter.severity) add("severity", filter.severity);
