@@ -9,9 +9,14 @@ on:
       - ".github/workflows/**"
   workflow_dispatch:
   push:
+    branches: ["main"]
     paths:
       - 'eper/**'
-      - '.github/workflows/eper-reexec-uat.yml'
+      - '.github/workflows/**'
+
+concurrency:
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   controlled-uat-simulation:
