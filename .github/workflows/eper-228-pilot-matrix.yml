@@ -10,11 +10,9 @@ on:
   pull_request:
     paths:
       - 'eper/**'
-      - '.github/workflows/eper-228-pilot-matrix.yml'
   push:
     paths:
       - 'eper/**'
-      - '.github/workflows/eper-228-pilot-matrix.yml'
 
 permissions:
   contents: read
