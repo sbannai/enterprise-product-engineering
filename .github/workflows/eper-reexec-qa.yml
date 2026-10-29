@@ -3,7 +3,7 @@ name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 on:
   pull_request:
