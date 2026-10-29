@@ -1,6 +1,6 @@
 name: EPER payment gateway contract tests
-# PR synchronization deliberately reruns this focused suite when its workflow definition changes.
-
+# Focused API contract and scheduler URL checks are grouped here to ensure they run on feature branches.
+ 
 on:
   push:
     branches: ["reconcile/payment-stack-with-receipt-contract"]
@@ -12,6 +12,10 @@ on:
       - "eper/packages/pricing/market-price-book.ts"
       - "eper/tests/payment-gateway.test.mjs"
       - "eper/tests/invoice-amount-authority.test.mjs"
+      - "eper/scripts/select-campaign-scheduler-database-url.mjs"
+      - "eper/scripts/migrate-campaign-scheduler.mjs"
+      - "eper/tests/campaign-scheduler-database-url.test.mjs"
+      - "eper/packages/campaign-scheduler/**"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -21,6 +25,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   payment-gateway-contract:
@@ -37,6 +45,10 @@ jobs:
           cache-dependency-path: eper/package-lock.json
       - name: Install locked dependencies
         run: npm ci
+      # Run the isolated scheduler URL/fail-closed contract before the shared TypeScript build,
+      # so a build failure does not hide whether this focused regression suite passes.
+      - name: Test campaign scheduler database URL selection and fail-closed migration
+        run: npm run test:campaign-scheduler-url
       - name: Build EPER
         run: npm run build
       - name: Test payment gateway verification, tenant isolation, and receipt access
