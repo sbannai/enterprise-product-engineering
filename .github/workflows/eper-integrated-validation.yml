@@ -9,6 +9,7 @@ on:
     branches: ["main"]
     paths:
       - "eper/**"
+      - '.github/workflows/eper-integrated-validation.yml'
   push:
     branches: ["main"]
     paths:
