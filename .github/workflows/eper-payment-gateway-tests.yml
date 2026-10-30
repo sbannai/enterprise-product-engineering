@@ -1,6 +1,11 @@
 name: EPER payment gateway contract tests
 # Keep focused gateway and invoice-authority contracts running on every payment/receipt branch that relies on them.
 
+concurrency:
+  # New PR head supersedes older runs for that PR; push/manual runs are commit-scoped.
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
