@@ -381,6 +381,29 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
+async function isCustomerApplicationAssigned(
+  identity: TrustedCustomerAccessIdentity,
+  applicationId: string,
+  options: {
+    actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore;
+    tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore;
+  },
+): Promise<boolean> {
+  if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+    if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore) {
+      throw new Error("CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE");
+    }
+    const tenantAssigned = (await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)).includes(applicationId);
+    if (!tenantAssigned) return false;
+    return options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId);
+  }
+  let assignments: unknown;
+  try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+  const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+    ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+  return Array.isArray(assigned) && assigned.includes(applicationId);
+}
+
 export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // Startup wiring is validated here too for tests and alternate server entry points.
@@ -448,11 +471,7 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
             "Execution diagnostics authorization is not configured for durable assignments."); return;
         }
         try {
-          const tenantAssigned = (await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)).includes(applicationId);
-          const actorAssigned = tenantAssigned && await options.actorApplicationAssignmentStore.isAssigned(
-            identity.tenantId, identity.actorId, applicationId,
-          );
-          if (!tenantAssigned || !actorAssigned) {
+          if (!await isCustomerApplicationAssigned(identity, applicationId, options)) {
             sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
           }
         } catch {
@@ -497,13 +516,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
       const applicationId = campaignLifecycle[1]!, scheduleId = campaignLifecycle[2]!, action = campaignLifecycle[3]!;
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
-        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      try {
+        if (!await isCustomerApplicationAssigned(identity, applicationId, options)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+      } catch {
+        sendApiError(request, response, 503, "CAMPAIGN_LIFECYCLE_AUTHORIZATION_UNAVAILABLE",
+          "Campaign lifecycle authorization is temporarily unavailable."); return;
       }
       try {
         let schedule;
@@ -551,13 +571,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
       const applicationId = campaignCollection[1];
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
-        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      try {
+        if (!await isCustomerApplicationAssigned(identity, applicationId, options)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+      } catch {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULE_AUTHORIZATION_UNAVAILABLE",
+          "Campaign schedule authorization is temporarily unavailable."); return;
       }
       let body: Record<string, unknown>;
       try { body = await readJson(request); }
@@ -601,13 +622,14 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
       const applicationId = (campaignCollection ?? campaignDetail)![1];
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
-        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      try {
+        if (!await isCustomerApplicationAssigned(identity, applicationId, options)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+      } catch {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULE_AUTHORIZATION_UNAVAILABLE",
+          "Campaign schedule authorization is temporarily unavailable."); return;
       }
       try {
         if (campaignCollection) {
