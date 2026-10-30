@@ -57,21 +57,26 @@ jobs:
           printf "build_exit_code=%s\n" "$command_status" >> reexec-evidence/build.log
           exit "$command_status"
 
-      - name: Execute controlled UAT technical simulation
+      - name: Execute B01 controlled technical preflight
         id: test
         if: always() && steps.build.outcome == 'success'
         working-directory: eper
         run: |
           set +e
-          npm test 2>&1 | tee reexec-evidence/uat-technical-execution.log
+          node scripts/run-b01-technical-preflight.mjs 2>&1 | tee reexec-evidence/uat-technical-execution.log
           command_status=${PIPESTATUS[0]}
-          printf "npm_test_exit_code=%s\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
+          printf "preflight_exit_code=%s\\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
           exit "$command_status"
+
+      - name: Build six-wave technical evidence
+        id: waves
+        if: always() && steps.test.outcome == 'success'
+        run: node eper/scripts/build-b01-wave-evidence.mjs
 
       - name: Append step outcomes
         if: always()
         run: |
-          printf "install_outcome=%s\nbuild_outcome=%s\ntest_outcome=%s\n" "${{ steps.install.outcome }}" "${{ steps.build.outcome }}" "${{ steps.test.outcome }}" >> eper/reexec-evidence/uat-execution-metadata.txt
+          printf "install_outcome=%s\\nbuild_outcome=%s\\ntest_outcome=%s\\nwave_evidence_outcome=%s\\n" "${{ steps.install.outcome }}" "${{ steps.build.outcome }}" "${{ steps.test.outcome }}" "${{ steps.waves.outcome }}" >> eper/reexec-evidence/uat-execution-metadata.txt
 
       - name: Upload diagnostic and technical evidence
         if: always()
