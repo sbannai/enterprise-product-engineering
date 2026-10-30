@@ -646,3 +646,41 @@ test("customer application list uses durable actor membership and intersects ten
     }
   }
 });
+
+
+test("customer settings use durable tenant ownership and actor membership without environment allowlists", async () => {
+  const keys = ["EPER_CUSTOMER_PORTAL_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "customer-settings-durable-assignment-token-0001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": { displayName: "Admissions", currency: "INR" } },
+  });
+  const tenantStore = { async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a", "app-b"]; } };
+  const actorStore = { async isAssigned(tenantId, actorId, applicationId) {
+    assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]);
+    return applicationId === "app-a";
+  } };
+  const server = createAppServer({ tenantApplicationAssignmentStore: tenantStore, actorApplicationAssignmentStore: actorStore });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const allowed = await fetch(base + "/customer/settings?applicationId=app-a", { headers: { authorization: "Bearer " + token } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), { applicationId: "app-a", settings: { displayName: "Admissions", currency: "INR" } });
+    const actorDenied = await fetch(base + "/customer/settings?applicationId=app-b", { headers: { authorization: "Bearer " + token } });
+    assert.equal(actorDenied.status, 403);
+    assert.deepEqual(await actorDenied.json(), { error: "actor_not_assigned_to_application" });
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
