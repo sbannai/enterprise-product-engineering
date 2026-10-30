@@ -364,7 +364,7 @@ test("dispatch-start fence locks live schedule and execution before marking disp
   });
   assert.equal(result, true);
   const lockIndex = calls.findIndex((call) => call.sql.includes("FOR UPDATE OF s, e"));
-  const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=COALESCE"));
+  const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=now()"));
   assert.ok(lockIndex >= 0 && fenceIndex > lockIndex);
   assert.equal(calls[0].sql, "BEGIN");
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")),
