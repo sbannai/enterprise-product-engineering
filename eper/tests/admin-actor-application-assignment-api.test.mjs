@@ -13,7 +13,7 @@ test("admin actor application assignment API authenticates admins and enforces t
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const calls = [];
   const store = {
-    async listActiveAssignments(tenantId, actorId) { calls.push({ method: "listActiveAssignments", tenantId, actorId }); return [{ applicationId: "app-a", version: 1, status: "active" }]; },
+    async listAssignments(tenantId, actorId) { calls.push({ method: "listAssignments", tenantId, actorId }); return [{ applicationId: "app-a", version: 2, status: "revoked" }]; },
     async assign(input) { calls.push({ method: "assign", input }); return { ...input, status: "active", version: 1 }; },
     async revoke(input) { calls.push({ method: "revoke", input }); return { ...input, status: "revoked", version: 2 }; },
   };
@@ -26,7 +26,7 @@ test("admin actor application assignment API authenticates admins and enforces t
     const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
     const listed = await fetch(url + "?actorId=actor-a", { headers });
     assert.equal(listed.status, 200);
-    assert.equal((await listed.json()).assignments[0].applicationId, "app-a");
+    assert.equal((await listed.json()).assignments[0].applicationId, "app-a");\n    assert.equal((await fetch(url + "?actorId=actor-a", { headers })).status, 200);
     const granted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 0 }) });
     assert.equal(granted.status, 201);
     assert.equal((await granted.json()).assignment.status, "active");
