@@ -29,10 +29,22 @@ interface PaymentRecord {
 }
 interface Ledger { records: PaymentRecord[]; }
 
+function acceptsEperV1(req: IncomingMessage): boolean {
+  const accepted = (req.headers.accept ?? "").split(",");
+  return accepted.some((entry) => {
+    const [mediaType, ...parameters] = entry.split(";");
+    if (mediaType.trim().toLowerCase() !== "application/vnd.eper.v1+json") return false;
+    const qualityParameter = parameters.find((parameter) => /^\\s*q\\s*=/i.test(parameter));
+    if (!qualityParameter) return true;
+    const quality = qualityParameter.slice(qualityParameter.indexOf("=") + 1).trim();
+    // RFC quality values are 0..1 with at most three fractional digits.
+    if (!/^(?:0(?:\\.\\d{0,3})?|1(?:\\.0{0,3})?)$/.test(quality)) return false;
+    return Number(quality) > 0;
+  });
+}
+
 function json(req: IncomingMessage, res: ServerResponse, status: number, body: Record<string, unknown>): void {
-  const acceptsV1 = (req.headers.accept ?? "")
-    .split(",")
-    .some((value) => value.trim().split(";")[0].trim().toLowerCase() === "application/vnd.eper.v1+json");
+  const acceptsV1 = acceptsEperV1(req);
   if (acceptsV1 && status >= 400 && status <= 599) {
     const rawCode = typeof body.error === "string" ? body.error : "request_failed";
     const normalizedCode = rawCode.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
