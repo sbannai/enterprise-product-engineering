@@ -103,19 +103,24 @@ test("enqueue accepts only approved scheduled tenant/application schedules and i
 
 
 test("failure uses bounded exponential retry policy and returns dead-letter at max attempts", async () => {
-  const outcomes = [{ status: "retry_wait" }, { status: "dead_letter" }];
+  const outcomes = [
+    { status: "retry_wait", last_error_code: "PROVIDER_TIMEOUT", last_error_detail_code: null, attempt_count: 1 },
+    { status: "dead_letter", last_error_code: "PROVIDER_TIMEOUT", last_error_detail_code: null, attempt_count: 5 },
+  ];
   const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [outcomes.shift()] : [], rowCount: 1 }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const first = await store.failExecution({
     tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", errorCode: "provider_timeout",
   });
   assert.equal(first, "retry_wait");
-  assert.match(calls[0].sql, /power\(2, GREATEST\(attempt_count - 1, 0\)\)/);
-  assert.equal(calls[0].values[5], "PROVIDER_TIMEOUT");
+  assert.match(calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions")).sql, /power\(2, GREATEST\(attempt_count - 1, 0\)\)/);
+  assert.equal(calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions")).values[5], "PROVIDER_TIMEOUT");
   const second = await store.failExecution({
     tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", errorCode: "provider_timeout",
   });
   assert.equal(second, "dead_letter");
+  assert.equal(calls.filter((call) => call.sql.includes("INSERT INTO eper_audit_events")).length, 2);
+  assert.ok(calls.some((call) => call.sql === "COMMIT"));
 });
 
 test("execution completion requires the current worker lease", async () => {
