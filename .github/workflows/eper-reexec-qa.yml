@@ -41,7 +41,7 @@ jobs:
       - name: Initialize QA evidence
         if: always()
         run: mkdir -p reexec-evidence
-      - name: Execute 228 requirement test suite serially for isolation
+      - name: Execute 228 requirement test suite
         run: |
           set -o pipefail
           npm test 2>&1 | tee reexec-evidence/qa-test-output.log
