@@ -17,7 +17,13 @@ test("admin actor application assignment API authenticates admins and enforces t
     async assign(input) { calls.push({ method: "assign", input }); if (input.expectedVersion === 99) throw new Error("ACTOR_APPLICATION_ASSIGNMENT_VERSION_CONFLICT"); return { ...input, status: "active", version: input.expectedVersion + 1 }; },
     async revoke(input) { calls.push({ method: "revoke", input }); if (input.expectedVersion === 99) throw new Error("ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND"); return { ...input, status: "revoked", version: input.expectedVersion + 1 }; },
   };
-  const server = createAppServer({ actorApplicationAssignmentStore: store });
+  const tenantApplicationAssignmentStore = {
+    async listActive(tenantId) {
+      assert.equal(tenantId, "tenant-a");
+      return ["app-a"];
+    },
+  };
+  const server = createAppServer({ actorApplicationAssignmentStore: store, tenantApplicationAssignmentStore });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address();
