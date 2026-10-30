@@ -81,7 +81,7 @@ export class PostgresActorApplicationAssignmentStore {
       if (!prior.rows[0] && status === "revoked") throw new Error("ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND");
       if (currentVersion !== input.expectedVersion) throw new ActorApplicationAssignmentVersionConflictError(currentVersion);
       const saved = await client.query<Row>(`INSERT INTO eper_actor_application_assignment (tenant_id, actor_id, application_id, assignment_status, version, assigned_at, assigned_by, revoked_at, revoked_by, updated_at, updated_by)
-        VALUES ($1, $2, $3, $4, 1, CASE WHEN $4 = 'active' THEN NOW() ELSE NULL END, $5, CASE WHEN $4 = 'revoked' THEN NOW() ELSE NULL END, CASE WHEN $4 = 'revoked' THEN $5 ELSE NULL END, NOW(), $5)
+        VALUES ($1, $2, $3, $4, 1, NOW(), $5, CASE WHEN $4 = 'revoked' THEN NOW() ELSE NULL END, CASE WHEN $4 = 'revoked' THEN $5 ELSE NULL END, NOW(), $5)
         ON CONFLICT (tenant_id, actor_id, application_id) DO UPDATE SET assignment_status = EXCLUDED.assignment_status,
         version = eper_actor_application_assignment.version + 1,
         assigned_at = CASE WHEN EXCLUDED.assignment_status = 'active' THEN NOW() ELSE eper_actor_application_assignment.assigned_at END,
