@@ -26,6 +26,11 @@ code{background:#f1f4f9;padding:2px 5px;border-radius:5px}.help{color:var(--mute
 <div class="field"><label for="version">Expected version</label><input id="version" type="number" min="0" step="1" value="0"></div>
 </div><div class="actions"><button id="load" class="secondary">Load actor assignments</button><button id="grant">Grant access</button><button id="revoke" class="danger">Revoke access</button></div>
 <div id="operation" class="status" role="status"></div><div id="assignments"></div></section>
+<section class="card"><h2>Tenant application ownership</h2><p class="help">Assign or revoke which applications belong to your authenticated tenant. Actor access can only be granted inside this boundary.</p><div class="grid">
+<div class="field"><label for="tenantApp">Application ID</label><input id="tenantApp" placeholder="application-id"></div>
+<div class="field"><label for="tenantVersion">Expected version</label><input id="tenantVersion" type="number" min="0" step="1" value="0"></div>
+</div><div class="actions"><button id="tenantLoad" class="secondary">Load tenant assignments</button><button id="tenantGrant">Assign to tenant</button><button id="tenantRevoke" class="danger">Revoke tenant assignment</button></div>
+<div id="tenantOperation" class="status" role="status"></div><div id="tenantAssignments"></div></section>
 <p class="help">Access is granted only when the application is assigned to the administrator's tenant. Changes require the current assignment version and are recorded with an audit event.</p>
 </main>
 <script>
@@ -62,6 +67,25 @@ code{background:#f1f4f9;padding:2px 5px;border-radius:5px}.help{color:var(--mute
   $("load").addEventListener("click",async()=>{try{await load();}catch(e){status("operation",e.message,"error");}});
   $("grant").addEventListener("click",async()=>{try{await change("POST");}catch(e){status("operation",e.message,"error");}});
   $("revoke").addEventListener("click",async()=>{try{await change("DELETE");}catch(e){status("operation",e.message,"error");}});
+  const tenantEndpoint="/admin/tenant-application-assignments";
+  async function loadTenant(){
+    const data=await call(tenantEndpoint);
+    $("tenantAssignments").replaceChildren();
+    if(!data.assignments.length){const p=document.createElement("p");p.className="help";p.textContent="No tenant application assignments yet. A new assignment starts at version 0.";$("tenantAssignments").append(p);}
+    for(const assignment of data.assignments){const row=document.createElement("div");row.className="result";const label=document.createElement("strong");label.textContent=assignment.applicationId+" · "+assignment.status;const select=document.createElement("button");select.className="secondary";select.type="button";select.textContent="Use version "+assignment.version;select.addEventListener("click",()=>{$("tenantApp").value=assignment.applicationId;$("tenantVersion").value=String(assignment.version);});row.append(label,select);$("tenantAssignments").append(row);}
+    status("tenantOperation","Loaded "+data.assignments.length+" tenant assignment record(s), including revoked history.","ok");
+  }
+  async function changeTenant(method){
+    const applicationId=$("tenantApp").value.trim(),expectedVersion=Number($("tenantVersion").value);
+    if(!applicationId||!Number.isSafeInteger(expectedVersion)||expectedVersion<0)throw new Error("Enter an application ID and valid expected version");
+    const data=await call(tenantEndpoint,{method,body:JSON.stringify({applicationId,expectedVersion})});
+    $("tenantVersion").value=String(data.assignment.version);await loadTenant();
+    status("tenantOperation",method==="POST"?"Application assigned to tenant.":"Tenant application assignment revoked.","ok");
+  }
+  $("tenantLoad").addEventListener("click",async()=>{try{await loadTenant();}catch(e){status("tenantOperation",e.message,"error");}});
+  $("tenantGrant").addEventListener("click",async()=>{try{await changeTenant("POST");}catch(e){status("tenantOperation",e.message,"error");}});
+  $("tenantRevoke").addEventListener("click",async()=>{try{await changeTenant("DELETE");}catch(e){status("tenantOperation",e.message,"error");}});
+
 })();
 </script></body></html>`;
 
