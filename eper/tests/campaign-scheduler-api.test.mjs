@@ -97,6 +97,28 @@ test("campaign schedule creation creates a draft and returns a durable schedule 
   assert.equal(body.data.approvalStatus, "pending");
 });
 
+test("campaign schedule creation rejects non-management roles before store access", async (t) => {
+  let createCalls = 0;
+  const { base } = await withServer(t, {
+    async createSchedule(input) { createCalls += 1; return { ...schedule, ...input, id: "unexpected" }; },
+  });
+  const limitedToken = "campaign-api-limited-role-token-32-characters";
+  const original = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [limitedToken]: { tenantId: "tenant-a", actorId: "actor-limited", roleKey: "teacher" },
+  });
+  t.after(() => { if (original === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON; else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = original; });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    method: "POST",
+    headers: { authorization: `Bearer ${limitedToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ campaignId: "campaign-a", triggerType: "once", timezone: "Asia/Kolkata", scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" } }),
+  });
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error.code, "CAMPAIGN_CREATE_FORBIDDEN");
+  assert.equal(createCalls, 0);
+});
+
 test("campaign schedule creation rejects missing required fields", async (t) => {
   const { base } = await withServer(t);
   const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
