@@ -326,7 +326,7 @@ test("schedule creation rolls back when durable audit insertion fails", async ()
     tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
     triggerType: "once", timezone: "Asia/Kolkata",
     scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" }, createdBy: "actor-a",
-  }), /audit storage unavailable/);
+  }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
   const sql = calls.map((call) => call.sql);
   assert.ok(sql.includes("ROLLBACK"));
   assert.ok(!sql.includes("COMMIT"));
@@ -392,7 +392,7 @@ test("dispatch-start fence is single-use and rejects a second acquisition", asyn
   };
   assert.equal(await store.beginExecutionDispatch(input), true);
   assert.equal(await store.beginExecutionDispatch(input), false);
-  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\\.dispatch_started_at IS NULL/);
+  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\.dispatch_started_at IS NULL/);
   assert.ok(calls.some((call) => call.sql.includes("SET dispatch_started_at=now()") && call.sql.includes("dispatch_started_at IS NULL")));
 });
 
@@ -471,11 +471,11 @@ test("execution with dispatch started is dead-lettered rather than automatically
   });
   assert.equal(outcome, "dead_letter");
   const failureUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
-  assert.match(failureUpdate.sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \\$5/);
+  assert.match(failureUpdate.sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
   assert.match(failureUpdate.sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
-  assert.match(failureUpdate.sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN \\$8 ELSE NULL END/);
+  assert.match(failureUpdate.sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN \$8 ELSE NULL END/);
   assert.equal(failureUpdate.values[7], "PROVIDER_TIMEOUT");
-  assert.match(failureUpdate.sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\\(\\) ELSE NULL END/);
+  assert.match(failureUpdate.sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\(\) ELSE NULL END/);
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
@@ -503,7 +503,7 @@ test("claim query excludes executions that crossed the dispatch fence and audits
   const claimed = await store.claimExecutions("worker-a", 10);
   assert.equal(claimed.length, 1);
   const claimQuery = calls.find((call) => call.sql.includes("WITH due AS"));
-  assert.match(claimQuery.sql, /e\\.dispatch_started_at IS NULL/);
+  assert.match(claimQuery.sql, /e\.dispatch_started_at IS NULL/);
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls[0].sql, "BEGIN");
   assert.equal(calls.at(-1).sql, "COMMIT");
