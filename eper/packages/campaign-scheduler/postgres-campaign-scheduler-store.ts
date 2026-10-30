@@ -589,7 +589,7 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query(
         `UPDATE eper_campaign_executions
-         SET status='succeeded', result=$5::jsonb, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
+         SET status='succeeded', result=$5::jsonb, last_error_code=NULL, last_error_detail_code=NULL, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4`,
         [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {})],
       );
@@ -611,7 +611,7 @@ export class PostgresCampaignSchedulerStore {
       const result = await client.query<{ id: string }>(
         `UPDATE eper_campaign_executions
          SET status='retry_wait', attempt_count=GREATEST(attempt_count - 1, 0),
-             available_at=now(), last_error_code=NULL, updated_at=now(),
+             available_at=now(), last_error_code=NULL, last_error_detail_code=NULL, updated_at=now(),
              locked_at=NULL, locked_by=NULL, completed_at=NULL
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
            AND locked_by=$4 AND dispatch_started_at IS NULL
