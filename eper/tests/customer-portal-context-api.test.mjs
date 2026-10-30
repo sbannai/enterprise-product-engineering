@@ -546,3 +546,55 @@ test("customer application settings fail closed when settings configuration is m
     }
   }
 });
+
+test("customer application access fails closed when actor application allowlist is missing, empty, or invalid", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const tokens = {
+    missing: "customer-actor-scope-missing-token-0000000001",
+    empty: "customer-actor-scope-empty-token-00000000001",
+    invalid: "customer-actor-scope-invalid-token-0000000001",
+  };
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [tokens.missing]: { tenantId: "tenant-a", actorId: "actor-missing", roleKey: "customer" },
+    [tokens.empty]: { tenantId: "tenant-a", actorId: "actor-empty", roleKey: "customer", applicationIds: [] },
+    [tokens.invalid]: { tenantId: "tenant-a", actorId: "actor-invalid", roleKey: "customer", applicationIds: ["app-a", 42] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": { displayName: "Admissions", currency: "INR" } },
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    for (const token of Object.values(tokens)) {
+      const headers = { authorization: "Bearer " + token };
+      const applications = await fetch(base + "/customer/applications", { headers });
+      assert.equal(applications.status, 200);
+      assert.deepEqual(await applications.json(), { applications: [] });
+      const settings = await fetch(base + "/customer/settings?applicationId=app-a", { headers });
+      assert.equal(settings.status, 403);
+      assert.deepEqual(await settings.json(), { error: "actor_not_assigned_to_application" });
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
