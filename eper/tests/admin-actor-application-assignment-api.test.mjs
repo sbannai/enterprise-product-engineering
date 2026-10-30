@@ -26,7 +26,7 @@ test("admin actor application assignment API authenticates admins and enforces t
     const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
     const listed = await fetch(url + "?actorId=actor-a", { headers });
     assert.equal(listed.status, 200);
-    assert.equal((await listed.json()).assignments[0].applicationId, "app-a");\n    assert.equal((await fetch(url + "?actorId=actor-a", { headers })).status, 200);
+    assert.equal((await listed.json()).assignments[0].applicationId, "app-a");
     const granted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 0 }) });
     assert.equal(granted.status, 201);
     assert.equal((await granted.json()).assignment.status, "active");
