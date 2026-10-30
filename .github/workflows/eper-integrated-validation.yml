@@ -1,8 +1,7 @@
 name: EPER Integrated Validation (same-commit end-to-end)
 
 concurrency:
-  # New PR head supersedes older runs for that PR; push/manual runs are commit-scoped.
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
@@ -72,9 +71,11 @@ jobs:
         run: npm test
 
   requirement-matrix:
+    # Keep the expensive full matrix off PR fan-out; run on main or manual dispatch.
+    if: github.event_name != 'pull_request'
     name: 228 requirements / 38 chapter pilot matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v7
@@ -244,19 +245,24 @@ jobs:
       - uat-readiness-evidence
     runs-on: ubuntu-latest
     steps:
-      - name: Require every technical lane to complete successfully
+      - name: Require every applicable technical lane to complete successfully
         env:
+          EVENT_NAME: ${{ github.event_name }}
           PAYMENT: ${{ needs.payment-postgres.result }}
           MATRIX: ${{ needs.requirement-matrix.result }}
           RUNTIME: ${{ needs.runtime-six-family.result }}
           RELEASE: ${{ needs.release-and-traceability.result }}
           READINESS: ${{ needs.uat-readiness-evidence.result }}
         run: |
-          printf 'payment-postgres=%s\nrequirement-matrix=%s\nruntime-six-family=%s\nrelease-traceability=%s\nuat-readiness-evidence=%s\n' "$PAYMENT" "$MATRIX" "$RUNTIME" "$RELEASE" "$READINESS"
+          printf 'event=%s\npayment-postgres=%s\nrequirement-matrix=%s\nruntime-six-family=%s\nrelease-traceability=%s\nuat-readiness-evidence=%s\n' "$EVENT_NAME" "$PAYMENT" "$MATRIX" "$RUNTIME" "$RELEASE" "$READINESS"
           test "$PAYMENT" = success
-          test "$MATRIX" = success
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            test "$MATRIX" = skipped
+          else
+            test "$MATRIX" = success
+          fi
           test "$RUNTIME" = success
           test "$RELEASE" = success
           test "$READINESS" = success
-          echo "PASS: all integrated technical lanes completed on the same commit."
+          echo "PASS: all applicable technical lanes completed on the same commit."
           echo "NOTE: this is not business UAT acceptance or production release authorization."
