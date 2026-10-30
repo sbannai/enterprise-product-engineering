@@ -7,3 +7,10 @@ export {
   type ActorApplicationAssignment,
   type ChangeActorApplicationAssignmentInput,
 } from "./postgres-actor-application-assignment-store.js";
+
+export {
+  PostgresTenantApplicationAssignmentStore,
+  TenantApplicationAssignmentVersionConflictError,
+  type TenantApplicationAssignment,
+  type ChangeTenantApplicationAssignmentInput,
+} from "./postgres-tenant-application-assignment-store.js";
