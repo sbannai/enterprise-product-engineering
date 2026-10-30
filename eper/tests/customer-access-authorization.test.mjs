@@ -177,3 +177,18 @@ test("AI draft routes enforce durable tenant and actor assignments before draft 
     }
   }
 });
+
+test("API factory fails closed when durable actor assignment mode has no store", () => {
+  const key = "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE";
+  const previous = process.env[key];
+  process.env[key] = "postgres";
+  try {
+    assert.throws(
+      () => createAppServer(),
+      { message: "CUSTOMER_ACTOR_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE" },
+    );
+  } finally {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+});
