@@ -586,8 +586,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 409, { error: error.message });
         } else if (error instanceof Error && error.message === "ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND") {
           sendJson(request, response, 404, { error: error.message });
-        } else if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
-          sendJson(request, response, 400, { error: "invalid_json" });
+        } else if (error instanceof SyntaxError || error instanceof Error && (error.message === "JSON_OBJECT_REQUIRED" || error.message.startsWith("ACTOR_APPLICATION_ASSIGNMENT_INVALID_") || error.message === "ACTOR_APPLICATION_ASSIGNMENT_EXPECTED_VERSION_INVALID" || error.message === "ACTOR_APPLICATION_ASSIGNMENT_CORRELATION_ID_REQUIRED")) {
+          sendJson(request, response, 400, { error: error.message === "JSON_OBJECT_REQUIRED" || error instanceof SyntaxError ? "invalid_json" : error.message });
         } else {
           sendJson(request, response, 503, { error: "actor_application_assignment_operation_failed" });
         }
