@@ -695,12 +695,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      let assigned: unknown;
+      if (options.tenantApplicationAssignmentStore) assigned = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
       const applicationId = campaignLifecycle[1]!, scheduleId = campaignLifecycle[2]!, action = campaignLifecycle[3]!;
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId) || !actorAssigned) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
       try {
@@ -749,12 +756,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      let assigned: unknown;
+      if (options.tenantApplicationAssignmentStore) assigned = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
       const applicationId = campaignCollection[1];
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId) || !actorAssigned) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
       let body: Record<string, unknown>;
@@ -799,12 +813,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      let assigned: unknown;
+      if (options.tenantApplicationAssignmentStore) assigned = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
       const applicationId = (campaignCollection ?? campaignDetail)![1];
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId) || !actorAssigned) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
       try {
@@ -950,14 +971,20 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
         try {
           modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
-          assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+          if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
           assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
         } catch { sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return; }
         const objectRecord = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
         const modules = objectRecord(modulesConfig)?.[identity.tenantId];
-        const assignments = objectRecord(assignmentsConfig)?.[identity.tenantId];
+        const assignments = options.tenantApplicationAssignmentStore
+          ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+          : objectRecord(assignmentsConfig)?.[identity.tenantId];
+        const actorAssigned = options.actorApplicationAssignmentStore
+          ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+          : identity.applicationIds?.includes(applicationId) === true;
         const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
-        if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) || !assignments.includes(applicationId) || !tenantAssets) {
+        if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) ||
+            !assignments.includes(applicationId) || !actorAssigned || !tenantAssets) {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
         const applicationAssets = tenantAssets[applicationId];
