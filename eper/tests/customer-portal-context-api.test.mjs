@@ -598,3 +598,51 @@ test("customer application access fails closed when actor application allowlist 
     }
   }
 });
+
+
+test("customer application list uses durable actor membership and intersects tenant applications", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-durable-membership-list-test-token-0001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
+    "tenant-a": ["app-a", "app-b"],
+    "tenant-b": ["app-c"],
+  });
+  const observed = [];
+  const store = {
+    async listActive(tenantId, actorId) {
+      observed.push({ tenantId, actorId });
+      return ["app-b", "app-c", "app-not-assigned-to-tenant"];
+    },
+    async isAssigned() { return false; },
+  };
+  const server = createAppServer({ actorApplicationAssignmentStore: store });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications", {
+      headers: { authorization: "Bearer " + token },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { applications: [{ applicationId: "app-b" }] });
+    assert.deepEqual(observed, [{ tenantId: "tenant-a", actorId: "actor-a" }]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
