@@ -218,6 +218,11 @@ test("worker does not call provider when the atomic dispatch fence is denied", a
     store.calls.push(["dispatch-fence", input]);
     return false;
   };
+  store.failExecution = async (input) => {
+    store.calls.push(["fail", input]);
+    controller.abort();
+    return "retry_wait";
+  };
   let dispatchCalls = 0;
   await runCampaignExecutionWorker(store, async () => {
     dispatchCalls += 1;
