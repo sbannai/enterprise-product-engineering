@@ -85,7 +85,18 @@ test("governed CRM, sales and marketing agent draft workflow", async (t) => {
     const id = created.json.draft.id;
     const selfApproval = await request(`/v1/agents/drafts/${id}/approve`, { method: "POST", body: {} });
     assert.equal(selfApproval.status, 403);
-    assert.equal(selfApproval.json.error, "maker_checker_separation_required");
+    assert.equal(selfApproval.json.error, "reviewer_role_required");
+
+    const reviewerCreated = await request("/v1/agents/sales/drafts", {
+      method: "POST", principal: "reviewer-test",
+      body: { intent: "proposal-outline", input: { objective: "maker-checker regression" } },
+    });
+    assert.equal(reviewerCreated.status, 201);
+    const reviewerSelfApproval = await request(`/v1/agents/drafts/${reviewerCreated.json.draft.id}/approve`, {
+      method: "POST", principal: "reviewer-test", body: {},
+    });
+    assert.equal(reviewerSelfApproval.status, 403);
+    assert.equal(reviewerSelfApproval.json.error, "maker_checker_separation_required");
     const approval = await request(`/v1/agents/drafts/${id}/approve`, { method: "POST", principal: "reviewer-test", body: { note: "Reviewed in test" } });
     assert.equal(approval.status, 200);
     assert.equal(approval.json.draft.status, "APPROVED");
