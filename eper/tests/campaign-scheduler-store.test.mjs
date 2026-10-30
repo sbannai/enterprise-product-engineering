@@ -135,14 +135,22 @@ test("execution completion requires the current worker lease", async () => {
 });
 
 test("stale worker recovery validates policy and requeues or dead-letters expired leases", async () => {
-  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 3 }));
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_executions") ? [
+      { id: "exec-1", tenant_id: "tenant-a", application_id: "app-a", status: "retry_wait", last_error_code: "WORKER_LEASE_EXPIRED", last_error_detail_code: null, attempt_count: 2 },
+      { id: "exec-2", tenant_id: "tenant-b", application_id: "app-b", status: "dead_letter", last_error_code: "DISPATCH_OUTCOME_UNKNOWN", last_error_detail_code: "WORKER_LEASE_EXPIRED", attempt_count: 5 },
+      { id: "exec-3", tenant_id: "tenant-c", application_id: "app-c", status: "retry_wait", last_error_code: "WORKER_LEASE_EXPIRED", last_error_detail_code: null, attempt_count: 1 },
+    ] : [], rowCount: sql.includes("UPDATE eper_campaign_executions") ? 3 : 1,
+  }));
   const store = new PostgresCampaignSchedulerStore(pool);
   await assert.rejects(store.recoverStaleExecutions(5, 5), /CAMPAIGN_RECOVERY_POLICY_INVALID/);
   assert.equal(calls.length, 0);
   const recovered = await store.recoverStaleExecutions(300, 5);
   assert.equal(recovered, 3);
-  assert.match(calls[0].sql, /WORKER_LEASE_EXPIRED/);
-  assert.match(calls[0].sql, /status='running' AND locked_at < now\(\)/);
+  const recoveryUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.match(recoveryUpdate.sql, /WORKER_LEASE_EXPIRED/);
+  assert.equal(calls.filter((call) => call.sql.includes("INSERT INTO eper_audit_events")).length, 3);
+  assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
 
