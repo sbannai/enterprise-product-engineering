@@ -382,6 +382,12 @@ function createConfiguredCapabilityServices() {
 }
 
 export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+  // Durable mode must never fall back to credential-embedded applicationIds.
+  // Startup wiring is validated here too for tests and alternate server entry points.
+  if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+    if (!options.actorApplicationAssignmentStore) throw new Error("CUSTOMER_ACTOR_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+    if (!options.tenantApplicationAssignmentStore) throw new Error("TENANT_APPLICATION_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+  }
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
