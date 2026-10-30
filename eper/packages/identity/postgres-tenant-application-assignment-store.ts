@@ -34,6 +34,9 @@ export class PostgresTenantApplicationAssignmentStore {
     try {
       const result = await client.query<{ table_name: string | null }>("SELECT to_regclass('public.eper_tenant_application_assignment')::text AS table_name");
       if (!result.rows[0]?.table_name) throw new Error("EPER_TENANT_APPLICATION_ASSIGNMENT_SCHEMA_NOT_APPLIED");
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_TENANT_APPLICATION_ASSIGNMENT_SCHEMA_NOT_APPLIED") throw error;
+      throw new Error("EPER_TENANT_APPLICATION_ASSIGNMENT_READINESS_FAILED", { cause: error });
     } finally { client.release(); }
   }
   async listActive(tenantId: string): Promise<string[]> {
