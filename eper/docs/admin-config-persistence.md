@@ -53,6 +53,8 @@ Tenant/application ownership is managed separately by `GET /admin/tenant-applica
 
 The same-origin admin console is `/admin/actor-application-assignments/ui`. The Pricing & Payments console links to it from Client & Application Access. Credentials remain in page memory and are not persisted in browser storage. Assignment mutations use optimistic version checks and write their audit event in the same database transaction; stale versions return `409`, applications outside the tenant allowlist return `403`, and a revocation without an existing assignment returns `404`.
 
+The same Actor & Application Access console now includes a tenant-ownership section for listing, granting and revoking tenant/application assignments through the durable API. Tenant ownership is the outer authorization boundary; actor membership is intersected with it for customer application visibility. Module-entitlement tenant checks also resolve against the durable tenant assignment store in PostgreSQL assignment mode, rather than the environment allowlist.
+
 The customer application list, settings and ticket APIs use the active actor/application membership when PostgreSQL assignment mode is enabled. Environment-based actor application IDs remain a compatibility path only when PostgreSQL assignment mode is not enabled.
 
 ## Admin UI shell boundary
