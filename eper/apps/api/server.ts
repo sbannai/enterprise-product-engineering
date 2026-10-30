@@ -496,6 +496,84 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
 
+    // Durable administrator provisioning for actor-to-application membership.
+    if (requestUrl.pathname === "/admin/actor-application-assignments") {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.actorApplicationAssignmentStore) {
+        sendJson(request, response, 503, { error: "actor_application_assignment_store_unavailable" });
+        return;
+      }
+      const adminIdentity = resolveAdminConfigIdentity(request);
+      if (!adminIdentity) {
+        sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+        return;
+      }
+      try {
+        if (request.method === "GET") {
+          const actorId = requestUrl.searchParams.get("actorId") ?? "";
+          if (!/^[a-zA-Z0-9._-]{2,128}$/.test(actorId)) {
+            sendJson(request, response, 400, { error: "invalid_actor_id" });
+            return;
+          }
+          const applicationIds = await options.actorApplicationAssignmentStore.listActive(adminIdentity.tenantId, actorId);
+          sendJson(request, response, 200, { tenantId: adminIdentity.tenantId, actorId, applicationIds });
+          return;
+        }
+        if (request.method === "POST" || request.method === "DELETE") {
+          const body = await readJson(request);
+          const actorId = typeof body.actorId === "string" ? body.actorId : "";
+          const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+          const expectedVersion = body.expectedVersion;
+          if (!/^[a-zA-Z0-9._-]{2,128}$/.test(actorId) ||
+              !/^[a-zA-Z0-9._:-]{2,128}$/.test(applicationId) ||
+              !Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) {
+            sendJson(request, response, 400, { error: "invalid_assignment_input" });
+            return;
+          }
+          let tenantAssignments: unknown;
+          try {
+            const parsed: unknown = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+            tenantAssignments = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+              ? (parsed as Record<string, unknown>)[adminIdentity.tenantId] : null;
+          } catch { tenantAssignments = null; }
+          if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
+            sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+            return;
+          }
+          const change = {
+            tenantId: adminIdentity.tenantId,
+            actorId,
+            applicationId,
+            changedBy: adminIdentity.actorId,
+            expectedVersion: expectedVersion as number,
+            environment: options.adminConfigEnvironment ?? "uat",
+            correlationId: resolveApiRequestId(request),
+            serviceVersion: options.serviceVersion,
+          };
+          const assignment = request.method === "POST"
+            ? await options.actorApplicationAssignmentStore.assign(change)
+            : await options.actorApplicationAssignmentStore.revoke(change);
+          sendJson(request, response, request.method === "POST" ? 201 : 200, { assignment });
+          return;
+        }
+        sendMethodNotAllowed(request, response, "GET, POST, DELETE");
+      } catch (error) {
+        if (error instanceof Error && error.message === "ACTOR_APPLICATION_ASSIGNMENT_VERSION_CONFLICT") {
+          sendJson(request, response, 409, { error: error.message });
+        } else if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
+          sendJson(request, response, 400, { error: "invalid_json" });
+        } else {
+          sendJson(request, response, 503, { error: "actor_application_assignment_operation_failed" });
+        }
+      }
+      return;
+    }
+
     // Customer session introspection: identity is derived only from the server-side
     // credential map. This is an API boundary, not a substitute for a browser login UI.
     if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
