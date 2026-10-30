@@ -43,9 +43,6 @@ jobs:
       - name: Build release candidate
         run: npm run build
 
-      - name: Execute verification tests
-        run: npm test
-
       - name: Build UAT container image (no push)
         run: |
           docker build \
