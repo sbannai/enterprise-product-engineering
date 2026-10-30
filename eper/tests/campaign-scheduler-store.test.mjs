@@ -126,6 +126,7 @@ test("execution completion requires the current worker lease", async () => {
   });
   assert.equal(completed, false);
   assert.match(calls[0].sql, /status='running' AND locked_by=\$4/);
+  assert.match(calls[0].sql, /last_error_code=NULL, last_error_detail_code=NULL/);
 });
 
 test("stale worker recovery validates policy and requeues or dead-letters expired leases", async () => {
@@ -579,6 +580,7 @@ test("pausing before dispatch releases the claim without consuming retry budget"
   const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
   assert.ok(update, "must update the claimed execution");
   assert.match(update.sql, /status='retry_wait'/);
+  assert.match(update.sql, /last_error_code=NULL, last_error_detail_code=NULL/);
   assert.match(update.sql, /attempt_count=GREATEST\(attempt_count - 1, 0\)/);
   assert.match(update.sql, /dispatch_started_at IS NULL/);
   assert.match(update.sql, /locked_by=\$4/);
