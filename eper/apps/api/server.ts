@@ -1387,7 +1387,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       // Tenant ownership alone is not actor authorization. Require the credential's
       // explicit application allow-list before reading, creating, or replying to tickets.
-      if (!identity.applicationIds?.includes(applicationId)) {
+      if (!(options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true)) {
         sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
@@ -1686,7 +1688,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
       }
-      if (!identity.applicationIds?.includes(applicationId)) {
+      if (!(options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true)) {
         sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
