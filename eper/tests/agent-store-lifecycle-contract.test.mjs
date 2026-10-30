@@ -51,7 +51,7 @@ test("rejecting an agent draft fails its job instead of reporting success", () =
   assert.match(source, /AGENT_DRAFT_REJECTED/);
   assert.match(source, /AGENT_DRAFT_JOB_NOT_AWAITING_APPROVAL/);
   assert.match(source, /if \(jobUpdate\.rowCount !== 1\)/);
-  assert.match(source, /SELECT status FROM eper_agent_jobs WHERE tenant_id=\\$1 AND application_id=\\$2 AND job_id=\\$3 FOR UPDATE/);
+  assert.ok(source.includes("SELECT status FROM eper_agent_jobs WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3 FOR UPDATE"));
   assert.match(source, /status='awaiting_approval'/);
 });
 
@@ -72,7 +72,7 @@ test("API request ID stays stable across audit correlation and response envelope
 test("durable draft read returns review metadata only through tenant/application-scoped storage", () => {
   assert.match(source, /async getDraft/);
   assert.match(source, /WHERE tenant_id=\$1 AND application_id=\$2 AND draft_id=\$3/);
-  assert.ok(routes.includes('const draftMatch = /^\\/v1\\/agent-drafts\\/([0-9a-f-]+)$/;'));
+  assert.ok(routes.includes('const draftMatch = /^\\/v1\\/agent-drafts\\/([0-9a-f-]+)$/.exec(pathname);'));
   assert.match(routes, /options\.store\.getDraft/);
   assert.ok(routes.includes('const isDraftReviewRoute = /^\\/v1\\/agent-drafts\\/[0-9a-f-]+\\/(approve|reject)$/.test(pathname);'));
   assert.match(routes, /const allowedMethod = pathname === "\/v1\/agent-jobs" \|\| isDraftReviewRoute \|\| cancelMatch \? "POST" : "GET";/);
