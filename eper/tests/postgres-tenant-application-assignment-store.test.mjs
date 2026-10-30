@@ -91,3 +91,21 @@ test("tenant application assignment rolls back when audit persistence fails", as
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.ok(!calls.some(call => call.sql === "COMMIT"));
 });
+
+test("tenant application assignment can be re-granted after revocation with a higher version", async () => {
+  const { calls, pool } = fakeWritePool({ prior: [{ version: 2 }] });
+  const saved = await new PostgresTenantApplicationAssignmentStore(pool).assign({ ...changeInput, expectedVersion: 2 });
+  assert.equal(saved.status, "active");
+  assert.equal(saved.version, 3);
+  assert.equal(saved.revokedAt, null);
+  assert.ok(calls.some(call => /ON CONFLICT \(tenant_id, application_id\) DO UPDATE/.test(call.sql)));
+  assert.ok(calls.some(call => /tenant.application_assignment.grant/.test(JSON.stringify(call.values))));
+});
+
+test("tenant application revoke rejects a missing assignment", async () => {
+  const { calls, pool } = fakeWritePool();
+  await assert.rejects(() => new PostgresTenantApplicationAssignmentStore(pool).revoke(changeInput),
+    { message: "TENANT_APPLICATION_ASSIGNMENT_NOT_FOUND" });
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some(call => /INSERT INTO eper_tenant_application_assignment/.test(call.sql)));
+});
