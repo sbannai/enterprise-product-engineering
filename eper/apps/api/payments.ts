@@ -38,7 +38,7 @@ function acceptsEperV1(req: IncomingMessage): boolean {
     if (!qualityParameter) return true;
     const quality = qualityParameter.slice(qualityParameter.indexOf("=") + 1).trim();
     // RFC quality values are 0..1 with at most three fractional digits.
-    if (!/^(?:0(?:\.\\d{0,3})?|1(?:\.0{0,3})?)$/.test(quality)) return false;
+    if (!/^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(quality)) return false;
     return Number(quality) > 0;
   });
 }
