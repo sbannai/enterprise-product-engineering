@@ -1259,3 +1259,23 @@ test("customer ticket reply endpoint rejects empty, oversized, and over-posted b
     assert.equal(storeCalls, 0);
   });
 });
+
+test("ticket API uses durable tenant ownership and actor membership without environment allowlists", async () => {
+  process.env.EPER_TICKETING_API_ENABLED="true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON=JSON.stringify({
+    [credential]:{tenantId:"tenant-a",actorId:"actor-a",roleKey:"customer"},
+  });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  let storeCalls=0;
+  const ticketStore={async assertReady(){},async list(){storeCalls++;return [];}};
+  const tenantApplicationAssignmentStore={async listActive(tenantId){assert.equal(tenantId,"tenant-a");return ["app-a","app-b"];}};
+  const actorApplicationAssignmentStore={async isAssigned(tenantId,actorId,applicationId){assert.deepEqual([tenantId,actorId,applicationId],["tenant-a","actor-a","app-a"]);return true;}};
+  await withServer({ticketStore,tenantApplicationAssignmentStore,actorApplicationAssignmentStore},async(base)=>{
+    const allowed=await fetch(base+"/customer/applications/app-a/tickets",{headers:{authorization:"Bearer "+credential}});
+    assert.equal(allowed.status,200);
+    assert.equal(storeCalls,1);
+    const actorDenied=await fetch(base+"/customer/applications/app-b/tickets",{headers:{authorization:"Bearer "+credential}});
+    assert.equal(actorDenied.status,403);
+    assert.equal(storeCalls,1);
+  });
+});
