@@ -192,3 +192,18 @@ test("API factory fails closed when durable actor assignment mode has no store",
     else process.env[key] = previous;
   }
 });
+
+test("API factory fails closed when durable tenant assignment store is missing", () => {
+  const key = "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE";
+  const previous = process.env[key];
+  process.env[key] = "postgres";
+  try {
+    assert.throws(
+      () => createAppServer({ actorApplicationAssignmentStore: {} }),
+      { message: "TENANT_APPLICATION_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE" },
+    );
+  } finally {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+});
