@@ -17,7 +17,8 @@ test("tenant application assignment admin API authenticates and scopes mutations
     async assign(input) { calls.push(["assign", input]); return { ...input, status: "active", version: input.expectedVersion + 1 }; },
     async revoke(input) { calls.push(["revoke", input]); return { ...input, status: "revoked", version: input.expectedVersion + 1 }; },
   };
-  const server = createAppServer({ tenantApplicationAssignmentStore: store });
+  const actorApplicationAssignmentStore = {};
+  const server = createAppServer({ tenantApplicationAssignmentStore: store, actorApplicationAssignmentStore });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address();
