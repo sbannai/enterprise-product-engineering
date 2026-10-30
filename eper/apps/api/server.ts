@@ -433,6 +433,13 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
+      // Durable actor/application assignments are enforced by the scheduler APIs.
+      // Until this diagnostics route is wired to those stores, fail closed rather
+      // than treating tenant membership alone as sufficient authorization.
+      if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+        sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+          "Execution diagnostics authorization is not configured for durable assignments."); return;
+      }
       let assignments: unknown;
       try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
       const applicationId = campaignExecutionDiagnostic[1];
