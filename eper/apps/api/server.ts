@@ -549,7 +549,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
           const expectedVersion = body.expectedVersion;
           if (!/^[a-zA-Z0-9._-]{2,128}$/.test(actorId) ||
-              !/^[a-zA-Z0-9._:-]{2,128}$/.test(applicationId) ||
+              !/^[a-zA-Z0-9._-]{2,128}$/.test(applicationId) ||
               !Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) {
             sendJson(request, response, 400, { error: "invalid_assignment_input" });
             return;
@@ -584,6 +584,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       } catch (error) {
         if (error instanceof Error && error.message === "ACTOR_APPLICATION_ASSIGNMENT_VERSION_CONFLICT") {
           sendJson(request, response, 409, { error: error.message });
+        } else if (error instanceof Error && error.message === "ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND") {
+          sendJson(request, response, 404, { error: error.message });
         } else if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
           sendJson(request, response, 400, { error: "invalid_json" });
         } else {
