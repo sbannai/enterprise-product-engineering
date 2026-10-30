@@ -8,6 +8,8 @@ import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady 
 import { PostgresTicketStore, createCanonicalTicketAuditWriter } from "../../packages/ticketing/postgres-ticket-store.js";
 import { PostgresAgentDraftStore } from "../../packages/agents/postgres-agent-draft-store.js";
 import { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
+import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -56,9 +58,18 @@ function readApplicationAssignments(): Record<string, string[]> {
   }
   return assignments;
 }
+const actorAssignmentMode = process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE ?? "legacy";
+if (actorAssignmentMode !== "legacy" && actorAssignmentMode !== "postgres") {
+  throw new Error("EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE_UNSUPPORTED");
+}
+let tenantApplicationAssignmentStoreForEntitlements: PostgresTenantApplicationAssignmentStore | undefined;
 const moduleEntitlementService = moduleEntitlementMode === "postgres" && paymentPool
   ? new PostgresModuleEntitlementService(paymentPool, {
       async isAssignedToTenant(tenantId, applicationId) {
+        if (actorAssignmentMode === "postgres") {
+          if (!tenantApplicationAssignmentStoreForEntitlements) throw new Error("TENANT_APPLICATION_ASSIGNMENT_STORE_NOT_READY");
+          return (await tenantApplicationAssignmentStoreForEntitlements.listActive(tenantId)).includes(applicationId);
+        }
         const assignments = readApplicationAssignments();
         return assignments[tenantId]?.includes(applicationId) === true;
       },
@@ -114,6 +125,19 @@ if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
 
+if (actorAssignmentMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("CUSTOMER_ACTOR_ASSIGNMENTS_REQUIRE_POSTGRES_AND_DURABLE_AUDIT");
+}
+const actorApplicationAssignmentStore = actorAssignmentMode === "postgres" && paymentPool
+  ? new PostgresActorApplicationAssignmentStore(paymentPool)
+  : undefined;
+if (actorApplicationAssignmentStore) await actorApplicationAssignmentStore.assertReady();
+const tenantApplicationAssignmentStore = actorAssignmentMode === "postgres" && paymentPool
+  ? new PostgresTenantApplicationAssignmentStore(paymentPool)
+  : undefined;
+if (tenantApplicationAssignmentStore) await tenantApplicationAssignmentStore.assertReady();
+tenantApplicationAssignmentStoreForEntitlements = tenantApplicationAssignmentStore;
+
 const agentsEnabled = process.env.EPER_AGENTS_API_ENABLED === "true";
 if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
   throw new Error("AGENTS_API_REQUIRES_POSTGRES_CONFIGURATION_AND_DURABLE_AUDIT");
@@ -151,7 +175,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 
 const server = createAppServer({
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
-  agentDraftStore, ticketStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
+  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
 });
