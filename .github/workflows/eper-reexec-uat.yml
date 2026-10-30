@@ -3,7 +3,7 @@ name: EPER REEXEC-002 Controlled UAT Technical Simulation
 
 concurrency:
   # New PR head supersedes older runs for that PR; push/manual runs are commit-scoped.
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: eper-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
