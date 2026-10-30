@@ -406,7 +406,7 @@ test("support admin queue and status updates remain scoped to the trusted admin 
 
     const update = await fetch(base + "/admin/support/tickets/00000000-0000-4000-8000-000000000001/status", {
       method: "PATCH",
-      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", "x-correlation-id": "invalid correlation id", "x-tenant-id": "tenant-attacker", "x-actor-id": "attacker-actor", "x-role-key": "customer" },
+      headers: { authorization: `Bearer ${credential}`, "content-type": "application/json", accept: "application/vnd.eper.v1+json", "x-correlation-id": "invalid correlation id", "x-tenant-id": "tenant-attacker", "x-actor-id": "attacker-actor", "x-role-key": "customer" },
       body: JSON.stringify({ status: "in_progress" }),
     });
     assert.equal(update.status, 200);
