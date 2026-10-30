@@ -219,6 +219,11 @@ test("campaign schedule console serves responsive UI and lifecycle controls", as
   assert.match(html, /<option value="once">Once<\/option><option value="recurring">Recurring<\/option>/);
   assert.doesNotMatch(html, /<option value="event">|<option value="condition">/);
   assert.match(html, /aria-live="polite"/);
+  assert.match(html, /Execution diagnostics/);
+  assert.match(html, /id="executionId"/);
+  assert.match(html, /Load diagnostics/);
+  assert.match(html, /campaign-executions/);
+  assert.match(html, /lastErrorDetailCode/);
 });
 
 test("campaign schedule creation rejects trigger types without verified execution paths", async (t) => {
