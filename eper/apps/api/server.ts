@@ -420,6 +420,41 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
 
     // Campaign schedule read APIs: tenant identity is server-derived, and application assignment
     // is checked independently before any database lookup.
+    const campaignExecutionDiagnostic = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-executions\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    if (campaignExecutionDiagnostic && ["GET", "HEAD"].includes(request.method ?? "")) {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!["customer-admin", "application-admin", "campaign-approver"].includes(identity.roleKey)) {
+        sendApiError(request, response, 403, "CAMPAIGN_DIAGNOSTICS_FORBIDDEN", "A campaign operator role is required."); return;
+      }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      let assignments: unknown;
+      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+      const applicationId = campaignExecutionDiagnostic[1];
+      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
+        const diagnostics = await options.campaignSchedulerStore.getExecutionDiagnostics({
+          tenantId: identity.tenantId, applicationId, executionId: campaignExecutionDiagnostic[2],
+        });
+        if (!diagnostics) { sendApiError(request, response, 404, "EXECUTION_NOT_FOUND", "The execution was not found."); return; }
+        sendApiSuccess(request, response, 200, { execution: diagnostics }); return;
+      } catch (error) {
+        const invalid = error instanceof Error && error.message === "CAMPAIGN_EXECUTION_ID_INVALID";
+        sendApiError(request, response, invalid ? 400 : 500,
+          invalid ? "INVALID_EXECUTION_ID" : "CAMPAIGN_EXECUTION_DIAGNOSTICS_READ_FAILED",
+          "Execution diagnostics could not be retrieved."); return;
+      }
+    }
+
     const campaignCollection = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules$/.exec(requestUrl.pathname);
     const campaignDetail = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
     const campaignLifecycle = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/(approve|pause|resume|cancel)$/.exec(requestUrl.pathname);
