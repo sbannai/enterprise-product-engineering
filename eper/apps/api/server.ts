@@ -14,6 +14,7 @@ import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
 import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
+import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
@@ -495,6 +496,24 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    if (isAdminActorApplicationAssignmentUiRequest(request)) {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+      });
+      response.end(adminActorApplicationAssignmentUiHtml);
+      return;
+    }
 
     // Durable administrator provisioning for actor-to-application membership.
     if (requestUrl.pathname === "/admin/actor-application-assignments") {
