@@ -61,9 +61,14 @@ function readApplicationAssignments(): Record<string, string[]> {
   }
   return assignments;
 }
+let tenantApplicationAssignmentStoreForEntitlements: PostgresTenantApplicationAssignmentStore | undefined;
 const moduleEntitlementService = moduleEntitlementMode === "postgres" && paymentPool
   ? new PostgresModuleEntitlementService(paymentPool, {
       async isAssignedToTenant(tenantId, applicationId) {
+        if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+          if (!tenantApplicationAssignmentStoreForEntitlements) throw new Error("TENANT_APPLICATION_ASSIGNMENT_STORE_NOT_READY");
+          return (await tenantApplicationAssignmentStoreForEntitlements.listActive(tenantId)).includes(applicationId);
+        }
         const assignments = readApplicationAssignments();
         return assignments[tenantId]?.includes(applicationId) === true;
       },
@@ -109,6 +114,7 @@ const tenantApplicationAssignmentStore = actorAssignmentMode === "postgres" && p
   ? new PostgresTenantApplicationAssignmentStore(paymentPool)
   : undefined;
 if (tenantApplicationAssignmentStore) await tenantApplicationAssignmentStore.assertReady();
+tenantApplicationAssignmentStoreForEntitlements = tenantApplicationAssignmentStore;
 
 const auditWriter = auditMode === "postgres" && paymentPool
   ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord): Promise<void> => {
