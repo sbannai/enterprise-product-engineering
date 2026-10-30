@@ -1,9 +1,9 @@
 name: EPER payment gateway contract tests
 # Keep focused gateway and invoice-authority contracts running on every payment/receipt branch that relies on them.
 
+
 concurrency:
-  # New PR head supersedes older runs for that PR; push/manual runs are commit-scoped.
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
@@ -15,6 +15,7 @@ on:
       - "reconcile/payment-stack-with-receipt-contract"
   pull_request:
     paths:
+      - ".github/workflows/eper-payment-gateway-tests.yml"
       - "eper/apps/api/payments.ts"
       - "eper/apps/api/server.ts"
       - "eper/packages/payments/invoice-amount-authority.ts"
@@ -24,8 +25,6 @@ on:
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
-      - ".github/workflows/eper-payment-gateway-tests.yml"
-      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -34,6 +33,7 @@ permissions:
 jobs:
   payment-gateway-contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: eper
@@ -44,11 +44,27 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: eper/package-lock.json
+      - name: Initialize diagnostic evidence
+        if: always()
+        run: mkdir -p reexec-evidence/ci-logs
       - name: Install locked dependencies
         run: npm ci
       - name: Build EPER
         run: npm run build
       - name: Test payment gateway verification, tenant isolation, and receipt access
-        run: node --test tests/payment-gateway.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/payment-gateway.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-gateway.log
       - name: Test trusted invoice amount authority
-        run: node --test tests/invoice-amount-authority.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/invoice-amount-authority.test.mjs 2>&1 | tee reexec-evidence/ci-logs/invoice-amount-authority.log
+
+      - name: Upload payment diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-PAYMENT-GATEWAY-DIAGNOSTICS-${{ github.run_id }}
+          path: eper/reexec-evidence/ci-logs/
+          if-no-files-found: warn
+          retention-days: 14
