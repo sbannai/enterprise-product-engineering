@@ -269,6 +269,24 @@ test("execution diagnostics require operator role and return only tenant-scoped 
   assert.deepEqual(captured, { tenantId: "tenant-a", applicationId: "app-a", executionId: "execution-a" });
 });
 
+test("execution diagnostics fail closed in durable assignment mode until durable authorization is wired", async (t) => {
+  const original = process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE;
+  process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
+  t.after(() => {
+    if (original === undefined) delete process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE;
+    else process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = original;
+  });
+  let reads = 0;
+  const { base } = await withServer(t, {
+    async getExecutionDiagnostics() { reads += 1; return null; },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-executions/execution-a", {
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.eper.v1+json" },
+  });
+  assert.equal(response.status, 503);
+  assert.equal(reads, 0, "diagnostic lookup must not run without durable actor/application authorization");
+});
+
 test("execution diagnostics hide unassigned applications and reject non-operator roles", async (t) => {
   let reads = 0;
   const { base } = await withServer(t, {
