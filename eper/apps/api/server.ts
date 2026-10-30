@@ -1638,8 +1638,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 503, { error: "customer_applications_unavailable" });
         return;
       }
+      // Tenant assignment is necessary but not sufficient: each actor receives
+      // only the applications explicitly mapped to their trusted identity.
+      const actorApplications = new Set(identity.applicationIds ?? []);
       sendJson(request, response, 200, {
-        applications: [...new Set(tenantAssignments as string[])].map((applicationId) => ({ applicationId })),
+        applications: [...new Set(tenantAssignments as string[])]
+          .filter((applicationId) => actorApplications.has(applicationId))
+          .map((applicationId) => ({ applicationId })),
       });
       return;
     }
@@ -1678,6 +1683,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      if (!identity.applicationIds?.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
       let settingsConfig: unknown;
