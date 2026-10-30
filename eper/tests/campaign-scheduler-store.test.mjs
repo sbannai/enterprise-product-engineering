@@ -424,6 +424,8 @@ test("execution with dispatch started is dead-lettered rather than automatically
   assert.equal(outcome, "dead_letter");
   assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
   assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
+  assert.match(calls[0].sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN \$8 ELSE NULL END/);
+  assert.equal(calls[0].values[7], "PROVIDER_TIMEOUT");
   assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\(\) ELSE NULL END/);
 });
 
@@ -446,7 +448,7 @@ test("claim query excludes executions that already crossed the dispatch-start fe
 
 test("scheduler readiness rejects a database missing the dispatch-fence migration", async () => {
   const { pool, calls } = fakePool(async () => ({
-    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: null }],
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: null, error_detail_column: null }],
     rowCount: 1,
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
@@ -457,7 +459,7 @@ test("scheduler readiness rejects a database missing the dispatch-fence migratio
 
 test("scheduler readiness accepts schema with dispatch-fence migration applied", async () => {
   const { pool } = fakePool(async () => ({
-    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at" }],
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at", error_detail_column: "last_error_detail_code" }],
     rowCount: 1,
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
