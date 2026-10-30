@@ -14,7 +14,7 @@ test("admin actor application assignment API authenticates admins and enforces t
   const calls = [];
   const store = {
     async listAssignments(tenantId, actorId) { calls.push({ method: "listAssignments", tenantId, actorId }); return [{ applicationId: "app-a", version: 2, status: "revoked" }]; },
-    async assign(input) { calls.push({ method: "assign", input }); return { ...input, status: "active", version: 1 }; },
+    async assign(input) { calls.push({ method: "assign", input }); return { ...input, status: "active", version: input.expectedVersion + 1 }; },
     async revoke(input) { calls.push({ method: "revoke", input }); return { ...input, status: "revoked", version: 2 }; },
   };
   const server = createAppServer({ actorApplicationAssignmentStore: store });
@@ -37,7 +37,7 @@ test("admin actor application assignment API authenticates admins and enforces t
     assert.equal((await revoked.json()).assignment.status, "revoked");
     const regranted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 2 }) });
     assert.equal(regranted.status, 201);
-    assert.equal((await regranted.json()).assignment.status, "active");\n    assert.equal((await fetch(url, { method: "PUT", headers })).status, 405);
+    const regrantBody = await regranted.json();\n    assert.equal(regrantBody.assignment.status, "active");\n    assert.equal(regrantBody.assignment.version, 3);\n    assert.equal((await fetch(url, { method: "PUT", headers })).status, 405);
     assert.deepEqual(calls.map(call => call.method), ["listAssignments", "assign", "revoke", "assign"]);
     assert.equal(calls[1].input.tenantId, "tenant-a");
     assert.equal(calls[1].input.changedBy, "admin-a");
