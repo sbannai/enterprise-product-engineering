@@ -58,7 +58,7 @@ code{background:#f1f4f9;padding:2px 5px;border-radius:5px}.help{color:var(--mute
     await load();
     status("operation",method==="POST"?"Application access granted.":"Application access revoked.","ok");
   }
-  $("connect").addEventListener("click",async()=>{token=$("token").value.trim();if(!token){status("connection","Administrator token is required.","error");return;}try{await load();status("connection","Administrator session connected.","ok");}catch(e){token="";status("connection",e.message,"error");}});
+  $("connect").addEventListener("click",async()=>{token=$("token").value.trim();if(!token){status("connection","Administrator token is required.","error");return;}if(!$("actor").value.trim()){status("connection","Token saved for this page session. Enter an actor ID, then select Load assignments.","ok");return;}try{await load();status("connection","Administrator session connected.","ok");}catch(e){status("connection",e.message,"error");}});
   $("load").addEventListener("click",async()=>{try{await load();}catch(e){status("operation",e.message,"error");}});
   $("grant").addEventListener("click",async()=>{try{await change("POST");}catch(e){status("operation",e.message,"error");}});
   $("revoke").addEventListener("click",async()=>{try{await change("DELETE");}catch(e){status("operation",e.message,"error");}});
