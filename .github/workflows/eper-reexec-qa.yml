@@ -2,7 +2,7 @@
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: eper-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: false
 
 on:
@@ -20,6 +20,7 @@ on:
 jobs:
   controlled-qa-reexecution:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: eper
