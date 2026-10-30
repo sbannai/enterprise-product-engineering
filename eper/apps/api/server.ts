@@ -25,6 +25,8 @@ import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import type { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
+import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { renderCampaignSchedulerConsole } from "./campaign-scheduler-ui.js";
 
 function sendJson(request: IncomingMessage, response: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
@@ -379,7 +381,7 @@ function createConfiguredCapabilityServices() {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
   const services = createConfiguredCapabilityServices();
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -433,20 +435,32 @@ export function createAppServer(options: { invoiceAmountSource?: TrustedInvoiceA
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      // Durable actor/application assignments are enforced by the scheduler APIs.
-      // Until this diagnostics route is wired to those stores, fail closed rather
-      // than treating tenant membership alone as sufficient authorization.
-      if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
-        sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
-          "Execution diagnostics authorization is not configured for durable assignments."); return;
-      }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
       const applicationId = campaignExecutionDiagnostic[1];
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
-        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+        if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore) {
+          sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+            "Execution diagnostics authorization is not configured for durable assignments."); return;
+        }
+        try {
+          const tenantAssigned = (await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)).includes(applicationId);
+          const actorAssigned = tenantAssigned && await options.actorApplicationAssignmentStore.isAssigned(
+            identity.tenantId, identity.actorId, applicationId,
+          );
+          if (!tenantAssigned || !actorAssigned) {
+            sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+          }
+        } catch {
+          sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+            "Execution diagnostics authorization is temporarily unavailable."); return;
+        }
+      } else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+        if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
       }
       try {
         const diagnostics = await options.campaignSchedulerStore.getExecutionDiagnostics({
