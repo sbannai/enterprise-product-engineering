@@ -694,7 +694,11 @@ export class PostgresCampaignSchedulerStore {
     }
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ status: "retry_wait" | "dead_letter" }>(
+      await client.query("BEGIN");
+      const result = await client.query<{
+        status: "retry_wait" | "dead_letter"; last_error_code: string;
+        last_error_detail_code: string | null; attempt_count: number;
+      }>(
         `UPDATE eper_campaign_executions
          SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
              last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE $6 END,
@@ -704,10 +708,28 @@ export class PostgresCampaignSchedulerStore {
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN now() ELSE NULL END
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
-         RETURNING status`,
+         RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
         [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds, errorCode],
       );
-      return result.rows[0]?.status ?? "not_owned";
+      const row = result.rows[0];
+      if (!row) { await client.query("COMMIT"); return "not_owned"; }
+      try {
+        await appendAuditEventInTransaction(client, {
+          tenantId, applicationId, environment: this.auditEnvironment,
+          actorType: "service", actorId: workerId,
+          action: row.status === "dead_letter" ? "campaign_execution_dead_lettered" : "campaign_execution_retry_scheduled",
+          outcome: "failure", reasonCode: row.last_error_detail_code ?? row.last_error_code,
+          resourceType: "campaign-execution", resourceId: input.executionId,
+          source: "job", operationName: row.status === "dead_letter" ? "campaign.execution.dead_letter" : "campaign.execution.retry",
+          serviceVersion: this.serviceVersion,
+          payload: { resultingStatus: row.status, attemptCount: Number(row.attempt_count), safetyClassification: row.last_error_code, errorDetailCode: row.last_error_detail_code },
+        });
+      } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      await client.query("COMMIT");
+      return row.status;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
     } finally { client.release(); }
   }
 
@@ -719,7 +741,11 @@ export class PostgresCampaignSchedulerStore {
     }
     const client = await this.pool.connect();
     try {
-      const result = await client.query(
+      await client.query("BEGIN");
+      const result = await client.query<{
+        id: string; tenant_id: string; application_id: string; status: "retry_wait" | "dead_letter";
+        last_error_code: string; last_error_detail_code: string | null; attempt_count: number;
+      }>(
         `UPDATE eper_campaign_executions
          SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
              last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE 'WORKER_LEASE_EXPIRED' END,
@@ -728,10 +754,29 @@ export class PostgresCampaignSchedulerStore {
                ELSE now() + (LEAST(15 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN now() ELSE NULL END
-         WHERE status='running' AND locked_at < now() - ($1 * interval '1 second')`,
+         WHERE status='running' AND locked_at < now() - ($1 * interval '1 second')
+         RETURNING id, tenant_id, application_id, status, last_error_code, last_error_detail_code, attempt_count`,
         [staleAfterSeconds, maxAttempts],
       );
-      return result.rowCount ?? 0;
+      for (const row of result.rows) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+            environment: this.auditEnvironment, actorType: "service", actorId: "campaign-scheduler-recovery",
+            action: row.status === "dead_letter" ? "campaign_execution_dead_lettered" : "campaign_execution_retry_scheduled",
+            outcome: "failure", reasonCode: row.last_error_detail_code ?? row.last_error_code,
+            resourceType: "campaign-execution", resourceId: String(row.id),
+            source: "job", operationName: row.status === "dead_letter" ? "campaign.execution.recovery_dead_letter" : "campaign.execution.recovery_retry",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: row.status, attemptCount: Number(row.attempt_count), safetyClassification: row.last_error_code, errorDetailCode: row.last_error_detail_code, recovery: true },
+          });
+        } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      }
+      await client.query("COMMIT");
+      return result.rowCount ?? result.rows.length;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
     } finally { client.release(); }
   }
 
