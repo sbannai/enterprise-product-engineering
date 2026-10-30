@@ -237,3 +237,51 @@ test("campaign schedule creation rejects trigger types without verified executio
     assert.equal(response.status, 400, `${triggerType} trigger must fail closed until its execution path is implemented`);
   }
 });
+
+
+test("execution diagnostics require operator role and return only tenant-scoped error details", async (t) => {
+  let captured;
+  const diagnostic = {
+    executionId: "execution-a", scheduleId: "schedule-a", status: "dead_letter", attemptCount: 2,
+    lastErrorCode: "DISPATCH_OUTCOME_UNKNOWN",
+    lastErrorDetailCode: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+    dispatchStartedAt: "2030-01-01T10:00:00.000Z",
+    completedAt: "2030-01-01T10:00:05.000Z",
+    updatedAt: "2030-01-01T10:00:05.000Z",
+  };
+  const { base } = await withServer(t, {
+    async getExecutionDiagnostics(input) {
+      captured = input;
+      return diagnostic;
+    },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-executions/execution-a", {
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.eper.v1+json" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.data.execution, diagnostic);
+  assert.deepEqual(captured, { tenantId: "tenant-a", applicationId: "app-a", executionId: "execution-a" });
+});
+
+test("execution diagnostics hide unassigned applications and reject non-operator roles", async (t) => {
+  let reads = 0;
+  const { base } = await withServer(t, {
+    async getExecutionDiagnostics() { reads += 1; return null; },
+  });
+  const wrongApplication = await fetch(base + "/customer/applications/app-b/campaign-executions/execution-a", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(wrongApplication.status, 404);
+  const limitedToken = "campaign-api-limited-role-token-32-characters";
+  const original = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [limitedToken]: { tenantId: "tenant-a", actorId: "actor-limited", roleKey: "teacher" },
+  });
+  t.after(() => { if (original === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON; else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = original; });
+  const forbidden = await fetch(base + "/customer/applications/app-a/campaign-executions/execution-a", {
+    headers: { authorization: `Bearer ${limitedToken}` },
+  });
+  assert.equal(forbidden.status, 403);
+  assert.equal(reads, 0, "authorization must be enforced before execution lookup");
+});
