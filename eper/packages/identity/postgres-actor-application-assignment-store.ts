@@ -43,13 +43,16 @@ export class PostgresActorApplicationAssignmentStore {
       throw new Error("EPER_ACTOR_APPLICATION_ASSIGNMENT_READINESS_FAILED", { cause: error });
     } finally { client.release(); }
   }
-  async listActiveAssignments(tenantId: string, actorId: string): Promise<ActorApplicationAssignment[]> {
+  async listAssignments(tenantId: string, actorId: string): Promise<ActorApplicationAssignment[]> {
     this.validateId(tenantId, "tenantId"); this.validateId(actorId, "actorId");
     const client = await this.pool.connect();
     try {
-      const result = await client.query<Row>("SELECT * FROM eper_actor_application_assignment WHERE tenant_id = $1 AND actor_id = $2 AND assignment_status = 'active' ORDER BY application_id", [tenantId, actorId]);
+      const result = await client.query<Row>("SELECT * FROM eper_actor_application_assignment WHERE tenant_id = $1 AND actor_id = $2 ORDER BY application_id", [tenantId, actorId]);
       return result.rows.map(mapRow);
     } finally { client.release(); }
+  }
+  async listActiveAssignments(tenantId: string, actorId: string): Promise<ActorApplicationAssignment[]> {
+    return (await this.listAssignments(tenantId, actorId)).filter(row => row.status === "active");
   }
   async listActive(tenantId: string, actorId: string): Promise<string[]> {
     return (await this.listActiveAssignments(tenantId, actorId)).map(row => row.applicationId);
