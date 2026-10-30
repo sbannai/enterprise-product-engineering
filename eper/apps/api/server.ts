@@ -539,8 +539,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 400, { error: "invalid_actor_id" });
             return;
           }
-          const applicationIds = await options.actorApplicationAssignmentStore.listActive(adminIdentity.tenantId, actorId);
-          sendJson(request, response, 200, { tenantId: adminIdentity.tenantId, actorId, applicationIds });
+          const assignments = await options.actorApplicationAssignmentStore.listActiveAssignments(adminIdentity.tenantId, actorId);
+          sendJson(request, response, 200, { tenantId: adminIdentity.tenantId, actorId, assignments });
           return;
         }
         if (request.method === "POST" || request.method === "DELETE") {
