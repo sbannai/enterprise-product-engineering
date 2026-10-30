@@ -457,6 +457,21 @@ test("scheduler readiness rejects a database missing the dispatch-fence migratio
   assert.match(calls[0].sql, /dispatch_started_at/);
 });
 
+test("scheduler readiness rejects a database missing the durable error-detail migration", async () => {
+  const { pool, calls } = fakePool(async () => ({
+    rows: [{
+      schedules_table: "eper_campaign_schedules",
+      executions_table: "eper_campaign_executions",
+      dispatch_started_column: "dispatch_started_at",
+      error_detail_column: null,
+    }],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.assertReady(), /EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED/);
+  assert.match(calls[0].sql, /last_error_detail_code/);
+});
+
 test("scheduler readiness accepts schema with dispatch-fence migration applied", async () => {
   const { pool } = fakePool(async () => ({
     rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at", error_detail_column: "last_error_detail_code" }],
