@@ -35,7 +35,10 @@ test("admin actor application assignment API authenticates admins and enforces t
     const revoked = await fetch(url, { method: "DELETE", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 1 }) });
     assert.equal(revoked.status, 200);
     assert.equal((await revoked.json()).assignment.status, "revoked");
-    assert.deepEqual(calls.map(call => call.method), ["listActiveAssignments", "assign", "revoke"]);
+    const regranted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 2 }) });
+    assert.equal(regranted.status, 201);
+    assert.equal((await regranted.json()).assignment.status, "active");
+    assert.deepEqual(calls.map(call => call.method), ["listAssignments", "assign", "revoke", "assign"]);
     assert.equal(calls[1].input.tenantId, "tenant-a");
     assert.equal(calls[1].input.changedBy, "admin-a");
   } finally {
