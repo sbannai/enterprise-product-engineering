@@ -642,6 +642,41 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /** Return a safe, tenant-scoped operational view; never expose execution payloads or provider data. */
+  async getExecutionDiagnostics(input: {
+    tenantId: string; applicationId: string; executionId: string;
+  }): Promise<{
+    executionId: string; scheduleId: string; status: CampaignExecutionStatus; attemptCount: number;
+    lastErrorCode: string | null; lastErrorDetailCode: string | null;
+    dispatchStartedAt: string | null; completedAt: string | null; updatedAt: string;
+  } | null> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT id, schedule_id, status, attempt_count, last_error_code, last_error_detail_code,
+                dispatch_started_at, completed_at, updated_at
+         FROM eper_campaign_executions
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3
+         LIMIT 1`,
+        [tenantId, applicationId, input.executionId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const iso = (value: unknown): string | null => value ? new Date(value as string | Date).toISOString() : null;
+      return {
+        executionId: String(row.id), scheduleId: String(row.schedule_id),
+        status: row.status as CampaignExecutionStatus, attemptCount: Number(row.attempt_count),
+        lastErrorCode: row.last_error_code == null ? null : String(row.last_error_code),
+        lastErrorDetailCode: row.last_error_detail_code == null ? null : String(row.last_error_detail_code),
+        dispatchStartedAt: iso(row.dispatch_started_at), completedAt: iso(row.completed_at),
+        updatedAt: new Date(row.updated_at as string | Date).toISOString(),
+      };
+    } finally { client.release(); }
+  }
+
   async failExecution(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
     errorCode: string; maxAttempts?: number; baseDelaySeconds?: number;
