@@ -10,12 +10,12 @@ on:
     branches: ["main"]
     paths:
       - "eper/**"
-      - ".github/workflows/**"
+      - ".github/workflows/eper-integrated-validation.yml"
   push:
     branches: ["main"]
     paths:
       - "eper/**"
-      - ".github/workflows/**"
+      - ".github/workflows/eper-integrated-validation.yml"
   workflow_dispatch:
 
 permissions:
