@@ -44,7 +44,7 @@ jobs:
       - name: Execute 228 requirement test suite serially for isolation
         run: |
           set -o pipefail
-          node --test --test-concurrency=1 tests/*.test.mjs 2>&1 | tee reexec-evidence/qa-test-output.log
+          npm test 2>&1 | tee reexec-evidence/qa-test-output.log
       - name: Record execution metadata
         if: always()
         run: |
