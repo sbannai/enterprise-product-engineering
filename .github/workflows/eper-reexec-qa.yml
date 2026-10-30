@@ -2,7 +2,8 @@
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
 concurrency:
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  # PR runs supersede older runs for that PR; push/manual runs are exact-commit scoped.
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 on:
