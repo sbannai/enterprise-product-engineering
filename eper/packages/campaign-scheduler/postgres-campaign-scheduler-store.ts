@@ -777,7 +777,27 @@ export class PostgresCampaignSchedulerStore {
          RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
         [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds, errorCode],
       );
-      const row = result.rows[0];
+      let row = result.rows[0];
+      if (!row && errorCode === "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST") {
+        // The completion update can fail precisely because this worker no longer owns
+        // the lease. Do not leave a fenced execution running or lose the diagnostic:
+        // persist only the ambiguity-safe dead-letter state, without requiring the old lease.
+        const diagnostic = await client.query<{
+          status: "dead_letter"; last_error_code: string;
+          last_error_detail_code: string | null; attempt_count: number;
+        }>(
+          `UPDATE eper_campaign_executions
+           SET status='dead_letter', last_error_code='DISPATCH_OUTCOME_UNKNOWN',
+               last_error_detail_code=$4, updated_at=now(), locked_at=NULL, locked_by=NULL,
+               completed_at=COALESCE(completed_at, now())
+           WHERE tenant_id=$1 AND application_id=$2 AND id=$3
+             AND dispatch_started_at IS NOT NULL
+             AND (status='running' OR (status='dead_letter' AND last_error_code='DISPATCH_OUTCOME_UNKNOWN'))
+           RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
+          [tenantId, applicationId, input.executionId, errorCode],
+        );
+        row = diagnostic.rows[0];
+      }
       if (!row) { await client.query("COMMIT"); return "not_owned"; }
       try {
         await appendAuditEventInTransaction(client, {
