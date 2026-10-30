@@ -100,7 +100,8 @@ test("actor application assignment history includes revoked records and versions
 });
 
 test("actor application read operations use explicit tenant and actor scope", async () => {
-  const { calls, pool } = fakePool();
+  const activeRow = { tenant_id: "tenant-a", actor_id: "actor-a", application_id: "app-a", assignment_status: "active", version: 1, assigned_at: "2026-10-29T00:00:00.000Z", assigned_by: "admin-a", revoked_at: null, revoked_by: null, updated_at: "2026-10-29T00:00:00.000Z", updated_by: "admin-a" };
+  const { calls, pool } = fakePool({ prior: [activeRow] });
   const store = new PostgresActorApplicationAssignmentStore(pool);
   assert.deepEqual(await store.listActive("tenant-a", "actor-a"), ["app-a"]);
   assert.equal(await store.isAssigned("tenant-a", "actor-a", "app-a"), true);
