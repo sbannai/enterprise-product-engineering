@@ -5,11 +5,12 @@ import { createAppServer } from "../dist/apps/api/server.js";
 const token = "campaign-api-test-token-with-at-least-32-characters";
 const schedule = { id: "schedule-1", tenantId: "tenant-a", applicationId: "app-a", status: "scheduled" };
 
-async function withServer(t, overrides = {}) {
+async function withServer(t, overrides = {}, assignmentStores = {}) {
   const saved = {
     EPER_CAMPAIGN_SCHEDULER_API_ENABLED: process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED,
     EPER_CUSTOMER_ACCESS_IDENTITIES_JSON: process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON,
     EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON: process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON,
+    EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE,
   };
   process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
@@ -25,7 +26,7 @@ async function withServer(t, overrides = {}) {
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
     ...overrides,
   };
-  const server = createAppServer({ campaignSchedulerStore: store });
+  const server = createAppServer({ campaignSchedulerStore: store, ...assignmentStores });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -269,22 +270,48 @@ test("execution diagnostics require operator role and return only tenant-scoped 
   assert.deepEqual(captured, { tenantId: "tenant-a", applicationId: "app-a", executionId: "execution-a" });
 });
 
-test("execution diagnostics fail closed in durable assignment mode until durable authorization is wired", async (t) => {
-  const original = process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE;
+test("execution diagnostics require both durable tenant and actor assignment before reading", async (t) => {
   process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
-  t.after(() => {
-    if (original === undefined) delete process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE;
-    else process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = original;
-  });
   let reads = 0;
+  const diagnostic = {
+    executionId: "execution-a", scheduleId: "schedule-a", status: "dead_letter", attemptCount: 2,
+    lastErrorCode: "DISPATCH_OUTCOME_UNKNOWN",
+    lastErrorDetailCode: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+    dispatchStartedAt: "2030-01-01T10:00:00.000Z",
+    completedAt: "2030-01-01T10:00:05.000Z",
+    updatedAt: "2030-01-01T10:00:05.000Z",
+  };
   const { base } = await withServer(t, {
-    async getExecutionDiagnostics() { reads += 1; return null; },
+    async getExecutionDiagnostics() { reads += 1; return diagnostic; },
+  }, {
+    tenantApplicationAssignmentStore: { async listActive(tenantId) { return tenantId === "tenant-a" ? ["app-a"] : []; } },
+    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+      return tenantId === "tenant-a" && actorId === "actor-a" && applicationId === "app-a";
+    } },
   });
   const response = await fetch(base + "/customer/applications/app-a/campaign-executions/execution-a", {
     headers: { authorization: `Bearer ${token}`, accept: "application/vnd.eper.v1+json" },
   });
-  assert.equal(response.status, 503);
-  assert.equal(reads, 0, "diagnostic lookup must not run without durable actor/application authorization");
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.data.execution, diagnostic);
+  assert.equal(reads, 1);
+});
+
+test("execution diagnostics hide actor-unassigned applications before scheduler lookup", async (t) => {
+  process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
+  let reads = 0;
+  const { base } = await withServer(t, {
+    async getExecutionDiagnostics() { reads += 1; return null; },
+  }, {
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+    actorApplicationAssignmentStore: { async isAssigned() { return false; } },
+  });
+  const response = await fetch(base + "/customer/applications/app-a/campaign-executions/execution-a", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 404);
+  assert.equal(reads, 0, "diagnostic lookup must not run for an actor without application membership");
 });
 
 test("execution diagnostics hide unassigned applications and reject non-operator roles", async (t) => {
