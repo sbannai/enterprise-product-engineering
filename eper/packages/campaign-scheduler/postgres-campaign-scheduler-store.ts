@@ -533,6 +533,18 @@ export class PostgresCampaignSchedulerStore {
            AND dispatch_started_at IS NULL`,
         [tenantId, applicationId, input.executionId, workerId],
       );
+      try {
+        await appendAuditEventInTransaction(client, {
+          tenantId, applicationId, environment: this.auditEnvironment,
+          actorType: "service", actorId: workerId,
+          action: "campaign_execution_dispatch_started", outcome: "success",
+          reasonCode: "CAMPAIGN_DISPATCH_FENCE_ACQUIRED",
+          resourceType: "campaign-execution", resourceId: input.executionId,
+          source: "job", operationName: "campaign.execution.dispatch_start",
+          serviceVersion: this.serviceVersion,
+          payload: { resultingStatus: "running", dispatchFenceAcquired: true },
+        });
+      } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
       await client.query("COMMIT");
       return true;
     } catch (error) {
@@ -602,13 +614,33 @@ export class PostgresCampaignSchedulerStore {
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
-      const result = await client.query(
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string; attempt_count: number }>(
         `UPDATE eper_campaign_executions
          SET status='succeeded', result=$5::jsonb, last_error_code=NULL, last_error_detail_code=NULL, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4`,
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         RETURNING id, attempt_count`,
         [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {})],
       );
-      return result.rowCount === 1;
+      if (result.rows.length === 1) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId, applicationId, environment: this.auditEnvironment,
+            actorType: "service", actorId: workerId,
+            action: "campaign_execution_succeeded", outcome: "success",
+            reasonCode: "CAMPAIGN_EXECUTION_COMPLETED",
+            resourceType: "campaign-execution", resourceId: input.executionId,
+            source: "job", operationName: "campaign.execution.complete",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: "succeeded", attemptCount: Number(result.rows[0].attempt_count) },
+          });
+        } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      }
+      await client.query("COMMIT");
+      return result.rows.length === 1;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally { client.release(); }
   }
 
