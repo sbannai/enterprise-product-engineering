@@ -38,8 +38,10 @@ test("schedule creation is tenant-scoped and starts as draft pending approval", 
   });
   assert.equal(result.status, "draft");
   assert.equal(result.approvalStatus, "pending");
-  assert.match(calls[0].sql, /tenant_id, application_id, campaign_id/);
-  assert.equal(calls[0].values[1], "tenant-a");
+  const scheduleInsert = calls.find((call) => call.sql.includes("INSERT INTO eper_campaign_schedules"));
+  assert.ok(scheduleInsert);
+  assert.match(scheduleInsert.sql, /tenant_id, application_id, campaign_id/);
+  assert.equal(scheduleInsert.values[1], "tenant-a");
 });
 
 test("schedule creation rejects malformed timezone before database access", async () => {
@@ -344,7 +346,7 @@ test("schedule creation rolls back when durable audit insertion fails", async ()
     tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
     triggerType: "once", timezone: "Asia/Kolkata",
     scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" }, createdBy: "actor-a",
-  }), /audit storage unavailable/);
+  }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
   const sql = calls.map((call) => call.sql);
   assert.ok(sql.includes("ROLLBACK"));
   assert.ok(!sql.includes("COMMIT"));
@@ -479,7 +481,7 @@ test("dispatch-start fence is single-use and rejects a second acquisition", asyn
   };
   assert.equal(await store.beginExecutionDispatch(input), true);
   assert.equal(await store.beginExecutionDispatch(input), false);
-  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\\.dispatch_started_at IS NULL/);
+  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\.dispatch_started_at IS NULL/);
   assert.ok(calls.some((call) => call.sql.includes("SET dispatch_started_at=now()") && call.sql.includes("dispatch_started_at IS NULL")));
 });
 
