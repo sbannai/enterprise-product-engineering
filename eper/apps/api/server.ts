@@ -2018,6 +2018,28 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 400, { error: "invalid_access_query" });
         return;
       }
+      // The entitlement diagnostic is a protected customer API too: entitlement
+      // must never be evaluated for an application outside both assignment boundaries.
+      const tenantApplications = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : (() => {
+            try {
+              const parsed: unknown = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+              return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)[identity.tenantId] : [];
+            } catch { return []; }
+          })();
+      if (!Array.isArray(tenantApplications) || !tenantApplications.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!actorAssigned) {
+        sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
+        return;
+      }
       try {
         const context = {
           tenantId: identity.tenantId,
