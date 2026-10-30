@@ -70,10 +70,10 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
   await runCampaignExecutionWorker(store, async () => {
     providerCalls += 1; return { outcome: {} };
   }, {
-    workerId: "test-worker", signal: controller.signal, idleDelayMs: 100,
+    workerId: "test-worker", signal: controller.signal, idleDelayMs: 100, maxAttempts: 4,
     authorizeDispatch: async () => { throw new Error("policy store unavailable"); },
   });
   assert.equal(providerCalls, 0);
-  assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_POLICY_DENIED");
-  assert.equal(failed?.maxAttempts, 1);
+  assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE");
+  assert.equal(failed?.maxAttempts, 4);
 });
