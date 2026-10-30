@@ -442,9 +442,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
-  if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres" &&
-      !options.actorApplicationAssignmentStore) {
-    throw new Error("CUSTOMER_ACTOR_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+  if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+    if (!options.actorApplicationAssignmentStore) {
+      throw new Error("CUSTOMER_ACTOR_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+    }
+    if (!options.tenantApplicationAssignmentStore) {
+      throw new Error("TENANT_APPLICATION_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+    }
   }
   const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
