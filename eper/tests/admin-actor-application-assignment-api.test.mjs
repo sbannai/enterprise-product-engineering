@@ -13,7 +13,7 @@ test("admin actor application assignment API authenticates admins and enforces t
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const calls = [];
   const store = {
-    async listActive(tenantId, actorId) { calls.push({ method: "listActive", tenantId, actorId }); return ["app-a"]; },
+    async listActiveAssignments(tenantId, actorId) { calls.push({ method: "listActiveAssignments", tenantId, actorId }); return [{ applicationId: "app-a", version: 1, status: "active" }]; },
     async assign(input) { calls.push({ method: "assign", input }); return { ...input, status: "active", version: 1 }; },
     async revoke(input) { calls.push({ method: "revoke", input }); return { ...input, status: "revoked", version: 2 }; },
   };
@@ -26,7 +26,7 @@ test("admin actor application assignment API authenticates admins and enforces t
     const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
     const listed = await fetch(url + "?actorId=actor-a", { headers });
     assert.equal(listed.status, 200);
-    assert.deepEqual((await listed.json()).applicationIds, ["app-a"]);
+    assert.equal((await listed.json()).assignments[0].applicationId, "app-a");
     const granted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 0 }) });
     assert.equal(granted.status, 201);
     assert.equal((await granted.json()).assignment.status, "active");
@@ -35,7 +35,7 @@ test("admin actor application assignment API authenticates admins and enforces t
     const revoked = await fetch(url, { method: "DELETE", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 1 }) });
     assert.equal(revoked.status, 200);
     assert.equal((await revoked.json()).assignment.status, "revoked");
-    assert.deepEqual(calls.map(call => call.method), ["listActive", "assign", "revoke"]);
+    assert.deepEqual(calls.map(call => call.method), ["listActiveAssignments", "assign", "revoke"]);
     assert.equal(calls[1].input.tenantId, "tenant-a");
     assert.equal(calls[1].input.changedBy, "admin-a");
   } finally {
