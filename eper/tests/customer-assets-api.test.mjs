@@ -297,3 +297,31 @@ test("asset download rejects unsafe or overlong provider URLs and audits the fai
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+test("customer assets intersect durable tenant ownership with actor application membership", async () => {
+  const keys=["EPER_CUSTOMER_ASSETS_API_ENABLED","EPER_CUSTOMER_ACCESS_IDENTITIES_JSON","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON","EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  const token="durable-assets-actor-token-000000000000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED="true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON=JSON.stringify({[token]:{tenantId:"tenant-a",actorId:"actor-a",roleKey:"customer"}});
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON=JSON.stringify({"tenant-a":["client-assets"]});
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON=JSON.stringify({"tenant-a":{
+    "app-owned-and-allowed":[{id:"visible",name:"Visible.pdf",type:"document",accessReference:"blobref:visible"}],
+    "app-owned-but-not-allowed":[{id:"hidden",name:"Hidden.pdf",type:"document",accessReference:"blobref:hidden"}]
+  }});
+  const tenantStore={async listActive(tenantId){assert.equal(tenantId,"tenant-a");return ["app-owned-and-allowed","app-owned-but-not-allowed"];}};
+  const actorStore={async listActive(tenantId,actorId){assert.equal(tenantId,"tenant-a");assert.equal(actorId,"actor-a");return ["app-owned-and-allowed"];}};
+  const server=createAppServer({tenantApplicationAssignmentStore:tenantStore,actorApplicationAssignmentStore:actorStore});
+  try{
+    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});
+    const address=server.address();assert.ok(address&&typeof address==="object");
+    const response=await fetch("http://127.0.0.1:"+address.port+"/customer/assets",{headers:{authorization:"Bearer "+token}});
+    assert.equal(response.status,200);
+    const body=await response.json();
+    assert.deepEqual(body.assets.map(asset=>asset.id),["visible"]);
+  }finally{
+    await new Promise(resolve=>server.close(resolve));
+    for(const key of keys){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}
+  }
+});
