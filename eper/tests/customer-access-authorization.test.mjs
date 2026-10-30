@@ -113,3 +113,66 @@ test("agent job reads enforce durable tenant ownership and actor membership with
     }
   }
 });
+
+
+test("AI draft routes enforce durable tenant and actor assignments before draft creation", async () => {
+  const values = {
+    EPER_AGENTS_API_ENABLED: "true",
+    EPER_AGENTS_PRINCIPAL_TOKENS: "maker=" + "agent-draft-durable-token-000000000000000000",
+    EPER_AGENTS_PRINCIPAL_TENANTS_JSON: JSON.stringify({ maker: "tenant-a" }),
+    EPER_AGENTS_REVIEWER_PRINCIPALS: "reviewer",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
+  };
+  const keys = Object.keys(values);
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(values)) process.env[key] = value;
+  let tenantApplications = ["app-a"];
+  let actorAllowed = false;
+  const calls = [];
+  const tenantStore = { async listActive(tenantId) {
+    calls.push(["tenant", tenantId]);
+    return tenantApplications;
+  } };
+  const actorStore = { async isAssigned(tenantId, actorId, applicationId) {
+    calls.push(["actor", tenantId, actorId, applicationId]);
+    return actorAllowed;
+  } };
+  const adminConfigurationStore = { async get(tenantId, resource) {
+    assert.equal(tenantId, "tenant-a");
+    assert.equal(resource, "ai-integrations");
+    return { config: { applications: { "app-a": { enabled: true, provider: "openai" } } } };
+  } };
+  const server = createAppServer({ tenantApplicationAssignmentStore: tenantStore,
+    actorApplicationAssignmentStore: actorStore, adminConfigurationStore });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const endpoint = "http://127.0.0.1:" + address.port + "/v1/agents/sales/drafts?applicationId=app-a";
+    const headers = { authorization: "Bearer agent-draft-durable-token-000000000000000000",
+      "content-type": "application/json" };
+    const body = JSON.stringify({ intent: "follow-up", input: { objective: "authorization regression" } });
+
+    tenantApplications = [];
+    let response = await fetch(endpoint, { method: "POST", headers, body });
+    assert.equal(response.status, 403);
+    assert.deepEqual(calls, [["tenant", "tenant-a"]]);
+
+    calls.length = 0;
+    tenantApplications = ["app-a"];
+    response = await fetch(endpoint, { method: "POST", headers, body });
+    assert.equal(response.status, 403);
+    assert.deepEqual(calls, [["tenant", "tenant-a"], ["actor", "tenant-a", "maker", "app-a"]]);
+
+    calls.length = 0;
+    actorAllowed = true;
+    response = await fetch(endpoint, { method: "POST", headers, body });
+    assert.equal(response.status, 201);
+    assert.deepEqual(calls, [["tenant", "tenant-a"], ["actor", "tenant-a", "maker", "app-a"]]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
