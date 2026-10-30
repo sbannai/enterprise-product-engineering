@@ -41,7 +41,7 @@ jobs:
       - name: Build candidate
         run: npm run build
       - name: Execute 228 requirement test suite serially
-        run: node --test --test-concurrency=1 tests/*.test.mjs
+        run: npm test
       - name: Record execution metadata
         if: always()
         run: |
