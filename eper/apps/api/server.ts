@@ -2363,7 +2363,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (!tenantApplications.includes(applicationId)) {
           return { allowed: false, statusCode: 403, error: "application_not_assigned_to_tenant" };
         }
-        if (!await options.actorApplicationAssignmentStore.isAssigned(tenantId, identity.principalId, applicationId)) {
+        let principalActors: unknown;
+        try { principalActors = JSON.parse(process.env.EPER_AGENTS_PRINCIPAL_ACTORS_JSON ?? ""); } catch { principalActors = null; }
+        const actorId = principalActors && typeof principalActors === "object" && !Array.isArray(principalActors)
+          ? (principalActors as Record<string, unknown>)[identity.principalId] : undefined;
+        if (typeof actorId !== "string" || !actorId.trim() || actorId !== actorId.trim() || actorId.length > 128) {
+          return { allowed: false, statusCode: 503, error: "agents_principal_actor_mapping_unconfigured" };
+        }
+        if (!await options.actorApplicationAssignmentStore.isAssigned(tenantId, actorId, applicationId)) {
           return { allowed: false, statusCode: 403, error: "actor_not_assigned_to_application" };
         }
       }
