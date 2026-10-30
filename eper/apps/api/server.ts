@@ -1643,7 +1643,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       // Tenant assignment is necessary but not sufficient: each actor receives
       // only the applications explicitly mapped to their trusted identity.
-      const actorApplications = new Set(options.actorApplicationAssignmentStore\n        ? await options.actorApplicationAssignmentStore.listActive(identity.tenantId, identity.actorId)\n        : identity.applicationIds ?? []);
+      const actorApplications = new Set(options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.listActive(identity.tenantId, identity.actorId)
+        : identity.applicationIds ?? []);
       sendJson(request, response, 200, {
         applications: [...new Set(tenantAssignments as string[])]
           .filter((applicationId) => actorApplications.has(applicationId))
