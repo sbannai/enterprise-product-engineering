@@ -21,8 +21,7 @@ permissions:
 
 jobs:
   chapter-pilot-matrix:
-    # Run the full 38-chapter matrix on main or manually; PRs use focused functionality tests.
-    if: github.event_name != 'pull_request'
+    # Run the full 38-chapter / 228-requirement matrix once on each PR head and main commit.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
