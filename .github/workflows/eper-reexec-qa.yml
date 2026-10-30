@@ -4,7 +4,7 @@ name: EPER RE-EXEC-001 Controlled QA Re-Execution
 # Isolate each PR validation by its exact head commit. Push and manual runs
 # are isolated by the exact commit being tested, never merely by branch name.
 concurrency:
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
