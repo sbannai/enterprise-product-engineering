@@ -774,3 +774,41 @@ test("execution diagnostics expose durable error classifications within tenant a
   assert.deepEqual(query.values, ["tenant-a", "app-a", "execution-a"]);
   assert.doesNotMatch(query.sql, /payload|idempotency_key/);
 });
+
+test("completion lease loss is durably dead-lettered after the worker no longer owns the lease", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("UPDATE eper_campaign_executions") && sql.includes("locked_by=$4")) {
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql.includes("UPDATE eper_campaign_executions") && sql.includes("dispatch_started_at IS NOT NULL")) {
+      return {
+        rows: [{
+          status: "dead_letter",
+          last_error_code: "DISPATCH_OUTCOME_UNKNOWN",
+          last_error_detail_code: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+          attempt_count: 2,
+        }],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const outcome = await store.failExecution({
+    tenantId: "tenant-a",
+    applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    workerId: "worker-a",
+    errorCode: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+  });
+  assert.equal(outcome, "dead_letter");
+  const leaseOwnedUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("locked_by=$4"));
+  assert.ok(leaseOwnedUpdate, "the normal lease-owned failure update is attempted first");
+  const diagnosticUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("dispatch_started_at IS NOT NULL"));
+  assert.ok(diagnosticUpdate, "the dispatch-fenced row receives a diagnostic-only safety update after lease loss");
+  assert.match(diagnosticUpdate.sql, /status='dead_letter'/);
+  assert.match(diagnosticUpdate.sql, /last_error_code='DISPATCH_OUTCOME_UNKNOWN'/);
+  assert.equal(diagnosticUpdate.values[3], "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST");
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
