@@ -38,8 +38,10 @@ test("schedule creation is tenant-scoped and starts as draft pending approval", 
   });
   assert.equal(result.status, "draft");
   assert.equal(result.approvalStatus, "pending");
-  assert.match(calls[0].sql, /tenant_id, application_id, campaign_id/);
-  assert.equal(calls[0].values[1], "tenant-a");
+  const scheduleInsert = calls.find((call) => call.sql.includes("INSERT INTO eper_campaign_schedules"));
+  assert.ok(scheduleInsert);
+  assert.match(scheduleInsert.sql, /tenant_id, application_id, campaign_id/);
+  assert.equal(scheduleInsert.values[1], "tenant-a");
 });
 
 test("schedule creation rejects malformed timezone before database access", async () => {
@@ -187,7 +189,9 @@ test("event trigger fan-out is tenant/application scoped and idempotent", async 
   assert.match(calls[0].sql, /s\.tenant_id=\$1 AND s\.application_id=\$2/);
   assert.match(calls[0].sql, /trigger_type='event'/);
   assert.match(calls[0].sql, /schedule_definition->>'eventType'=\$5/);
-  assert.match(calls[0].sql, /'event:' \|\| \$5 \|\| ':' \|\| \$4 \|\| ':' \|\| s\.id::text/);
+  assert.match(calls[0].sql, /'event:' \|\| \$7 \|\| ':' \|\| s\.id::text/);
+  assert.equal(calls[0].values[6].length, 64);
+  assert.match(calls[0].values[6], /^[a-f0-9]{64}$/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
   assert.equal(calls[0].values[3], "evt-123");
   assert.equal(calls[0].values[4], "lead.created");
@@ -214,7 +218,8 @@ test("dispatch authorization re-reads current schedule approval and worker lease
     tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
   });
   assert.equal(authorized, true);
-  assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)/);
+  assert.match(calls[0].sql, /s\.approval_status='approved'/);
   assert.match(calls[0].sql, /e\.status='running' AND e\.locked_by=\$4/);
   assert.match(calls[0].sql, /WHERE e\.tenant_id=\$1 AND e\.application_id=\$2 AND e\.id=\$3/);
   assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a"]);
@@ -283,7 +288,7 @@ test("schedule creation rolls back when durable audit insertion fails", async ()
     tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
     triggerType: "once", timezone: "Asia/Kolkata",
     scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" }, createdBy: "actor-a",
-  }), /audit storage unavailable/);
+  }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
   const sql = calls.map((call) => call.sql);
   assert.ok(sql.includes("ROLLBACK"));
   assert.ok(!sql.includes("COMMIT"));
@@ -321,7 +326,7 @@ test("dispatch-start fence locks live schedule and execution before marking disp
   });
   assert.equal(result, true);
   const lockIndex = calls.findIndex((call) => call.sql.includes("FOR UPDATE OF s, e"));
-  const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=COALESCE"));
+  const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=now()"));
   assert.ok(lockIndex >= 0 && fenceIndex > lockIndex);
   assert.equal(calls[0].sql, "BEGIN");
   assert.equal(calls.at(-1).sql, "COMMIT");
@@ -347,7 +352,7 @@ test("dispatch-start fence is single-use and rejects a second acquisition", asyn
   };
   assert.equal(await store.beginExecutionDispatch(input), true);
   assert.equal(await store.beginExecutionDispatch(input), false);
-  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\\.dispatch_started_at IS NULL/);
+  assert.match(calls.find((call) => call.sql.includes("SELECT s.id")).sql, /e\.dispatch_started_at IS NULL/);
   assert.ok(calls.some((call) => call.sql.includes("SET dispatch_started_at=now()") && call.sql.includes("dispatch_started_at IS NULL")));
 });
 
@@ -363,7 +368,7 @@ test("dispatch-start fence denies jobs whose live schedule is cancelled", async 
   });
   assert.equal(result, false);
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
-  assert.ok(!calls.some((call) => call.sql.includes("SET dispatch_started_at=COALESCE")));
+  assert.ok(!calls.some((call) => call.sql.includes("SET dispatch_started_at=now()")));
 });
 
 
