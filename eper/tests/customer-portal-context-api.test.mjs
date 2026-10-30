@@ -149,7 +149,7 @@ test("customer help and growth content is tenant-scoped and module-entitlement e
   const tokenA = "tenant-content-a-test-token-00000000000000000001";
   const tokenB = "tenant-content-b-test-token-00000000000000000001";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a", "app-invalid"] },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
     [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
@@ -345,7 +345,7 @@ test("customer application list fails closed for malformed or non-canonical assi
   const token = "customer-app-list-invalid-config-token-0000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   const server = createAppServer();
   try {
@@ -493,9 +493,9 @@ test("customer application settings expose only safe preferences for assigned ap
     assert.deepEqual(await disabledForTenant.json(), { error: "customer_settings_not_enabled" });
     process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"], "tenant-b": ["settings"] });
     process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-invalid"], "tenant-b": ["app-b"] });
-    const invalidPreferences = await fetch(url + "app-invalid", { headers: { authorization: "Bearer " + tokenA } });
-    assert.equal(invalidPreferences.status, 200);
-    assert.deepEqual(await invalidPreferences.json(), { applicationId: "app-invalid", settings: {} });
+    const actorDenied = await fetch(url + "app-invalid", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(actorDenied.status, 403);
+    assert.deepEqual(await actorDenied.json(), { error: "actor_not_assigned_to_application" });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
