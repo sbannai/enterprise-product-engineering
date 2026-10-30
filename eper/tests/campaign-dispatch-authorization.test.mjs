@@ -75,7 +75,7 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
   });
   assert.equal(providerCalls, 0);
   assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE");
-  assert.equal(failed?.maxAttempts, 1);
+  assert.equal(failed?.maxAttempts, 5, "authorization outages are retryable because no provider dispatch occurred");
 });
 
 
