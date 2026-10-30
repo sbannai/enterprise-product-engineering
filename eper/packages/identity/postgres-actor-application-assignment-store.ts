@@ -78,6 +78,7 @@ export class PostgresActorApplicationAssignmentStore {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-actor-application:" + input.tenantId + ":" + input.actorId + ":" + input.applicationId]);
       const prior = await client.query<Row>("SELECT * FROM eper_actor_application_assignment WHERE tenant_id = $1 AND actor_id = $2 AND application_id = $3 FOR UPDATE", [input.tenantId, input.actorId, input.applicationId]);
       const currentVersion = prior.rows[0] ? Number(prior.rows[0].version) : 0;
+      if (!prior.rows[0] && status === "revoked") throw new Error("ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND");
       if (currentVersion !== input.expectedVersion) throw new ActorApplicationAssignmentVersionConflictError(currentVersion);
       const saved = await client.query<Row>(`INSERT INTO eper_actor_application_assignment (tenant_id, actor_id, application_id, assignment_status, version, assigned_at, assigned_by, revoked_at, revoked_by, updated_at, updated_by)
         VALUES ($1, $2, $3, $4, 1, CASE WHEN $4 = 'active' THEN NOW() ELSE NULL END, $5, CASE WHEN $4 = 'revoked' THEN NOW() ELSE NULL END, CASE WHEN $4 = 'revoked' THEN $5 ELSE NULL END, NOW(), $5)
