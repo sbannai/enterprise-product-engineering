@@ -490,11 +490,41 @@ test("stale recovery does not automatically retry an execution whose dispatch ma
   assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]2 THEN now\(\) ELSE NULL END/);
 });
 
-test("claim query excludes executions that already crossed the dispatch-start fence", async () => {
-  const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
+test("claim query excludes executions that crossed the dispatch fence and audits each claim", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("WITH due AS") ? [{
+      id: "job-1", schedule_id: "schedule-1", tenant_id: "tenant-a", application_id: "app-a",
+      scheduled_for: "2030-01-01T00:00:00.000Z", status: "running", attempt_count: 1,
+      idempotency_key: "idem-1", payload: {}, available_at: "2030-01-01T00:00:00.000Z",
+    }] : [],
+    rowCount: sql.includes("WITH due AS") ? 1 : 0,
+  }));
   const store = new PostgresCampaignSchedulerStore(pool);
-  await store.claimExecutions("worker-a", 10);
-  assert.match(calls[0].sql, /e\.dispatch_started_at IS NULL/);
+  const claimed = await store.claimExecutions("worker-a", 10);
+  assert.equal(claimed.length, 1);
+  const claimQuery = calls.find((call) => call.sql.includes("WITH due AS"));
+  assert.match(claimQuery.sql, /e\\.dispatch_started_at IS NULL/);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls[0].sql, "BEGIN");
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
+
+test("claim rolls back when a worker-lease audit event cannot be persisted", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("INSERT INTO eper_audit_events")) throw new Error("audit storage unavailable");
+    return {
+      rows: sql.includes("WITH due AS") ? [{
+        id: "job-1", schedule_id: "schedule-1", tenant_id: "tenant-a", application_id: "app-a",
+        scheduled_for: "2030-01-01T00:00:00.000Z", status: "running", attempt_count: 1,
+        idempotency_key: "idem-1", payload: {}, available_at: "2030-01-01T00:00:00.000Z",
+      }] : [],
+      rowCount: 1,
+    };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.claimExecutions("worker-a", 10), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
 });
 
 
