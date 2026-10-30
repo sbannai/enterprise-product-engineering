@@ -134,6 +134,35 @@ test("execution completion requires the current worker lease", async () => {
   assert.match(calls[0].sql, /last_error_code=NULL, last_error_detail_code=NULL/);
 });
 
+test("successful execution completion appends a transactional audit event", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("RETURNING id, attempt_count") ? [{ id: "job-1", attempt_count: 2 }] : [],
+    rowCount: sql.includes("UPDATE eper_campaign_executions") ? 1 : 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const completed = await store.completeExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1",
+    workerId: "worker-a", result: { delivered: true },
+  });
+  assert.equal(completed, true);
+  assert.equal(calls[0].sql, "BEGIN");
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
+
+test("successful completion rolls back if its audit event cannot be persisted", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("INSERT INTO eper_audit_events")) throw new Error("audit storage unavailable");
+    return { rows: sql.includes("RETURNING id, attempt_count") ? [{ id: "job-1", attempt_count: 1 }] : [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.completeExecution({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a",
+  }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+  assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
+});
+
 test("stale worker recovery validates policy and requeues or dead-letters expired leases", async () => {
   const { pool, calls } = fakePool(async (sql) => ({
     rows: sql.includes("UPDATE eper_campaign_executions") ? [
@@ -338,6 +367,8 @@ test("dispatch-start fence locks live schedule and execution before marking disp
   const fenceIndex = calls.findIndex((call) => call.sql.includes("SET dispatch_started_at=COALESCE"));
   assert.ok(lockIndex >= 0 && fenceIndex > lockIndex);
   assert.equal(calls[0].sql, "BEGIN");
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")),
+    "dispatch fence acquisition must be audited before provider dispatch");
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
