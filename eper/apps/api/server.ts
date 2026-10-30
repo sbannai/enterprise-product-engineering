@@ -15,6 +15,7 @@ import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./cus
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
 import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
 import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
+import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
@@ -433,7 +434,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
   const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -790,8 +791,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!Array.isArray(tenantModules) || !tenantModules.includes("client-assets")) {
         sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
       }
-      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
-        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      const tenantAssignments = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+          ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(tenantAssignments) || tenantAssignments.some((id) =>
         typeof id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(id))) {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
@@ -1733,7 +1736,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 503, { error: "customer_applications_unavailable" });
         return;
       }
-      const tenantAssignments = (assignments as Record<string, unknown>)[identity.tenantId];
+      const tenantAssignments = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : (assignments as Record<string, unknown>)[identity.tenantId];
       if (!Array.isArray(tenantAssignments) || tenantAssignments.some((item) =>
         typeof item !== "string" || item !== item.trim() || item.length < 1 || item.length > 128 ||
         !/^[a-zA-Z0-9._:-]+$/.test(item))) {
