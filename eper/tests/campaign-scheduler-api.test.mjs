@@ -334,3 +334,42 @@ test("execution diagnostics hide unassigned applications and reject non-operator
   assert.equal(forbidden.status, 403);
   assert.equal(reads, 0, "authorization must be enforced before execution lookup");
 });
+
+
+test("campaign schedule routes enforce durable tenant and actor assignments consistently", async (t) => {
+  let reads = 0;
+  let writes = 0;
+  const { base } = await withServer(t, {
+    async listSchedules() { reads += 1; return [schedule]; },
+    async createSchedule() { writes += 1; return { ...schedule, id: "created" }; },
+    async pauseOrCancel() { writes += 1; return schedule; },
+  }, {
+    tenantApplicationAssignmentStore: { async listActive(tenantId) {
+      return tenantId === "tenant-a" ? ["app-a"] : [];
+    } },
+    actorApplicationAssignmentStore: { async isAssigned() { return false; } },
+  }, true);
+
+  const headers = { authorization: `Bearer ${token}`, accept: "application/vnd.eper.v1+json" };
+  const listed = await fetch(base + "/customer/applications/app-a/campaign-schedules", { headers });
+  assert.equal(listed.status, 404);
+
+  const created = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({
+      campaignId: "campaign-a", triggerType: "once", timezone: "Asia/Kolkata",
+      scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" },
+    }),
+  });
+  assert.equal(created.status, 404);
+
+  const cancelled = await fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/cancel", {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(cancelled.status, 404);
+  assert.equal(reads, 0, "schedule reads must not run for an actor without application membership");
+  assert.equal(writes, 0, "schedule mutations must not run for an actor without application membership");
+});
