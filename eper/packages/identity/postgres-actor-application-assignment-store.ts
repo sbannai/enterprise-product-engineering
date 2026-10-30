@@ -43,13 +43,16 @@ export class PostgresActorApplicationAssignmentStore {
       throw new Error("EPER_ACTOR_APPLICATION_ASSIGNMENT_READINESS_FAILED", { cause: error });
     } finally { client.release(); }
   }
-  async listActive(tenantId: string, actorId: string): Promise<string[]> {
+  async listActiveAssignments(tenantId: string, actorId: string): Promise<ActorApplicationAssignment[]> {
     this.validateId(tenantId, "tenantId"); this.validateId(actorId, "actorId");
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ application_id: string }>("SELECT application_id FROM eper_actor_application_assignment WHERE tenant_id = $1 AND actor_id = $2 AND assignment_status = 'active' ORDER BY application_id", [tenantId, actorId]);
-      return result.rows.map(row => row.application_id);
+      const result = await client.query<Row>("SELECT * FROM eper_actor_application_assignment WHERE tenant_id = $1 AND actor_id = $2 AND assignment_status = 'active' ORDER BY application_id", [tenantId, actorId]);
+      return result.rows.map(mapRow);
     } finally { client.release(); }
+  }
+  async listActive(tenantId: string, actorId: string): Promise<string[]> {
+    return (await this.listActiveAssignments(tenantId, actorId)).map(row => row.applicationId);
   }
   async isAssigned(tenantId: string, actorId: string, applicationId: string): Promise<boolean> {
     this.validateId(tenantId, "tenantId"); this.validateId(actorId, "actorId"); this.validateId(applicationId, "applicationId");
