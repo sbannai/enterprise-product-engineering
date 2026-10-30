@@ -26,7 +26,11 @@ test("admin actor application assignment API authenticates admins and enforces t
     const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
     const listed = await fetch(url + "?actorId=actor-a", { headers });
     assert.equal(listed.status, 200);
-    const listing = await listed.json();\n    assert.equal(listing.assignments[0].applicationId, "app-a");\n    assert.equal(listing.assignments[0].status, "revoked");\n    assert.equal(listing.assignments[0].version, 2);\n    assert.equal((await fetch(url + "?actorId=x", { headers })).status, 400);
+    const listing = await listed.json();
+    assert.equal(listing.assignments[0].applicationId, "app-a");
+    assert.equal(listing.assignments[0].status, "revoked");
+    assert.equal(listing.assignments[0].version, 2);
+    assert.equal((await fetch(url + "?actorId=x", { headers })).status, 400);
     const granted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 0 }) });
     assert.equal(granted.status, 201);
     assert.equal((await granted.json()).assignment.status, "active");
@@ -37,7 +41,14 @@ test("admin actor application assignment API authenticates admins and enforces t
     assert.equal((await revoked.json()).assignment.status, "revoked");
     const regranted = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 2 }) });
     assert.equal(regranted.status, 201);
-    const regrantBody = await regranted.json();\n    assert.equal(regrantBody.assignment.status, "active");\n    assert.equal(regrantBody.assignment.version, 3);\n    assert.equal((await fetch(url, { method: "PUT", headers })).status, 405);\n    const stale = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 99 }) });\n    assert.equal(stale.status, 409);\n    const missing = await fetch(url, { method: "DELETE", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 99 }) });\n    assert.equal(missing.status, 404);
+    const regrantBody = await regranted.json();
+    assert.equal(regrantBody.assignment.status, "active");
+    assert.equal(regrantBody.assignment.version, 3);
+    assert.equal((await fetch(url, { method: "PUT", headers })).status, 405);
+    const stale = await fetch(url, { method: "POST", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 99 }) });
+    assert.equal(stale.status, 409);
+    const missing = await fetch(url, { method: "DELETE", headers, body: JSON.stringify({ actorId: "actor-a", applicationId: "app-a", expectedVersion: 99 }) });
+    assert.equal(missing.status, 404);
     assert.deepEqual(calls.map(call => call.method), ["listAssignments", "assign", "revoke", "assign", "assign", "revoke"]);
     assert.equal(calls[1].input.tenantId, "tenant-a");
     assert.equal(calls[1].input.changedBy, "admin-a");
