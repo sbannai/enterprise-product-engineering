@@ -600,6 +600,67 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    if (requestUrl.pathname === "/admin/tenant-application-assignments") {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.tenantApplicationAssignmentStore) {
+        sendJson(request, response, 503, { error: "tenant_application_assignment_store_unavailable" });
+        return;
+      }
+      const adminIdentity = resolveAdminConfigIdentity(request);
+      if (!adminIdentity) {
+        sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+        return;
+      }
+      try {
+        if (request.method === "GET") {
+          const assignments = await options.tenantApplicationAssignmentStore.listAssignments(adminIdentity.tenantId);
+          sendJson(request, response, 200, { tenantId: adminIdentity.tenantId, assignments });
+          return;
+        }
+        if (request.method === "POST" || request.method === "DELETE") {
+          const body = await readJson(request);
+          const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+          const expectedVersion = body.expectedVersion;
+          if (!/^[a-zA-Z0-9._-]{2,128}$/.test(applicationId) ||
+              !Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) {
+            sendJson(request, response, 400, { error: "invalid_assignment_input" });
+            return;
+          }
+          const change = {
+            tenantId: adminIdentity.tenantId, applicationId, changedBy: adminIdentity.actorId,
+            expectedVersion: expectedVersion as number,
+            environment: options.adminConfigEnvironment ?? "uat",
+            correlationId: resolveApiRequestId(request), serviceVersion: options.serviceVersion,
+          };
+          const assignment = request.method === "POST"
+            ? await options.tenantApplicationAssignmentStore.assign(change)
+            : await options.tenantApplicationAssignmentStore.revoke(change);
+          sendJson(request, response, request.method === "POST" ? 201 : 200, { assignment });
+          return;
+        }
+        sendMethodNotAllowed(request, response, "GET, POST, DELETE");
+      } catch (error) {
+        if (error instanceof Error && error.message === "TENANT_APPLICATION_ASSIGNMENT_VERSION_CONFLICT") {
+          sendJson(request, response, 409, { error: error.message });
+        } else if (error instanceof Error && error.message === "TENANT_APPLICATION_ASSIGNMENT_NOT_FOUND") {
+          sendJson(request, response, 404, { error: error.message });
+        } else if (error instanceof SyntaxError || error instanceof Error && (error.message === "JSON_OBJECT_REQUIRED" ||
+          error.message.startsWith("TENANT_APPLICATION_ASSIGNMENT_INVALID_") ||
+          error.message === "TENANT_APPLICATION_ASSIGNMENT_EXPECTED_VERSION_INVALID" ||
+          error.message === "TENANT_APPLICATION_ASSIGNMENT_CORRELATION_ID_REQUIRED")) {
+          sendJson(request, response, 400, { error: error instanceof SyntaxError || error.message === "JSON_OBJECT_REQUIRED" ? "invalid_json" : error.message });
+        } else {
+          sendJson(request, response, 503, { error: "tenant_application_assignment_operation_failed" });
+        }
+      }
+      return;
+    }
+
     // Customer session introspection: identity is derived only from the server-side
     // credential map. This is an API boundary, not a substitute for a browser login UI.
     if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
