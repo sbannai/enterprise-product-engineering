@@ -2,29 +2,28 @@
 name: EPER 228 Requirement Pilot Test Matrix
 
 concurrency:
-  # New PR head supersedes older runs for that PR; push/manual runs are commit-scoped.
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'eper/**'
-      - '.github/workflows/eper-228-pilot-matrix.yml'
-      - '.github/workflows/**'
+      - "eper/**"
+      - ".github/workflows/eper-228-pilot-matrix.yml"
   push:
+    branches: ["main"]
     paths:
-      - 'eper/**'
-      - '.github/workflows/eper-228-pilot-matrix.yml'
+      - "eper/**"
 
 permissions:
   contents: read
 
 jobs:
   chapter-pilot-matrix:
+    # Run the full 38-chapter / 228-requirement matrix once on each PR head and main commit.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
