@@ -46,9 +46,9 @@ code{background:#f1f4f9;padding:2px 5px;border-radius:5px}.help{color:var(--mute
     if(!actor) throw new Error("Enter an actor ID");
     const data=await call(endpoint+"?actorId="+encodeURIComponent(actor));
     $("assignments").replaceChildren();
-    if(!data.applicationIds.length){const p=document.createElement("p");p.className="help";p.textContent="No active application assignments."; $("assignments").append(p);}
-    for(const applicationId of data.applicationIds){const row=document.createElement("div");row.className="result";const label=document.createElement("strong");label.textContent=applicationId;const active=document.createElement("span");active.textContent="Active";row.append(label,active);$("assignments").append(row);}
-    status("operation","Loaded "+data.applicationIds.length+" active assignment(s).","ok");
+    if(!data.assignments.length){const p=document.createElement("p");p.className="help";p.textContent="No active application assignments."; $("assignments").append(p);}
+    for(const assignment of data.assignments){const row=document.createElement("div");row.className="result";const label=document.createElement("strong");label.textContent=assignment.applicationId;const select=document.createElement("button");select.className="secondary";select.type="button";select.textContent="Version "+assignment.version;select.addEventListener("click",()=>{$("app").value=assignment.applicationId;$("version").value=String(assignment.version);});row.append(label,select);$("assignments").append(row);}
+    status("operation","Loaded "+data.assignments.length+" active assignment(s). Select a version to prepare a revocation.","ok");
   }
   async function change(method) {
     const actorId=$("actor").value.trim(), applicationId=$("app").value.trim(), expectedVersion=Number($("version").value);
