@@ -69,7 +69,7 @@ jobs:
           set +e
           node --test --test-concurrency=1 tests/*.test.mjs 2>&1 | tee reexec-evidence/uat-technical-execution.log
           command_status=${PIPESTATUS[0]}
-          printf "npm_test_exit_code=%s\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
+          printf "node_test_exit_code=%s\n" "$command_status" >> reexec-evidence/uat-technical-execution.log
           exit "$command_status"
 
       - name: Append step outcomes
