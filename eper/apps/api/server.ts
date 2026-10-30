@@ -2355,6 +2355,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
         return { allowed: false, statusCode: 400, error: "application_id_required_for_ai_integration_policy" };
       }
+      if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+        if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore) {
+          return { allowed: false, statusCode: 503, error: "agent_application_assignment_store_unavailable" };
+        }
+        const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(tenantId);
+        if (!tenantApplications.includes(applicationId)) {
+          return { allowed: false, statusCode: 403, error: "application_not_assigned_to_tenant" };
+        }
+        if (!await options.actorApplicationAssignmentStore.isAssigned(tenantId, identity.principalId, applicationId)) {
+          return { allowed: false, statusCode: 403, error: "actor_not_assigned_to_application" };
+        }
+      }
       if (!tenantId || !options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
         return { allowed: false, statusCode: 503, error: "ai_integration_policy_store_unconfigured" };
       }
