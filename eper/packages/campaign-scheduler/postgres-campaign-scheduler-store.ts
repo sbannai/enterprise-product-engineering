@@ -723,6 +723,7 @@ export class PostgresCampaignSchedulerStore {
         `UPDATE eper_campaign_executions
          SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
              last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE 'WORKER_LEASE_EXPIRED' END,
+             last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'WORKER_LEASE_EXPIRED' ELSE NULL END,
              available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN available_at
                ELSE now() + (LEAST(15 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
