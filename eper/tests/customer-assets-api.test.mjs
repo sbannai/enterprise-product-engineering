@@ -325,3 +325,63 @@ test("customer assets intersect durable tenant ownership with actor application 
     for(const key of keys){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}
   }
 });
+
+
+test("asset downloads enforce durable tenant ownership and actor membership without environment allowlists", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "durable-asset-download-authorization-token-0001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": [{ id: "doc-a", name: "Brief.pdf", type: "document", accessReference: "blobref:private-a" }] },
+  });
+  const tenantStore = { async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a"]; } };
+  const actorStore = { async isAssigned(tenantId, actorId, applicationId) {
+    assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+    return true;
+  } };
+  let resolverCalls = 0;
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: tenantStore,
+    actorApplicationAssignmentStore: actorStore,
+    assetDownloadResolver: async () => {
+      resolverCalls += 1;
+      return { url: "https://storage.example.test/signed-download", expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    },
+    assetAuditWriter: async () => {},
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications/app-a/assets/doc-a/download",
+      { headers: { authorization: "Bearer " + token } });
+    assert.equal(response.status, 200);
+    assert.equal(resolverCalls, 1);
+    const deniedStore = { async isAssigned() { return false; } };
+    const deniedServer = createAppServer({
+      tenantApplicationAssignmentStore: tenantStore,
+      actorApplicationAssignmentStore: deniedStore,
+      assetDownloadResolver: async () => { resolverCalls += 1; return { url: "https://storage.example.test/should-not-run", expiresAt: new Date(Date.now() + 60_000).toISOString() }; },
+      assetAuditWriter: async () => {},
+    });
+    try {
+      await new Promise((resolve, reject) => { deniedServer.once("error", reject); deniedServer.listen(0, "127.0.0.1", resolve); });
+      const deniedAddress = deniedServer.address(); assert.ok(deniedAddress && typeof deniedAddress === "object");
+      const denied = await fetch("http://127.0.0.1:" + deniedAddress.port + "/customer/applications/app-a/assets/doc-a/download",
+        { headers: { authorization: "Bearer " + token } });
+      assert.equal(denied.status, 403);
+      assert.deepEqual(await denied.json(), { error: "actor_not_assigned_to_application" });
+      assert.equal(resolverCalls, 1, "storage provider must not be called for an unauthorized actor");
+    } finally { await new Promise(resolve => deniedServer.close(resolve)); }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
