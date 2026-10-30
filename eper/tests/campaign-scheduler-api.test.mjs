@@ -200,3 +200,25 @@ test("campaign resume passes a distinct audit operation to the store", async (t)
   assert.equal(response.status, 200);
   assert.equal(captured.operation, "resume");
 });
+
+test("campaign schedule API uses durable tenant and actor assignment stores", async (t) => {
+  const tenantApplicationAssignmentStore = {
+    async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a", "app-b"]; },
+  };
+  const actorApplicationAssignmentStore = {
+    async isAssigned(tenantId, actorId, applicationId) {
+      assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+      return true;
+    },
+  };
+  const { base } = await withServer(t, { tenantApplicationAssignmentStore, actorApplicationAssignmentStore });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  const allowed = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(allowed.status, 200);
+  const denied = await fetch(base + "/customer/applications/app-b/campaign-schedules", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(denied.status, 404);
+});
