@@ -57,3 +57,50 @@ test("admin actor application assignment API authenticates admins and enforces t
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+test("actor grants validate ownership against the durable tenant assignment store", async () => {
+  const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE",
+    "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "admin-durable-tenant-ownership-token-0000001";
+  process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
+  process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
+  process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "admin-a" },
+  });
+  // A stale/contradictory environment map must not override the durable ownership source.
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-env-only"] });
+  const tenantReads = [];
+  const tenantApplicationAssignmentStore = {
+    async listActive(tenantId) { tenantReads.push(tenantId); return ["app-db-owned"]; },
+  };
+  const writes = [];
+  const actorApplicationAssignmentStore = {
+    async assign(input) { writes.push(input); return { ...input, status: "active", version: 1 }; },
+    async revoke(input) { writes.push(input); return { ...input, status: "revoked", version: 2 }; },
+    async listAssignments() { return []; },
+  };
+  const server = createAppServer({ tenantApplicationAssignmentStore, actorApplicationAssignmentStore });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/admin/actor-application-assignments";
+    const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
+    const denied = await fetch(url, { method: "POST", headers,
+      body: JSON.stringify({ actorId: "actor-a", applicationId: "app-env-only", expectedVersion: 0 }) });
+    assert.equal(denied.status, 403);
+    assert.deepEqual(await denied.json(), { error: "application_not_assigned_to_tenant" });
+    const allowed = await fetch(url, { method: "POST", headers,
+      body: JSON.stringify({ actorId: "actor-a", applicationId: "app-db-owned", expectedVersion: 0 }) });
+    assert.equal(allowed.status, 201);
+    assert.deepEqual(tenantReads, ["tenant-a", "tenant-a"]);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].tenantId, "tenant-a");
+    assert.equal(writes[0].applicationId, "app-db-owned");
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
