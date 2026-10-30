@@ -22,7 +22,7 @@ function fakeStore(claimed = []) {
   const calls = [];
   return {
     calls,
-    async recoverStaleExecutions() { calls.push("recover"); return 0; },
+    async recoverStaleExecutions(...args) { calls.push(["recover", ...args]); return 0; },
     async materializeDueOneTimeSchedules() { calls.push("materialize-once"); return 0; },
     async materializeDueRecurringSchedules() { calls.push("materialize-recurring"); return 0; },
     async claimExecutions(workerId, batchSize) { calls.push(["claim", workerId, batchSize]); return claimed.splice(0); },
@@ -43,7 +43,7 @@ test("worker processes claimed executions asynchronously and completes with tena
     dispatchCalls.push(job);
     controller.abort();
     return { outcome: { accepted: true } };
-  }, { workerId: "worker-a", signal: controller.signal, idleDelayMs: 100, authorizeDispatch: async () => true });
+  }, { workerId: "worker-a", signal: controller.signal, idleDelayMs: 100, maxAttempts: 3, authorizeDispatch: async () => true });
   assert.equal(dispatchCalls.length, 1);
   assert.equal(dispatchCalls[0].idempotencyKey, "campaign:schedule-1:2030-01-01T00:00:00.000Z");
   const fence = store.calls.find((call) => Array.isArray(call) && call[0] === "dispatch-fence");
@@ -54,7 +54,7 @@ test("worker processes claimed executions asynchronously and completes with tena
   assert.equal(complete[1].applicationId, "app-a");
   assert.equal(complete[1].workerId, "worker-a");
   assert.deepEqual(complete[1].result, { accepted: true });
-  assert.deepEqual(store.calls.slice(0, 4), ["recover", "materialize-once", "materialize-recurring", ["claim", "worker-a", 10]]);
+  assert.deepEqual(store.calls.slice(0, 4), [["recover", 300, 3], "materialize-once", "materialize-recurring", ["claim", "worker-a", 10]]);
 });
 
 test("worker records dispatch failures for bounded retry handling", async () => {
