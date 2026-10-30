@@ -846,7 +846,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       let assetsConfig: unknown;
       try {
         modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
-        assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+        if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
         assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
       } catch {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
@@ -1851,10 +1851,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         return;
       }
       let assignmentsConfig: unknown;
-      try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
-      catch { assignmentsConfig = null; }
-      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
-        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!options.tenantApplicationAssignmentStore) {
+        try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+        catch { assignmentsConfig = null; }
+      }
+      const tenantAssignments = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+          ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
