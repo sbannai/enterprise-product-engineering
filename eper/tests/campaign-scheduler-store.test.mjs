@@ -661,3 +661,30 @@ test("event execution idempotency key stays within the database limit for maximu
   assert.equal(insert.values[3], input.eventId);
   assert.equal(insert.values[4], input.eventType);
 });
+
+test("execution diagnostics expose durable error classifications within tenant and application scope", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("SELECT id, schedule_id, status, attempt_count")
+      ? [{
+          id: "execution-a", schedule_id: "schedule-a", status: "dead_letter", attempt_count: 2,
+          last_error_code: "DISPATCH_OUTCOME_UNKNOWN",
+          last_error_detail_code: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+          dispatch_started_at: "2030-01-01T10:00:00.000Z",
+          completed_at: "2030-01-01T10:00:05.000Z",
+          updated_at: "2030-01-01T10:00:05.000Z",
+        }]
+      : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const result = await store.getExecutionDiagnostics({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "execution-a",
+  });
+  assert.equal(result.status, "dead_letter");
+  assert.equal(result.lastErrorCode, "DISPATCH_OUTCOME_UNKNOWN");
+  assert.equal(result.lastErrorDetailCode, "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST");
+  const query = calls[0];
+  assert.match(query.sql, /WHERE tenant_id=\$1 AND application_id=\$2 AND id=\$3/);
+  assert.deepEqual(query.values, ["tenant-a", "app-a", "execution-a"]);
+  assert.doesNotMatch(query.sql, /payload|idempotency_key/);
+});
