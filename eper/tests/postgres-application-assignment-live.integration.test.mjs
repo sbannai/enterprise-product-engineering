@@ -61,6 +61,18 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
         assert.equal(history.find(row => row.applicationId === applicationId)?.version, 2);
       });
 
+      await t.test("tenant assignment concurrent updates serialize on the expected version", async () => {
+        const attempts = await Promise.allSettled([
+          tenantStore.assign({ ...common, applicationId, expectedVersion: 1 }),
+          tenantStore.assign({ ...common, applicationId, expectedVersion: 1 }),
+        ]);
+        assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1);
+        const rejected = attempts.find(result => result.status === "rejected");
+        assert.match(String(rejected?.reason?.message), /TENANT_APPLICATION_ASSIGNMENT_VERSION_CONFLICT/);
+        const history = await tenantStore.listAssignments(tenantId);
+        assert.equal(history.find(row => row.applicationId === applicationId)?.version, 2);
+      });
+
       await t.test("revocation blocks access immediately and regrant advances the version", async () => {
         const revoked = await actorStore.revoke({ ...common, actorId, applicationId, expectedVersion: 2 });
         assert.equal(revoked.status, "revoked");
@@ -68,9 +80,12 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
         const regranted = await actorStore.assign({ ...common, actorId, applicationId, expectedVersion: 3 });
         assert.equal(regranted.status, "active");
         assert.equal(regranted.version, 4);
-        const tenantRevoked = await tenantStore.revoke({ ...common, applicationId, expectedVersion: 1 });
+        const tenantRevoked = await tenantStore.revoke({ ...common, applicationId, expectedVersion: 2 });
         assert.equal(tenantRevoked.status, "revoked");
         assert.deepEqual(await tenantStore.listActive(tenantId), []);
+        const tenantRegranted = await tenantStore.assign({ ...common, applicationId, expectedVersion: 3 });
+        assert.equal(tenantRegranted.status, "active");
+        assert.equal(tenantRegranted.version, 4);
       });
 
       await t.test("audit insert failure rolls back the assignment mutation", async () => {
@@ -97,6 +112,11 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
             (await actorStore.listAssignments(tenantId, actorId)).map(row => row.applicationId),
             [applicationId],
           );
+          await assert.rejects(
+            tenantStore.assign({ ...common, applicationId: rollbackApplicationId, expectedVersion: 0 }),
+            /INJECTED_ASSIGNMENT_AUDIT_FAILURE/,
+          );
+          assert.deepEqual(await tenantStore.listActive(tenantId), [applicationId]);
         } finally {
           await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON eper_audit_events`);
           await pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
