@@ -26,6 +26,11 @@ main{max-width:1100px;margin:auto;padding:clamp(16px,4vw,36px)}h1{font-size:clam
 <div class="field full"><div class="actions"><button type="submit">Create draft</button></div></div>
 </form></section>
 <div id="notice" class="notice" role="status" aria-live="polite">Enter an application ID and authorized token to load schedules.</div>
+<section class="panel" aria-labelledby="execution-heading"><h2 id="execution-heading">Execution diagnostics</h2><div class="grid">
+<div class="field"><label for="executionId">Execution ID</label><input id="executionId" autocomplete="off" maxlength="128" placeholder="Paste an execution ID"></div>
+<div class="field"><label for="executionLookup">Lookup</label><div class="actions"><button id="executionLookup" type="button" class="secondary">Load diagnostics</button></div></div>
+</div><p class="muted">Shows operational status and safe error classifications only. Access is checked against your application assignment and operator role.</p>
+<div id="executionDiagnostics" class="notice" role="status" aria-live="polite">No execution selected.</div></section>
 <section class="panel"><div class="schedule-head"><h2>Schedules</h2><button id="refreshButton" class="secondary" type="button">Refresh</button></div><div id="schedules"><p class="muted">No schedules loaded yet.</p></div></section>
 </main>
 <script>
@@ -89,6 +94,32 @@ main{max-width:1100px;margin:auto;padding:clamp(16px,4vw,36px)}h1{font-size:clam
       notice('Schedule updated. Refreshing authoritative state…'); await load();
     } catch (e) { notice(e.message || 'Schedule action failed.', true); }
   }
+  $('executionLookup').addEventListener('click', async () => {
+    const executionId = $('executionId').value.trim();
+    const output = $('executionDiagnostics');
+    output.className = 'notice';
+    if (!executionId) { output.textContent = 'Enter an execution ID.'; return; }
+    try {
+      output.textContent = 'Loading execution diagnostics…';
+      const result = await api('/customer/applications/' + encodeURIComponent(appId()) + '/campaign-executions/' + encodeURIComponent(executionId));
+      const execution = result.execution;
+      output.replaceChildren();
+      const fields = [
+        ['Execution', execution.executionId], ['Schedule', execution.scheduleId],
+        ['Status', execution.status], ['Attempts', String(execution.attemptCount)],
+        ['Safety classification', execution.lastErrorCode || '—'],
+        ['Specific error', execution.lastErrorDetailCode || '—'],
+        ['Dispatch started', execution.dispatchStartedAt || '—'],
+        ['Completed', execution.completedAt || '—'], ['Last updated', execution.updatedAt],
+      ];
+      for (const [label, value] of fields) {
+        const row = document.createElement('p');
+        const strong = document.createElement('strong'); strong.textContent = label + ': ';
+        const span = document.createElement('span'); span.textContent = value;
+        row.append(strong, span); output.append(row);
+      }
+    } catch (e) { output.className = 'notice error'; output.textContent = e.message || 'Unable to load execution diagnostics.'; }
+  });
   $('loadButton').addEventListener('click', load);
   $('refreshButton').addEventListener('click', load);
   $('createForm').addEventListener('submit', async (event) => {
