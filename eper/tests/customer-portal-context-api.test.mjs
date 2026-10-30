@@ -429,8 +429,8 @@ test("customer application settings expose only safe preferences for assigned ap
   const tokenB = "customer-settings-tenant-b-token-000000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
     "tenant-a": ["settings"], "tenant-b": ["settings"],
@@ -518,7 +518,7 @@ test("customer application settings fail closed when settings configuration is m
   const token = "customer-settings-config-fail-closed-token-0001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
