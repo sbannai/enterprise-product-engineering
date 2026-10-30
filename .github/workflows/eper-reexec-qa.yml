@@ -1,8 +1,10 @@
 # Re-run controlled QA after payment/receipt branch reconciliation.
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
+# Isolate each PR validation by its exact head commit. Push and manual runs
+# are isolated by the exact commit being tested, never merely by branch name.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 on:
