@@ -518,7 +518,7 @@ test("cancelling a claimed execution before the dispatch fence prevents fence ac
     }
     if (sql.includes("UPDATE eper_campaign_executions SET status='cancelled'")) {
       if (["queued", "retry_wait", "running"].includes(executionStatus) && !dispatchStarted) executionStatus = "cancelled";
-      return { rows: [], rowCount: 1 };
+      return { rows: [{ id: "execution-1" }], rowCount: 1 };
     }
     if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) {
       const allowed = scheduleStatus === "scheduled" && executionStatus === "running" && !dispatchStarted;
@@ -547,6 +547,9 @@ test("cancelling a claimed execution before the dispatch fence prevents fence ac
   assert.equal(fenceResult, false);
   assert.equal(dispatchStarted, false);
   assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_campaign_executions SET status='cancelled'")));
+  assert.equal(calls.filter((call) => call.sql.includes("INSERT INTO eper_audit_events")).length, 2,
+    "schedule cancellation and its execution cancellation must both be audited");
+  assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
 
