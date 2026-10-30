@@ -93,13 +93,16 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null;
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null;
       }>(
         `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
                 to_regclass('public.eper_campaign_executions')::text AS executions_table,
                 (SELECT column_name FROM information_schema.columns
                  WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                   AND column_name='dispatch_started_at') AS dispatch_started_column`,
+                   AND column_name='dispatch_started_at') AS dispatch_started_column,
+                (SELECT column_name FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                   AND column_name='last_error_detail_code') AS error_detail_column`,
       );
       if (!result.rows[0]?.schedules_table || !result.rows[0]?.executions_table) {
         throw new Error("EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED");
@@ -107,10 +110,14 @@ export class PostgresCampaignSchedulerStore {
       if (!result.rows[0]?.dispatch_started_column) {
         throw new Error("EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED");
       }
+      if (!result.rows[0]?.error_detail_column) {
+        throw new Error("EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED");
+      }
     } catch (error) {
       if (error instanceof Error && (
         error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED" ||
-        error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED"
+        error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED" ||
+        error.message === "EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED"
       )) throw error;
       throw new Error("EPER_CAMPAIGN_SCHEDULER_READINESS_CHECK_FAILED", { cause: error });
     } finally { client.release(); }
@@ -656,13 +663,14 @@ export class PostgresCampaignSchedulerStore {
         `UPDATE eper_campaign_executions
          SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
              last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE $6 END,
+             last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN $8 ELSE NULL END,
              available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN available_at
                ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN now() ELSE NULL END
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
          RETURNING status`,
-        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds],
+        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds, errorCode],
       );
       return result.rows[0]?.status ?? "not_owned";
     } finally { client.release(); }
