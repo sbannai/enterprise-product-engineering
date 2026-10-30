@@ -14,10 +14,10 @@ on:
       - ".github/workflows/**"
   workflow_dispatch:
 
-# Keep PR attempts isolated by PR number and push attempts isolated by commit SHA.
-# A newer commit on the same integration branch must not cancel QA for an earlier merge commit.
+# Isolate each PR validation by its exact head commit. Push and manual runs
+# are isolated by the exact commit being tested.
 concurrency:
-  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
