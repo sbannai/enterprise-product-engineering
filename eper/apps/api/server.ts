@@ -864,6 +864,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         typeof id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(id))) {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
       }
+      const actorAssignments = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.listActive(identity.tenantId, identity.actorId)
+        : identity.applicationIds ?? [];
+      const actorApplicationSet = new Set(actorAssignments);
       const tenantAssets = assetsConfig && typeof assetsConfig === "object" && !Array.isArray(assetsConfig)
         ? (assetsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!tenantAssets || typeof tenantAssets !== "object" || Array.isArray(tenantAssets)) {
@@ -871,7 +875,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const allAssets: Record<string, unknown>[] = [];
       const applicationsWithAssets = new Set<string>();
-      for (const assignedId of [...new Set(tenantAssignments as string[])]) {
+      for (const assignedId of [...new Set(tenantAssignments as string[])].filter((id) => actorApplicationSet.has(id))) {
         const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
         if (applicationAssets === undefined) continue;
         if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
@@ -1543,12 +1547,17 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 400, { error: "invalid_application_id" });
         return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
-      catch { assignments = null; }
-      if (!assignments || typeof assignments !== "object" || Array.isArray(assignments) ||
-          !Array.isArray((assignments as Record<string, unknown>)[identity.tenantId]) ||
-          !((assignments as Record<string, unknown[]>)[identity.tenantId] as unknown[]).includes(applicationId)) {
+      let tenantAssignments: unknown;
+      if (options.tenantApplicationAssignmentStore) {
+        tenantAssignments = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      } else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+        catch { assignments = null; }
+        tenantAssignments = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
+      if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
       }
