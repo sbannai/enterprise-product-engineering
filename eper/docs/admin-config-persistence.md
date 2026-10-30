@@ -39,7 +39,8 @@ The audit migration runner applies both the audit chain schema and `002_admin_co
 The actor membership administration API is separately gated and uses the same mapped administrator identities:
 
 - `EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE=postgres` — enables PostgreSQL-backed actor/application membership. It requires the shared PostgreSQL pool and durable audit mode; API startup checks that migration `007_actor_application_assignments.sql` has been applied.
-- `EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON` — tenant-to-application allowlist. An administrator may grant actor membership only for an application already assigned to that administrator's tenant. This remains the tenant-level boundary; actor membership is the additional per-actor boundary.
+- `EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON` — compatibility-mode tenant-to-application allowlist. When `EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE=postgres`, tenant ownership is read from `eper_tenant_application_assignment` instead; migration `008_tenant_application_assignments.sql` is applied by the audit migration runner and startup verifies the schema.
+- PostgreSQL tenant ownership and actor membership are separate durable boundaries. The same persistence mode initializes both stores and requires the shared PostgreSQL pool plus durable audit mode.
 - `EPER_ADMIN_CONFIG_IDENTITIES_JSON` — maps each administrator bearer credential to its trusted tenant and actor identity. The mapped actor is recorded as the grant/revoke initiator.
 
 | Method | Route | Purpose |
@@ -47,6 +48,8 @@ The actor membership administration API is separately gated and uses the same ma
 | GET | `/admin/actor-application-assignments?actorId=<actor>` | List assignment history, including revoked records and current versions, for an actor in the authenticated administrator's tenant |
 | POST | `/admin/actor-application-assignments` | Grant or re-grant membership; body requires `actorId`, `applicationId` and `expectedVersion` |
 | DELETE | `/admin/actor-application-assignments` | Revoke membership using the same version-checked body |
+
+Tenant/application ownership is managed separately by `GET /admin/tenant-application-assignments`, `POST /admin/tenant-application-assignments`, and `DELETE /admin/tenant-application-assignments`. The authenticated administrator identity supplies the tenant and changed-by actor; clients cannot choose another tenant. Mutations use expected versions and transactional audit events. Customer application listing intersects active tenant assignments with active actor memberships. Customer settings and actor-grant validation use the same durable tenant ownership source in PostgreSQL mode.
 
 The same-origin admin console is `/admin/actor-application-assignments/ui`. The Pricing & Payments console links to it from Client & Application Access. Credentials remain in page memory and are not persisted in browser storage. Assignment mutations use optimistic version checks and write their audit event in the same database transaction; stale versions return `409`, applications outside the tenant allowlist return `403`, and a revocation without an existing assignment returns `404`.
 
