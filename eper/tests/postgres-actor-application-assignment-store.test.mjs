@@ -65,6 +65,40 @@ test("actor application assignment rolls back when its audit write fails", async
   assert.ok(!calls.some(call => call.sql === "COMMIT"));
 });
 
+test("actor application assignment can be re-granted after revocation with a higher version", async () => {
+  const { calls, pool } = fakePool({ prior: [{ version: 2 }] });
+  const store = new PostgresActorApplicationAssignmentStore(pool);
+  const saved = await store.assign({ ...input, expectedVersion: 2 });
+  assert.equal(saved.status, "active");
+  assert.equal(saved.version, 3);
+  assert.ok(calls.some(call => /ON CONFLICT \(tenant_id, actor_id, application_id\) DO UPDATE/.test(call.sql)));
+  assert.ok(calls.some(call => /identity.application_assignment.grant/.test(JSON.stringify(call.values))));
+});
+
+test("actor application revoke rejects a missing assignment", async () => {
+  const { calls, pool } = fakePool();
+  const store = new PostgresActorApplicationAssignmentStore(pool);
+  await assert.rejects(() => store.revoke(input), { message: "ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND" });
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some(call => /INSERT INTO eper_actor_application_assignment/.test(call.sql)));
+});
+
+test("actor application assignment history includes revoked records and versions", async () => {
+  const row = {
+    tenant_id: "tenant-a", actor_id: "actor-a", application_id: "app-a", assignment_status: "revoked",
+    version: 2, assigned_at: "2026-10-29T00:00:00.000Z", assigned_by: "admin-a",
+    revoked_at: "2026-10-30T00:00:00.000Z", revoked_by: "admin-a",
+    updated_at: "2026-10-30T00:00:00.000Z", updated_by: "admin-a",
+  };
+  const { pool, calls } = fakePool({ prior: [row] });
+  const store = new PostgresActorApplicationAssignmentStore(pool);
+  const history = await store.listAssignments("tenant-a", "actor-a");
+  assert.equal(history.length, 1);
+  assert.equal(history[0].status, "revoked");
+  assert.equal(history[0].version, 2);
+  assert.deepEqual(calls[0].values, ["tenant-a", "actor-a"]);
+});
+
 test("actor application read operations use explicit tenant and actor scope", async () => {
   const { calls, pool } = fakePool();
   const store = new PostgresActorApplicationAssignmentStore(pool);
