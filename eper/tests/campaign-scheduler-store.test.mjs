@@ -429,18 +429,24 @@ test("cancellation rolls back when a running execution has crossed the dispatch 
 
 
 test("execution with dispatch started is dead-lettered rather than automatically replayed after failure", async () => {
-  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [{ status: "dead_letter" }] : [], rowCount: 1 }));
+  const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [{
+    status: "dead_letter", last_error_code: "DISPATCH_OUTCOME_UNKNOWN",
+    last_error_detail_code: "PROVIDER_TIMEOUT", attempt_count: 2,
+  }] : [], rowCount: 1 }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const outcome = await store.failExecution({
     tenantId: "tenant-a", applicationId: "app-a", executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
     workerId: "worker-a", errorCode: "provider_timeout",
   });
   assert.equal(outcome, "dead_letter");
-  assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$5/);
-  assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
-  assert.match(calls[0].sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN \$8 ELSE NULL END/);
-  assert.equal(calls[0].values[7], "PROVIDER_TIMEOUT");
-  assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\(\) ELSE NULL END/);
+  const failureUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.match(failureUpdate.sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \\$5/);
+  assert.match(failureUpdate.sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
+  assert.match(failureUpdate.sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN \\$8 ELSE NULL END/);
+  assert.equal(failureUpdate.values[7], "PROVIDER_TIMEOUT");
+  assert.match(failureUpdate.sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]5 THEN now\\(\\) ELSE NULL END/);
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
 test("stale recovery does not automatically retry an execution whose dispatch may have reached provider", async () => {
