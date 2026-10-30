@@ -4,8 +4,9 @@ name: EPER CI
 # Full-suite and same-commit end-to-end validation live in eper-integrated-validation.yml.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  # New PR head supersedes older runs for that PR; push/manual runs are commit-scoped.
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 on:
   workflow_dispatch:
