@@ -177,9 +177,13 @@ function resolveAgentJobIdentity(request: IncomingMessage): TrustedAgentJobIdent
     if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
     if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
     const applications = (identity as Record<string, unknown>).applicationIds;
-    if (!Array.isArray(applications) || applications.length === 0 ||
-        applications.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9._-]{2,100}$/.test(id))) return null;
-    return { ...base, applicationIds: [...new Set(applications as string[])] };
+    if (Array.isArray(applications) && applications.length > 0 &&
+        applications.every((id) => typeof id === "string" && /^[a-zA-Z0-9._-]{2,100}$/.test(id))) {
+      return { ...base, applicationIds: [...new Set(applications as string[])] };
+    }
+    // In durable assignment mode, application membership is resolved from PostgreSQL per request.
+    if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") return { ...base, applicationIds: [] };
+    return null;
   }
   return null;
 }
@@ -2325,6 +2329,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;
     if (await handleAgentJobRoute(request, response, requestUrl.pathname, {
       store: agentStore, resolveIdentity: resolveAgentJobIdentity,
+      authorizeApplication: async (identity, applicationId) => {
+        if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId)) return false;
+        if (options.tenantApplicationAssignmentStore && options.actorApplicationAssignmentStore &&
+            process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+          const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+          if (!tenantApplications.includes(applicationId)) return false;
+          return options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId);
+        }
+        return identity.applicationIds.includes(applicationId);
+      },
       environment: options.adminConfigEnvironment ?? "sandbox",
     })) return;
 
