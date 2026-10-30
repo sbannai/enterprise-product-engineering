@@ -19,7 +19,8 @@ Use secret/configuration management at deployment time; never commit credentials
     "<long-random-bearer-credential>": {
       "tenantId": "tenant-a",
       "actorId": "actor-a",
-      "roleKey": "customer"
+      "roleKey": "customer",
+      "applicationIds": ["app-a"]
     }
   },
   "EPER_CUSTOMER_WORKSPACE_MODULES_JSON": {
@@ -39,6 +40,8 @@ Use secret/configuration management at deployment time; never commit credentials
 ```
 
 The JSON above illustrates each environment variable's value separately; do not set all four variables to one combined object.
+
+For application-scoped customer routes (including `GET /customer/applications`, application settings, and ticket operations), `applicationIds` is the actor-level allowlist in the trusted identity record. The server intersects it with the tenant's `EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON` assignments; tenant membership alone does not grant an actor access to every tenant application. If `applicationIds` is absent, empty, or invalid, application-scoped access fails closed (the application list is empty and direct application access is denied). Keep this mapping server-side and update it through the approved identity provisioning process.
 
 ## Security and current limitations
 
