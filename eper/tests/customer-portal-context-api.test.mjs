@@ -149,8 +149,8 @@ test("customer help and growth content is tenant-scoped and module-entitlement e
   const tokenA = "tenant-content-a-test-token-00000000000000000001";
   const tokenB = "tenant-content-b-test-token-00000000000000000001";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a", "app-invalid"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
     "tenant-a": ["help-center"],
@@ -288,8 +288,8 @@ test("customer application list returns only server-assigned applications for th
   const tokenB = "customer-app-list-b-token-00000000000000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
     "tenant-a": ["app-a", "app-a", "app-a-2"],
@@ -308,7 +308,7 @@ test("customer application list returns only server-assigned applications for th
     assert.equal(anonymous.status, 401);
     const responseA = await fetch(url, { headers: { authorization: "Bearer " + tokenA, "x-tenant-id": "tenant-b" } });
     assert.equal(responseA.status, 200);
-    assert.deepEqual(await responseA.json(), { applications: [{ applicationId: "app-a" }, { applicationId: "app-a-2" }] });
+    assert.deepEqual(await responseA.json(), { applications: [{ applicationId: "app-a" }] });
     const versionedA = await fetch(url, { headers: {
       authorization: "Bearer " + tokenA,
       accept: "application/vnd.eper.v1+json",
@@ -319,7 +319,7 @@ test("customer application list returns only server-assigned applications for th
     assert.equal(versionedA.status, 200);
     const versionedBody = await versionedA.json();
     assert.equal(versionedBody.success, true);
-    assert.deepEqual(versionedBody.data.applications, [{ applicationId: "app-a" }, { applicationId: "app-a-2" }]);
+    assert.deepEqual(versionedBody.data.applications, [{ applicationId: "app-a" }]);
     assert.ok(versionedBody.meta.requestId);
     assert.equal(versionedA.headers.get("x-request-id"), versionedBody.meta.requestId);
     const responseB = await fetch(url, { headers: { authorization: "Bearer " + tokenB } });
