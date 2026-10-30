@@ -460,6 +460,7 @@ export class PostgresCampaignSchedulerStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("CAMPAIGN_CLAIM_LIMIT_INVALID");
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `WITH due AS (
            SELECT e.id FROM eper_campaign_executions e
@@ -479,6 +480,21 @@ export class PostgresCampaignSchedulerStore {
          RETURNING e.*`,
         [worker, limit],
       );
+      for (const row of result.rows) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+            environment: this.auditEnvironment, actorType: "service", actorId: worker,
+            action: "campaign_execution_claimed", outcome: "success",
+            reasonCode: "CAMPAIGN_EXECUTION_WORKER_LEASE_ACQUIRED",
+            resourceType: "campaign-execution", resourceId: String(row.id),
+            source: "job", operationName: "campaign.execution.claim",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: "running", attemptCount: Number(row.attempt_count) },
+          });
+        } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      }
+      await client.query("COMMIT");
       return result.rows.map((row) => {
         const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
         return {
@@ -489,6 +505,9 @@ export class PostgresCampaignSchedulerStore {
           availableAt: new Date(row.available_at as string | Date).toISOString(),
         };
       });
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally { client.release(); }
   }
 
