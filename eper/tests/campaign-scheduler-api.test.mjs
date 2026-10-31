@@ -13,8 +13,8 @@ async function withServer(t, overrides = {}) {
   };
   process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
-    ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
+    ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const storeOverrides = overrides;
@@ -26,7 +26,7 @@ async function withServer(t, overrides = {}) {
     async getSchedule(input) { return input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.scheduleId === "schedule-1" ? schedule : null; },
     ...storeOverrides,
   };
-  const server = createAppServer({ campaignSchedulerStore: store });
+  const server = createAppServer({ campaignSchedulerStore: store, tenantApplicationAssignmentStore: overrides.tenantApplicationAssignmentStore, actorApplicationAssignmentStore: overrides.actorApplicationAssignmentStore });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -199,4 +199,26 @@ test("campaign resume passes a distinct audit operation to the store", async (t)
   });
   assert.equal(response.status, 200);
   assert.equal(captured.operation, "resume");
+});
+
+test("campaign schedule API uses durable tenant and actor assignment stores", async (t) => {
+  const tenantApplicationAssignmentStore = {
+    async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a", "app-b"]; },
+  };
+  const actorApplicationAssignmentStore = {
+    async isAssigned(tenantId, actorId, applicationId) {
+      assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+      return true;
+    },
+  };
+  const { base } = await withServer(t, { tenantApplicationAssignmentStore, actorApplicationAssignmentStore });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  const allowed = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(allowed.status, 200);
+  const denied = await fetch(base + "/customer/applications/app-b/campaign-schedules", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(denied.status, 404);
 });
