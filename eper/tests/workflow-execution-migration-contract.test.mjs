@@ -86,3 +86,13 @@ test("workflow role catalogue stores application-scoped permission grants", asyn
   assert.match(sql, /current_setting\('eper\.application_id', true\)/);
   assert.match(sql, /eper_workflow_actor_role_assignment_role_fk/);
 });
+
+
+test("workflow instance starts have a unique, fingerprinted idempotency key", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/005_workflow_start_idempotency.sql", import.meta.url), "utf8");
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS start_idempotency_key/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS start_request_fingerprint/);
+  assert.match(sql, /start_request_fingerprint ~ '\^\[a-f0-9\]\{64\}\$'/);
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS eper_workflow_instances_start_idempotency_idx/);
+  assert.match(sql, /WHERE start_idempotency_key IS NOT NULL/);
+});
