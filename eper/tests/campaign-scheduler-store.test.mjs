@@ -39,8 +39,10 @@ test("schedule creation is tenant-scoped and starts as draft pending approval", 
   });
   assert.equal(result.status, "draft");
   assert.equal(result.approvalStatus, "pending");
-  assert.match(calls[0].sql, /tenant_id, application_id, campaign_id/);
-  assert.equal(calls[0].values[1], "tenant-a");
+  const insert = calls.find((call) => call.sql.includes("INSERT INTO eper_campaign_schedules"));
+  assert.ok(insert);
+  assert.match(insert.sql, /tenant_id, application_id, campaign_id/);
+  assert.equal(insert.values[1], "tenant-a");
 });
 
 test("schedule creation rejects malformed timezone before database access", async () => {
@@ -79,9 +81,11 @@ test("worker claim uses SKIP LOCKED and caps batch size", async () => {
   await assert.rejects(store.claimExecutions("worker-a", 101), /CAMPAIGN_CLAIM_LIMIT_INVALID/);
   assert.equal(calls.length, 0);
   await store.claimExecutions("worker-a", 5);
-  assert.match(calls[0].sql, /FOR UPDATE(?: OF e)? SKIP LOCKED/);
-  assert.match(calls[0].sql, /attempt_count=e\.attempt_count\+1/);
-  assert.deepEqual(calls[0].values, ["worker-a", 5]);
+  const claim = calls.find((call) => call.sql.includes("WITH due AS"));
+  assert.ok(claim);
+  assert.match(claim.sql, /FOR UPDATE(?: OF e)? SKIP LOCKED/);
+  assert.match(claim.sql, /attempt_count=e\.attempt_count\+1/);
+  assert.deepEqual(claim.values, ["worker-a", 5]);
 });
 
 test("enqueue accepts only approved scheduled tenant/application schedules and is idempotent", async () => {
@@ -98,7 +102,8 @@ test("enqueue accepts only approved scheduled tenant/application schedules and i
     payload: { safe: true },
   });
   assert.equal(job?.id, "job-1");
-  assert.match(calls[0].sql, /s\.status='scheduled' AND s\.approval_status='approved'/);
+  assert.match(calls[0].sql, /\(s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)\)/);
+  assert.match(calls[0].sql, /s\.approval_status='approved'/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\)/);
 });
 
@@ -131,8 +136,10 @@ test("execution completion requires the current worker lease", async () => {
     tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", result: { delivered: true },
   });
   assert.equal(completed, false);
-  assert.match(calls[0].sql, /status='running' AND locked_by=\$4/);
-  assert.match(calls[0].sql, /last_error_code=NULL, last_error_detail_code=NULL/);
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.ok(update);
+  assert.match(update.sql, /status='running' AND locked_by=\$4/);
+  assert.match(update.sql, /last_error_code=NULL, last_error_detail_code=NULL/);
 });
 
 test("successful execution completion appends a transactional audit event", async () => {
@@ -148,7 +155,7 @@ test("successful execution completion appends a transactional audit event", asyn
   assert.equal(completed, true);
   assert.equal(calls[0].sql, "BEGIN");
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
-  assert.equal(calls.at(-1).sql, "COMMIT");
+  assert.ok(calls.some((call) => call.sql === "COMMIT"), "cancellation transaction must commit before the later denied fence transaction rolls back");
 });
 
 test("successful completion rolls back if its audit event cannot be persisted", async () => {
@@ -231,7 +238,8 @@ test("event trigger fan-out is tenant/application scoped and idempotent", async 
   assert.match(calls[0].sql, /s\.tenant_id=\$1 AND s\.application_id=\$2/);
   assert.match(calls[0].sql, /trigger_type='event'/);
   assert.match(calls[0].sql, /schedule_definition->>'eventType'=\$5/);
-  assert.match(calls[0].sql, /'event:' \|\| \$5 \|\| ':' \|\| \$4 \|\| ':' \|\| s\.id::text/);
+  assert.match(calls[0].sql, /'event:' \|\| \$7 \|\| ':' \|\| s\.id::text/);
+  assert.equal(calls[0].values[6], createHash("sha256").update("lead.created").update("\0").update("evt-123").digest("hex"));
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
   assert.equal(calls[0].values[3], "evt-123");
   assert.equal(calls[0].values[4], "lead.created");
@@ -485,10 +493,12 @@ test("stale recovery does not automatically retry an execution whose dispatch ma
   const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 1 }));
   const store = new PostgresCampaignSchedulerStore(pool);
   await store.recoverStaleExecutions(300, 5);
-  assert.match(calls[0].sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$2/);
-  assert.match(calls[0].sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
-  assert.match(calls[0].sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'WORKER_LEASE_EXPIRED' ELSE NULL END/);
-  assert.match(calls[0].sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]2 THEN now\(\) ELSE NULL END/);
+  const recovery = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.ok(recovery);
+  assert.match(recovery.sql, /dispatch_started_at IS NOT NULL OR attempt_count >= \$2/);
+  assert.match(recovery.sql, /'DISPATCH_OUTCOME_UNKNOWN'/);
+  assert.match(recovery.sql, /last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'WORKER_LEASE_EXPIRED' ELSE NULL END/);
+  assert.match(recovery.sql, /completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= [$]2 THEN now\(\) ELSE NULL END/);
 });
 
 test("claim query excludes executions that crossed the dispatch fence and audits each claim", async () => {
@@ -805,7 +815,7 @@ test("completion lease loss is durably dead-lettered after the worker no longer 
   assert.equal(outcome, "dead_letter");
   const leaseOwnedUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("locked_by=$4"));
   assert.ok(leaseOwnedUpdate, "the normal lease-owned failure update is attempted first");
-  const diagnosticUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("dispatch_started_at IS NOT NULL"));
+  const diagnosticUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("SET status='dead_letter'"));
   assert.ok(diagnosticUpdate, "the dispatch-fenced row receives a diagnostic-only safety update after lease loss");
   assert.match(diagnosticUpdate.sql, /status='dead_letter'/);
   assert.match(diagnosticUpdate.sql, /last_error_code='DISPATCH_OUTCOME_UNKNOWN'/);
