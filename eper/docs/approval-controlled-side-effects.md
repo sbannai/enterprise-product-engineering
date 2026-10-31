@@ -142,3 +142,20 @@ Slices A–F do not authorize enabling a real external provider. Slice G require
 - Canonical EM-EVT-001 event names and ownership for proposal/approval/execution lifecycle.
 
 Until these decisions are approved, the implementation must enforce the known minimum: distinct human approver, exact proposal hash/version, trusted tenant/application scope, fresh authorization, durable audit, and fail-closed behavior. Missing additional policy must block the affected action rather than invent a threshold or exception.
+
+
+## 10. Execution orchestration implementation status (2026-10-31)
+
+The first worker-side orchestration slice is implemented as a disabled-by-default library service:
+
+- Loads the exact tenant/application/proposal version and selected approval grant from the durable store.
+- Calls the host-owned `execute_proposal` authorization operation with proposal hash and approval ID.
+- Requires the fresh host policy version to match the approval grant's recorded policy version.
+- Runs a required independent-controls callback before attempting the transactional execution claim.
+- Passes only the typed proposal, execution ID and stable idempotency key to the host dispatcher contract.
+- Persists successful outcome through the existing transactional execution ledger and audit path.
+- Does not ship a provider/CRM adapter, public execution endpoint or production host wiring. Dispatch remains disabled unless an explicit host composition enables it; no production composition does so in this slice.
+
+The host dispatcher must deduplicate using the supplied idempotency key. If dispatch returns an ambiguous outcome or the final ledger write fails after provider success, the lease is retained for controlled recovery; a retry is safe only where the receiver honors that same idempotency key. This slice does not claim universal exactly-once delivery.
+
+Validation must cover policy denial, policy-version drift, independent-control denial, disabled dispatch, duplicate claims, concurrent workers, lease expiry/recovery and the crash-after-provider-success boundary. PostgreSQL remains local/ephemeral integration scope only; no cloud resource, real provider or Business UAT is enabled.
