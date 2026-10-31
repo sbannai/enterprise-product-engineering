@@ -167,6 +167,8 @@ The branch includes `packages/workflows/migrations/001_workflow_execution.sql`, 
 
 The integrated PostgreSQL CI lane applied this migration successfully, applied it a second time to verify repeatability, and passed the full EPER test suite with PostgreSQL enabled on commit `1d8d456a962c4a71d2156c5d7aca455609ed4b2f`. This is ephemeral CI database evidence, not a production or UAT deployment.
 
+Migration `002_workflow_publication_events.sql` adds an append-only publication lifecycle ledger. The publisher now takes a transaction-scoped advisory lock keyed by tenant/application/workflow before allocating a version, closing the concurrent first-publication race where `SELECT ... FOR UPDATE` has no row to lock. Each successful publication appends a lifecycle event in the same transaction as the immutable definition snapshot and audit event. The latest event for a workflow is the authoritative publication pointer; retirement must append a `retired` event rather than update an immutable definition row. The lifecycle ledger has tenant/application RLS plus UPDATE/DELETE/TRUNCATE guards. Exact-head CI for this follow-on increment is pending.
+
 ## 11. Current evidence disposition
 
 | Capability | Current evidence | Disposition |
