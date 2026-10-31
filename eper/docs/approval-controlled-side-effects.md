@@ -149,7 +149,7 @@ Until these decisions are approved, the implementation must enforce the known mi
 The first worker-side orchestration slice is implemented as a disabled-by-default library service:
 
 - Loads the exact tenant/application/proposal version and selected approval grant from the durable store.
-- Calls the host-owned `execute_proposal` authorization operation with proposal hash and approval ID.
+- Calls the host-owned `execute_proposal` authorization operation with proposal hash, approval ID and original human approver identity, so the host can recheck current grantor authority.
 - Requires the fresh host policy version to match the approval grant's recorded policy version.
 - Runs a required independent-controls callback before attempting the transactional execution claim.
 - Passes only the typed proposal, execution ID and stable idempotency key to the host dispatcher contract.
