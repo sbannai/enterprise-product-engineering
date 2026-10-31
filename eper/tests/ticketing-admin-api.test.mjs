@@ -159,3 +159,53 @@ test("same admin ticket API derives result scope from the authenticated role", a
     assert.equal(calls[1].scope.tenantId, "tenant-a");
   });
 });
+
+
+test("admin can confirm P1 only with a substantive rationale and trusted actor identity", async () => {
+  let args;
+  const ticketStore = {
+    async list() { return []; },
+    async changeStatus() { return ticket; },
+    async assign() { return ticket; },
+    async classifySeverity(identity, id, severity, rationale) {
+      args = { identity, id, severity, rationale };
+      return { ...ticket, severity, p1Rationale: rationale, p1ConfirmedBy: identity.actorId };
+    },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const url = base + "/admin/support/tickets/" + ticket.id + "/severity";
+    const invalid = await fetch(url, {
+      method: "PATCH", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ severity: "p1_confirmed", rationale: "Too short" }),
+    });
+    assert.equal(invalid.status, 400);
+    const valid = await fetch(url, {
+      method: "PATCH", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ severity: "p1_confirmed", rationale: "Payment integrity is blocked for all users and receipts cannot be reconciled." }),
+    });
+    assert.equal(valid.status, 200);
+    assert.equal(args.identity.tenantId, "tenant-a");
+    assert.equal(args.identity.actorId, "admin-1");
+    assert.equal(args.id, ticket.id);
+    assert.equal(args.severity, "p1_confirmed");
+    assert.match(args.rationale, /Payment integrity/);
+  });
+});
+
+test("admin severity endpoint rejects client-supplied confirmation identity and unknown fields", async () => {
+  let calls = 0;
+  const ticketStore = {
+    async list() { return []; },
+    async changeStatus() { return ticket; },
+    async assign() { return ticket; },
+    async classifySeverity() { calls++; return ticket; },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const response = await fetch(base + "/admin/support/tickets/" + ticket.id + "/severity", {
+      method: "PATCH", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ severity: "p1_confirmed", rationale: "Valid rationale that is sufficiently long.", confirmedBy: "attacker" }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls, 0);
+  });
+});

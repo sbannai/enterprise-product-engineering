@@ -9,7 +9,7 @@ import {
 
 test("ticketing domain exports controlled lifecycle values", () => {
   assert.deepEqual(TICKET_TYPES, ["defect", "feedback", "feature_request", "question"]);
-  assert.deepEqual(TICKET_SEVERITIES, ["p1_candidate", "p2", "p3", "p4"]);
+  assert.deepEqual(TICKET_SEVERITIES, ["p1_candidate", "p1_confirmed", "p2", "p3", "p4"]);
   assert.deepEqual(TICKET_STATUSES, ["new", "triaged", "assigned", "in_progress", "resolved", "closed"]);
 });
 
