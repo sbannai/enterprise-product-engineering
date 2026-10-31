@@ -306,6 +306,19 @@ test("PostgreSQL action approval ledger enforces scope, immutable decisions and 
         ) VALUES ($1,$2,$3,$4,1,$5,'requester-1','approver-1','human',$6,$7,'policy-v1')`,
         [tenantId, applicationId, approvalId, proposalId, payloadHash, now.toISOString(), expiresAt.toISOString()],
       );
+      await client.query("SAVEPOINT invalid_approval_actor");
+      await assert.rejects(
+        client.query(
+          `INSERT INTO eper_action_approval_decisions (
+            tenant_id, application_id, decision_id, proposal_id, proposal_version,
+            proposal_hash, approval_id, decision, actor_id, actor_type, decided_at, expires_at, policy_version
+          ) VALUES ($1,$2,$3,$4,1,$5,$6,'approve','different-approver','human',$7,$8,'policy-v1')`,
+          [tenantId, applicationId, randomUUID(), proposalId, payloadHash, approvalId, now.toISOString(), expiresAt.toISOString()],
+        ),
+        /EPER_ACTION_APPROVAL_ACTOR_MISMATCH/,
+      );
+      await client.query("ROLLBACK TO SAVEPOINT invalid_approval_actor");
+      await client.query("RELEASE SAVEPOINT invalid_approval_actor");
       await client.query(
         `INSERT INTO eper_action_approval_decisions (
           tenant_id, application_id, decision_id, proposal_id, proposal_version,
