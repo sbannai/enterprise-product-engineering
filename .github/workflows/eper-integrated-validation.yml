@@ -61,6 +61,10 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration schema to ephemeral PostgreSQL
         run: npm run migrate:audit
+      - name: Apply workflow execution schema to ephemeral PostgreSQL
+        run: npm run migrate:workflows
+      - name: Verify workflow execution schema migration is repeatable
+        run: npm run migrate:workflows
       - name: Apply campaign scheduler schema and dispatch-fence migrations to ephemeral PostgreSQL
         run: npm run migrate:campaign-scheduler
       - name: Apply ticketing schema to ephemeral PostgreSQL

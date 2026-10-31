@@ -4,6 +4,10 @@ import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
+import { PostgresWorkflowRoleDefinitionStore } from "../../packages/workflows/postgres-workflow-role-definition-store.js";
+import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflows/postgres-workflow-actor-role-assignment-store.js";
+import { WorkflowDefinitionPublisher } from "../../packages/workflows/workflow-definition-publisher.js";
+import { PostgresWorkflowExecutionService } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
 import { PostgresTicketStore, createCanonicalTicketAuditWriter } from "../../packages/ticketing/postgres-ticket-store.js";
@@ -23,7 +27,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode;
+const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
 const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
@@ -106,6 +111,10 @@ if (actorAssignmentMode !== "environment" && actorAssignmentMode !== "postgres")
 if (actorAssignmentMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_ACTOR_ASSIGNMENTS_REQUIRE_POSTGRES_AND_DURABLE_AUDIT");
 }
+if (workflowExecutionEnabled && (!paymentPool || auditMode !== "postgres" ||
+    actorAssignmentMode !== "postgres" || adminConfigMode !== "postgres")) {
+  throw new Error("WORKFLOW_EXECUTION_REQUIRES_POSTGRES_AUDIT_AND_DURABLE_ADMIN_ASSIGNMENTS");
+}
 const actorApplicationAssignmentStore = actorAssignmentMode === "postgres" && paymentPool
   ? new PostgresActorApplicationAssignmentStore(paymentPool)
   : undefined;
@@ -115,6 +124,22 @@ const tenantApplicationAssignmentStore = actorAssignmentMode === "postgres" && p
   : undefined;
 if (tenantApplicationAssignmentStore) await tenantApplicationAssignmentStore.assertReady();
 tenantApplicationAssignmentStoreForEntitlements = tenantApplicationAssignmentStore;
+
+const workflowRoleDefinitionStore = workflowExecutionEnabled && paymentPool
+  ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
+  : undefined;
+const workflowActorRoleAssignmentStore = workflowExecutionEnabled && paymentPool
+  ? new PostgresWorkflowActorRoleAssignmentStore(paymentPool)
+  : undefined;
+const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
+  ? new WorkflowDefinitionPublisher(paymentPool)
+  : undefined;
+const workflowExecutionService = workflowExecutionEnabled && paymentPool
+  ? new PostgresWorkflowExecutionService(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (workflowRoleDefinitionStore) await workflowRoleDefinitionStore.assertReady();
+if (workflowActorRoleAssignmentStore) await workflowActorRoleAssignmentStore.assertReady();
+if (workflowExecutionService) await workflowExecutionService.assertReady();
 
 const auditWriter = auditMode === "postgres" && paymentPool
   ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord): Promise<void> => {
@@ -182,6 +207,8 @@ const server = createAppServer({
   agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore,
+  workflowDefinitionPublisher, workflowExecutionService,
 });
 
 server.listen(port, host, () => {
