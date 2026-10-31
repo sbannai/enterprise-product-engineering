@@ -21,6 +21,7 @@ test("approval grants bind the exact proposal hash and enforce human maker-check
   assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, proposal_id, proposal_version, proposal_hash\)/);
   assert.match(sql, /approver_type varchar\(16\) NOT NULL CHECK \(approver_type = 'human'\)/);
   assert.match(sql, /CHECK \(approver_id <> requested_by\)/);
+  assert.match(sql, /proposal_version, payload_hash, requested_by\)/);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_action_approval_decisions/);
   assert.match(sql, /decision IN \('approve','reject','revoke'\)/);
   assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_action_approval_decisions/);
@@ -34,7 +35,9 @@ test("execution claims enforce one-use approval and idempotency with immutable i
   assert.match(sql, /execution_status IN \('processing','succeeded','failed'\)/);
   assert.match(sql, /EPER_ACTION_EXECUTION_IDENTITY_IMMUTABLE/);
   assert.match(sql, /EPER_ACTION_EXECUTION_ALREADY_SUCCEEDED/);
+  assert.match(sql, /UNIQUE \(tenant_id, application_id, execution_id, approval_id\)/);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_action_execution_events/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, execution_id, approval_id\)/);
   assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_action_execution_events/);
   assert.match(sql, /BEFORE TRUNCATE ON eper_action_execution_events/);
 });
