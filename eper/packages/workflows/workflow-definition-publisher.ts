@@ -139,7 +139,7 @@ export class WorkflowDefinitionPublisher {
       // The transaction-scoped advisory lock closes the empty-result FOR UPDATE race.
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-        [context.tenantId + "\\u001f" + context.applicationId + "\\u001f" + snapshot.id],
+        [JSON.stringify([context.tenantId, context.applicationId, snapshot.id])],
       );
 
       const latest = await client.query<{ definition_version: number | string }>(
