@@ -29,6 +29,8 @@ The campaign scheduler remains a separate subsystem. Its lease, retry, and dispa
 
 A running instance must pin an immutable snapshot of the exact active definition used at creation time. Later edits to the tenant's configured definition must not silently change in-flight instances.
 
+**Application-scope blocker:** the existing `eper_admin_configuration` table is keyed by (`tenant_id, resource_type`) and its workflow configuration has no `application_id`. It is therefore not a safe execution-definition authority for multiple applications within one tenant. Do not read the tenant-wide `workflows` blob and assume it belongs to the caller's application. The first implementation must introduce an application-scoped publication boundary in `eper_workflow_definition_versions`, populated only by a trusted publisher that receives tenant/application identity from server-side assignment context. Until that boundary exists, instance creation must remain disabled. Existing tenant-wide configuration may be used only as an administrative draft source; it must not be executed directly.
+
 Minimum snapshot metadata:
 - tenant_id and application_id
 - workflow_id and definition_version
@@ -95,7 +97,7 @@ Branching must be explicit: if an activity has multiple nextActivityIds, the act
 
 Use a dedicated migration directory under `eper/packages/workflows/migrations` and the existing migration runner pattern. Proposed tables:
 
-- `eper_workflow_definition_versions`: immutable tenant/application/workflow/version snapshot, digest, status, publication metadata.
+- `eper_workflow_definition_versions`: immutable tenant/application/workflow/version snapshot, digest, status, publication metadata. This table is the authoritative execution boundary; it must not inherit tenant-wide scope from `eper_admin_configuration`.
 - `eper_workflow_instances`: current instance projection, pinned definition version/digest, current activity, data, status and optimistic version.
 - `eper_workflow_transitions`: append-only transition history with actor, action, version pair, idempotency key, correlation and payload digest.
 - `eper_workflow_idempotency`: request digest and stored response/transition identifier, unique by tenant/application/instance/key.
@@ -150,7 +152,7 @@ Use standard API response/error envelopes already established in EPER. Return 40
 
 ## 9. Delivery sequence and merge gate
 
-1. Add immutable definition-version publication and migration.
+1. Add application-scoped immutable definition-version publication and migration; define the trusted tenant/application publisher boundary before any instance route is enabled.
 2. Add instance/transition/idempotency schema and PostgreSQL store.
 3. Add service transition guards and deterministic unit tests.
 4. Add API wiring behind a disabled-by-default feature flag.
@@ -166,6 +168,7 @@ Use standard API response/error envelopes already established in EPER. Return 40
 | Workflow definition validation | Existing unit tests and service | FOUNDATION |
 | Role/permission configuration | Existing validation and access checks | FOUNDATION |
 | Tenant-scoped durable admin configuration | Existing PostgreSQL store and integration test | FOUNDATION; deployment mode is opt-in |
+| Application-scoped immutable workflow definition versions | Not evidenced; current admin config is tenant/resource scoped only | BLOCKED |
 | Immutable workflow definition versions | Not evidenced | NOT_STARTED |
 | Durable workflow instances | Not evidenced | NOT_STARTED |
 | Transactional state transitions | Not evidenced | NOT_STARTED |
