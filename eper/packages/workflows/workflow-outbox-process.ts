@@ -6,7 +6,7 @@ import {
 
 export interface WorkflowOutboxContextSource {
   /** Return only tenant/application scopes this worker is authorized to process. */
-  listActiveContexts(): Promise<WorkflowOutboxContext[]>;
+  listActiveContexts(signal?: AbortSignal): Promise<WorkflowOutboxContext[]>;
 }
 
 export interface WorkflowOutboxProcessOptions {
@@ -68,7 +68,7 @@ export class WorkflowOutboxProcess {
         claimed: 0, delivered: 0, retried: 0, deadLettered: 0, contextsVisited: 0,
       };
       try {
-        const listed = await this.contexts.listActiveContexts();
+        const listed = await this.contexts.listActiveContexts(signal);
         if (!Array.isArray(listed) || listed.length > this.options.maxContextsPerPass) {
           throw new Error("WORKFLOW_OUTBOX_CONTEXT_SOURCE_INVALID");
         }
@@ -82,9 +82,9 @@ export class WorkflowOutboxProcess {
         }
         for (const context of unique.values()) {
           if (signal.aborted) break;
+          total.contextsVisited += 1;
           try {
             const result = await this.worker.runOnce(context, this.options.batchSize);
-            total.contextsVisited += 1;
             total.claimed += result.claimed;
             total.delivered += result.delivered;
             total.retried += result.retried;
