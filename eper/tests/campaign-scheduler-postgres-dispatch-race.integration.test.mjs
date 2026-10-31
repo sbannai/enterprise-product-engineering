@@ -125,10 +125,11 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
           WHERE s.tenant_id=$1 AND s.application_id=$2 AND s.id=$3 AND e.id=$4
         `, [tenantId, applicationId, scheduleId, executionId]);
         const activity = await blocker.query(`
-          SELECT pid, state, wait_event_type, wait_event, query, pg_blocking_pids(pid) AS blockers
+          SELECT pid, datname, usename, application_name, state,
+                 wait_event_type, wait_event, query, pg_blocking_pids(pid) AS blockers
           FROM pg_stat_activity
-          WHERE datname=current_database() AND pid <> pg_backend_pid()
-            AND (wait_event_type='Lock' OR query ILIKE '%eper_campaign_schedules%')
+          WHERE pid <> pg_backend_pid()
+          ORDER BY pid
         `);
         assert.fail("Dispatch lock wait not observed; " + JSON.stringify({
           dispatchOutcome, dispatchError, row: rowState.rows[0] ?? null, activity: activity.rows,
