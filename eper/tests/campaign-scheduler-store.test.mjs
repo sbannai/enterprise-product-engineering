@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { PostgresCampaignSchedulerStore } from "../dist/packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 
 function fakePool(onQuery = async () => ({ rows: [], rowCount: 0 })) {
@@ -26,6 +27,9 @@ test("event fan-out accepts event IDs through 256 characters and rejects longer 
     eventId: "e".repeat(256), occurredAt: "2030-01-01T00:00:00.000Z",
   });
   assert.equal(calls.length, 1, "256-character event ID must reach the idempotent insert");
+  assert.equal(calls[0].values[6].length, 64, "event idempotency identity must fit the bounded database key");
+  assert.match(calls[0].values[6], /^[a-f0-9]{64}$/);
+  assert.equal(calls[0].values[6], createHash("sha256").update("lead.created").update("\0").update("e".repeat(256)).digest("hex"));
   await assert.rejects(store.enqueueEventExecutions({
     tenantId: "tenant-a", applicationId: "app-a", eventType: "lead.created",
     eventId: "e".repeat(257), occurredAt: "2030-01-01T00:00:00.000Z",
@@ -265,7 +269,9 @@ test("event trigger fan-out is tenant/application scoped and idempotent", async 
   assert.match(calls[0].sql, /s\.tenant_id=\$1 AND s\.application_id=\$2/);
   assert.match(calls[0].sql, /trigger_type='event'/);
   assert.match(calls[0].sql, /schedule_definition->>'eventType'=\$5/);
-  assert.match(calls[0].sql, /'event:' \|\| \$5 \|\| ':' \|\| \$4 \|\| ':' \|\| s\.id::text/);
+  assert.ok(calls[0].sql.includes("'event:' || $7 || ':' || s.id::text"));
+  assert.equal(calls[0].values[6].length, 64);
+  assert.match(calls[0].values[6], /^[a-f0-9]{64}$/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
   assert.equal(calls[0].values[3], "evt-123");
   assert.equal(calls[0].values[4], "lead.created");

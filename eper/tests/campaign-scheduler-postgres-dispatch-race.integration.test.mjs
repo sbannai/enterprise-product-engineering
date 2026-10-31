@@ -12,7 +12,8 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
   skip: !enabled ? "Set EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL to an isolated, migrated test database" : false,
 }, async () => {
   const parsed = new URL(databaseUrl);
-  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  assert.ok(databaseName.length > 0, "test database name must be present");
   assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
     "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
 
@@ -177,6 +178,51 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       await pool.query("DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3", [tenantId, applicationId, scheduleId]);
       await pool.query("DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3", [tenantId, applicationId, scheduleId]);
     }
+    await pool.end();
+  }
+});
+
+
+test("PostgreSQL accepts a 256-character event ID with a bounded idempotency key", {
+  skip: !enabled ? "Set EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL to an isolated, migrated test database" : false,
+}, async () => {
+  const parsed = new URL(databaseUrl);
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
+    "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
+
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 3, connectionTimeoutMillis: 3000 });
+  const tenantId = "scheduler-event-id-test-" + randomUUID();
+  const applicationId = "app-event-id-" + randomUUID();
+  const scheduleId = randomUUID();
+  const store = new PostgresCampaignSchedulerStore(pool, "sandbox", "postgres-event-id-test");
+  try {
+    await pool.query(
+      `INSERT INTO eper_campaign_schedules
+        (id, tenant_id, application_id, campaign_id, trigger_type, timezone,
+         schedule_definition, approval_status, status, next_run_at, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,'event','UTC',$5::jsonb,'approved','scheduled',$6,$7,$7)`,
+      [scheduleId, tenantId, applicationId, "campaign-event-id", JSON.stringify({ eventType: "lead.created" }),
+        new Date(Date.now() + 60_000).toISOString(), "integration-test"],
+    );
+
+    const input = {
+      tenantId, applicationId, eventType: "lead.created",
+      eventId: "e".repeat(256), occurredAt: new Date().toISOString(),
+      payload: { integrationTest: true },
+    };
+    assert.equal(await store.enqueueEventExecutions(input), 1);
+    const persisted = await pool.query(
+      "SELECT idempotency_key FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2",
+      [tenantId, applicationId],
+    );
+    assert.equal(persisted.rowCount, 1);
+    assert.ok(persisted.rows[0].idempotency_key.length <= 256);
+    assert.match(persisted.rows[0].idempotency_key, /^event:[a-f0-9]{64}:/);
+    assert.equal(await store.enqueueEventExecutions(input), 0, "repeated event delivery must remain idempotent");
+  } finally {
+    await pool.query("DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]);
+    await pool.query("DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3", [tenantId, applicationId, scheduleId]);
     await pool.end();
   }
 });
