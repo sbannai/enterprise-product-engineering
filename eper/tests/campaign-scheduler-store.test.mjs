@@ -832,15 +832,3 @@ test("event fan-out accepts event IDs through 256 characters and rejects longer 
   }), /CAMPAIGN_EVENT_IDENTITY_INVALID/);
   assert.equal(calls.length, 1, "257-character event ID must be rejected before database access");
 });
-
-const now = Date.now();
-function scheduleRow(overrides = {}) {
-  return {
-    id: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
-    tenant_id: "tenant-a", application_id: "app-a", campaign_id: "campaign-a",
-    trigger_type: "once", timezone: "Asia/Kolkata", schedule_definition: { at: "2030-01-01T10:00:00+05:30" },
-    approval_status: "pending", status: "draft", next_run_at: null,
-    created_by: "actor-a", updated_by: "actor-a",
-    created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(), ...overrides,
-  };
-}
