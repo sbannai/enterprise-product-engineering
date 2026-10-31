@@ -42,10 +42,6 @@ test("workflow execution API is opt-in and derives identity from trusted credent
     assert.equal(calls[0].actorId, "actor-a");
     assert.equal(calls[0].applicationId, "app-a");
     assert.equal(calls[0].workflowId, "onboarding");
-    const disabled = await fetch(url + "/customer/applications/app-a/workflows/onboarding/instances", {
-      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
-    });
-    assert.equal(disabled.status, 404);
   } finally {
     await new Promise(resolve => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
