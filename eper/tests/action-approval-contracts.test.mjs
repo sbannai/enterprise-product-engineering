@@ -96,7 +96,7 @@ test("rejects missing, rejected and revoked approvals", () => {
   assert.equal(evaluate({ proposal, approval: { ...approval, decision: "reject" } }).reason, "APPROVAL_NOT_APPROVED");
   assert.equal(evaluate({ proposal, approval: { ...approval, revokedAt: "2026-10-31T10:45:00.000Z" } }).reason, "APPROVAL_REVOKED");
   assert.equal(evaluate({ proposal, approval: { ...approval, revokedAt: "not-a-date" } }).reason, "APPROVAL_REVOKED");
-  assert.equal(evaluate({ proposal, approval: { ...approval, approvalId: "" } }).reason, "HUMAN_APPROVER_REQUIRED");
+  assert.equal(evaluate({ proposal, approval: { ...approval, approvalId: "" } }).reason, "APPROVAL_ID_REQUIRED");
 });
 
 test("rejects approval for another proposal version or payload hash", () => {
