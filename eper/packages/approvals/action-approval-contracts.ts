@@ -187,8 +187,9 @@ export function evaluateActionApprovalGate(input: ActionApprovalGateInput): Acti
       !validText(approval.policyVersion) || Date.parse(approval.decidedAt) > now) {
     return { allowed: false, reason: "APPROVAL_EXPIRED" };
   }
-  if (approval.revokedAt && validTimestamp(approval.revokedAt) && Date.parse(approval.revokedAt) <= now) {
-    return { allowed: false, reason: "APPROVAL_REVOKED" };
+  if (approval.revokedAt !== undefined) {
+    if (!validTimestamp(approval.revokedAt)) return { allowed: false, reason: "APPROVAL_REVOKED" };
+    if (Date.parse(approval.revokedAt) <= now) return { allowed: false, reason: "APPROVAL_REVOKED" };
   }
   if (Date.parse(approval.expiresAt) <= now) return { allowed: false, reason: "APPROVAL_EXPIRED" };
   if (!input.authorizationGranted) return { allowed: false, reason: "AUTHORIZATION_DENIED" };
