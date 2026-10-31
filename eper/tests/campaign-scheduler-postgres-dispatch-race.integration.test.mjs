@@ -102,6 +102,9 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       const deadline = Date.now() + 5000;
       let dispatchIsWaiting = false;
       while (Date.now() < deadline) {
+        // pg_stat_activity snapshots are cached within a transaction; clear the
+        // snapshot so each poll can see the dispatch backend opened after BEGIN.
+        await blocker.query("SELECT pg_stat_clear_snapshot()");
         const waiting = await blocker.query(`
           SELECT 1
           FROM pg_stat_activity
@@ -128,6 +131,7 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
             ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
           WHERE s.tenant_id=$1 AND s.application_id=$2 AND s.id=$3 AND e.id=$4
         `, [tenantId, applicationId, scheduleId, executionId]);
+        await blocker.query("SELECT pg_stat_clear_snapshot()");
         const activity = await blocker.query(`
           SELECT pid, datname, usename, application_name, state,
                  wait_event_type, wait_event, query, pg_blocking_pids(pid) AS blockers
