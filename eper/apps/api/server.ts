@@ -642,7 +642,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           });
           if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_PROPOSAL_CREATE_DENIED", "You are not allowed to create this action proposal."); return; }
           if (!permission.proposalExpiresAt || !Number.isFinite(Date.parse(permission.proposalExpiresAt)) ||
-              new Date(Date.parse(permission.proposalExpiresAt)).toISOString() !== permission.proposalExpiresAt) {
+              new Date(Date.parse(permission.proposalExpiresAt)).toISOString() !== permission.proposalExpiresAt ||
+              Date.parse(permission.proposalExpiresAt) <= Date.now()) {
             sendApiError(request, response, 503, "ACTION_APPROVAL_POLICY_INCOMPLETE", "The host approval policy did not supply a valid proposal expiry."); return;
           }
           const envelope = {
@@ -707,7 +708,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           }
           if (body.decision === "approve" && (!permission.approvalExpiresAt ||
               !Number.isFinite(Date.parse(permission.approvalExpiresAt)) ||
-              new Date(Date.parse(permission.approvalExpiresAt)).toISOString() !== permission.approvalExpiresAt)) {
+              new Date(Date.parse(permission.approvalExpiresAt)).toISOString() !== permission.approvalExpiresAt ||
+              Date.parse(permission.approvalExpiresAt) <= Date.now() ||
+              Date.parse(permission.approvalExpiresAt) > Date.parse(proposal.expiresAt))) {
             sendApiError(request, response, 503, "ACTION_APPROVAL_POLICY_INCOMPLETE", "The host approval policy did not supply a valid approval expiry."); return;
           }
           const result = await store.recordDecision({
@@ -726,6 +729,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : "ACTION_APPROVAL_OPERATION_FAILED";
+        if (error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED") {
+          sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return;
+        }
+        if (message === "REQUEST_BODY_TOO_LARGE") {
+          sendApiError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body is too large."); return;
+        }
         const status = /NOT_FOUND/.test(message) ? 404
           : /CONFLICT|IDEMPOTENCY|ALREADY_CLAIMED/.test(message) ? 409
           : /INVALID|REQUIRED/.test(message) ? 400
