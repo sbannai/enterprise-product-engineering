@@ -35,6 +35,10 @@ test("workflow execution migration enforces tenant/application row-level securit
   assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_definition_versions/);
   assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_transitions/);
   assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_idempotency/);
+  const lifecycle = await readFile(new URL("../packages/workflows/migrations/002_workflow_publication_events.sql", import.meta.url), "utf8");
+  for (const table of ["eper_workflow_definition_versions", "eper_workflow_transitions", "eper_workflow_idempotency"]) {
+    assert.match(lifecycle, new RegExp("BEFORE TRUNCATE ON " + table));
+  }
   assert.doesNotMatch(sql, /eper_schema_migrations/);
   const runner = await readFile(new URL("../scripts/migrate-workflows.mjs", import.meta.url), "utf8");
   assert.match(runner, /eper_workflow_schema_migrations/);
