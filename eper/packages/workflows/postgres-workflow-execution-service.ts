@@ -277,6 +277,7 @@ export class PostgresWorkflowExecutionService {
     try {
       await client.query("BEGIN");
       await setRlsContext(client, input.tenantId, input.applicationId);
+      await assertMembership(client, input);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
         [JSON.stringify([input.tenantId, input.applicationId, "workflow-start", input.idempotencyKey])],
@@ -303,7 +304,6 @@ export class PostgresWorkflowExecutionService {
         return replay as unknown as WorkflowInstanceRecord;
       }
 
-      await assertMembership(client, input);
       const publication = await client.query<DefinitionVersionRow>(
         `SELECT e.event_type, v.definition_version, v.definition_digest, v.definition
            FROM eper_workflow_publication_events e
@@ -404,6 +404,7 @@ export class PostgresWorkflowExecutionService {
     try {
       await client.query("BEGIN");
       await setRlsContext(client, input.tenantId, input.applicationId);
+      await assertMembership(client, input);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
         [JSON.stringify([input.tenantId, input.applicationId, input.instanceId, input.idempotencyKey])],
@@ -435,7 +436,6 @@ export class PostgresWorkflowExecutionService {
         throw new WorkflowExecutionError("WORKFLOW_EXECUTION_VERSION_CONFLICT", 409);
       }
 
-      await assertMembership(client, input);
       const definitionResult = await client.query<{ definition: WorkflowDefinition | string }>(
         `SELECT definition FROM eper_workflow_definition_versions
           WHERE tenant_id = $1 AND application_id = $2 AND workflow_id = $3
