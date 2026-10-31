@@ -23,6 +23,8 @@ export interface ActionApprovalAuthorizationRequest {
   proposalVersion?: number;
   proposalHash?: string;
   approvalId?: string;
+  /** Original human grantor; host policy can recheck their current authority. */
+  approverId?: string;
   actionType?: string;
   sideEffectClass?: string;
   targetType?: string;
