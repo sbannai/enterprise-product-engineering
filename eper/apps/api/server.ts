@@ -570,6 +570,165 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const allowedBodyKeys = (body: Record<string, unknown>, allowed: string[]): boolean =>
       Object.keys(body).every(key => allowed.includes(key));
 
+    if (actionProposalCollection || actionProposalDetail || actionProposalDecisions) {
+      if (process.env.EPER_ACTION_APPROVAL_API_ENABLED !== "true" ||
+          process.env.EPER_ACTION_APPROVAL_PERSISTENCE !== "postgres" ||
+          process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveAdminConfigIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      const store = options.actionApprovalStore;
+      const authorizer = options.actionApprovalAuthorizer;
+      if (!store || !authorizer || !options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore) {
+        sendApiError(request, response, 503, "ACTION_APPROVAL_UNAVAILABLE", "Action approval is not configured."); return;
+      }
+      const applicationId = (actionProposalCollection ?? actionProposalDetail ?? actionProposalDecisions)![1];
+      const proposalId = actionProposalDetail?.[2] ?? actionProposalDecisions?.[2];
+      const environment = options.adminConfigEnvironment ?? "sandbox";
+      const correlationId = resolveApiRequestId(request);
+      const auditContext = {
+        tenantId: identity.tenantId, applicationId, actorId: identity.actorId, actorType: "human" as const,
+        environment, source: "api" as const, operationName: "action-approval.api",
+        correlationId, serviceVersion: options.serviceVersion,
+      };
+      const authorize = async (
+        operation: ActionApprovalAuthorizationOperation,
+        proposal?: { proposalId: string; proposalVersion: number; payloadHash: string; actionType: string; sideEffectClass: string; targetType: string; targetId: string },
+      ) => authorizer({
+        tenantId: identity.tenantId, applicationId, actorId: identity.actorId, operation,
+        ...(proposal ? proposal : {}),
+      });
+      try {
+        const activeApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+        if (!activeApplications.includes(applicationId)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+        if (!(await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId))) {
+          sendApiError(request, response, 403, "ADMIN_NOT_ASSIGNED_TO_APPLICATION", "The administrator is not assigned to this application."); return;
+        }
+
+        if (actionProposalCollection && request.method === "GET") {
+          const permission = await authorize("view_queue");
+          if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_ACCESS_DENIED", "You are not allowed to view this approval queue."); return; }
+          const rawLimit = requestUrl.searchParams.get("limit");
+          const limit = rawLimit === null ? 50 : Number(rawLimit);
+          if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+            sendApiError(request, response, 400, "ACTION_PROPOSAL_LIST_LIMIT_INVALID", "The queue limit must be between 1 and 100."); return;
+          }
+          const proposals = await store.listProposals({ tenantId: identity.tenantId, applicationId }, limit);
+          sendApiSuccess(request, response, 200, { proposals }); return;
+        }
+
+        if (actionProposalCollection && request.method === "POST") {
+          const body = await readJson(request);
+          if (!allowedBodyKeys(body, ["actionType", "sideEffectClass", "targetType", "targetId", "payload", "idempotencyKey"])) {
+            sendApiError(request, response, 400, "INVALID_ACTION_PROPOSAL_BODY", "Only action, target, payload and idempotency fields are accepted."); return;
+          }
+          if (typeof body.actionType !== "string" || !body.actionType.trim() ||
+              typeof body.sideEffectClass !== "string" || !ACTION_SIDE_EFFECT_CLASSES.includes(body.sideEffectClass as typeof ACTION_SIDE_EFFECT_CLASSES[number]) ||
+              typeof body.targetType !== "string" || !body.targetType.trim() ||
+              typeof body.targetId !== "string" || !body.targetId.trim() ||
+              !body.payload || typeof body.payload !== "object" || Array.isArray(body.payload) ||
+              typeof body.idempotencyKey !== "string" || body.idempotencyKey.trim().length < 16 || body.idempotencyKey.length > 128) {
+            sendApiError(request, response, 400, "ACTION_PROPOSAL_INVALID", "The action proposal fields are invalid."); return;
+          }
+          const permission = await authorize("create_proposal", {
+            proposalId: "", proposalVersion: 1, payloadHash: "",
+            actionType: body.actionType, sideEffectClass: body.sideEffectClass,
+            targetType: body.targetType, targetId: body.targetId,
+          });
+          if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_PROPOSAL_CREATE_DENIED", "You are not allowed to create this action proposal."); return; }
+          if (!permission.proposalExpiresAt || !Number.isFinite(Date.parse(permission.proposalExpiresAt)) ||
+              new Date(Date.parse(permission.proposalExpiresAt)).toISOString() !== permission.proposalExpiresAt) {
+            sendApiError(request, response, 503, "ACTION_APPROVAL_POLICY_INCOMPLETE", "The host approval policy did not supply a valid proposal expiry."); return;
+          }
+          const envelope = {
+            proposalId: randomUUID(), proposalVersion: 1, tenantId: identity.tenantId, applicationId,
+            actionType: body.actionType, sideEffectClass: body.sideEffectClass as typeof ACTION_SIDE_EFFECT_CLASSES[number],
+            targetType: body.targetType, targetId: body.targetId, requestedBy: identity.actorId,
+            requesterType: "human" as const, payload: body.payload as Record<string, unknown>,
+            idempotencyKey: body.idempotencyKey, createdAt: new Date().toISOString(),
+            expiresAt: permission.proposalExpiresAt, correlationId,
+          };
+          const proposal = { ...envelope, payloadHash: hashActionProposal(envelope) };
+          const created = await store.createProposal(proposal, auditContext);
+          sendApiSuccess(request, response, created.replayed ? 200 : 201, created); return;
+        }
+
+        if (actionProposalDetail && request.method === "GET") {
+          const permission = await authorize("view_proposal");
+          if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_ACCESS_DENIED", "You are not allowed to view this proposal."); return; }
+          const version = Number(requestUrl.searchParams.get("version") ?? "1");
+          if (!Number.isSafeInteger(version) || version < 1) {
+            sendApiError(request, response, 400, "ACTION_PROPOSAL_VERSION_INVALID", "A positive proposal version is required."); return;
+          }
+          const proposal = await store.getProposal({ tenantId: identity.tenantId, applicationId, proposalId: proposalId!, proposalVersion: version });
+          if (!proposal) { sendApiError(request, response, 404, "ACTION_PROPOSAL_NOT_FOUND", "The action proposal was not found."); return; }
+          sendApiSuccess(request, response, 200, { proposal }); return;
+        }
+
+        if (actionProposalDecisions && request.method === "POST") {
+          const body = await readJson(request);
+          if (!allowedBodyKeys(body, ["decision", "approvalId", "reasonCode"])) {
+            sendApiError(request, response, 400, "INVALID_ACTION_APPROVAL_DECISION_BODY", "Only decision, approvalId and reasonCode are accepted."); return;
+          }
+          if (body.decision !== "approve" && body.decision !== "reject" && body.decision !== "revoke") {
+            sendApiError(request, response, 400, "ACTION_APPROVAL_DECISION_INVALID", "Decision must be approve, reject or revoke."); return;
+          }
+          if (body.decision === "revoke" && (typeof body.approvalId !== "string" || !body.approvalId.trim())) {
+            sendApiError(request, response, 400, "ACTION_APPROVAL_ID_REQUIRED", "A grant approvalId is required for revocation."); return;
+          }
+          const version = Number(requestUrl.searchParams.get("version") ?? "1");
+          if (!Number.isSafeInteger(version) || version < 1) {
+            sendApiError(request, response, 400, "ACTION_PROPOSAL_VERSION_INVALID", "A positive proposal version is required."); return;
+          }
+          const proposal = await store.getProposal({ tenantId: identity.tenantId, applicationId, proposalId: proposalId!, proposalVersion: version });
+          if (!proposal) { sendApiError(request, response, 404, "ACTION_PROPOSAL_NOT_FOUND", "The action proposal was not found."); return; }
+          const operation: ActionApprovalAuthorizationOperation = body.decision === "approve" ? "approve_proposal"
+            : body.decision === "reject" ? "reject_proposal" : "revoke_approval";
+          const permission = await authorize(operation, {
+            proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
+            payloadHash: proposal.payloadHash, actionType: proposal.actionType,
+            sideEffectClass: proposal.sideEffectClass, targetType: proposal.targetType, targetId: proposal.targetId,
+          });
+          if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_DECISION_DENIED", "You are not allowed to record this decision."); return; }
+          if (!permission.policyVersion?.trim()) {
+            sendApiError(request, response, 503, "ACTION_APPROVAL_POLICY_INCOMPLETE", "The host approval policy did not supply a policy version."); return;
+          }
+          if (body.decision === "approve" && (!permission.approvalExpiresAt ||
+              !Number.isFinite(Date.parse(permission.approvalExpiresAt)) ||
+              new Date(Date.parse(permission.approvalExpiresAt)).toISOString() !== permission.approvalExpiresAt)) {
+            sendApiError(request, response, 503, "ACTION_APPROVAL_POLICY_INCOMPLETE", "The host approval policy did not supply a valid approval expiry."); return;
+          }
+          const result = await store.recordDecision({
+            ...auditContext, proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
+            decision: body.decision, approvalId: body.decision === "approve" ? randomUUID()
+              : body.decision === "revoke" ? body.approvalId as string : undefined,
+            decidedAt: new Date().toISOString(),
+            expiresAt: body.decision === "approve" ? permission.approvalExpiresAt : undefined,
+            policyVersion: permission.policyVersion,
+            reasonCode: typeof body.reasonCode === "string" ? body.reasonCode.slice(0, 128) : undefined,
+          });
+          sendApiSuccess(request, response, 201, { decision: result }); return;
+        }
+        sendMethodNotAllowed(request, response,
+          actionProposalCollection ? "GET, POST" : actionProposalDetail ? "GET" : "POST");
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "ACTION_APPROVAL_OPERATION_FAILED";
+        const status = /NOT_FOUND/.test(message) ? 404
+          : /CONFLICT|IDEMPOTENCY|ALREADY_CLAIMED/.test(message) ? 409
+          : /INVALID|REQUIRED/.test(message) ? 400
+          : 503;
+        const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "ACTION_APPROVAL_OPERATION_FAILED";
+        sendApiError(request, response, status, code, "The action approval operation could not be completed."); return;
+      }
+    }
+
     if (workflowRoleCollection || workflowRoleDetail || workflowRoleAssignments || workflowPublishRoute) {
       if (process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
