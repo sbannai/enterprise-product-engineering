@@ -28,6 +28,9 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
     const service = new PostgresWorkflowExecutionService(pool, "workflow-integration-test");
 
     try {
+      await roleStore.assertReady();
+      await assignmentStore.assertReady();
+      await service.assertReady();
       const client = await pool.connect();
       try {
         await client.query(
