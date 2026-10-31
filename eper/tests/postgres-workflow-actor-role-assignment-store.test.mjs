@@ -41,7 +41,7 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus =
         return { rows: [row], rowCount: 1 };
       }
       if (sql.includes("SELECT last_event_hash")) return { rows: [{ last_event_hash: null }], rowCount: 1 };
-      if (sql.includes("SELECT role_id FROM eper_workflow_actor_role_assignment")) {
+      if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
         return { rows: [{ role_id: "finance-approver" }, { role_id: "expense-reviewer" }], rowCount: 2 };
       }
       return { rows: [], rowCount: 1 };
@@ -80,6 +80,8 @@ test("role assignment reads set tenant/application RLS context transaction-local
   assert.deepEqual(roles, ["finance-approver", "expense-reviewer"]);
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(', true)')));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.sql.includes(', true)')));
+  assert.ok(calls.some(call => call.sql.includes("JOIN eper_actor_application_assignment") && call.sql.includes("assignment_status = 'active'")));
+  assert.ok(calls.some(call => call.sql.includes("JOIN eper_tenant_application_assignment") && call.sql.includes("assignment_status = 'active'")));
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
 
