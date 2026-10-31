@@ -72,6 +72,10 @@ test("customer application access check uses only server-mapped tenant and role 
   });
   let observed;
   const server = createAppServer({
+    tenantApplicationAssignmentStore: { async listActive(tenantId) { assert.equal(tenantId, "trusted-tenant-a"); return ["application-from-path"]; } },
+    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+      assert.deepEqual([tenantId, actorId, applicationId], ["trusted-tenant-a", "trusted-actor-a", "application-from-path"]); return true;
+    } },
     moduleEntitlementService: {
       checkModule: async (context, moduleKey) => {
         observed = { context, moduleKey };
