@@ -628,12 +628,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           if (!allowedBodyKeys(body, ["actionType", "sideEffectClass", "targetType", "targetId", "payload", "idempotencyKey"])) {
             sendApiError(request, response, 400, "INVALID_ACTION_PROPOSAL_BODY", "Only action, target, payload and idempotency fields are accepted."); return;
           }
-          if (typeof body.actionType !== "string" || !body.actionType.trim() ||
+          if (typeof body.actionType !== "string" || !body.actionType.trim() || body.actionType !== body.actionType.trim() ||
               typeof body.sideEffectClass !== "string" || !ACTION_SIDE_EFFECT_CLASSES.includes(body.sideEffectClass as typeof ACTION_SIDE_EFFECT_CLASSES[number]) ||
-              typeof body.targetType !== "string" || !body.targetType.trim() ||
-              typeof body.targetId !== "string" || !body.targetId.trim() ||
+              typeof body.targetType !== "string" || !body.targetType.trim() || body.targetType !== body.targetType.trim() ||
+              typeof body.targetId !== "string" || !body.targetId.trim() || body.targetId !== body.targetId.trim() ||
               !body.payload || typeof body.payload !== "object" || Array.isArray(body.payload) ||
-              typeof body.idempotencyKey !== "string" || body.idempotencyKey.trim().length < 16 || body.idempotencyKey.length > 128) {
+              typeof body.idempotencyKey !== "string" || body.idempotencyKey.trim().length < 16 || body.idempotencyKey !== body.idempotencyKey.trim() || body.idempotencyKey.length > 128) {
             sendApiError(request, response, 400, "ACTION_PROPOSAL_INVALID", "The action proposal fields are invalid."); return;
           }
           const permission = await authorize("create_proposal", {
@@ -691,6 +691,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           }
           const proposal = await store.getProposal({ tenantId: identity.tenantId, applicationId, proposalId: proposalId!, proposalVersion: version });
           if (!proposal) { sendApiError(request, response, 404, "ACTION_PROPOSAL_NOT_FOUND", "The action proposal was not found."); return; }
+          if (body.decision === "approve" && identity.actorId === proposal.requestedBy) {
+            sendApiError(request, response, 403, "MAKER_CHECKER_SEPARATION_REQUIRED", "The proposal creator cannot approve their own action."); return;
+          }
           const operation: ActionApprovalAuthorizationOperation = body.decision === "approve" ? "approve_proposal"
             : body.decision === "reject" ? "reject_proposal" : "revoke_approval";
           const permission = await authorize(operation, {
