@@ -482,6 +482,12 @@ export class PostgresActionApprovalStore {
       );
       if (!proposalResult.rows[0]) throw new Error("ACTION_PROPOSAL_NOT_FOUND");
       const proposal = mapProposal(proposalResult.rows[0]);
+      if (input.decision === "approve" && Date.parse(proposal.expiresAt) <= Date.parse(input.decidedAt)) {
+        throw new Error("ACTION_PROPOSAL_EXPIRED");
+      }
+      if (input.decision === "approve" && input.expiresAt && Date.parse(input.expiresAt) > Date.parse(proposal.expiresAt)) {
+        throw new Error("ACTION_APPROVAL_EXPIRY_EXCEEDS_PROPOSAL");
+      }
       let approvalId: string | null = null;
       if (input.decision === "approve") {
         approvalId = input.approvalId!;
