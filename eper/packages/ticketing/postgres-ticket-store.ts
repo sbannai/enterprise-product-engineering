@@ -342,7 +342,8 @@ export class PostgresTicketStore {
         `SELECT count(*)::int AS count FROM eper_support_tickets
          WHERE tenant_id = $1 AND type = 'defect' AND severity = 'p1_confirmed'
            AND duplicate_disposition = 'distinct'
-           AND evidence_reference IS NOT NULL AND length(trim(evidence_reference)) > 0`,
+           AND evidence_reference IS NOT NULL AND length(trim(evidence_reference)) > 0
+           AND assigned_to IS NOT NULL AND length(trim(assigned_to)) > 0`,
         [tenantId],
       );
       return Number(result.rows[0]?.count ?? 0);

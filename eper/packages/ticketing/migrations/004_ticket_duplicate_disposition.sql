@@ -31,4 +31,4 @@ ALTER TABLE eper_support_tickets
 CREATE INDEX IF NOT EXISTS eper_support_tickets_distinct_confirmed_p1_idx
   ON eper_support_tickets (tenant_id, created_at DESC)
   WHERE type = 'defect' AND severity = 'p1_confirmed'
-    AND duplicate_disposition = 'distinct' AND evidence_reference IS NOT NULL;
+    AND duplicate_disposition = 'distinct' AND evidence_reference IS NOT NULL AND assigned_to IS NOT NULL;

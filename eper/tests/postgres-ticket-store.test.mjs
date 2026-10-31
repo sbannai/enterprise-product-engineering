@@ -593,6 +593,7 @@ test("distinct confirmed P1 counter excludes duplicates and non-evidence tickets
   assert.match(query.sql, /severity = 'p1_confirmed'/);
   assert.match(query.sql, /duplicate_disposition = 'distinct'/);
   assert.match(query.sql, /evidence_reference IS NOT NULL/);
+  assert.match(query.sql, /assigned_to IS NOT NULL/);
   assert.deepEqual(query.values, ["tenant-a"]);
   await assert.rejects(() => store.countDistinctConfirmedP1(" tenant-a"), /ticket_tenant_scope_required/);
 });
