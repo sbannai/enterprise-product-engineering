@@ -142,6 +142,14 @@ function parsePayload(value: Record<string, unknown> | string): Record<string, u
   }
   return payload as Record<string, unknown>;
 }
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
+  if (value && typeof value === "object") {
+    return "{" + Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([key, item]) => JSON.stringify(key) + ":" + stableJson(item)).join(",") + "}";
+  }
+  return JSON.stringify(value) ?? "null";
+}
 function timestamp(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) throw new Error("ACTION_APPROVAL_DATABASE_TIMESTAMP_INVALID");
@@ -325,8 +333,10 @@ export class PostgresActionApprovalStore {
       );
       if (!existing.rows[0]) throw new Error("ACTION_PROPOSAL_CONFLICT");
       const stored = mapProposal(existing.rows[0]);
-      if (stored.proposalId !== proposal.proposalId || stored.proposalVersion !== proposal.proposalVersion ||
-          stored.payloadHash !== proposal.payloadHash) {
+      if (stored.actionType !== proposal.actionType || stored.sideEffectClass !== proposal.sideEffectClass ||
+          stored.targetType !== proposal.targetType || stored.targetId !== proposal.targetId ||
+          stored.requestedBy !== proposal.requestedBy || stored.requesterType !== proposal.requesterType ||
+          stableJson(stored.payload) !== stableJson(proposal.payload)) {
         throw new Error("ACTION_PROPOSAL_IDEMPOTENCY_CONFLICT");
       }
       await client.query("COMMIT");
