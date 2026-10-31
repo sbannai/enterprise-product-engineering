@@ -185,13 +185,13 @@ Migration `002_workflow_publication_events.sql` adds an append-only publication 
 | Transactional state transitions | Submit/approve/reject/cancel state machine implemented with expected-version checks, role authorization, field validation, branching, idempotency and same-transaction audit | CI-VALIDATED |
 | Workflow instance audit history | Start and transition audit events persisted atomically with state, transition and idempotency records; real PostgreSQL integration passed | CI-VALIDATED |
 | Restart/concurrency/idempotency behavior | Service recreation and duplicate start/transition replay tested against PostgreSQL; advisory locks serialize same idempotency key and instance row locks serialize state changes; concurrent stress test remains | CI-VALIDATED; STRESS TEST PENDING |
-| End-to-end workflow execution API | Service layer is not yet wired to HTTP routes or enabled by a feature flag | NOT_STARTED |
+| End-to-end workflow execution API | Admin role/publish routes and customer start/transition routes implemented behind an explicit opt-in flag; API tests verify trusted identity, body allowlists and tenant/application scoping | CI-VALIDATED; DISABLED BY DEFAULT |
 
 ## 12. Publisher increment (CI-validated)
 
 `packages/workflows/workflow-definition-publisher.ts` now implements the first publisher slice. It accepts tenant, application, actor and correlation identity only through a trusted server-side context; validates an active workflow definition; sets the tenant/application RLS context; checks active tenant-application ownership and actor-application assignment using `FOR SHARE` locks in the same transaction; validates every activity's role and permission against the application-scoped role catalogue; assigns the next per-workflow version; stores a canonical SHA-256 digest and immutable snapshot; and appends the audit event in the same transaction. Assignment lookup errors and missing/revoked assignments fail closed. Tests cover successful publication, revoked tenant ownership, missing actor assignment, lookup failure and invalid definitions.
 
-The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. The exact PR head `f74bf85bae69bbe11dac6b02fb8c95092321ed85` passed all 12 associated GitHub Actions workflows, including typecheck/build/full tests, repeatable PostgreSQL migrations, release candidate build, six-family HTTP smoke, 228-requirement pilot matrix, QA/UAT technical simulations, G9 reconciliation and integrated validation. This is technical CI evidence only; it is not a production deployment or Business UAT authorization.
+The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. The exact PR head `102fedbe6e4fc0968a768878e5f02414b5a18cf2` passed all 12 associated GitHub Actions workflows, including typecheck/build/full tests, repeatable PostgreSQL migrations, release candidate build, six-family HTTP smoke, 228-requirement pilot matrix, QA/UAT technical simulations, G9 reconciliation and integrated validation. This is technical CI evidence only; it is not a production deployment or Business UAT authorization.
 
 **Exit criterion:** Do not label the workflow execution USP as IMPLEMENTED or TESTED until the full vertical slice and the integration evidence above exist on one exact commit.
 
@@ -215,6 +215,31 @@ Unit and migration contract tests cover role definition writes, successful grant
 - Instance projection update, append-only transition row, idempotency response and audit event are committed in one transaction. A transaction-scoped advisory lock serializes retries with the same idempotency key; the instance row lock and expected-version check protect concurrent state changes.
 - Request retries after service recreation are covered by a live PostgreSQL integration test. The test verifies one instance, start and submit transitions, original start replay, completed transition replay, exact definition pin, and audit events.
 
-The workflow migration runner now applies all five workflow migrations and the CI lane applies them twice to verify repeatability. The exact PR head `f74bf85bae69bbe11dac6b02fb8c95092321ed85` passed all 12 associated GitHub Actions workflows, including the new live PostgreSQL workflow execution integration and the full PostgreSQL-backed test suite.
+The workflow migration runner now applies all five workflow migrations and the CI lane applies them twice to verify repeatability. The execution service's startup readiness check verifies all seven tenant/application-RLS tables and the start-idempotency column; the live PostgreSQL integration test exercises the role, assignment and execution readiness checks. The exact PR head `102fedbe6e4fc0968a768878e5f02414b5a18cf2` passed all 12 associated GitHub Actions workflows, including the live PostgreSQL workflow execution integration and full PostgreSQL-backed test suite.
 
 **Remaining boundary:** the service is not yet exposed through an HTTP route. The role definition and assignment stores are also not yet wired to an application admin API. Do not enable the execution feature or authorize Business UAT until trusted route context, admin authorization, API contracts, negative isolation tests and the remaining UAT entry-gate evidence are complete.
+
+
+## 15. Opt-in HTTP API and deployment boundary (CI-validated)
+
+The API server now exposes the service layer only when `EPER_WORKFLOW_EXECUTION_API_ENABLED=true`. It remains disabled by default. Startup wiring requires PostgreSQL, durable audit, PostgreSQL tenant/actor application assignments and durable admin configuration; the server fails closed if the required stores or schema readiness checks are absent.
+
+**Admin routes** (also require `EPER_ADMIN_CONFIG_API_ENABLED=true` and `EPER_ADMIN_CONFIG_PERSISTENCE=postgres`):
+
+- `GET /admin/applications/:applicationId/workflow-roles`
+- `PUT /admin/applications/:applicationId/workflow-roles/:roleId`
+- `GET|POST|DELETE /admin/applications/:applicationId/workflow-role-assignments`
+- `POST /admin/applications/:applicationId/workflows/:workflowId/publish`
+
+Admin identity comes from the server-side `EPER_ADMIN_CONFIG_IDENTITIES_JSON` mapping. Application ownership is checked against the durable tenant/application assignment store. Publishing additionally requires the publisher actor to have active actor/application membership and the workflow's required role grants.
+
+**Customer routes**:
+
+- `POST /customer/applications/:applicationId/workflows/:workflowId/instances`
+- `POST /customer/applications/:applicationId/workflow-instances/:instanceId/transitions`
+
+Customer identity comes from `EPER_CUSTOMER_ACCESS_IDENTITIES_JSON`. Tenant and actor IDs are never accepted from request bodies; application ID and workflow/instance IDs are taken from the route, validated, and checked by the durable service. Request bodies use explicit allowlists for idempotency, business reference/data, expected version, action, payload and target activity.
+
+The API contract tests cover authentication, body identity spoofing rejection, role administration, publication, start/transition context propagation, tenant/application ownership and the disabled-by-default feature flag. The exact PR head `102fedbe6e4fc0968a768878e5f02414b5a18cf2` passed all 12 associated GitHub Actions workflows.
+
+**Deployment decision:** do not set the workflow feature flag in a hosted or UAT environment yet. The route layer is CI-validated, but production-like tenant bootstrap, admin credential provisioning, concurrent transition stress tests, operational monitoring and all existing Business UAT entry-gate evidence remain outstanding. No cloud resources were provisioned.
