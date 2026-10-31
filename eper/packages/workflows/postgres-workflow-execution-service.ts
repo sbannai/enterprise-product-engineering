@@ -322,7 +322,7 @@ export class PostgresWorkflowExecutionService {
            ) AS start_key_present`,
       );
       const row = result.rows[0];
-      if (Number(row?.ready_tables) !== 9 || row?.start_key_present !== true) {
+      if (Number(row?.ready_tables) !== 11 || row?.start_key_present !== true) {
         throw new Error("EPER_WORKFLOW_EXECUTION_SCHEMA_NOT_READY");
       }
     } catch (error) {
