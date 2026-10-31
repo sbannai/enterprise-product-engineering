@@ -80,8 +80,16 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       const blockerPid = Number(blockerPidResult.rows[0]?.pid);
       assert.ok(Number.isInteger(blockerPid) && blockerPid > 0, "Expected a PostgreSQL backend PID for the blocker");
 
+      let dispatchOutcome = "pending";
+      let dispatchError = null;
       const dispatchPromise = store.beginExecutionDispatch({
         tenantId, applicationId, executionId, workerId: "race-worker",
+      }).then((result) => {
+        dispatchOutcome = String(result);
+        return result;
+      }, (error) => {
+        dispatchError = error instanceof Error ? error.message : String(error);
+        return false;
       });
 
       // Do not rely on a fixed sleep or exact SQL-text formatting. Prove the
@@ -107,8 +115,25 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
         }
         await delay(25);
       }
-      assert.equal(dispatchIsWaiting, true,
-        "Dispatch fence never reached the expected PostgreSQL row-lock wait; race was not exercised");
+      if (!dispatchIsWaiting) {
+        const rowState = await blocker.query(`
+          SELECT s.status AS schedule_status, s.approval_status, s.trigger_type,
+                 e.status AS execution_status, e.locked_by, e.dispatch_started_at
+          FROM eper_campaign_schedules s
+          JOIN eper_campaign_executions e
+            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
+          WHERE s.tenant_id=$1 AND s.application_id=$2 AND s.id=$3 AND e.id=$4
+        `, [tenantId, applicationId, scheduleId, executionId]);
+        const activity = await blocker.query(`
+          SELECT pid, state, wait_event_type, wait_event, query, pg_blocking_pids(pid) AS blockers
+          FROM pg_stat_activity
+          WHERE datname=current_database() AND pid <> pg_backend_pid()
+            AND (wait_event_type='Lock' OR query ILIKE '%eper_campaign_schedules%')
+        `);
+        assert.fail("Dispatch lock wait not observed; " + JSON.stringify({
+          dispatchOutcome, dispatchError, row: rowState.rows[0] ?? null, activity: activity.rows,
+        }));
+      }
 
       await blocker.query(
         "UPDATE eper_campaign_schedules SET status='paused', updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
