@@ -95,6 +95,33 @@ CREATE TABLE IF NOT EXISTS eper_workflow_idempotency (
     ON DELETE RESTRICT
 );
 
+
+-- Definition versions, transition history and idempotency receipts are append-only.
+CREATE OR REPLACE FUNCTION eper_reject_workflow_ledger_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'EPER_WORKFLOW_LEDGER_APPEND_ONLY'
+    USING ERRCODE = 'integrity_constraint_violation';
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS eper_workflow_definitions_no_update ON eper_workflow_definition_versions;
+CREATE TRIGGER eper_workflow_definitions_no_update
+BEFORE UPDATE OR DELETE ON eper_workflow_definition_versions
+FOR EACH ROW EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
+
+DROP TRIGGER IF EXISTS eper_workflow_transitions_no_update ON eper_workflow_transitions;
+CREATE TRIGGER eper_workflow_transitions_no_update
+BEFORE UPDATE OR DELETE ON eper_workflow_transitions
+FOR EACH ROW EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
+
+DROP TRIGGER IF EXISTS eper_workflow_idempotency_no_update ON eper_workflow_idempotency;
+CREATE TRIGGER eper_workflow_idempotency_no_update
+BEFORE UPDATE OR DELETE ON eper_workflow_idempotency
+FOR EACH ROW EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
+
 -- Force tenant/application isolation. Runtime connections must set both context values.
 DO $$
 DECLARE table_name text;
