@@ -655,7 +655,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           };
           const proposal = { ...envelope, payloadHash: hashActionProposal(envelope) };
           const created = await store.createProposal(proposal, auditContext);
-          sendApiSuccess(request, response, created.replayed ? 200 : 201, created); return;
+          sendApiSuccess(request, response, created.replayed ? 200 : 201, { proposal: created.proposal, replayed: created.replayed }); return;
         }
 
         if (actionProposalDetail && request.method === "GET") {
