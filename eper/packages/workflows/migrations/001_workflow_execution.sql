@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS eper_workflow_definition_versions (
   published_by varchar(128) NOT NULL CHECK (length(btrim(published_by)) BETWEEN 1 AND 128),
   published_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, application_id, workflow_id, definition_version),
+  UNIQUE (tenant_id, application_id, workflow_id, definition_version, definition_digest),
   UNIQUE (tenant_id, application_id, workflow_id, definition_digest)
 );
 CREATE INDEX IF NOT EXISTS eper_workflow_definition_active_idx
@@ -36,8 +37,8 @@ CREATE TABLE IF NOT EXISTS eper_workflow_instances (
   updated_at timestamptz NOT NULL DEFAULT now(),
   completed_at timestamptz,
   PRIMARY KEY (tenant_id, application_id, instance_id),
-  FOREIGN KEY (tenant_id, application_id, workflow_id, definition_version)
-    REFERENCES eper_workflow_definition_versions (tenant_id, application_id, workflow_id, definition_version)
+  FOREIGN KEY (tenant_id, application_id, workflow_id, definition_version, definition_digest)
+    REFERENCES eper_workflow_definition_versions (tenant_id, application_id, workflow_id, definition_version, definition_digest)
     ON DELETE RESTRICT,
   CHECK (
     (status = 'running' AND current_activity_id IS NOT NULL AND completed_at IS NULL)
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS eper_workflow_transitions (
   payload_digest char(64) CHECK (payload_digest IS NULL OR payload_digest ~ '^[a-f0-9]{64}$'),
   occurred_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, application_id, transition_id),
+  UNIQUE (tenant_id, application_id, instance_id, transition_id),
   UNIQUE (tenant_id, application_id, instance_id, idempotency_key),
   FOREIGN KEY (tenant_id, application_id, instance_id)
     REFERENCES eper_workflow_instances (tenant_id, application_id, instance_id)
@@ -88,8 +90,8 @@ CREATE TABLE IF NOT EXISTS eper_workflow_idempotency (
   FOREIGN KEY (tenant_id, application_id, instance_id)
     REFERENCES eper_workflow_instances (tenant_id, application_id, instance_id)
     ON DELETE RESTRICT,
-  FOREIGN KEY (tenant_id, application_id, transition_id)
-    REFERENCES eper_workflow_transitions (tenant_id, application_id, transition_id)
+  FOREIGN KEY (tenant_id, application_id, instance_id, transition_id)
+    REFERENCES eper_workflow_transitions (tenant_id, application_id, instance_id, transition_id)
     ON DELETE RESTRICT
 );
 
