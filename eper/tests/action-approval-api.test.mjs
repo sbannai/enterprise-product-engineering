@@ -184,7 +184,9 @@ test("action approval API startup requires a host authorizer and durable persist
   const previous = saveEnvironment();
   configureEnvironment();
   try {
-    assert.throws(() => createAppServer(), /ACTION_APPROVAL_API_REQUIRES_POSTGRES_AUDIT_ASSIGNMENTS_AND_HOST_AUTHORIZER/);
+    assert.throws(() => createAppServer({
+      tenantApplicationAssignmentStore: {}, actorApplicationAssignmentStore: {},
+    }), /ACTION_APPROVAL_API_REQUIRES_POSTGRES_AUDIT_ASSIGNMENTS_AND_HOST_AUTHORIZER/);
   } finally {
     restoreEnvironment(previous);
   }
