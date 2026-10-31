@@ -231,12 +231,18 @@ export class PostgresTicketStore {
     severity: TicketSeverity,
     rationale?: string,
   ): Promise<TicketRecord | null> {
-    if (severity === "p1_confirmed" && (!rationale || rationale.trim().length < 20 || rationale.trim().length > 1000)) {
-      throw new Error("ticket_p1_rationale_required");
+    if (!rationale || rationale.trim().length < 20 || rationale.trim().length > 1000) {
+      throw new Error("ticket_severity_rationale_required");
     }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      const current = await client.query<Record<string, unknown>>(
+        "SELECT severity FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+        [identity.tenantId, ticketId],
+      );
+      if (!current.rows[0]) { await client.query("ROLLBACK"); return null; }
+      const previousSeverity = String(current.rows[0].severity);
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_support_tickets
          SET severity = $3,
@@ -252,7 +258,7 @@ export class PostgresTicketStore {
       await this.audit({
         tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
         correlationId: identity.correlationId, action: "ticket.severity_classified", ticketId, outcome: "success",
-        payload: { severity, ...(severity === "p1_confirmed" ? { rationale: rationale!.trim(), confirmedBy: identity.actorId } : {}) },
+        payload: { previousSeverity, severity, rationale: rationale.trim(), ...(severity === "p1_confirmed" ? { confirmedBy: identity.actorId } : {}) },
       }, client);
       await client.query("COMMIT");
       return mapRecord(result.rows[0]);
