@@ -15,8 +15,8 @@ test("single-call client assets API returns tenant/application-scoped asset meta
   const tokenB = "client-assets-tenant-b-token-000000000000000002";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a", "app-c", "app-empty"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
     "tenant-a": ["client-assets"],
@@ -134,8 +134,8 @@ test("asset download rechecks tenant/application access and requires an audited 
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a", "app-c", "app-empty"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"], "tenant-b": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
@@ -201,7 +201,7 @@ test("asset download records failure when no storage provider is configured", as
   const credential = "client-assets-provider-missing-token-1234567890";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
@@ -235,7 +235,7 @@ test("asset download fails closed when durable audit persistence fails", async (
   const credential = "client-assets-audit-failure-token-1234567890";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
-  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" } });
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({ "tenant-a": { "app-a": [{ id: "doc-1", name: "Project brief.pdf", type: "document", accessReference: "blobref:private-a" }] } });
@@ -264,7 +264,7 @@ test("asset download rejects unsafe or overlong provider URLs and audits the fai
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const credential = "client-assets-invalid-provider-token-123456789";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
-  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" } });
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({ "tenant-a": { "app-a": [{ id: "doc-1", name: "Project brief.pdf", type: "document", accessReference: "blobref:private-a" }] } });
@@ -272,6 +272,8 @@ test("asset download rejects unsafe or overlong provider URLs and audits the fai
     for (const descriptor of [
       { url: "http://storage.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
       { url: "https://storage.example.test/file", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() },
+      { url: "https://untrusted.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      { url: "https://user:pass@storage.example.test/file", expiresAt: new Date(Date.now() + 60_000).toISOString() },
     ]) {
       const audit = [];
       const server = createAppServer({
@@ -294,6 +296,96 @@ test("asset download rejects unsafe or overlong provider URLs and audits the fai
       }
     }
   } finally {
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
+test("customer assets intersect durable tenant ownership with actor application membership", async () => {
+  const keys=["EPER_CUSTOMER_ASSETS_API_ENABLED","EPER_CUSTOMER_ACCESS_IDENTITIES_JSON","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON","EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  const token="durable-assets-actor-token-000000000000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED="true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON=JSON.stringify({[token]:{tenantId:"tenant-a",actorId:"actor-a",roleKey:"customer",applicationIds:["app-a"]}});
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON=JSON.stringify({"tenant-a":["client-assets"]});
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON=JSON.stringify({"tenant-a":{
+    "app-owned-and-allowed":[{id:"visible",name:"Visible.pdf",type:"document",accessReference:"blobref:visible"}],
+    "app-owned-but-not-allowed":[{id:"hidden",name:"Hidden.pdf",type:"document",accessReference:"blobref:hidden"}]
+  }});
+  const tenantStore={async listActive(tenantId){assert.equal(tenantId,"tenant-a");return ["app-owned-and-allowed","app-owned-but-not-allowed"];}};
+  const actorStore={async listActive(tenantId,actorId){assert.equal(tenantId,"tenant-a");assert.equal(actorId,"actor-a");return ["app-owned-and-allowed"];}};
+  const server=createAppServer({tenantApplicationAssignmentStore:tenantStore,actorApplicationAssignmentStore:actorStore});
+  try{
+    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});
+    const address=server.address();assert.ok(address&&typeof address==="object");
+    const response=await fetch("http://127.0.0.1:"+address.port+"/customer/assets",{headers:{authorization:"Bearer "+token}});
+    assert.equal(response.status,200);
+    const body=await response.json();
+    assert.deepEqual(body.assets.map(asset=>asset.id),["visible"]);
+  }finally{
+    await new Promise(resolve=>server.close(resolve));
+    for(const key of keys){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}
+  }
+});
+
+
+test("asset downloads enforce durable tenant ownership and actor membership without environment allowlists", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSETS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "durable-asset-download-authorization-token-0001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": [{ id: "doc-a", name: "Brief.pdf", type: "document", accessReference: "blobref:private-a" }] },
+  });
+  const tenantStore = { async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a"]; } };
+  const actorStore = { async isAssigned(tenantId, actorId, applicationId) {
+    assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+    return true;
+  } };
+  let resolverCalls = 0;
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: tenantStore,
+    actorApplicationAssignmentStore: actorStore,
+    assetDownloadResolver: async () => {
+      resolverCalls += 1;
+      return { url: "https://storage.example.test/signed-download", expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    },
+    assetAuditWriter: async () => {},
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications/app-a/assets/doc-a/download",
+      { headers: { authorization: "Bearer " + token } });
+    assert.equal(response.status, 200);
+    assert.equal(resolverCalls, 1);
+    const deniedStore = { async isAssigned() { return false; } };
+    const deniedServer = createAppServer({
+      tenantApplicationAssignmentStore: tenantStore,
+      actorApplicationAssignmentStore: deniedStore,
+      assetDownloadResolver: async () => { resolverCalls += 1; return { url: "https://storage.example.test/should-not-run", expiresAt: new Date(Date.now() + 60_000).toISOString() }; },
+      assetAuditWriter: async () => {},
+    });
+    try {
+      await new Promise((resolve, reject) => { deniedServer.once("error", reject); deniedServer.listen(0, "127.0.0.1", resolve); });
+      const deniedAddress = deniedServer.address(); assert.ok(deniedAddress && typeof deniedAddress === "object");
+      const denied = await fetch("http://127.0.0.1:" + deniedAddress.port + "/customer/applications/app-a/assets/doc-a/download",
+        { headers: { authorization: "Bearer " + token } });
+      // Keep asset existence non-disclosing: unauthorized application/actor access is 404.
+      assert.equal(denied.status, 404);
+      assert.deepEqual(await denied.json(), { error: "asset_not_found" });
+      assert.equal(resolverCalls, 1, "storage provider must not be called for an unauthorized actor");
+    } finally { await new Promise(resolve => deniedServer.close(resolve)); }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });

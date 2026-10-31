@@ -35,7 +35,7 @@ export async function handleAgentJobRoute(
   request: IncomingMessage,
   response: ServerResponse,
   pathname: string,
-  options: { store?: PostgresAgentStore; resolveIdentity: AgentJobIdentityResolver; environment: AuditEnvironment },
+  options: { store?: PostgresAgentStore; resolveIdentity: AgentJobIdentityResolver; environment: AuditEnvironment; authorizeApplication?: (identity: AgentJobTrustedIdentity, applicationId: string) => Promise<boolean> },
 ): Promise<boolean> {
   const cancelMatch = /^\/v1\/agent-jobs\/([0-9a-f-]+)\/cancel$/.exec(pathname);
   if (pathname !== "/v1/agent-jobs" && !/^\/v1\/agent-jobs\/[0-9a-f-]+$/.test(pathname) && !cancelMatch && !/^\/v1\/agent-drafts\/[0-9a-f-]+(?:\/(approve|reject))?$/.test(pathname)) return false;
@@ -49,6 +49,9 @@ export async function handleAgentJobRoute(
     return true;
   }
   const requestId = resolveApiRequestId(request);
+  const applicationAllowed = async (applicationId: string) => options.authorizeApplication
+    ? options.authorizeApplication(identity, applicationId)
+    : /^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) && identity.applicationIds.includes(applicationId);
   try {
     const reviewMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)\/(approve|reject)$/.exec(pathname);
     const draftMatch = /^\/v1\/agent-drafts\/([0-9a-f-]+)$/.exec(pathname);
@@ -66,7 +69,7 @@ export async function handleAgentJobRoute(
         return true;
       }
       const applicationId = new URL(request.url ?? pathname, "http://localhost").searchParams.get("applicationId") ?? "";
-      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+      if (!(await applicationAllowed(applicationId))) {
         sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
         return true;
       }
@@ -80,7 +83,7 @@ export async function handleAgentJobRoute(
     }
     if (request.method === "GET" && draftMatch) {
       const applicationId = new URL(request.url ?? pathname, "http://localhost").searchParams.get("applicationId") ?? "";
-      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+      if (!(await applicationAllowed(applicationId))) {
         sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
         return true;
       }
@@ -106,7 +109,7 @@ export async function handleAgentJobRoute(
       }
       const body = await readBody(request);
       const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
-      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+      if (!(await applicationAllowed(applicationId))) {
         sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
         return true;
       }
@@ -133,7 +136,7 @@ export async function handleAgentJobRoute(
       }
       const body = await readBody(request);
       const validated = validateCreateAgentJobRequest(body);
-      if (!identity.applicationIds.includes(validated.applicationId)) {
+      if (!(await applicationAllowed(validated.applicationId))) {
         sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "This identity is not assigned to the requested application.");
         return true;
       }
@@ -163,7 +166,7 @@ export async function handleAgentJobRoute(
     const match = /^\/v1\/agent-jobs\/([0-9a-f-]+)$/.exec(pathname);
     if (request.method === "GET" && match) {
       const applicationId = new URL(request.url ?? pathname, "http://localhost").searchParams.get("applicationId") ?? "";
-      if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId) || !identity.applicationIds.includes(applicationId)) {
+      if (!(await applicationAllowed(applicationId))) {
         sendError(request, response, 403, "APPLICATION_ACCESS_DENIED", "A permitted applicationId is required.");
         return true;
       }

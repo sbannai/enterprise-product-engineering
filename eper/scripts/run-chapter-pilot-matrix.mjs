@@ -141,4 +141,22 @@ console.log(JSON.stringify({
   evidenceDir: "eper/reexec-evidence",
 }, null, 2));
 
+const blockingRequirementStatuses = new Set([
+  "NO_TEST_FILE",
+  "REQUIREMENT_TEST_MAPPING_GAP",
+  "REQUIREMENT_TEST_NOT_OBSERVED",
+  "REQUIREMENT_TEST_FAIL",
+]);
+const blockingRequirements = requirementResults.filter((r) => blockingRequirementStatuses.has(r.status));
+if (blockingRequirements.length > 0) {
+  console.error(JSON.stringify({
+    error: "REQUIREMENT_MATRIX_GATE_FAILED",
+    blockingRequirementCount: blockingRequirements.length,
+    blockingRequirementStatuses: Object.fromEntries(
+      [...new Set(blockingRequirements.map((r) => r.status))].map((status) => [status, blockingRequirements.filter((r) => r.status === status).length])
+    ),
+    sampleRequirementIds: blockingRequirements.slice(0, 20).map((r) => r.requirementId),
+  }, null, 2));
+  process.exitCode = 1;
+}
 if (chapterResults.some((r) => r.status !== "PASS")) process.exitCode = 1;

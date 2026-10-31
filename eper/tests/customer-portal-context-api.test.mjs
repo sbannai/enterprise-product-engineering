@@ -72,6 +72,10 @@ test("customer application access check uses only server-mapped tenant and role 
   });
   let observed;
   const server = createAppServer({
+    tenantApplicationAssignmentStore: { async listActive(tenantId) { assert.equal(tenantId, "trusted-tenant-a"); return ["application-from-path"]; } },
+    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+      assert.deepEqual([tenantId, actorId, applicationId], ["trusted-tenant-a", "trusted-actor-a", "application-from-path"]); return true;
+    } },
     moduleEntitlementService: {
       checkModule: async (context, moduleKey) => {
         observed = { context, moduleKey };
@@ -149,8 +153,8 @@ test("customer help and growth content is tenant-scoped and module-entitlement e
   const tokenA = "tenant-content-a-test-token-00000000000000000001";
   const tokenB = "tenant-content-b-test-token-00000000000000000001";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
     "tenant-a": ["help-center"],
@@ -288,8 +292,8 @@ test("customer application list returns only server-assigned applications for th
   const tokenB = "customer-app-list-b-token-00000000000000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
     "tenant-a": ["app-a", "app-a", "app-a-2"],
@@ -308,7 +312,7 @@ test("customer application list returns only server-assigned applications for th
     assert.equal(anonymous.status, 401);
     const responseA = await fetch(url, { headers: { authorization: "Bearer " + tokenA, "x-tenant-id": "tenant-b" } });
     assert.equal(responseA.status, 200);
-    assert.deepEqual(await responseA.json(), { applications: [{ applicationId: "app-a" }, { applicationId: "app-a-2" }] });
+    assert.deepEqual(await responseA.json(), { applications: [{ applicationId: "app-a" }] });
     const versionedA = await fetch(url, { headers: {
       authorization: "Bearer " + tokenA,
       accept: "application/vnd.eper.v1+json",
@@ -319,7 +323,7 @@ test("customer application list returns only server-assigned applications for th
     assert.equal(versionedA.status, 200);
     const versionedBody = await versionedA.json();
     assert.equal(versionedBody.success, true);
-    assert.deepEqual(versionedBody.data.applications, [{ applicationId: "app-a" }, { applicationId: "app-a-2" }]);
+    assert.deepEqual(versionedBody.data.applications, [{ applicationId: "app-a" }]);
     assert.ok(versionedBody.meta.requestId);
     assert.equal(versionedA.headers.get("x-request-id"), versionedBody.meta.requestId);
     const responseB = await fetch(url, { headers: { authorization: "Bearer " + tokenB } });
@@ -345,7 +349,7 @@ test("customer application list fails closed for malformed or non-canonical assi
   const token = "customer-app-list-invalid-config-token-0000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   const server = createAppServer();
   try {
@@ -429,8 +433,8 @@ test("customer application settings expose only safe preferences for assigned ap
   const tokenB = "customer-settings-tenant-b-token-000000000001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
-    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer" },
+    [tokenA]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+    [tokenB]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
     "tenant-a": ["settings"], "tenant-b": ["settings"],
@@ -493,9 +497,9 @@ test("customer application settings expose only safe preferences for assigned ap
     assert.deepEqual(await disabledForTenant.json(), { error: "customer_settings_not_enabled" });
     process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"], "tenant-b": ["settings"] });
     process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-invalid"], "tenant-b": ["app-b"] });
-    const invalidPreferences = await fetch(url + "app-invalid", { headers: { authorization: "Bearer " + tokenA } });
-    assert.equal(invalidPreferences.status, 200);
-    assert.deepEqual(await invalidPreferences.json(), { applicationId: "app-invalid", settings: {} });
+    const actorDenied = await fetch(url + "app-invalid", { headers: { authorization: "Bearer " + tokenA } });
+    assert.equal(actorDenied.status, 403);
+    assert.deepEqual(await actorDenied.json(), { error: "actor_not_assigned_to_application" });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) {
@@ -518,7 +522,7 @@ test("customer application settings fail closed when settings configuration is m
   const token = "customer-settings-config-fail-closed-token-0001";
   process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
@@ -544,5 +548,143 @@ test("customer application settings fail closed when settings configuration is m
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
     }
+  }
+});
+
+test("customer application access fails closed when actor application allowlist is missing, empty, or invalid", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const tokens = {
+    missing: "customer-actor-scope-missing-token-0000000001",
+    empty: "customer-actor-scope-empty-token-00000000001",
+    invalid: "customer-actor-scope-invalid-token-0000000001",
+  };
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [tokens.missing]: { tenantId: "tenant-a", actorId: "actor-missing", roleKey: "customer" },
+    [tokens.empty]: { tenantId: "tenant-a", actorId: "actor-empty", roleKey: "customer", applicationIds: [] },
+    [tokens.invalid]: { tenantId: "tenant-a", actorId: "actor-invalid", roleKey: "customer", applicationIds: ["app-a", 42] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": { displayName: "Admissions", currency: "INR" } },
+  });
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    for (const token of Object.values(tokens)) {
+      const headers = { authorization: "Bearer " + token };
+      const applications = await fetch(base + "/customer/applications", { headers });
+      assert.equal(applications.status, 200);
+      assert.deepEqual(await applications.json(), { applications: [] });
+      const settings = await fetch(base + "/customer/settings?applicationId=app-a", { headers });
+      assert.equal(settings.status, 403);
+      assert.deepEqual(await settings.json(), { error: "actor_not_assigned_to_application" });
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+
+test("customer application list uses durable actor membership and intersects tenant applications", async () => {
+  const keys = [
+    "EPER_CUSTOMER_PORTAL_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-durable-membership-list-test-token-0001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({
+    "tenant-a": ["app-a", "app-b"],
+    "tenant-b": ["app-c"],
+  });
+  const observed = [];
+  const store = {
+    async listActive(tenantId, actorId) {
+      observed.push({ tenantId, actorId });
+      return ["app-b", "app-c", "app-not-assigned-to-tenant"];
+    },
+    async isAssigned() { return false; },
+  };
+  const server = createAppServer({ actorApplicationAssignmentStore: store });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications", {
+      headers: { authorization: "Bearer " + token },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { applications: [{ applicationId: "app-b" }] });
+    assert.deepEqual(observed, [{ tenantId: "tenant-a", actorId: "actor-a" }]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+
+test("customer settings use durable tenant ownership and actor membership without environment allowlists", async () => {
+  const keys = ["EPER_CUSTOMER_PORTAL_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "customer-settings-durable-assignment-token-0001";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer" },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["settings"] });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  process.env.EPER_CUSTOMER_APPLICATION_SETTINGS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": { displayName: "Admissions", currency: "INR" } },
+  });
+  const tenantStore = { async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a", "app-b"]; } };
+  const actorStore = { async isAssigned(tenantId, actorId, applicationId) {
+    assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]);
+    return applicationId === "app-a";
+  } };
+  const server = createAppServer({ tenantApplicationAssignmentStore: tenantStore, actorApplicationAssignmentStore: actorStore });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const allowed = await fetch(base + "/customer/settings?applicationId=app-a", { headers: { authorization: "Bearer " + token } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), { applicationId: "app-a", settings: { displayName: "Admissions", currency: "INR" } });
+    const actorDenied = await fetch(base + "/customer/settings?applicationId=app-b", { headers: { authorization: "Bearer " + token } });
+    assert.equal(actorDenied.status, 403);
+    assert.deepEqual(await actorDenied.json(), { error: "actor_not_assigned_to_application" });
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });

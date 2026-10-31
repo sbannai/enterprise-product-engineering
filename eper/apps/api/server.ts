@@ -14,6 +14,8 @@ import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
 import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
+import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
+import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
@@ -29,6 +31,7 @@ import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
+import type { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
@@ -174,9 +177,13 @@ function resolveAgentJobIdentity(request: IncomingMessage): TrustedAgentJobIdent
     if (expected.length < 32 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) continue;
     if (!identity || typeof identity !== "object" || Array.isArray(identity)) return null;
     const applications = (identity as Record<string, unknown>).applicationIds;
-    if (!Array.isArray(applications) || applications.length === 0 ||
-        applications.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9._-]{2,100}$/.test(id))) return null;
-    return { ...base, applicationIds: [...new Set(applications as string[])] };
+    if (Array.isArray(applications) && applications.length > 0 &&
+        applications.every((id) => typeof id === "string" && /^[a-zA-Z0-9._-]{2,100}$/.test(id))) {
+      return { ...base, applicationIds: [...new Set(applications as string[])] };
+    }
+    // In durable assignment mode, application membership is resolved from PostgreSQL per request.
+    if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") return { ...base, applicationIds: [] };
+    return null;
   }
   return null;
 }
@@ -431,7 +438,18 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore } = {}): Server {
+  // Durable mode must never fall back to credential-embedded applicationIds.
+  // main.ts wires and readiness-checks this store; keep the API factory fail-closed
+  // as well for tests, alternate entry points, and future embedding scenarios.
+  if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+    if (!options.actorApplicationAssignmentStore) {
+      throw new Error("CUSTOMER_ACTOR_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+    }
+    if (!options.tenantApplicationAssignmentStore) {
+      throw new Error("TENANT_APPLICATION_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
+    }
+  }
   const services = createConfiguredCapabilityServices(options.capabilityPool);
   const localizationService = new LocalizationService();
   const rawPriceBook = process.env.EPER_MARKET_PRICE_BOOK_JSON;
@@ -495,6 +513,169 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
 
+    if (isAdminActorApplicationAssignmentUiRequest(request)) {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "same-origin",
+      });
+      response.end(adminActorApplicationAssignmentUiHtml);
+      return;
+    }
+
+    // Durable administrator provisioning for actor-to-application membership.
+    if (requestUrl.pathname === "/admin/actor-application-assignments") {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.actorApplicationAssignmentStore) {
+        sendJson(request, response, 503, { error: "actor_application_assignment_store_unavailable" });
+        return;
+      }
+      const adminIdentity = resolveAdminConfigIdentity(request);
+      if (!adminIdentity) {
+        sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+        return;
+      }
+      try {
+        if (request.method === "GET") {
+          const actorId = requestUrl.searchParams.get("actorId") ?? "";
+          if (!/^[a-zA-Z0-9._-]{2,128}$/.test(actorId)) {
+            sendJson(request, response, 400, { error: "invalid_actor_id" });
+            return;
+          }
+          const assignments = await options.actorApplicationAssignmentStore.listAssignments(adminIdentity.tenantId, actorId);
+          sendJson(request, response, 200, { tenantId: adminIdentity.tenantId, actorId, assignments });
+          return;
+        }
+        if (request.method === "POST" || request.method === "DELETE") {
+          const body = await readJson(request);
+          const actorId = typeof body.actorId === "string" ? body.actorId : "";
+          const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+          const expectedVersion = body.expectedVersion;
+          if (!/^[a-zA-Z0-9._-]{2,128}$/.test(actorId) ||
+              !/^[a-zA-Z0-9._-]{2,128}$/.test(applicationId) ||
+              !Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) {
+            sendJson(request, response, 400, { error: "invalid_assignment_input" });
+            return;
+          }
+          let tenantAssignments: unknown;
+          if (options.tenantApplicationAssignmentStore) {
+            tenantAssignments = await options.tenantApplicationAssignmentStore.listActive(adminIdentity.tenantId);
+          } else {
+            try {
+              const parsed: unknown = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+              tenantAssignments = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)[adminIdentity.tenantId] : null;
+            } catch { tenantAssignments = null; }
+          }
+          if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
+            sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+            return;
+          }
+          const change = {
+            tenantId: adminIdentity.tenantId,
+            actorId,
+            applicationId,
+            changedBy: adminIdentity.actorId,
+            expectedVersion: expectedVersion as number,
+            environment: options.adminConfigEnvironment ?? "uat",
+            correlationId: resolveApiRequestId(request),
+            serviceVersion: options.serviceVersion,
+          };
+          const assignment = request.method === "POST"
+            ? await options.actorApplicationAssignmentStore.assign(change)
+            : await options.actorApplicationAssignmentStore.revoke(change);
+          sendJson(request, response, request.method === "POST" ? 201 : 200, { assignment });
+          return;
+        }
+        sendMethodNotAllowed(request, response, "GET, POST, DELETE");
+      } catch (error) {
+        if (error instanceof Error && error.message === "ACTOR_APPLICATION_ASSIGNMENT_VERSION_CONFLICT") {
+          sendJson(request, response, 409, { error: error.message });
+        } else if (error instanceof Error && error.message === "ACTOR_APPLICATION_ASSIGNMENT_NOT_FOUND") {
+          sendJson(request, response, 404, { error: error.message });
+        } else if (error instanceof SyntaxError || error instanceof Error && (error.message === "JSON_OBJECT_REQUIRED" || error.message.startsWith("ACTOR_APPLICATION_ASSIGNMENT_INVALID_") || error.message === "ACTOR_APPLICATION_ASSIGNMENT_EXPECTED_VERSION_INVALID" || error.message === "ACTOR_APPLICATION_ASSIGNMENT_CORRELATION_ID_REQUIRED")) {
+          sendJson(request, response, 400, { error: error.message === "JSON_OBJECT_REQUIRED" || error instanceof SyntaxError ? "invalid_json" : error.message });
+        } else {
+          sendJson(request, response, 503, { error: "actor_application_assignment_operation_failed" });
+        }
+      }
+      return;
+    }
+
+    if (requestUrl.pathname === "/admin/tenant-application-assignments") {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      if (!options.tenantApplicationAssignmentStore) {
+        sendJson(request, response, 503, { error: "tenant_application_assignment_store_unavailable" });
+        return;
+      }
+      const adminIdentity = resolveAdminConfigIdentity(request);
+      if (!adminIdentity) {
+        sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+        return;
+      }
+      try {
+        if (request.method === "GET") {
+          const assignments = await options.tenantApplicationAssignmentStore.listAssignments(adminIdentity.tenantId);
+          sendJson(request, response, 200, { tenantId: adminIdentity.tenantId, assignments });
+          return;
+        }
+        if (request.method === "POST" || request.method === "DELETE") {
+          const body = await readJson(request);
+          const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+          const expectedVersion = body.expectedVersion;
+          if (!/^[a-zA-Z0-9._-]{2,128}$/.test(applicationId) ||
+              !Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) {
+            sendJson(request, response, 400, { error: "invalid_assignment_input" });
+            return;
+          }
+          const change = {
+            tenantId: adminIdentity.tenantId, applicationId, changedBy: adminIdentity.actorId,
+            expectedVersion: expectedVersion as number,
+            environment: options.adminConfigEnvironment ?? "uat",
+            correlationId: resolveApiRequestId(request), serviceVersion: options.serviceVersion,
+          };
+          const assignment = request.method === "POST"
+            ? await options.tenantApplicationAssignmentStore.assign(change)
+            : await options.tenantApplicationAssignmentStore.revoke(change);
+          sendJson(request, response, request.method === "POST" ? 201 : 200, { assignment });
+          return;
+        }
+        sendMethodNotAllowed(request, response, "GET, POST, DELETE");
+      } catch (error) {
+        if (error instanceof Error && error.message === "TENANT_APPLICATION_ASSIGNMENT_VERSION_CONFLICT") {
+          sendJson(request, response, 409, { error: error.message });
+        } else if (error instanceof Error && error.message === "TENANT_APPLICATION_ASSIGNMENT_NOT_FOUND") {
+          sendJson(request, response, 404, { error: error.message });
+        } else if (error instanceof SyntaxError || error instanceof Error && (error.message === "JSON_OBJECT_REQUIRED" ||
+          error.message.startsWith("TENANT_APPLICATION_ASSIGNMENT_INVALID_") ||
+          error.message === "TENANT_APPLICATION_ASSIGNMENT_EXPECTED_VERSION_INVALID" ||
+          error.message === "TENANT_APPLICATION_ASSIGNMENT_CORRELATION_ID_REQUIRED")) {
+          sendJson(request, response, 400, { error: error instanceof SyntaxError || error.message === "JSON_OBJECT_REQUIRED" ? "invalid_json" : error.message });
+        } else {
+          sendJson(request, response, 503, { error: "tenant_application_assignment_operation_failed" });
+        }
+      }
+      return;
+    }
+
     // Customer session introspection: identity is derived only from the server-side
     // credential map. This is an API boundary, not a substitute for a browser login UI.
     if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
@@ -529,12 +710,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      let assigned: unknown;
+      if (options.tenantApplicationAssignmentStore) assigned = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
       const applicationId = campaignLifecycle[1]!, scheduleId = campaignLifecycle[2]!, action = campaignLifecycle[3]!;
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId) || !actorAssigned) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
       try {
@@ -586,12 +774,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      let assigned: unknown;
+      if (options.tenantApplicationAssignmentStore) assigned = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
       const applicationId = campaignCollection[1];
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId) || !actorAssigned) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
       let body: Record<string, unknown>;
@@ -637,12 +832,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
-      const assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
-        ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      let assigned: unknown;
+      if (options.tenantApplicationAssignmentStore) assigned = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); } catch { assignments = null; }
+        assigned = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
       const applicationId = (campaignCollection ?? campaignDetail)![1];
-      if (!Array.isArray(assigned) || !assigned.includes(applicationId)) {
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!Array.isArray(assigned) || !assigned.includes(applicationId) || !actorAssigned) {
         sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
       }
       try {
@@ -684,7 +886,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       let assetsConfig: unknown;
       try {
         modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
-        assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+        if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
         assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
       } catch {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
@@ -694,12 +896,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!Array.isArray(tenantModules) || !tenantModules.includes("client-assets")) {
         sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
       }
-      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
-        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      const tenantAssignments = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+          ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(tenantAssignments) || tenantAssignments.some((id) =>
         typeof id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(id))) {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
       }
+      const actorAssignments = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.listActive(identity.tenantId, identity.actorId)
+        : identity.applicationIds ?? [];
+      const actorApplicationSet = new Set(actorAssignments);
       const tenantAssets = assetsConfig && typeof assetsConfig === "object" && !Array.isArray(assetsConfig)
         ? (assetsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!tenantAssets || typeof tenantAssets !== "object" || Array.isArray(tenantAssets)) {
@@ -707,7 +915,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const allAssets: Record<string, unknown>[] = [];
       const applicationsWithAssets = new Set<string>();
-      for (const assignedId of [...new Set(tenantAssignments as string[])]) {
+      for (const assignedId of [...new Set(tenantAssignments as string[])].filter((id) => actorApplicationSet.has(id))) {
         const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
         if (applicationAssets === undefined) continue;
         if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
@@ -782,14 +990,20 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
         try {
           modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
-          assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+          if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
           assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
         } catch { sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return; }
         const objectRecord = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
         const modules = objectRecord(modulesConfig)?.[identity.tenantId];
-        const assignments = objectRecord(assignmentsConfig)?.[identity.tenantId];
+        const assignments = options.tenantApplicationAssignmentStore
+          ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+          : objectRecord(assignmentsConfig)?.[identity.tenantId];
+        const actorAssigned = options.actorApplicationAssignmentStore
+          ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+          : identity.applicationIds?.includes(applicationId) === true;
         const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
-        if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) || !assignments.includes(applicationId) || !tenantAssets) {
+        if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) ||
+            !assignments.includes(applicationId) || !actorAssigned || !tenantAssets) {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
         const applicationAssets = tenantAssets[applicationId];
@@ -803,7 +1017,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         let url: URL; const expiresAt = Date.parse(result.expiresAt); const now = Date.now();
         try { url = new URL(result.url); } catch { url = new URL("about:blank"); }
-        if (url.protocol !== "https:" || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
+        if (url.protocol !== "https:" || url.username || url.password || !configuredAssetStorageHosts.some((host) => host.toLowerCase() === url.hostname.toLowerCase()) || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
         await audit("success");
@@ -1379,18 +1593,25 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 400, { error: "invalid_application_id" });
         return;
       }
-      let assignments: unknown;
-      try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
-      catch { assignments = null; }
-      if (!assignments || typeof assignments !== "object" || Array.isArray(assignments) ||
-          !Array.isArray((assignments as Record<string, unknown>)[identity.tenantId]) ||
-          !((assignments as Record<string, unknown[]>)[identity.tenantId] as unknown[]).includes(applicationId)) {
+      let tenantAssignments: unknown;
+      if (options.tenantApplicationAssignmentStore) {
+        tenantAssignments = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+      } else {
+        let assignments: unknown;
+        try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+        catch { assignments = null; }
+        tenantAssignments = assignments && typeof assignments === "object" && !Array.isArray(assignments)
+          ? (assignments as Record<string, unknown>)[identity.tenantId] : null;
+      }
+      if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
         return;
       }
       // Tenant ownership alone is not actor authorization. Require the credential's
       // explicit application allow-list before reading, creating, or replying to tickets.
-      if (!identity.applicationIds?.includes(applicationId)) {
+      if (!(options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true)) {
         sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
@@ -1631,19 +1852,28 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       let assignments: unknown;
       try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
       catch { assignments = null; }
-      if (!assignments || typeof assignments !== "object" || Array.isArray(assignments)) {
+      if (!options.tenantApplicationAssignmentStore && (!assignments || typeof assignments !== "object" || Array.isArray(assignments))) {
         sendJson(request, response, 503, { error: "customer_applications_unavailable" });
         return;
       }
-      const tenantAssignments = (assignments as Record<string, unknown>)[identity.tenantId];
+      const tenantAssignments = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : (assignments as Record<string, unknown>)[identity.tenantId];
       if (!Array.isArray(tenantAssignments) || tenantAssignments.some((item) =>
         typeof item !== "string" || item !== item.trim() || item.length < 1 || item.length > 128 ||
         !/^[a-zA-Z0-9._:-]+$/.test(item))) {
         sendJson(request, response, 503, { error: "customer_applications_unavailable" });
         return;
       }
+      // Tenant assignment is necessary but not sufficient: each actor receives
+      // only the applications explicitly mapped to their trusted identity.
+      const actorApplications = new Set(options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.listActive(identity.tenantId, identity.actorId)
+        : identity.applicationIds ?? []);
       sendJson(request, response, 200, {
-        applications: [...new Set(tenantAssignments as string[])].map((applicationId) => ({ applicationId })),
+        applications: [...new Set(tenantAssignments as string[])]
+          .filter((applicationId) => actorApplications.has(applicationId))
+          .map((applicationId) => ({ applicationId })),
       });
       return;
     }
@@ -1676,12 +1906,22 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         return;
       }
       let assignmentsConfig: unknown;
-      try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
-      catch { assignmentsConfig = null; }
-      const tenantAssignments = assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
-        ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
+      if (!options.tenantApplicationAssignmentStore) {
+        try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
+        catch { assignmentsConfig = null; }
+      }
+      const tenantAssignments = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+          ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      if (!(options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true)) {
+        sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
       let settingsConfig: unknown;
@@ -1795,6 +2035,28 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!applicationId.trim() || applicationId.length > 128 || !itemKey.trim() || itemKey.length > 128 ||
           !/^[a-zA-Z0-9._:-]{1,128}$/.test(permissionKey)) {
         sendJson(request, response, 400, { error: "invalid_access_query" });
+        return;
+      }
+      // The entitlement diagnostic is a protected customer API too: entitlement
+      // must never be evaluated for an application outside both assignment boundaries.
+      const tenantApplications = options.tenantApplicationAssignmentStore
+        ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+        : (() => {
+            try {
+              const parsed: unknown = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+              return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)[identity.tenantId] : [];
+            } catch { return []; }
+          })();
+      if (!Array.isArray(tenantApplications) || !tenantApplications.includes(applicationId)) {
+        sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
+        return;
+      }
+      const actorAssigned = options.actorApplicationAssignmentStore
+        ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+        : identity.applicationIds?.includes(applicationId) === true;
+      if (!actorAssigned) {
+        sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
       try {
@@ -2082,6 +2344,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const agentStore = options.capabilityPool ? new PostgresAgentStore(options.capabilityPool as unknown as AgentSqlPool) : undefined;
     if (await handleAgentJobRoute(request, response, requestUrl.pathname, {
       store: agentStore, resolveIdentity: resolveAgentJobIdentity,
+      authorizeApplication: async (identity, applicationId) => {
+        if (!/^[a-zA-Z0-9._-]{2,100}$/.test(applicationId)) return false;
+        if (options.tenantApplicationAssignmentStore && options.actorApplicationAssignmentStore &&
+            process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+          const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+          if (!tenantApplications.includes(applicationId)) return false;
+          return options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId);
+        }
+        return identity.applicationIds.includes(applicationId);
+      },
       environment: options.adminConfigEnvironment ?? "sandbox",
     })) return;
 
@@ -2097,6 +2369,25 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const tenantId = identity.tenantId;
       if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(applicationId)) {
         return { allowed: false, statusCode: 400, error: "application_id_required_for_ai_integration_policy" };
+      }
+      if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
+        if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore) {
+          return { allowed: false, statusCode: 503, error: "agent_application_assignment_store_unavailable" };
+        }
+        const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(tenantId);
+        if (!tenantApplications.includes(applicationId)) {
+          return { allowed: false, statusCode: 403, error: "application_not_assigned_to_tenant" };
+        }
+        let principalActors: unknown;
+        try { principalActors = JSON.parse(process.env.EPER_AGENTS_PRINCIPAL_ACTORS_JSON ?? ""); } catch { principalActors = null; }
+        const actorId = principalActors && typeof principalActors === "object" && !Array.isArray(principalActors)
+          ? (principalActors as Record<string, unknown>)[identity.principalId] : undefined;
+        if (typeof actorId !== "string" || !actorId.trim() || actorId !== actorId.trim() || actorId.length > 128) {
+          return { allowed: false, statusCode: 503, error: "agents_principal_actor_mapping_unconfigured" };
+        }
+        if (!await options.actorApplicationAssignmentStore.isAssigned(tenantId, actorId, applicationId)) {
+          return { allowed: false, statusCode: 403, error: "actor_not_assigned_to_application" };
+        }
       }
       if (!tenantId || !options.adminConfigurationStore || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
         return { allowed: false, statusCode: 503, error: "ai_integration_policy_store_unconfigured" };
