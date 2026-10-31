@@ -63,7 +63,9 @@ test("publisher checks both assignments under lock and commits immutable version
   assert.match(result.definitionDigest, /^[a-f0-9]{64}$/);
   assert.ok(calls.some(call => call.sql.includes("FOR SHARE") && call.sql.includes("eper_tenant_application_assignment")));
   assert.ok(calls.some(call => call.sql.includes("FOR SHARE") && call.sql.includes("eper_actor_application_assignment")));
+  assert.ok(calls.some(call => call.sql.includes("pg_advisory_xact_lock(hashtextextended")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")));
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_publication_events")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
