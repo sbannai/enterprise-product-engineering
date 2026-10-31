@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS eper_action_proposals (
   UNIQUE (tenant_id, application_id, proposal_id, proposal_version, payload_hash),
   UNIQUE (tenant_id, application_id, idempotency_key),
   UNIQUE (tenant_id, application_id, proposal_id, proposal_version, idempotency_key),
+  UNIQUE (tenant_id, application_id, proposal_id, proposal_version, payload_hash, requested_by),
   CHECK (expires_at > created_at)
 );
 
@@ -46,8 +47,8 @@ CREATE TABLE IF NOT EXISTS eper_action_approval_grants (
   recorded_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, application_id, approval_id),
   UNIQUE (tenant_id, application_id, approval_id, proposal_id, proposal_version, proposal_hash),
-  FOREIGN KEY (tenant_id, application_id, proposal_id, proposal_version, proposal_hash)
-    REFERENCES eper_action_proposals (tenant_id, application_id, proposal_id, proposal_version, payload_hash)
+  FOREIGN KEY (tenant_id, application_id, proposal_id, proposal_version, proposal_hash, requested_by)
+    REFERENCES eper_action_proposals (tenant_id, application_id, proposal_id, proposal_version, payload_hash, requested_by)
     ON DELETE RESTRICT,
   CHECK (approver_id <> requested_by),
   CHECK (expires_at > decided_at)
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS eper_action_execution_claims (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, application_id, execution_id),
   UNIQUE (tenant_id, application_id, approval_id),
+  UNIQUE (tenant_id, application_id, execution_id, approval_id),
   UNIQUE (tenant_id, application_id, idempotency_key),
   FOREIGN KEY (tenant_id, application_id, approval_id, proposal_id, proposal_version, proposal_hash)
     REFERENCES eper_action_approval_grants
@@ -141,8 +143,8 @@ CREATE TABLE IF NOT EXISTS eper_action_execution_events (
   FOREIGN KEY (tenant_id, application_id, execution_id)
     REFERENCES eper_action_execution_claims (tenant_id, application_id, execution_id)
     ON DELETE RESTRICT,
-  FOREIGN KEY (tenant_id, application_id, approval_id)
-    REFERENCES eper_action_approval_grants (tenant_id, application_id, approval_id)
+  FOREIGN KEY (tenant_id, application_id, execution_id, approval_id)
+    REFERENCES eper_action_execution_claims (tenant_id, application_id, execution_id, approval_id)
     ON DELETE RESTRICT
 );
 
