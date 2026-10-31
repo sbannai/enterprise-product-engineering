@@ -17,6 +17,22 @@ function fakePool(onQuery = async () => ({ rows: [], rowCount: 0 })) {
   };
   return { calls, pool: { async connect() { return client; } } };
 }
+
+test("event fan-out accepts event IDs through 256 characters and rejects longer IDs before database access", async () => {
+  const { pool, calls } = fakePool();
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await store.enqueueEventExecutions({
+    tenantId: "tenant-a", applicationId: "app-a", eventType: "lead.created",
+    eventId: "e".repeat(256), occurredAt: "2030-01-01T00:00:00.000Z",
+  });
+  assert.equal(calls.length, 1, "256-character event ID must reach the idempotent insert");
+  await assert.rejects(store.enqueueEventExecutions({
+    tenantId: "tenant-a", applicationId: "app-a", eventType: "lead.created",
+    eventId: "e".repeat(257), occurredAt: "2030-01-01T00:00:00.000Z",
+  }), /CAMPAIGN_EVENT_IDENTITY_INVALID/);
+  assert.equal(calls.length, 1, "257-character event ID must be rejected before database access");
+});
+
 const now = Date.now();
 function scheduleRow(overrides = {}) {
   return {
