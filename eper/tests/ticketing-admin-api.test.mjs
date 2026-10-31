@@ -209,3 +209,29 @@ test("admin severity endpoint rejects client-supplied confirmation identity and 
     assert.equal(calls, 0);
   });
 });
+
+
+test("admin duplicate disposition validates canonical link and uses trusted tenant actor", async () => {
+  let args;
+  const ticketStore = {
+    async list() { return []; }, async changeStatus() { return ticket; }, async assign() { return ticket; },
+    async setDuplicateDisposition(identity, id, disposition, canonicalTicketId, rationale) {
+      args = { identity, id, disposition, canonicalTicketId, rationale }; return { ...ticket, duplicateDisposition: disposition, canonicalTicketId };
+    },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const url = base + "/admin/support/tickets/" + ticket.id + "/duplicate-disposition";
+    const invalid = await fetch(url, { method: "PATCH", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ disposition: "duplicate", rationale: "Insufficient" }) });
+    assert.equal(invalid.status, 400);
+    const valid = await fetch(url, { method: "PATCH", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ disposition: "duplicate", canonicalTicketId: "223e4567-e89b-12d3-a456-426614174000",
+        rationale: "Same payment failure, same affected application, and identical reproduction evidence." }) });
+    assert.equal(valid.status, 200);
+    assert.equal(args.identity.tenantId, "tenant-a");
+    assert.equal(args.identity.actorId, "admin-1");
+    assert.equal(args.id, ticket.id);
+    assert.equal(args.disposition, "duplicate");
+    assert.equal(args.canonicalTicketId, "223e4567-e89b-12d3-a456-426614174000");
+  });
+});
