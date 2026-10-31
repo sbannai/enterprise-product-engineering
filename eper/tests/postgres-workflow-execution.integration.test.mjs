@@ -7,6 +7,8 @@ import { PostgresWorkflowActorRoleAssignmentStore } from "../dist/packages/workf
 import { WorkflowDefinitionPublisher } from "../dist/packages/workflows/workflow-definition-publisher.js";
 import { PostgresWorkflowExecutionService } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresWorkflowOutboxStore } from "../dist/packages/workflows/postgres-workflow-outbox-store.js";
+import { PostgresActionApprovalStore } from "../dist/packages/approvals/postgres-action-approval-store.js";
+import { hashActionProposal } from "../dist/packages/approvals/action-approval-contracts.js";
 
 const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
 
@@ -427,6 +429,128 @@ test("PostgreSQL action approval ledger enforces scope, immutable decisions and 
       throw error;
     } finally {
       client.release();
+      await pool.end();
+    }
+  });
+
+
+test("PostgreSQL action approval store persists proposals, maker-checker decisions, execution claims and revocations",
+  { skip: !databaseConfigured },
+  async () => {
+    const pool = createPostgresPaymentPool();
+    const store = new PostgresActionApprovalStore(pool);
+    const suffix = randomUUID();
+    const tenantId = "action-store-tenant-" + suffix;
+    const applicationId = "action-store-app-" + suffix;
+    const requesterId = "action-requester-" + suffix;
+    const approverId = "action-approver-" + suffix;
+    const workerId = "action-worker-" + suffix;
+    const proposalEnvelope = {
+      proposalId: "action-proposal-" + suffix,
+      proposalVersion: 1,
+      tenantId,
+      applicationId,
+      actionType: "crm.contact.update",
+      sideEffectClass: "crm_mutation",
+      targetType: "contact",
+      targetId: "contact-" + suffix,
+      requestedBy: requesterId,
+      requesterType: "human",
+      payload: { name: "Approved contact name", fields: ["name"] },
+      idempotencyKey: "action-idem-" + suffix,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      correlationId: "action-corr-" + suffix,
+    };
+    const proposal = { ...proposalEnvelope, payloadHash: hashActionProposal(proposalEnvelope) };
+    const approvalId = "action-approval-" + suffix;
+    const context = {
+      tenantId, applicationId, actorId: requesterId, actorType: "human",
+      environment: "uat", source: "api", operationName: "action-approval-integration",
+      correlationId: proposal.correlationId, serviceVersion: "integration-test",
+    };
+
+    try {
+      await store.assertReady();
+      const created = await store.createProposal(proposal, context);
+      assert.equal(created.replayed, false);
+      assert.equal(created.proposal.payloadHash, proposal.payloadHash);
+      const replay = await store.createProposal(proposal, context);
+      assert.equal(replay.replayed, true);
+      assert.equal(replay.proposal.proposalId, proposal.proposalId);
+
+      const approved = await store.recordDecision({
+        ...context, actorId: approverId, decision: "approve", approvalId,
+        proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
+        decidedAt: new Date().toISOString(),
+        expiresAt: proposal.expiresAt, policyVersion: "policy-v1",
+      });
+      assert.equal(approved.approvalId, approvalId);
+      const loadedApproval = await store.getApproval({
+        tenantId, applicationId, proposalId: proposal.proposalId,
+        proposalVersion: proposal.proposalVersion, approvalId,
+      });
+      assert.ok(loadedApproval);
+      assert.equal(loadedApproval.approverId, approverId);
+      assert.equal(loadedApproval.revokedAt, undefined);
+
+      const claimContext = {
+        ...context, actorId: workerId, actorType: "system",
+        source: "job", operationName: "action-execution-worker",
+      };
+      const claim = await store.claimExecution({
+        ...claimContext, proposalId: proposal.proposalId,
+        proposalVersion: proposal.proposalVersion, approvalId, workerId,
+        leaseSeconds: 60, authorizationGranted: true, auditAvailable: true,
+        consentAndIndependentControlsAllowed: true,
+      });
+      assert.equal(claim.status, "processing");
+      assert.equal(claim.attemptCount, 1);
+      await assert.rejects(
+        store.claimExecution({
+          ...claimContext, proposalId: proposal.proposalId,
+          proposalVersion: proposal.proposalVersion, approvalId, workerId: "action-worker-2",
+          leaseSeconds: 60, authorizationGranted: true, auditAvailable: true,
+          consentAndIndependentControlsAllowed: true,
+        }),
+        /ACTION_EXECUTION_ALREADY_CLAIMED/,
+      );
+
+      const completed = await store.finishExecution({
+        ...claimContext, executionId: claim.executionId, workerId,
+        outcome: "succeeded", resultHash: "b".repeat(64),
+      });
+      assert.equal(completed.status, "succeeded");
+      assert.equal(completed.resultHash, "b".repeat(64));
+      const replayedClaim = await store.claimExecution({
+        ...claimContext, proposalId: proposal.proposalId,
+        proposalVersion: proposal.proposalVersion, approvalId, workerId,
+        leaseSeconds: 60, authorizationGranted: true, auditAvailable: true,
+        consentAndIndependentControlsAllowed: true,
+      });
+      assert.equal(replayedClaim.status, "succeeded");
+      assert.equal(replayedClaim.executionId, claim.executionId);
+
+      await store.recordDecision({
+        ...context, actorId: "action-revoker-" + suffix, decision: "revoke", approvalId,
+        proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
+        decidedAt: new Date().toISOString(), policyVersion: "policy-v1",
+      });
+      const revoked = await store.getApproval({
+        tenantId, applicationId, proposalId: proposal.proposalId,
+        proposalVersion: proposal.proposalVersion, approvalId,
+      });
+      assert.ok(revoked?.revokedAt);
+      await assert.rejects(
+        store.claimExecution({
+          ...claimContext, proposalId: proposal.proposalId,
+          proposalVersion: proposal.proposalVersion, approvalId, workerId,
+          leaseSeconds: 60, authorizationGranted: true, auditAvailable: true,
+          consentAndIndependentControlsAllowed: true,
+        }),
+        /ACTION_APPROVAL_GATE_DENIED:APPROVAL_REVOKED/,
+      );
+    } finally {
       await pool.end();
     }
   });
