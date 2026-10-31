@@ -67,13 +67,13 @@ jobs:
         if: always()
         run: |
           node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync } from "node:fs";
+          import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
           const logPath = "reexec-evidence/qa-test-output.log";
-          const log = readFileSync(logPath, "utf8");
+          const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
           const summary = {};
           for (const key of ["tests", "pass", "fail", "cancelled", "skipped"]) {
-            const match = [...log.matchAll(new RegExp(`^# ${key} (\\\\d+)$`, "gm"))].at(-1);
+            const match = [...log.matchAll(new RegExp(`^# ${key} (\\d+)$`, "gm"))].at(-1);
             summary[key] = match ? Number(match[1]) : null;
           }
 
@@ -85,10 +85,12 @@ jobs:
           }
           const prHeadSha = event.pull_request?.head?.sha ?? process.env.GITHUB_SHA;
           const prMergeSha = event.pull_request?.merge_commit_sha ?? process.env.GITHUB_SHA;
-          const outcome =
+          const summaryComplete =
+            ["tests", "pass", "fail", "cancelled", "skipped"].every((key) => summary[key] !== null) &&
+            summary.tests > 0;
+          const outcome = !summaryComplete ? "INCOMPLETE" :
             summary.fail > 0 ? "FAIL" :
-            summary.tests === null || summary.pass === null || summary.cancelled > 0 ? "INCOMPLETE" :
-            "PASS";
+            summary.cancelled > 0 ? "INCOMPLETE" : "PASS";
 
           const lines = [
             `# EPER-REEXEC-001 — Controlled QA Re-Execution Run ${process.env.GITHUB_RUN_NUMBER}`,
@@ -117,7 +119,7 @@ jobs:
             "A PASS is recorded only when a complete TAP summary exists, failed tests are zero, and cancelled tests are zero. Missing or incomplete summaries remain INCOMPLETE.",
             ""
           ];
-          writeFileSync(`reexec-evidence/EPER-REEXEC-001-${process.env.GITHUB_RUN_ID}.md`, lines.join("\\n"));
+          writeFileSync(`reexec-evidence/EPER-REEXEC-001-${process.env.GITHUB_RUN_ID}.md`, lines.join("\n"));
           NODE
       - name: Upload execution evidence
         if: always()
