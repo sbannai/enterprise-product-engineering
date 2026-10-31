@@ -92,7 +92,7 @@ test("action approval API derives tenant and actor from trusted identity and del
     const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
     const queue = await fetch(path, { headers });
     assert.equal(queue.status, 200);
-    assert.equal((await queue.json()).proposals[0].status, "pending");
+    assert.equal((await queue.json()).data.proposals[0].status, "pending");
 
     const body = {
       actionType: "crm.contact.update", sideEffectClass: "crm_mutation",
