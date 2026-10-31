@@ -63,6 +63,62 @@ jobs:
             echo "npm=$(npm --version)"
             echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > reexec-evidence/execution-metadata.txt
+      - name: Write run-specific QA evidence summary
+        if: always()
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const logPath = "reexec-evidence/qa-test-output.log";
+          const log = readFileSync(logPath, "utf8");
+          const summary = {};
+          for (const key of ["tests", "pass", "fail", "cancelled", "skipped"]) {
+            const match = [...log.matchAll(new RegExp(`^# ${key} (\\\\d+)$`, "gm"))].at(-1);
+            summary[key] = match ? Number(match[1]) : null;
+          }
+
+          let event = {};
+          try {
+            event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+          } catch {
+            // Push and workflow_dispatch runs do not have pull_request metadata.
+          }
+          const prHeadSha = event.pull_request?.head?.sha ?? process.env.GITHUB_SHA;
+          const prMergeSha = event.pull_request?.merge_commit_sha ?? process.env.GITHUB_SHA;
+          const outcome =
+            summary.fail > 0 ? "FAIL" :
+            summary.tests === null || summary.pass === null || summary.cancelled > 0 ? "INCOMPLETE" :
+            "PASS";
+
+          const lines = [
+            `# EPER-REEXEC-001 — Controlled QA Re-Execution Run ${process.env.GITHUB_RUN_NUMBER}`,
+            "",
+            "Classification: NEW CONTROLLED EXECUTION EVIDENCE — NOT HISTORICAL EVIDENCE",
+            "",
+            "- Population: 228 requirements / 38 chapters",
+            `- Workflow run ID: ${process.env.GITHUB_RUN_ID}`,
+            `- Repository: ${process.env.GITHUB_REPOSITORY}`,
+            `- PR head SHA: ${prHeadSha}`,
+            `- PR merge/check-out SHA: ${prMergeSha}`,
+            `- GitHub checkout SHA: ${process.env.GITHUB_SHA}`,
+            `- Test subtests: ${summary.tests ?? "UNAVAILABLE"}`,
+            `- Passed: ${summary.pass ?? "UNAVAILABLE"}`,
+            `- Failed: ${summary.fail ?? "UNAVAILABLE"}`,
+            `- Cancelled: ${summary.cancelled ?? "UNAVAILABLE"}`,
+            `- Skipped: ${summary.skipped ?? "UNAVAILABLE"}`,
+            `- Technical QA outcome: ${outcome}`,
+            "- Full TAP output: qa-test-output.log",
+            "- Execution metadata: execution-metadata.txt",
+            "",
+            "## Interpretation",
+            "",
+            "This report is generated from the current workflow run and its test log. It does not establish business UAT, release/go-live, production/operations, final acceptance, certification, or traceability freeze.",
+            "",
+            "A PASS is recorded only when a complete TAP summary exists, failed tests are zero, and cancelled tests are zero. Missing or incomplete summaries remain INCOMPLETE.",
+            ""
+          ];
+          writeFileSync(`reexec-evidence/EPER-REEXEC-001-${process.env.GITHUB_RUN_ID}.md`, lines.join("\\n"));
+          NODE
       - name: Upload execution evidence
         if: always()
         uses: actions/upload-artifact@v4
