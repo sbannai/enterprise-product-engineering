@@ -486,7 +486,7 @@ export class PostgresWorkflowExecutionService {
         `UPDATE eper_workflow_instances
             SET status = $4, current_activity_id = $5, data = $6::jsonb,
                 version = $7, updated_at = NOW(),
-                completed_at = CASE WHEN $4 = 'running' THEN NULL ELSE NOW() END
+                completed_at = CASE WHEN $4::varchar = 'running' THEN NULL ELSE NOW() END
           WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
             AND version = $8
           RETURNING *`,
