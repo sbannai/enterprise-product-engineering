@@ -124,42 +124,53 @@ test("admin assignment rejects extra fields and keeps trusted tenant identity", 
 
 test("same admin ticket API derives result scope from the authenticated role", async () => {
   const clientCredential = "d".repeat(48);
-  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [credential]: { tenantId: "tenant-a", actorId: "admin-1", roleKey: "product_admin" },
-    [clientCredential]: { tenantId: "tenant-a", actorId: "client-1", roleKey: "support_admin" },
-  });
-  process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["product_admin", "support_admin"]);
-  process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON = JSON.stringify(["product_admin"]);
-  const calls = [];
-  const ticketStore = {
-    async list(scope, filter) {
-      calls.push({ scope, filter });
-      return scope.tenantId
-        ? [ticket]
-        : [ticket, { ...ticket, id: "223e4567-e89b-12d3-a456-426614174000", tenantId: "tenant-b" }];
-    },
-    async changeStatus() { return ticket; },
-    async assign() { return ticket; },
-  };
-  await withServer({ ticketStore }, async (base) => {
-    const product = await fetch(base + "/admin/support/tickets", { headers: auth });
-    assert.equal(product.status, 200);
-    const productBody = await product.json();
-    assert.equal(productBody.scope, "authorized_platform");
-    assert.equal("tenantId" in productBody, false);
-    assert.equal(calls[0].scope.tenantId, undefined);
-
-    const client = await fetch(base + "/admin/support/tickets", {
-      headers: { authorization: "Bearer " + clientCredential },
+  const previousIdentities = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+  const previousAdminRoles = process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON;
+  const previousCrossTenantRoles = process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON;
+  try {
+    process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+      [credential]: { tenantId: "tenant-a", actorId: "admin-1", roleKey: "product_admin" },
+      [clientCredential]: { tenantId: "tenant-a", actorId: "client-1", roleKey: "support_admin" },
     });
-    assert.equal(client.status, 200);
-    const clientBody = await client.json();
-    assert.equal(clientBody.scope, "tenant");
-    assert.equal(clientBody.tenantId, "tenant-a");
-    assert.equal(calls[1].scope.tenantId, "tenant-a");
-  });
-});
+    process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = JSON.stringify(["product_admin", "support_admin"]);
+    process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON = JSON.stringify(["product_admin"]);
+    const calls = [];
+    const ticketStore = {
+      async list(scope, filter) {
+        calls.push({ scope, filter });
+        return scope.tenantId
+          ? [ticket]
+          : [ticket, { ...ticket, id: "223e4567-e89b-12d3-a456-426614174000", tenantId: "tenant-b" }];
+      },
+      async changeStatus() { return ticket; },
+      async assign() { return ticket; },
+    };
+    await withServer({ ticketStore }, async (base) => {
+      const product = await fetch(base + "/admin/support/tickets", { headers: auth });
+      assert.equal(product.status, 200);
+      const productBody = await product.json();
+      assert.equal(productBody.scope, "authorized_platform");
+      assert.equal("tenantId" in productBody, false);
+      assert.equal(calls[0].scope.tenantId, undefined);
 
+      const client = await fetch(base + "/admin/support/tickets", {
+        headers: { authorization: "Bearer " + clientCredential },
+      });
+      assert.equal(client.status, 200);
+      const clientBody = await client.json();
+      assert.equal(clientBody.scope, "tenant");
+      assert.equal(clientBody.tenantId, "tenant-a");
+      assert.equal(calls[1].scope.tenantId, "tenant-a");
+    });
+  } finally {
+    if (previousIdentities === undefined) delete process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
+    else process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = previousIdentities;
+    if (previousAdminRoles === undefined) delete process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON;
+    else process.env.EPER_TICKETING_ADMIN_ROLE_KEYS_JSON = previousAdminRoles;
+    if (previousCrossTenantRoles === undefined) delete process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON;
+    else process.env.EPER_TICKETING_CROSS_TENANT_ROLE_KEYS_JSON = previousCrossTenantRoles;
+  }
+});
 
 test("admin can confirm P1 only with a substantive rationale and trusted actor identity", async () => {
   let args;
@@ -185,7 +196,7 @@ test("admin can confirm P1 only with a substantive rationale and trusted actor i
     });
     assert.equal(valid.status, 200);
     assert.equal(args.identity.tenantId, "tenant-a");
-    assert.equal(args.identity.actorId, "admin-1");
+    assert.equal(args.identity.actorId, "support-1");
     assert.equal(args.id, ticket.id);
     assert.equal(args.severity, "p1_confirmed");
     assert.match(args.rationale, /Payment integrity/);
