@@ -117,3 +117,18 @@ test("independent control denial prevents claim and dispatch", async () => {
   assert.equal(calls.includes("claim"), false);
   assert.equal(calls.includes("dispatch"), false);
 });
+
+test("execution claim uses a fresh timestamp after authorization and controls", async () => {
+  const timestamps = [
+    "2026-10-31T16:00:00.000Z",
+    "2026-10-31T16:05:00.000Z",
+    "2026-10-31T16:05:01.000Z",
+  ];
+  const { service, calls } = fixture({ now: () => timestamps.shift() });
+  await service.execute({
+    tenantId: proposal.tenantId, applicationId: proposal.applicationId,
+    proposalId: proposal.proposalId, proposalVersion: 1, approvalId: approval.approvalId,
+  });
+  const claimInput = calls.find(item => item && item.operationName === "action-approval.execution" && item.now);
+  assert.equal(claimInput.now, "2026-10-31T16:05:00.000Z");
+});
