@@ -135,6 +135,13 @@ export class WorkflowDefinitionPublisher {
         throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_ACTOR_APPLICATION_NOT_ASSIGNED", 403);
       }
 
+      // Serialize version allocation even when the workflow has no prior version row.
+      // The transaction-scoped advisory lock closes the empty-result FOR UPDATE race.
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [context.tenantId + "\\u001f" + context.applicationId + "\\u001f" + snapshot.id],
+      );
+
       const latest = await client.query<{ definition_version: number | string }>(
         `SELECT definition_version FROM eper_workflow_definition_versions
          WHERE tenant_id = $1 AND application_id = $2 AND workflow_id = $3
@@ -153,6 +160,13 @@ export class WorkflowDefinitionPublisher {
       );
       const row = inserted.rows[0];
       if (!row) throw new Error("WORKFLOW_PUBLISH_INSERT_RETURNED_NO_ROW");
+      await client.query(
+        `INSERT INTO eper_workflow_publication_events
+         (tenant_id, application_id, workflow_id, event_type, definition_version, actor_id, correlation_id)
+         VALUES ($1, $2, $3, 'published', $4, $5, $6)`,
+        [context.tenantId, context.applicationId, snapshot.id, definitionVersion,
+          context.principalId, context.correlationId],
+      );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: context.tenantId,
         applicationId: context.applicationId,
