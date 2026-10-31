@@ -30,6 +30,11 @@ test("static wireframes POC is served without requiring API configuration", asyn
     assert.match(html, /\.app\{display:block\}/i, "mobile shell must collapse to one column");
     assert.match(html, /overflow:auto/i, "mobile navigation or table overflow must be contained");
     assert.match(html, /addEventListener/);
+    assert.match(html, /id="themeSwitcher"/, "product theme changer must be present");
+    assert.match(html, /Teal Horizon/, "Teal Horizon must be the default product theme");
+    assert.match(html, /id="roleSwitcher"/, "role preview switcher must be present");
+    assert.match(html, /id="menuToggle"/, "collapsible navigation control must be present");
+    assert.match(html, /sidebar-collapsed/, "collapsed navigation layout must be implemented");
     assert.match(html, /fetch\s*\(/, "support queue calls the protected API only after explicit token entry");
     assert.doesNotMatch(html, /XMLHttpRequest|WebSocket/, "wireframes must not use unapproved transport APIs");
   } finally {
