@@ -167,7 +167,9 @@ test("action approval API remains hidden when its feature flag is disabled", asy
   const previous = saveEnvironment();
   const token = configureEnvironment();
   delete process.env.EPER_ACTION_APPROVAL_API_ENABLED;
-  const server = createAppServer();
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: {}, actorApplicationAssignmentStore: {},
+  });
   try {
     const base = await listen(server);
     const response = await fetch(base + "/admin/applications/app-a/action-proposals", {
