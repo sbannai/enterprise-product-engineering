@@ -524,15 +524,21 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
 
-    const workflowRoleCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/workflow-roles$/.exec(requestUrl.pathname);
-    const workflowRoleDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/workflow-roles\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
-    const workflowRoleAssignments = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/workflow-role-assignments$/.exec(requestUrl.pathname);
-    const workflowPublishRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/publish$/.exec(requestUrl.pathname);
-    const workflowStartRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/instances$/.exec(requestUrl.pathname);
-    const workflowTransitionRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/workflow-instances\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/transitions$/i.exec(requestUrl.pathname);
+    const workflowRoleCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-roles$/.exec(requestUrl.pathname);
+    const workflowRoleDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-roles\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(requestUrl.pathname);
+    const workflowRoleAssignments = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-role-assignments$/.exec(requestUrl.pathname);
+    const workflowPublishRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/publish$/.exec(requestUrl.pathname);
+    const workflowStartRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/instances$/.exec(requestUrl.pathname);
+    const workflowTransitionRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-instances\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/transitions$/i.exec(requestUrl.pathname);
 
     const workflowError = (error: unknown): void => {
       const message = error instanceof Error ? error.message : "WORKFLOW_OPERATION_FAILED";
+      if (error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED") {
+        sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return;
+      }
+      if (message === "REQUEST_BODY_TOO_LARGE") {
+        sendApiError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body is too large."); return;
+      }
       if (error instanceof WorkflowExecutionError || error instanceof WorkflowDefinitionPublishError) {
         sendApiError(request, response, error.statusCode, error.code, "The workflow operation could not be completed.");
         return;
