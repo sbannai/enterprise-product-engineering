@@ -1,4 +1,19 @@
 export type AppearanceMode = "light" | "dark" | "system";
+
+/** EPER approved product-wide default; tenant branding can override only through validated configuration. */
+export const EPER_DEFAULT_THEME = Object.freeze({
+ themeId:"teal-horizon",name:"Teal Horizon",appearance:"light" as const,
+ primaryColor:"#167C80",navigationColor:"#123F43",navigationActiveColor:"#1B6265",
+ accentColor:"#45B5A8",surfaceColor:"#FFFFFF",backgroundColor:"#F6FAF9",
+ textColor:"#183638",mutedTextColor:"#607879",borderColor:"#DCE9E6",focusColor:"#45B5A8",
+});
+export const EPER_THEME_PRESETS = Object.freeze([
+ {themeId:"teal-horizon",name:"Teal Horizon",primaryColor:"#167C80",navigationColor:"#123F43",accentColor:"#45B5A8",surfaceColor:"#FFFFFF",backgroundColor:"#F6FAF9"},
+ {themeId:"emerald-executive",name:"Emerald Executive",primaryColor:"#35A477",navigationColor:"#123D32",accentColor:"#35A477",surfaceColor:"#FFFFFF",backgroundColor:"#F7FAF8"},
+ {themeId:"royal-plum",name:"Royal Plum",primaryColor:"#9B70AE",navigationColor:"#382044",accentColor:"#B18BC0",surfaceColor:"#FFFFFF",backgroundColor:"#FAF8FC"},
+ {themeId:"graphite-copper",name:"Graphite & Copper",primaryColor:"#B87545",navigationColor:"#252525",accentColor:"#C58A60",surfaceColor:"#FFFFFF",backgroundColor:"#FAF8F5"},
+ {themeId:"burgundy-classic",name:"Burgundy Classic",primaryColor:"#B45A70",navigationColor:"#4A1728",accentColor:"#C8798C",surfaceColor:"#FFFFFF",backgroundColor:"#FCF8F9"},
+] as const);
 export interface TenantTheme {
   tenantId:string; themeId:string; name:string; logoUrl?:string;
   primaryColor:string; accentColor:string; surfaceColor:string; textColor:string;
