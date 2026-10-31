@@ -29,5 +29,7 @@ test("support admin queue renders a safe, accessible reply thread and composer",
   assert.ok(html.includes('async function sendReply()'), "reply submission is asynchronous");
   assert.ok(html.includes('"/admin/support/tickets/"+encodeURIComponent(ticketId)+"/replies"'), "ticket ID is encoded in the thread endpoint");
   assert.ok(html.includes('esc(r.body)'), "reply text is HTML-escaped before rendering");
-  assert.ok(html.includes('body:JSON.stringify({body})'), "reply text is submitted as JSON");
+  assert.ok(html.includes('id="replyVisibility"'), "support can select customer-visible or internal-only visibility");
+  assert.ok(html.includes('body:JSON.stringify({body,visibility})'), "reply text and visibility are submitted as JSON");
+  assert.ok(html.includes('r.visibility==="internal"?"Internal note":"Customer-visible"'), "thread labels internal notes distinctly");
 });

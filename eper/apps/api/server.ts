@@ -2090,7 +2090,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           }
           const scopedIdentity = { tenantId: identity.tenantId, applicationId, actorId: identity.actorId, correlationId };
           if (request.method === "GET") {
-            const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId);
+            const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId, "customer");
             if (!replies) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
             sendJson(request, response, 200, { replies }); return;
           }
@@ -2210,16 +2210,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           if (adminTicketMatch[2] === "replies" && (request.method === "GET" || request.method === "POST")) {
             const scopedIdentity = { ...trustedIdentity, applicationId: "eper" };
             if (request.method === "GET") {
-              const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId);
+              const replies = await options.ticketStore.listReplies(scopedIdentity, ticketId, "admin");
               if (!replies) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
               sendJson(request, response, 200, { replies }); return;
             }
             const replyBody = await readJson(request);
+            const visibility = replyBody.visibility === undefined ? "customer_visible" : replyBody.visibility;
             if (typeof replyBody.body !== "string" || !replyBody.body.trim() || replyBody.body.trim().length > 8000 ||
-                Object.keys(replyBody).some((key) => key !== "body")) {
+                (visibility !== "customer_visible" && visibility !== "internal") ||
+                Object.keys(replyBody).some((key) => key !== "body" && key !== "visibility")) {
               sendJson(request, response, 400, { error: "invalid_ticket_reply" }); return;
             }
-            const reply = await options.ticketStore.addReply(scopedIdentity, ticketId, replyBody.body.trim(), "support");
+            const reply = await options.ticketStore.addReply(scopedIdentity, ticketId, replyBody.body.trim(), "support", visibility);
             if (!reply) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
             sendJson(request, response, 201, { reply }); return;
           }
