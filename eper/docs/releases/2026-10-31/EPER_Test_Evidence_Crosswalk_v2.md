@@ -19,7 +19,7 @@
 ## PR #273 same-head CI snapshot
 Head: `690960661e4d0def87d2a527a844e0c9c0678c22`.
 
-At snapshot time: build-and-test, release-candidate, controlled QA re-execution, container health, six-family HTTP smoke, G9 reconciliation and controlled technical UAT simulation reported success. Payment API + PostgreSQL + receipt contracts was still in progress. The 228 requirements / 38 chapter pilot matrix check was skipped on this PR. Therefore do not label the PR fully green and do not treat the skipped pilot matrix as a pass.
+Latest observed on head `21d57243719afa0071c811a46cd0df8cc98db3e3`: dedicated 228 Requirement Pilot Test Matrix run #5443 completed SUCCESS and uploaded artifact `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-41202791142` (artifact ID 13042674658). Six-Family Capability HTTP Smoke, G9 Reconciliation CI and Controlled UAT Technical Simulation also completed SUCCESS. At the latest check, integrated validation, EPER CI, Release Candidate Build, Controlled QA Re-Execution and Container Runtime Smoke were still in progress; Payment API + PostgreSQL + receipt contracts was also still in progress within integrated validation. The integrated-validation workflow's own 228/38 job was skipped, but the separate dedicated pilot-matrix workflow ran and passed. Do not label the whole PR green until all required checks finish.
 
 ## Acceptance gaps to close
 1. Re-run the 228/38 requirement pilot matrix on the documentation head or record a justified skip and separate approved evidence.
