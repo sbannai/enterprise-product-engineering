@@ -167,10 +167,14 @@ CREATE OR REPLACE FUNCTION eper_validate_action_approval_decision()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $function$
-DECLARE grant_approver_id varchar(128);
+DECLARE
+  grant_approver_id varchar(128);
+  grant_expires_at timestamptz;
+  grant_policy_version varchar(64);
 BEGIN
   IF NEW.decision = 'approve' THEN
-    SELECT approver_id INTO grant_approver_id
+    SELECT approver_id, expires_at, policy_version
+      INTO grant_approver_id, grant_expires_at, grant_policy_version
       FROM eper_action_approval_grants
      WHERE tenant_id = NEW.tenant_id
        AND application_id = NEW.application_id
@@ -178,8 +182,10 @@ BEGIN
        AND proposal_id = NEW.proposal_id
        AND proposal_version = NEW.proposal_version
        AND proposal_hash = NEW.proposal_hash;
-    IF grant_approver_id IS NULL OR grant_approver_id <> NEW.actor_id THEN
-      RAISE EXCEPTION 'EPER_ACTION_APPROVAL_ACTOR_MISMATCH'
+    IF grant_approver_id IS NULL OR grant_approver_id <> NEW.actor_id
+      OR grant_expires_at IS DISTINCT FROM NEW.expires_at
+      OR grant_policy_version IS DISTINCT FROM NEW.policy_version THEN
+      RAISE EXCEPTION 'EPER_ACTION_APPROVAL_PROVENANCE_MISMATCH'
         USING ERRCODE = 'integrity_constraint_violation';
     END IF;
   END IF;
