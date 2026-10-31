@@ -132,3 +132,59 @@ test("execution claim uses a fresh timestamp after authorization and controls", 
   const claimInput = calls.find(item => item && item.operationName === "action-approval.execution" && item.now);
   assert.equal(claimInput.now, "2026-10-31T16:05:00.000Z");
 });
+
+
+test("already-succeeded idempotent claim returns without dispatch", async () => {
+  const { service, calls, claim } = fixture({
+    store: {
+      async getProposal() { calls.push("proposal"); return proposal; },
+      async getApproval() { calls.push("approval"); return approval; },
+      async claimExecution() {
+        calls.push("claim");
+        return { ...claim, status: "succeeded", leaseExpiresAt: null, resultHash: "b".repeat(64) };
+      },
+      async finishExecution() { calls.push("finish"); throw new Error("must_not_finish"); },
+    },
+  });
+  const result = await service.execute({
+    tenantId: proposal.tenantId, applicationId: proposal.applicationId,
+    proposalId: proposal.proposalId, proposalVersion: 1, approvalId: approval.approvalId,
+  });
+  assert.equal(result.status, "succeeded");
+  assert.equal(calls.includes("dispatch"), false);
+  assert.equal(calls.includes("finish"), false);
+});
+
+test("claim owned by another worker prevents dispatch", async () => {
+  const { service, calls, claim } = fixture({
+    store: {
+      async getProposal() { calls.push("proposal"); return proposal; },
+      async getApproval() { calls.push("approval"); return approval; },
+      async claimExecution() { calls.push("claim"); return { ...claim, workerId: "worker-other" }; },
+      async finishExecution() { calls.push("finish"); throw new Error("must_not_finish"); },
+    },
+  });
+  await assert.rejects(() => service.execute({
+    tenantId: proposal.tenantId, applicationId: proposal.applicationId,
+    proposalId: proposal.proposalId, proposalVersion: 1, approvalId: approval.approvalId,
+  }), /ACTION_EXECUTION_CLAIM_NOT_OWNED/);
+  assert.equal(calls.includes("dispatch"), false);
+  assert.equal(calls.includes("finish"), false);
+});
+
+test("ambiguous dispatcher failure retains claim and does not mark execution failed", async () => {
+  const { service, calls } = fixture({
+    dispatcher: {
+      async dispatch() {
+        calls.push("dispatch");
+        throw new Error("AMBIGUOUS_PROVIDER_OUTCOME");
+      },
+    },
+  });
+  await assert.rejects(() => service.execute({
+    tenantId: proposal.tenantId, applicationId: proposal.applicationId,
+    proposalId: proposal.proposalId, proposalVersion: 1, approvalId: approval.approvalId,
+  }), /AMBIGUOUS_PROVIDER_OUTCOME/);
+  assert.equal(calls.includes("claim"), true);
+  assert.equal(calls.includes("finish"), false);
+});
