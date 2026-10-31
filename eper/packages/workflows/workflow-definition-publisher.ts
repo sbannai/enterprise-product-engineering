@@ -74,6 +74,8 @@ function validateDefinition(value: WorkflowDefinition): void {
         !["TASK", "FORM", "APPROVAL"].includes(activity.type) ||
         typeof activity.roleId !== "string" || !activity.roleId.trim() ||
         !["workflow:act", "workflow:approve"].includes(activity.permission) ||
+        (activity.type === "APPROVAL" && activity.permission !== "workflow:approve") ||
+        (activity.type !== "APPROVAL" && activity.permission !== "workflow:act") ||
         !Array.isArray(activity.nextActivityIds) || !Array.isArray(activity.fields)) {
       throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_INVALID_ACTIVITY", 400);
     }
