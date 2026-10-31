@@ -13,7 +13,7 @@ export interface TicketAuditEvent {
   applicationId: string;
   actorId: string;
   correlationId: string;
-  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned" | "ticket.replied";
+  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned" | "ticket.replied" | "ticket.severity_classified";
   ticketId: string;
   outcome: "success";
   payload: Record<string, unknown>;
@@ -215,6 +215,44 @@ export class PostgresTicketStore {
         tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
         correlationId: identity.correlationId, action: "ticket.status_changed", ticketId, outcome: "success",
         payload: { newStatus: status },
+      }, client);
+      await client.query("COMMIT");
+      return mapRecord(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Classifies severity; P1 confirmation requires a substantive rationale and records the confirming actor/time. */
+  async classifySeverity(
+    identity: TicketIdentity,
+    ticketId: string,
+    severity: TicketSeverity,
+    rationale?: string,
+  ): Promise<TicketRecord | null> {
+    if (severity === "p1_confirmed" && (!rationale || rationale.trim().length < 20 || rationale.trim().length > 1000)) {
+      throw new Error("ticket_p1_rationale_required");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<Record<string, unknown>>(
+        `UPDATE eper_support_tickets
+         SET severity = $3,
+             p1_rationale = CASE WHEN $3 = 'p1_confirmed' THEN $4 ELSE NULL END,
+             p1_confirmed_by = CASE WHEN $3 = 'p1_confirmed' THEN $5 ELSE NULL END,
+             p1_confirmed_at = CASE WHEN $3 = 'p1_confirmed' THEN now() ELSE NULL END,
+             updated_at = now()
+         WHERE tenant_id = $1 AND id = $2
+         RETURNING *`,
+        [identity.tenantId, ticketId, severity, rationale?.trim() ?? null, identity.actorId],
+      );
+      if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
+      await this.audit({
+        tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.severity_classified", ticketId, outcome: "success",
+        payload: { severity, ...(severity === "p1_confirmed" ? { rationale: rationale!.trim(), confirmedBy: identity.actorId } : {}) },
       }, client);
       await client.query("COMMIT");
       return mapRecord(result.rows[0]);
