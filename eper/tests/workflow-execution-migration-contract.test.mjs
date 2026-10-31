@@ -59,3 +59,16 @@ test("workflow publication lifecycle is append-only, application-scoped and conc
   assert.match(publisher, /pg_advisory_xact_lock\(hashtextextended\(\$1, 0\)\)/);
   assert.match(publisher, /INSERT INTO eper_workflow_publication_events/);
 });
+
+
+test("workflow actor role assignments are application-scoped and forced through RLS", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/003_workflow_actor_role_assignments.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_actor_role_assignment/);
+  assert.match(sql, /PRIMARY KEY \(tenant_id, application_id, actor_id, role_id\)/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id\)/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, actor_id, application_id\)/);
+  assert.match(sql, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /FORCE ROW LEVEL SECURITY/);
+  assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
+  assert.match(sql, /current_setting\('eper\.application_id', true\)/);
+});
