@@ -177,18 +177,28 @@ Migration `002_workflow_publication_events.sql` adds an append-only publication 
 | Workflow definition validation | Existing unit tests and service | FOUNDATION |
 | Role/permission configuration | Existing validation and access checks | FOUNDATION |
 | Tenant-scoped durable admin configuration | Existing PostgreSQL store and integration test | FOUNDATION; deployment mode is opt-in |
-| Application-scoped immutable workflow definition versions | PostgreSQL schema and fail-closed publisher implementation added; exact-head CI pending | IN_PROGRESS |
-| Immutable workflow definition versions | Publisher writes append-only versioned snapshots with SHA-256 digest; exact-head tests pending | IN_PROGRESS |
+| Application-scoped immutable workflow definition versions | Publisher writes immutable snapshots, serializes version allocation with a transaction advisory lock, and appends a publication lifecycle event plus audit record atomically; all 12 workflows passed on `52c5931373c55feb878338236b57f0ff9a408495` | CI-VALIDATED |
+| Immutable workflow definition versions | SHA-256 snapshot digest, append-only definition and publication ledgers, RLS, UPDATE/DELETE/TRUNCATE guards; exact-head build and test suite passed | CI-VALIDATED |
 | Durable workflow instances | Schema foundation added; store/service not implemented | FOUNDATION |
+| Application-scoped actor role assignments | PostgreSQL schema and audited grant/revoke/read store added; application membership is checked under row locks; exact-head build and test suite passed | CI-VALIDATED |
 | Transactional state transitions | Schema foundation added; transition service and atomic audit integration not implemented | NOT_STARTED |
 | Workflow instance audit history | Not evidenced | NOT_STARTED |
 | Restart/concurrency/idempotency behavior | Not evidenced for workflow instances | NOT_STARTED |
 | End-to-end workflow execution API | Not evidenced | NOT_STARTED |
 
-## 12. Publisher increment (implementation added; validation pending)
+## 12. Publisher increment (CI-validated)
 
 `packages/workflows/workflow-definition-publisher.ts` now implements the first publisher slice. It accepts tenant, application, actor and correlation identity only through a trusted server-side context; validates an active workflow definition; sets the tenant/application RLS context; checks active tenant-application ownership and actor-application assignment using `FOR SHARE` locks in the same transaction; assigns the next per-workflow version; stores a canonical SHA-256 digest and immutable snapshot; and appends the audit event in the same transaction. Assignment lookup errors and missing/revoked assignments fail closed. Tests cover successful publication, revoked tenant ownership, missing actor assignment, lookup failure and invalid definitions.
 
-The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. It must not be treated as production-ready. Exact-head typecheck/build/full-test CI is required before this increment is considered validated.
+The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. The exact PR head `52c5931373c55feb878338236b57f0ff9a408495` passed all 12 associated GitHub Actions workflows, including typecheck/build/full tests, repeatable PostgreSQL migrations, release candidate build, six-family HTTP smoke, 228-requirement pilot matrix, QA/UAT technical simulations, G9 reconciliation and integrated validation. This is technical CI evidence only; it is not a production deployment or Business UAT authorization.
 
 **Exit criterion:** Do not label the workflow execution USP as IMPLEMENTED or TESTED until the full vertical slice and the integration evidence above exist on one exact commit.
+
+
+## 13. Application-scoped role assignment increment (CI-validated)
+
+The branch adds `003_workflow_actor_role_assignments.sql` and `PostgresWorkflowActorRoleAssignmentStore`. Role memberships are keyed by tenant, application, actor and role; the schema enforces foreign keys to tenant/application and actor/application membership and forces tenant/application RLS. Grants re-check active tenant/application and actor/application assignments under `FOR SHARE` locks in the same transaction, use optimistic version checks and an advisory lock, and append the grant/revoke audit event atomically. Reads establish tenant/application RLS settings transaction-locally so pooled connections do not retain a prior caller's scope.
+
+Unit and migration contract tests cover successful grant/audit, inactive actor denial, transaction-local RLS context, application-scoped constraints and publication-ledger controls. The full exact-head test suite and all 12 GitHub Actions workflows passed on `52c5931373c55feb878338236b57f0ff9a408495`.
+
+**Remaining boundary:** the role-assignment store is not yet wired to an admin API or workflow transition authorization. The execution service must query this store for the activity's required role on every transition. Workflow instance persistence, transition/idempotency handling, restart recovery and API integration remain outstanding.
