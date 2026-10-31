@@ -264,11 +264,26 @@ export class PostgresCampaignSchedulerStore {
           [tenantId, applicationId, input.scheduleId],
         );
         if (dispatchStarted.rows.length) throw new Error("CAMPAIGN_DISPATCH_ALREADY_STARTED");
-        await client.query(
+        const cancelledExecutions = await client.query<{ id: string }>(
           `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now(), locked_at=NULL, locked_by=NULL
-           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')`,
+           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')
+           RETURNING id`,
           [tenantId, applicationId, input.scheduleId],
         );
+        for (const execution of cancelledExecutions.rows) {
+          try {
+            await appendAuditEventInTransaction(client, {
+              tenantId, applicationId, environment: this.auditEnvironment,
+              actorType: "human", actorId,
+              action: "campaign_execution_cancelled", outcome: "success",
+              reasonCode: "CAMPAIGN_SCHEDULE_CANCELLED_BEFORE_DISPATCH_FENCE",
+              resourceType: "campaign-execution", resourceId: String(execution.id),
+              source: "api", operationName: "campaign.execution.cancel",
+              serviceVersion: this.serviceVersion,
+              payload: { resultingStatus: "cancelled", scheduleId: input.scheduleId },
+            });
+          } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+        }
       }
       const schedule = mapSchedule(result.rows[0]);
       await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId, action: "campaign_schedule_" + input.action, resourceId: schedule.id, operationName: "campaign.schedule." + input.action, payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus } });
