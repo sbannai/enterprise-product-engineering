@@ -1,5 +1,5 @@
 /**
- * Host-owned authorization contract for action proposal review.
+ * Host-owned authorization contract for action proposal review and execution.
  *
  * EPER deliberately does not invent canonical approver roles, delegation,
  * thresholds, dual-control policy or approval validity. The host must supply
@@ -11,7 +11,8 @@ export type ActionApprovalAuthorizationOperation =
   | "create_proposal"
   | "approve_proposal"
   | "reject_proposal"
-  | "revoke_approval";
+  | "revoke_approval"
+  | "execute_proposal";
 
 export interface ActionApprovalAuthorizationRequest {
   tenantId: string;
