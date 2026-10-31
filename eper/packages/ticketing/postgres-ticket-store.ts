@@ -40,6 +40,11 @@ function mapRecord(row: Record<string, unknown>): TicketRecord {
     ...(typeof row.p1_rationale === "string" ? { p1Rationale: row.p1_rationale } : {}),
     ...(typeof row.p1_confirmed_by === "string" ? { p1ConfirmedBy: row.p1_confirmed_by } : {}),
     ...(row.p1_confirmed_at ? { p1ConfirmedAt: new Date(String(row.p1_confirmed_at)).toISOString() } : {}),
+    ...(typeof row.duplicate_disposition === "string" ? { duplicateDisposition: row.duplicate_disposition as TicketRecord["duplicateDisposition"] } : {}),
+    ...(typeof row.canonical_ticket_id === "string" ? { canonicalTicketId: row.canonical_ticket_id } : {}),
+    ...(typeof row.duplicate_rationale === "string" ? { duplicateRationale: row.duplicate_rationale } : {}),
+    ...(typeof row.duplicate_disposition_by === "string" ? { duplicateDispositionBy: row.duplicate_disposition_by } : {}),
+    ...(row.duplicate_disposition_at ? { duplicateDispositionAt: new Date(String(row.duplicate_disposition_at)).toISOString() } : {}),
     status: row.status as TicketStatus, severity: row.severity as TicketSeverity,
     assignedTo: typeof row.assigned_to === "string" ? row.assigned_to : null,
     createdAt: new Date(String(row.created_at)).toISOString(), updatedAt: new Date(String(row.updated_at)).toISOString(),
@@ -272,6 +277,75 @@ export class PostgresTicketStore {
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
+    } finally { client.release(); }
+  }
+
+  /** Classifies a ticket as distinct, duplicate of a same-tenant canonical ticket, or pending review. */
+  async setDuplicateDisposition(
+    identity: TicketIdentity,
+    ticketId: string,
+    disposition: "needs_review" | "distinct" | "duplicate",
+    canonicalTicketId: string | null,
+    rationale: string,
+  ): Promise<TicketRecord | null> {
+    if (!rationale || rationale.trim().length < 20 || rationale.trim().length > 1000) {
+      throw new Error("ticket_duplicate_rationale_required");
+    }
+    if (disposition === "duplicate" ? !canonicalTicketId || canonicalTicketId === ticketId : canonicalTicketId !== null) {
+      throw new Error("ticket_duplicate_canonical_invalid");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query<Record<string, unknown>>(
+        "SELECT id, application_id, duplicate_disposition FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+        [identity.tenantId, ticketId],
+      );
+      if (!current.rows[0]) { await client.query("ROLLBACK"); return null; }
+      if (disposition === "duplicate") {
+        const canonical = await client.query<Record<string, unknown>>(
+          "SELECT id, duplicate_disposition FROM eper_support_tickets WHERE tenant_id = $1 AND application_id = $2 AND id = $3 FOR UPDATE",
+          [identity.tenantId, current.rows[0].application_id, canonicalTicketId],
+        );
+        if (!canonical.rows[0] || canonical.rows[0].duplicate_disposition === "duplicate") {
+          throw new Error("ticket_duplicate_canonical_invalid");
+        }
+      }
+      const result = await client.query<Record<string, unknown>>(
+        `UPDATE eper_support_tickets
+         SET duplicate_disposition = $3, canonical_ticket_id = $4,
+             duplicate_rationale = $5, duplicate_disposition_by = $6,
+             duplicate_disposition_at = now(), updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [identity.tenantId, ticketId, disposition, canonicalTicketId, rationale.trim(), identity.actorId],
+      );
+      if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
+      await this.audit({
+        tenantId: identity.tenantId, applicationId: String(result.rows[0].application_id), actorId: identity.actorId,
+        correlationId: identity.correlationId, action: "ticket.duplicate_disposition_set", ticketId, outcome: "success",
+        payload: { disposition, canonicalTicketId, rationale: rationale.trim() },
+      }, client);
+      await client.query("COMMIT");
+      return mapRecord(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Counts only confirmed P1 defects with evidence and an explicit distinct disposition. */
+  async countDistinctConfirmedP1(tenantId: string): Promise<number> {
+    if (!tenantId || tenantId !== tenantId.trim()) throw new Error("ticket_tenant_scope_required");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ count: string | number }>(
+        `SELECT count(*)::int AS count FROM eper_support_tickets
+         WHERE tenant_id = $1 AND type = 'defect' AND severity = 'p1_confirmed'
+           AND duplicate_disposition = 'distinct'
+           AND evidence_reference IS NOT NULL AND length(trim(evidence_reference)) > 0`,
+        [tenantId],
+      );
+      return Number(result.rows[0]?.count ?? 0);
     } finally { client.release(); }
   }
 

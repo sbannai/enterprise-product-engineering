@@ -32,6 +32,11 @@ export interface TicketRecord extends CreateTicketInput {
   p1Rationale?: string | null;
   p1ConfirmedBy?: string | null;
   p1ConfirmedAt?: string | null;
+  duplicateDisposition?: "needs_review" | "distinct" | "duplicate";
+  canonicalTicketId?: string | null;
+  duplicateRationale?: string | null;
+  duplicateDispositionBy?: string | null;
+  duplicateDispositionAt?: string | null;
   assignedTo: string | null;
   createdAt: string;
   updatedAt: string;
