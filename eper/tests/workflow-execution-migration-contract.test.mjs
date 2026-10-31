@@ -31,6 +31,10 @@ test("workflow execution migration enforces tenant/application row-level securit
   assert.match(sql, /current_setting\(''eper\.tenant_id'', true\)/);
   assert.match(sql, /current_setting\(''eper\.application_id'', true\)/);
   assert.match(sql, /WITH CHECK/);
+  assert.match(sql, /EPER_WORKFLOW_LEDGER_APPEND_ONLY/);
+  assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_definition_versions/);
+  assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_transitions/);
+  assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_idempotency/);
   assert.doesNotMatch(sql, /eper_schema_migrations/);
   const runner = await readFile(new URL("../scripts/migrate-workflows.mjs", import.meta.url), "utf8");
   assert.match(runner, /eper_workflow_schema_migrations/);
