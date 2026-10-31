@@ -64,11 +64,13 @@ CREATE INDEX IF NOT EXISTS eper_workflow_outbox_delivery_pending_idx
   ON eper_workflow_outbox_delivery (tenant_id, application_id, available_at, event_id)
   WHERE delivery_status IN ('pending','processing');
 
-CREATE OR REPLACE TRIGGER eper_workflow_outbox_events_append_only
+DROP TRIGGER IF EXISTS eper_workflow_outbox_events_append_only ON eper_workflow_outbox_events;
+CREATE TRIGGER eper_workflow_outbox_events_append_only
   BEFORE UPDATE OR DELETE ON eper_workflow_outbox_events
   FOR EACH ROW EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
 
-CREATE OR REPLACE TRIGGER eper_workflow_outbox_events_no_truncate
+DROP TRIGGER IF EXISTS eper_workflow_outbox_events_no_truncate ON eper_workflow_outbox_events;
+CREATE TRIGGER eper_workflow_outbox_events_no_truncate
   BEFORE TRUNCATE ON eper_workflow_outbox_events
   FOR EACH STATEMENT EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
 
