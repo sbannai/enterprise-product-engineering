@@ -46,8 +46,8 @@ export interface CampaignExecutionRecord {
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const TZ_PATTERN = /^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+.-]+)*$/;
 
-function required(value: unknown, code: string): string {
-  if (typeof value !== "string" || !value.trim() || value.length > 128) throw new Error(code);
+function required(value: unknown, code: string, maxLength = 128): string {
+  if (typeof value !== "string" || !value.trim() || value.length > maxLength) throw new Error(code);
   return value.trim();
 }
 function mapSchedule(row: Record<string, unknown>): CampaignScheduleRecord {
@@ -325,7 +325,8 @@ export class PostgresCampaignSchedulerStore {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const eventType = required(input.eventType, "CAMPAIGN_EVENT_TYPE_REQUIRED");
-    const eventId = required(input.eventId, "CAMPAIGN_EVENT_ID_REQUIRED");
+    const eventId = typeof input.eventId === "string" ? input.eventId.trim() : "";
+    if (!eventId) throw new Error("CAMPAIGN_EVENT_ID_REQUIRED");
     if (eventType.length > 128 || eventId.length > 256) throw new Error("CAMPAIGN_EVENT_IDENTITY_INVALID");
     const occurredAt = new Date(input.occurredAt);
     if (!Number.isFinite(occurredAt.getTime())) throw new Error("CAMPAIGN_EVENT_OCCURRED_AT_INVALID");
