@@ -13,7 +13,7 @@ const input = {
   correlationId: "corr-01",
 };
 
-function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus = "active", priorVersion = null } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus = "active", permissionAllowed = true, priorVersion = null } = {}) {
   const calls = [];
   const now = "2026-10-31T11:55:00.000Z";
   const row = {
@@ -25,6 +25,7 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus =
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("SELECT EXISTS")) return { rows: [{ allowed: permissionAllowed }], rowCount: 1 };
       if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
         return { rows: [{ role_id: "finance-approver" }, { role_id: "expense-reviewer" }], rowCount: 2 };
       }
@@ -95,4 +96,35 @@ test("role grant rejects disabled application roles", async () => {
   );
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")), false);
+});
+
+
+test("permission check requires active actor, tenant, role and explicit permission", async () => {
+  const { calls, pool } = fixture();
+  const allowed = await new PostgresWorkflowActorRoleAssignmentStore(pool)
+    .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "workflow:approve");
+  assert.equal(allowed, true);
+  const sql = calls.find(call => call.sql.includes("SELECT EXISTS"))?.sql ?? "";
+  assert.ok(sql.includes("JOIN eper_actor_application_assignment"));
+  assert.ok(sql.includes("JOIN eper_tenant_application_assignment"));
+  assert.ok(sql.includes("JOIN eper_workflow_role_definition"));
+  assert.ok(sql.includes("rd.permissions ? $5"));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(", true)")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("permission check denies absent permission and rejects unknown permission keys", async () => {
+  const denied = fixture({ permissionAllowed: false });
+  assert.equal(
+    await new PostgresWorkflowActorRoleAssignmentStore(denied.pool)
+      .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "workflow:approve"),
+    false,
+  );
+  const invalid = fixture();
+  await assert.rejects(
+    new PostgresWorkflowActorRoleAssignmentStore(invalid.pool)
+      .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "workflow:root"),
+    /WORKFLOW_ROLE_ASSIGNMENT_PERMISSION_INVALID/,
+  );
+  assert.equal(invalid.calls.length, 0);
 });
