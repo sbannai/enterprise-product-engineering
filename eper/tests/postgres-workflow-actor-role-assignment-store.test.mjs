@@ -82,6 +82,7 @@ test("role assignment reads set tenant/application RLS context transaction-local
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.sql.includes(', true)')));
   assert.ok(calls.some(call => call.sql.includes("JOIN eper_actor_application_assignment") && call.sql.includes("assignment_status = 'active'")));
   assert.ok(calls.some(call => call.sql.includes("JOIN eper_tenant_application_assignment") && call.sql.includes("assignment_status = 'active'")));
+  assert.ok(calls.some(call => call.sql.includes("JOIN eper_workflow_role_definition") && call.sql.includes("role_status = 'active'")));
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
 
