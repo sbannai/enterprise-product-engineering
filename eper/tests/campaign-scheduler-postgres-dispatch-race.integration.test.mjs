@@ -71,16 +71,22 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
     const blocker = await pool.connect();
     try {
       await blocker.query("BEGIN");
-      await blocker.query(
+      const blockerRow = await blocker.query(
         "SELECT id FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3 FOR UPDATE",
         [tenantId, applicationId, scheduleId],
       );
+      assert.equal(blockerRow.rowCount, 1, "Expected the competing pause transaction to lock the schedule row");
+      const blockerPidResult = await blocker.query("SELECT pg_backend_pid() AS pid");
+      const blockerPid = Number(blockerPidResult.rows[0]?.pid);
+      assert.ok(Number.isInteger(blockerPid) && blockerPid > 0, "Expected a PostgreSQL backend PID for the blocker");
+
       const dispatchPromise = store.beginExecutionDispatch({
         tenantId, applicationId, executionId, workerId: "race-worker",
       });
 
-      // Do not rely on a fixed sleep: prove PostgreSQL has the dispatch transaction
-      // waiting on a lock before committing the competing pause.
+      // Do not rely on a fixed sleep or exact SQL-text formatting. Prove the
+      // dispatch transaction is blocked by this transaction using PostgreSQL's
+      // lock graph before committing the competing pause.
       const deadline = Date.now() + 5000;
       let dispatchIsWaiting = false;
       while (Date.now() < deadline) {
@@ -89,10 +95,12 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
           FROM pg_stat_activity
           WHERE datname = current_database()
             AND pid <> pg_backend_pid()
-            AND wait_event_type = 'Lock'
-            AND query LIKE '%FOR UPDATE OF s, e%'
+            AND state = 'active'
+            AND $1::integer = ANY(pg_blocking_pids(pid))
+            AND query ILIKE '%eper_campaign_schedules%'
+            AND query ILIKE '%eper_campaign_executions%'
           LIMIT 1
-        `);
+        `, [blockerPid]);
         if (waiting.rowCount > 0) {
           dispatchIsWaiting = true;
           break;
