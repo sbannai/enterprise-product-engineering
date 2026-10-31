@@ -41,6 +41,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://eper:eper_integrated_ci@localhost:5432/eper_integrated_test
+      EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: postgres://eper:eper_integrated_ci@localhost:5432/eper_integrated_test
     defaults:
       run:
         working-directory: eper
@@ -60,6 +61,8 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration schema to ephemeral PostgreSQL
         run: npm run migrate:audit
+      - name: Apply campaign scheduler schema and dispatch-fence migrations to ephemeral PostgreSQL
+        run: npm run migrate:campaign-scheduler
       - name: Apply ticketing schema to ephemeral PostgreSQL
         run: npm run migrate:ticketing
       - name: Verify ticketing schema migrations are repeatable
