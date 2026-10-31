@@ -161,17 +161,23 @@ Use standard API response/error envelopes already established in EPER. Return 40
 7. Review migration rollback/forward safety and confirm no existing configuration/API behavior regresses.
 8. Merge only when the exact PR head has passing required checks and code review; keep Business UAT blocked until the existing entry gates are evidenced.
 
-## 10. Current evidence disposition
+## 10. First implementation increment (schema foundation)
+
+The branch now includes `packages/workflows/migrations/001_workflow_execution.sql`, a dedicated `migrate:workflows` command, and a migration contract test. The migration creates application-scoped immutable definition-version records, durable instance projections, append-only transition records, and idempotency response records. It includes composite tenant/application foreign keys, pins the exact definition digest in each instance, binds idempotency rows to the matching instance/transition pair, and forces tenant/application row-level security using the `eper.tenant_id` and `eper.application_id` session settings.
+
+This is a schema foundation only. The publisher, execution store/service, trusted identity wiring, transaction/audit integration, route feature flag, and live PostgreSQL restart/concurrency tests are not implemented by this increment. The migration has not yet been applied to a live database; the contract test and exact-head CI must pass before this increment is considered validated.
+
+## 11. Current evidence disposition
 
 | Capability | Current evidence | Disposition |
 |---|---|---|
 | Workflow definition validation | Existing unit tests and service | FOUNDATION |
 | Role/permission configuration | Existing validation and access checks | FOUNDATION |
 | Tenant-scoped durable admin configuration | Existing PostgreSQL store and integration test | FOUNDATION; deployment mode is opt-in |
-| Application-scoped immutable workflow definition versions | Not evidenced; current admin config is tenant/resource scoped only | BLOCKED |
+| Application-scoped immutable workflow definition versions | Schema foundation added; publisher and trusted assignment enforcement not implemented | FOUNDATION |
 | Immutable workflow definition versions | Not evidenced | NOT_STARTED |
-| Durable workflow instances | Not evidenced | NOT_STARTED |
-| Transactional state transitions | Not evidenced | NOT_STARTED |
+| Durable workflow instances | Schema foundation added; store/service not implemented | FOUNDATION |
+| Transactional state transitions | Schema foundation added; transition service and atomic audit integration not implemented | NOT_STARTED |
 | Workflow instance audit history | Not evidenced | NOT_STARTED |
 | Restart/concurrency/idempotency behavior | Not evidenced for workflow instances | NOT_STARTED |
 | End-to-end workflow execution API | Not evidenced | NOT_STARTED |
