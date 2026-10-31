@@ -320,6 +320,10 @@ export class PostgresWorkflowExecutionService {
         throw new WorkflowExecutionError("WORKFLOW_EXECUTION_WORKFLOW_NOT_PUBLISHED", 404);
       }
       const definition = parseDefinition(published.definition);
+      if (definition.status !== "ACTIVE" || definition.id !== input.workflowId ||
+          digest(definition) !== published.definition_digest.trim()) {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_PUBLISHED_DEFINITION_INTEGRITY_FAILED", 500);
+      }
       const firstActivity = definition.activities[0];
       if (!firstActivity) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_DEFINITION_HAS_NO_ACTIVITIES", 422);
       validateActivityPayload(firstActivity.fields, data);
@@ -442,6 +446,9 @@ export class PostgresWorkflowExecutionService {
       const definitionRow = definitionResult.rows[0];
       if (!definitionRow) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_PINNED_DEFINITION_NOT_FOUND", 500);
       const definition = parseDefinition(definitionRow.definition);
+      if (definition.id !== instance.workflow_id || digest(definition) !== instance.definition_digest.trim()) {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_PINNED_DEFINITION_INTEGRITY_FAILED", 500);
+      }
       const current = definition.activities.find(activity => activity.id === instance.current_activity_id);
       if (!current) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_CURRENT_ACTIVITY_NOT_FOUND", 500);
 
