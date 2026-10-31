@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { PostgresWorkflowExecutionService } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
 
 const definition = {
@@ -20,7 +21,14 @@ const context = {
   tenantId: "tenant-01", applicationId: "app-01", actorId: "actor-01",
   correlationId: "corr-01", environment: "sandbox",
 };
-const digest = "a".repeat(64);
+function canonical(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value && typeof value === "object") return "{" + Object.entries(value)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => JSON.stringify(key) + ":" + canonical(item)).join(",") + "}";
+  return JSON.stringify(value) ?? "null";
+}
+const digest = createHash("sha256").update(canonical(definition)).digest("hex");
 const now = "2026-10-31T12:05:00.000Z";
 
 function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed = true } = {}) {
