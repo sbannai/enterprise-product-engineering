@@ -267,3 +267,115 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       await pool.end();
     }
   });
+
+
+test("PostgreSQL action approval ledger enforces scope, immutable decisions and one-use execution claims",
+  { skip: !databaseConfigured },
+  async () => {
+    const pool = createPostgresPaymentPool();
+    const suffix = randomUUID();
+    const tenantId = "approval-tenant-" + suffix;
+    const applicationId = "approval-app-" + suffix;
+    const proposalId = "proposal-" + suffix;
+    const approvalId = "approval-" + suffix;
+    const executionId = randomUUID();
+    const decisionId = randomUUID();
+    const eventId = randomUUID();
+    const payloadHash = "a".repeat(64);
+    const idempotencyKey = "approval-idem-" + suffix;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+      await client.query(
+        `INSERT INTO eper_action_proposals (
+          tenant_id, application_id, proposal_id, proposal_version, action_type,
+          side_effect_class, target_type, target_id, requested_by, requester_type,
+          payload, payload_hash, idempotency_key, correlation_id, created_at, expires_at
+        ) VALUES ($1,$2,$3,1,'crm.contact.update','crm_mutation','contact','contact-1',
+          'requester-1','human','{"name":"Updated"}'::jsonb,$4,$5,'corr-1',$6,$7)`,
+        [tenantId, applicationId, proposalId, payloadHash, idempotencyKey, now.toISOString(), expiresAt.toISOString()],
+      );
+      await client.query(
+        `INSERT INTO eper_action_approval_grants (
+          tenant_id, application_id, approval_id, proposal_id, proposal_version,
+          proposal_hash, requested_by, approver_id, approver_type, decided_at, expires_at, policy_version
+        ) VALUES ($1,$2,$3,$4,1,$5,'requester-1','approver-1','human',$6,$7,'policy-v1')`,
+        [tenantId, applicationId, approvalId, proposalId, payloadHash, now.toISOString(), expiresAt.toISOString()],
+      );
+      await client.query(
+        `INSERT INTO eper_action_approval_decisions (
+          tenant_id, application_id, decision_id, proposal_id, proposal_version,
+          proposal_hash, approval_id, decision, actor_id, actor_type, decided_at, expires_at, policy_version
+        ) VALUES ($1,$2,$3,$4,1,$5,$6,'approve','approver-1','human',$7,$8,'policy-v1')`,
+        [tenantId, applicationId, decisionId, proposalId, payloadHash, approvalId, now.toISOString(), expiresAt.toISOString()],
+      );
+      await client.query(
+        `INSERT INTO eper_action_execution_claims (
+          tenant_id, application_id, execution_id, proposal_id, proposal_version,
+          proposal_hash, approval_id, idempotency_key, execution_status,
+          attempt_count, worker_id, lease_expires_at
+        ) VALUES ($1,$2,$3,$4,1,$5,$6,$7,'processing',1,'worker-1',$8)`,
+        [tenantId, applicationId, executionId, proposalId, payloadHash, approvalId, idempotencyKey, expiresAt.toISOString()],
+      );
+      await client.query(
+        `INSERT INTO eper_action_execution_events (
+          tenant_id, application_id, event_id, execution_id, approval_id, event_type, worker_id
+        ) VALUES ($1,$2,$3,$4,$5,'claimed','worker-1')`,
+        [tenantId, applicationId, eventId, executionId, approvalId],
+      );
+
+      await assert.rejects(
+        client.query("UPDATE eper_action_proposals SET payload = '{}'::jsonb WHERE tenant_id = $1 AND application_id = $2 AND proposal_id = $3", [tenantId, applicationId, proposalId]),
+        /EPER_ACTION_LEDGER_APPEND_ONLY/,
+      );
+      await assert.rejects(
+        client.query("UPDATE eper_action_approval_grants SET expires_at = NOW() WHERE tenant_id = $1 AND application_id = $2 AND approval_id = $3", [tenantId, applicationId, approvalId]),
+        /EPER_ACTION_LEDGER_APPEND_ONLY/,
+      );
+      await assert.rejects(
+        client.query("UPDATE eper_action_approval_decisions SET decision = 'revoke' WHERE tenant_id = $1 AND application_id = $2 AND decision_id = $3", [tenantId, applicationId, decisionId]),
+        /EPER_ACTION_LEDGER_APPEND_ONLY/,
+      );
+      await assert.rejects(
+        client.query("UPDATE eper_action_execution_events SET event_type = 'failed' WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3", [tenantId, applicationId, eventId]),
+        /EPER_ACTION_LEDGER_APPEND_ONLY/,
+      );
+      await assert.rejects(
+        client.query("UPDATE eper_action_execution_claims SET approval_id = 'different-approval' WHERE tenant_id = $1 AND application_id = $2 AND execution_id = $3", [tenantId, applicationId, executionId]),
+        /EPER_ACTION_EXECUTION_IDENTITY_IMMUTABLE/,
+      );
+      await assert.rejects(
+        client.query(
+          `INSERT INTO eper_action_execution_claims (
+            tenant_id, application_id, execution_id, proposal_id, proposal_version,
+            proposal_hash, approval_id, idempotency_key, execution_status,
+            attempt_count, worker_id, lease_expires_at
+          ) VALUES ($1,$2,$3,$4,1,$5,$6,$7,'processing',1,'worker-2',$8)`,
+          [tenantId, applicationId, randomUUID(), proposalId, payloadHash, approvalId, idempotencyKey, expiresAt.toISOString()],
+        ),
+        /duplicate key|unique constraint/i,
+      );
+
+      await client.query("COMMIT");
+
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", ["different-tenant-" + suffix]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+      const hidden = await client.query(
+        "SELECT proposal_id FROM eper_action_proposals WHERE tenant_id = $1 AND application_id = $2",
+        [tenantId, applicationId],
+      );
+      assert.equal(hidden.rows.length, 0, "RLS must hide another tenant's proposal");
+      await client.query("ROLLBACK");
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  });
