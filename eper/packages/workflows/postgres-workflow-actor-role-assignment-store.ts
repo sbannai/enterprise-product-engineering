@@ -5,6 +5,11 @@ import {
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
 
+const WORKFLOW_ROLE_PERMISSION_KEYS = [
+  "workflow:view", "workflow:act", "workflow:approve",
+  "workflow:admin", "role:assign", "access:manage",
+] as const;
+
 export interface WorkflowActorRoleAssignment {
   tenantId: string;
   applicationId: string;
@@ -147,6 +152,53 @@ export class PostgresWorkflowActorRoleAssignmentStore {
     roleId: string,
   ): Promise<boolean> {
     return (await this.listActiveRoleIds(tenantId, applicationId, actorId)).includes(roleId);
+  }
+
+  /** Checks current role membership and permission in one tenant/application-scoped query. */
+  async hasPermission(
+    tenantId: string,
+    applicationId: string,
+    actorId: string,
+    roleId: string,
+    permission: string,
+  ): Promise<boolean> {
+    for (const [name, value] of Object.entries({ tenantId, applicationId, actorId, roleId })) {
+      validateId(value, name);
+    }
+    if (!(WORKFLOW_ROLE_PERMISSION_KEYS as readonly string[]).includes(permission)) {
+      throw new Error("WORKFLOW_ROLE_ASSIGNMENT_PERMISSION_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+      const result = await client.query<{ allowed: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM eper_workflow_actor_role_assignment r
+           JOIN eper_actor_application_assignment aa
+             ON aa.tenant_id = r.tenant_id AND aa.application_id = r.application_id
+            AND aa.actor_id = r.actor_id AND aa.assignment_status = 'active'
+           JOIN eper_tenant_application_assignment ta
+             ON ta.tenant_id = r.tenant_id AND ta.application_id = r.application_id
+            AND ta.assignment_status = 'active'
+           JOIN eper_workflow_role_definition rd
+             ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+            AND rd.role_id = r.role_id AND rd.role_status = 'active'
+          WHERE r.tenant_id = $1 AND r.application_id = $2
+            AND r.actor_id = $3 AND r.role_id = $4
+            AND r.assignment_status = 'active' AND rd.permissions ? $5
+         ) AS allowed`,
+        [tenantId, applicationId, actorId, roleId, permission],
+      );
+      await client.query("COMMIT");
+      return result.rows[0]?.allowed === true;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async assign(input: ChangeWorkflowActorRoleAssignmentInput): Promise<WorkflowActorRoleAssignment> {
