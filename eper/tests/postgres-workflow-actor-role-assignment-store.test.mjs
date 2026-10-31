@@ -13,7 +13,7 @@ const input = {
   correlationId: "corr-01",
 };
 
-function fixture({ tenantStatus = "active", actorStatus = "active", priorVersion = null } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus = "active", priorVersion = null } = {}) {
   const calls = [];
   const now = "2026-10-31T11:55:00.000Z";
   const row = {
@@ -27,6 +27,9 @@ function fixture({ tenantStatus = "active", actorStatus = "active", priorVersion
       calls.push({ sql, values });
       if (sql.includes("eper_tenant_application_assignment")) {
         return { rows: [{ assignment_status: tenantStatus }], rowCount: 1 };
+      }
+      if (sql.includes("eper_workflow_role_definition")) {
+        return { rows: [{ role_status: roleStatus }], rowCount: 1 };
       }
       if (sql.includes("eper_actor_application_assignment")) {
         return { rows: [{ assignment_status: actorStatus }], rowCount: 1 };
@@ -78,4 +81,15 @@ test("role assignment reads set tenant/application RLS context transaction-local
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(', true)')));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.sql.includes(', true)')));
   assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+
+test("role grant rejects disabled application roles", async () => {
+  const { calls, pool } = fixture({ roleStatus: "disabled" });
+  await assert.rejects(
+    new PostgresWorkflowActorRoleAssignmentStore(pool).assign(input),
+    /WORKFLOW_ROLE_ASSIGNMENT_ROLE_NOT_ACTIVE/,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")), false);
 });
