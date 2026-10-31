@@ -597,7 +597,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       };
       const authorize = async (
         operation: ActionApprovalAuthorizationOperation,
-        proposal?: { proposalId?: string; proposalVersion?: number; payloadHash?: string; actionType?: string; sideEffectClass?: string; targetType?: string; targetId?: string },
+        proposal?: { proposalId?: string; proposalVersion?: number; proposalHash?: string; approvalId?: string; actionType?: string; sideEffectClass?: string; targetType?: string; targetId?: string },
       ) => authorizer({
         tenantId: identity.tenantId, applicationId, actorId: identity.actorId, operation,
         ...(proposal ? proposal : {}),
@@ -668,7 +668,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           if (!proposal) { sendApiError(request, response, 404, "ACTION_PROPOSAL_NOT_FOUND", "The action proposal was not found."); return; }
           const permission = await authorize("view_proposal", {
             proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
-            payloadHash: proposal.payloadHash, actionType: proposal.actionType,
+            proposalHash: proposal.payloadHash, actionType: proposal.actionType,
             sideEffectClass: proposal.sideEffectClass, targetType: proposal.targetType, targetId: proposal.targetId,
           });
           if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_ACCESS_DENIED", "You are not allowed to view this proposal."); return; }
@@ -699,7 +699,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             : body.decision === "reject" ? "reject_proposal" : "revoke_approval";
           const permission = await authorize(operation, {
             proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
-            payloadHash: proposal.payloadHash, actionType: proposal.actionType,
+            proposalHash: proposal.payloadHash, approvalId: body.decision === "revoke" ? body.approvalId as string : undefined,
+            actionType: proposal.actionType,
             sideEffectClass: proposal.sideEffectClass, targetType: proposal.targetType, targetId: proposal.targetId,
           });
           if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_DECISION_DENIED", "You are not allowed to record this decision."); return; }
