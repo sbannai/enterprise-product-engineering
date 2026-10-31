@@ -1,5 +1,6 @@
 import type { AuditSqlPool } from "../audit/audit-event-store.js";
-import type { WorkflowOutboxContext, WorkflowOutboxContextSource } from "./workflow-outbox-process.js";
+import type { WorkflowOutboxContext } from "./postgres-workflow-outbox-store.js";
+import type { WorkflowOutboxContextSource } from "./workflow-outbox-process.js";
 
 interface ActiveAssignmentRow { tenant_id: string; application_id: string; }
 
