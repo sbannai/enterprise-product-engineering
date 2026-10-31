@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { runWorkflowOutboxWorkerHost } from "../dist/packages/workflows/workflow-outbox-host.js";
 
-function fakeSignalHost({ signalDuringRegistration } = {}) {
+function fakeSignalHost({ signalDuringRegistration, failOnRegistration } = {}) {
   const listeners = new Map();
   return {
     listeners,
     on(signal, listener) {
+      if (signal === failOnRegistration) throw new Error("registration failed");
       listeners.set(signal, listener);
       if (signal === signalDuringRegistration) listener();
     },
@@ -38,6 +39,19 @@ test("host maps SIGINT to graceful runtime cancellation", async () => {
     workerId: "worker-01",
   }, host);
   assert.equal(connects, 0);
+  assert.equal(host.listeners.size, 0);
+});
+
+test("host removes SIGINT listener when SIGTERM registration fails", async () => {
+  const host = fakeSignalHost({ failOnRegistration: "SIGTERM" });
+  await assert.rejects(
+    runWorkflowOutboxWorkerHost({
+      pool: {},
+      dispatcher: { async dispatch() {} },
+      workerId: "worker-01",
+    }, host),
+    /registration failed/,
+  );
   assert.equal(host.listeners.size, 0);
 });
 
