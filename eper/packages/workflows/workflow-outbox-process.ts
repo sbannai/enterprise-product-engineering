@@ -34,13 +34,15 @@ function validateOptions(options: WorkflowOutboxProcessOptions): Required<Pick<
 function waitForNextPass(signal: AbortSignal, milliseconds: number): Promise<void> {
   if (signal.aborted) return Promise.resolve();
   return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       signal.removeEventListener("abort", finish);
       resolve();
     };
-    const timer = setTimeout(finish, milliseconds);
+    timer = setTimeout(finish, milliseconds);
     signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
   });
 }
 
@@ -88,11 +90,11 @@ export class WorkflowOutboxProcess {
             total.retried += result.retried;
             total.deadLettered += result.deadLettered;
           } catch (error) {
-            this.options.onError?.(error, context);
+            try { this.options.onError?.(error, context); } catch { /* observability callbacks must not stop delivery */ }
           }
         }
       } catch (error) {
-        this.options.onError?.(error);
+        try { this.options.onError?.(error); } catch { /* observability callbacks must not stop delivery */ }
       }
       try { this.options.onPass?.(total); } catch { /* observability callbacks must not stop delivery */ }
       if (!signal.aborted && total.claimed === 0) {
