@@ -2120,7 +2120,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
     // Tenant-scoped support-admin ticket queue and controlled lifecycle mutations.
-    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|assignment|replies))?$/.exec(requestUrl.pathname);
+    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|severity|assignment|replies))?$/.exec(requestUrl.pathname);
     if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
@@ -2230,6 +2230,26 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               return;
             }
             const ticket = await options.ticketStore.changeStatus(trustedIdentity, ticketId, body.status as typeof TICKET_STATUSES[number]);
+            if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 200, { ticket });
+            return;
+          }
+          if (adminTicketMatch[2] === "severity") {
+            const validSeverity = typeof body.severity === "string" &&
+              (TICKET_SEVERITIES as readonly string[]).includes(body.severity);
+            const validRationale = body.rationale === undefined ||
+              (typeof body.rationale === "string" && body.rationale.trim().length <= 1000);
+            if (!validSeverity || !validRationale ||
+                Object.keys(body).some((key) => key !== "severity" && key !== "rationale") ||
+                (body.severity === "p1_confirmed" &&
+                  (typeof body.rationale !== "string" || body.rationale.trim().length < 20))) {
+              sendJson(request, response, 400, { error: "invalid_ticket_severity_classification" });
+              return;
+            }
+            const ticket = await options.ticketStore.classifySeverity(
+              trustedIdentity, ticketId, body.severity as typeof TICKET_SEVERITIES[number],
+              typeof body.rationale === "string" ? body.rationale.trim() : undefined,
+            );
             if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
             sendJson(request, response, 200, { ticket });
             return;
