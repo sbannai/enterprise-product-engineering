@@ -13,7 +13,7 @@ export interface TicketAuditEvent {
   applicationId: string;
   actorId: string;
   correlationId: string;
-  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned" | "ticket.replied" | "ticket.severity_classified";
+  action: "ticket.created" | "ticket.status_changed" | "ticket.assigned" | "ticket.replied" | "ticket.severity_classified" | "ticket.duplicate_disposition_set";
   ticketId: string;
   outcome: "success";
   payload: Record<string, unknown>;
