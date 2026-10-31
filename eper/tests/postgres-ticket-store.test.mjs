@@ -402,10 +402,10 @@ test("ticket reply is tenant-scoped and commits with its audit event", async () 
   assert.equal(reply.authorRole, "support");
   assert.equal(reply.body, "We are investigating");
   const insert = calls.find((x) => /INSERT INTO eper_support_ticket_replies/.test(x.sql));
-  assert.deepEqual(insert.values.slice(1), ["tenant-a", "app-a", "ticket-1", "actor-a", "support", "We are investigating"]);
+  assert.deepEqual(insert.values.slice(1), ["tenant-a", "app-a", "ticket-1", "actor-a", "support", "We are investigating", "customer_visible"]);
   assert.equal(auditEvents.length, 1);
   assert.equal(auditEvents[0].action, "ticket.replied");
-  assert.deepEqual(auditEvents[0].payload, { replyId: "reply-1", authorRole: "support" });
+  assert.deepEqual(auditEvents[0].payload, { replyId: "reply-1", authorRole: "support", visibility: "customer_visible" });
   assert.ok(calls.some((x) => x.sql === "COMMIT"));
   assert.ok(!calls.some((x) => x.sql === "ROLLBACK"));
 });
@@ -596,4 +596,34 @@ test("distinct confirmed P1 counter excludes duplicates and non-evidence tickets
   assert.match(query.sql, /assigned_to IS NOT NULL/);
   assert.deepEqual(query.values, ["tenant-a"]);
   await assert.rejects(() => store.countDistinctConfirmedP1(" tenant-a"), /ticket_tenant_scope_required/);
+});
+
+
+test("customer conversation reads filter internal notes at the SQL boundary", async () => {
+  const calls = [];
+  const replyRows = [{ id: "reply-public", tenant_id: "tenant-a", application_id: "app-a", ticket_id: "ticket-1",
+    author_id: "support-a", author_role: "support", body: "Customer update", visibility: "customer_visible",
+    created_at: "2026-10-31T10:00:00.000Z" }];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT id FROM eper_support_tickets/.test(sql)) return { rows: [{ id: "ticket-1" }], rowCount: 1 };
+      if (/SELECT \* FROM eper_support_ticket_replies/.test(sql)) return { rows: replyRows, rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    }, release() {},
+  };
+  const store = new PostgresTicketStore({ async connect() { return client; } }, async () => {});
+  const replies = await store.listReplies(identity, "ticket-1", "customer");
+  assert.equal(replies.length, 1);
+  const query = calls.find(x => /SELECT \* FROM eper_support_ticket_replies/.test(x.sql));
+  assert.match(query.sql, /visibility = 'customer_visible'/);
+  assert.deepEqual(query.values, ["tenant-a", "ticket-1"]);
+});
+
+test("customers cannot create internal support notes", async () => {
+  let connections = 0;
+  const store = new PostgresTicketStore({ async connect() { connections++; throw new Error("must not connect"); } }, async () => {});
+  await assert.rejects(() => store.addReply(identity, "ticket-1", "Attempted internal note", "customer", "internal"),
+    /customer_internal_note_forbidden/);
+  assert.equal(connections, 0);
 });

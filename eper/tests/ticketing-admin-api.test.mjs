@@ -235,3 +235,28 @@ test("admin duplicate disposition validates canonical link and uses trusted tena
     assert.equal(args.canonicalTicketId, "223e4567-e89b-12d3-a456-426614174000");
   });
 });
+
+
+test("admin support replies accept explicit internal visibility and reject invalid visibility", async () => {
+  let args;
+  const ticketStore = {
+    async list() { return []; }, async changeStatus() { return ticket; }, async assign() { return ticket; },
+    async listReplies() { return []; },
+    async addReply(identity, id, body, authorRole, visibility) {
+      args = { identity, id, body, authorRole, visibility };
+      return { id: "reply-1", body, visibility };
+    },
+  };
+  await withServer({ ticketStore }, async (base) => {
+    const url = base + "/admin/support/tickets/" + ticket.id + "/replies";
+    const invalid = await fetch(url, { method: "POST", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ body: "Private note with unsupported visibility", visibility: "secret" }) });
+    assert.equal(invalid.status, 400);
+    const ok = await fetch(url, { method: "POST", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ body: "Internal note: reproduce with synthetic account only.", visibility: "internal" }) });
+    assert.equal(ok.status, 201);
+    assert.equal(args.identity.tenantId, "tenant-a");
+    assert.equal(args.authorRole, "support");
+    assert.equal(args.visibility, "internal");
+  });
+});

@@ -58,6 +58,7 @@ export interface TicketReplyRecord {
   ticketId: string;
   authorId: string;
   authorRole: "customer" | "support";
+  visibility: "customer_visible" | "internal";
   body: string;
   createdAt: string;
 }
@@ -66,7 +67,8 @@ function mapReply(row: Record<string, unknown>): TicketReplyRecord {
   return {
     id: String(row.id), tenantId: String(row.tenant_id), applicationId: String(row.application_id),
     ticketId: String(row.ticket_id), authorId: String(row.author_id),
-    authorRole: row.author_role as TicketReplyRecord["authorRole"], body: String(row.body),
+    authorRole: row.author_role as TicketReplyRecord["authorRole"],
+    visibility: row.visibility === "internal" ? "internal" : "customer_visible", body: String(row.body),
     createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
@@ -160,7 +162,7 @@ export class PostgresTicketStore {
   }
 
   /** Lists the thread only when the ticket is inside the trusted tenant/application scope. */
-  async listReplies(identity: TicketIdentity, ticketId: string): Promise<TicketReplyRecord[] | null> {
+  async listReplies(identity: TicketIdentity, ticketId: string, audience: "customer" | "admin" = "admin"): Promise<TicketReplyRecord[] | null> {
     const client = await this.pool.connect();
     try {
       const ticket = await client.query<Record<string, unknown>>(
@@ -169,7 +171,7 @@ export class PostgresTicketStore {
       );
       if (!ticket.rows[0]) return null;
       const result = await client.query<Record<string, unknown>>(
-        "SELECT * FROM eper_support_ticket_replies WHERE tenant_id = $1 AND ticket_id = $2 ORDER BY created_at ASC, id ASC",
+        `SELECT * FROM eper_support_ticket_replies WHERE tenant_id = $1 AND ticket_id = $2${audience === "customer" ? " AND visibility = 'customer_visible'" : ""} ORDER BY created_at ASC, id ASC`,
         [identity.tenantId, ticketId],
       );
       return result.rows.map(mapReply);
@@ -182,7 +184,9 @@ export class PostgresTicketStore {
     ticketId: string,
     body: string,
     authorRole: "customer" | "support",
+    visibility: "customer_visible" | "internal" = "customer_visible",
   ): Promise<TicketReplyRecord | null> {
+    if (authorRole === "customer" && visibility !== "customer_visible") throw new Error("customer_internal_note_forbidden");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -193,14 +197,14 @@ export class PostgresTicketStore {
       if (!ticket.rows[0]) { await client.query("ROLLBACK"); return null; }
       const applicationId = String(ticket.rows[0].application_id);
       const result = await client.query<Record<string, unknown>>(
-        "INSERT INTO eper_support_ticket_replies (id, tenant_id, application_id, ticket_id, author_id, author_role, body) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-        [randomUUID(), identity.tenantId, applicationId, ticketId, identity.actorId, authorRole, body],
+        "INSERT INTO eper_support_ticket_replies (id, tenant_id, application_id, ticket_id, author_id, author_role, body, visibility) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+        [randomUUID(), identity.tenantId, applicationId, ticketId, identity.actorId, authorRole, body, visibility],
       );
       if (!result.rows[0]) throw new Error("ticket_reply_insert_returned_no_row");
       await this.audit({
         tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
         correlationId: identity.correlationId, action: "ticket.replied", ticketId, outcome: "success",
-        payload: { replyId: String(result.rows[0].id), authorRole },
+        payload: { replyId: String(result.rows[0].id), authorRole, visibility },
       }, client);
       await client.query("COMMIT");
       return mapReply(result.rows[0]);

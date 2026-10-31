@@ -1136,7 +1136,7 @@ test("support admin can read and post ticket replies through the tenant-scoped A
   const ticketStore = {
     async assertReady() {},
     async list() { return []; },
-    async listReplies(identity, id) { calls.push({ operation: "listReplies", identity, id }); return [reply]; },
+    async listReplies(identity, id, audience) { calls.push({ operation: "listReplies", identity, id, audience }); return [reply]; },
     async addReply(identity, id, body, role) { calls.push({ operation: "addReply", identity, id, body, role }); return reply; },
   };
   await withServer({ ticketStore }, async (base) => {
@@ -1216,6 +1216,7 @@ test("customer can read and post replies only for an assigned application's tick
     assert.equal(calls.length, 2);
     assert.equal(calls[0].identity.tenantId, "tenant-customer-a");
     assert.equal(calls[0].identity.applicationId, "app-a");
+    assert.equal(calls[0].audience, "customer");
     assert.equal(calls[1].identity.actorId, "customer-actor-a");
     assert.equal(calls[1].role, "customer");
     assert.equal(calls[1].body, "Still seeing the issue");
