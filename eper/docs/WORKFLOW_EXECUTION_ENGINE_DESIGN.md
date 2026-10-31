@@ -1,13 +1,13 @@
 # Workflow Execution Engine — Technical Design
 
-**Status:** Proposed implementation contract  
+**Status:** Implemented technical slice; CI/integration validated; operationalization pending  
 **Scope:** First durable workflow-instance execution vertical slice  
 **Target:** Local development and PostgreSQL integration tests only  
 **Production/UAT status:** Not enabled; no Business UAT authorization implied
 
 ## 1. Purpose and boundary
 
-EPER currently has workflow-definition and role configuration validation, a tenant-scoped PostgreSQL admin-configuration store, and an audit-event writer. The workflow package currently exposes lifecycle-state types rather than an instance execution service. Generated task-form previews are not business execution.
+EPER now has an application-scoped workflow publisher, durable PostgreSQL instance and transition services, application-scoped role/actor assignment stores, opt-in administration and execution APIs, transactional audit/outbox records, and a continuously running outbox process component. The implementation is technically validated in CI and PostgreSQL integration tests. Generated task-form previews remain distinct from business execution; the executable backend is present, while production dispatcher/context integration and worker operations remain pending.
 
 This design defines the first executable slice: instantiate an approved, active workflow definition; assign the first activity; accept an authorized action or approval; persist the transition and its audit event atomically; and recover the resulting state after process restart.
 
@@ -29,7 +29,7 @@ The campaign scheduler remains a separate subsystem. Its lease, retry, and dispa
 
 A running instance must pin an immutable snapshot of the exact active definition used at creation time. Later edits to the tenant's configured definition must not silently change in-flight instances.
 
-**Application-scope blocker:** the existing `eper_admin_configuration` table is keyed by (`tenant_id, resource_type`) and its workflow configuration has no `application_id`. It is therefore not a safe execution-definition authority for multiple applications within one tenant. Do not read the tenant-wide `workflows` blob and assume it belongs to the caller's application. The first implementation must introduce an application-scoped publication boundary in `eper_workflow_definition_versions`, populated only by a trusted publisher that receives tenant/application identity from server-side assignment context. Until that boundary exists, instance creation must remain disabled. Existing tenant-wide configuration may be used only as an administrative draft source; it must not be executed directly. The current durable admin bearer mapping resolves only tenantId and actorId, not applicationId. A publication API must therefore accept an application selector only as an untrusted request parameter and verify it server-side against both the tenant-application ownership allowlist and the actor-application active assignment store before writing the versioned snapshot. Missing assignment stores or assignment lookup failures must fail closed.
+**Implemented boundary:** the application-scoped publication boundary now exists in `eper_workflow_definition_versions`. The publisher accepts tenant/application/actor identity only from trusted server-side context, verifies active tenant-application ownership and actor-application assignment, validates activity role grants, writes an immutable version/digest and lifecycle/audit records atomically, and fails closed on missing or failed assignment lookups. Request application selectors remain untrusted and are checked server-side. The tenant-wide admin configuration remains a draft/configuration source only; it is not executed directly.
 
 Minimum snapshot metadata:
 - tenant_id and application_id
@@ -186,14 +186,15 @@ Migration `002_workflow_publication_events.sql` adds an append-only publication 
 | Workflow instance audit history | Start and transition audit events persisted atomically with state, transition and idempotency records; real PostgreSQL integration passed | CI-VALIDATED |
 | Restart/concurrency/idempotency behavior | PostgreSQL integration test covers concurrent duplicate starts, concurrent duplicate submits, competing approvals with the same expected version, cross-application and cross-tenant denial, service recreation and original-response replay; advisory locks, instance row locks and RLS isolation are exercised | INTEGRATION-TESTED; LOAD TEST PENDING |
 | End-to-end workflow execution API | Admin role/publish routes and customer start/transition routes implemented behind an explicit opt-in flag; API tests verify trusted identity, body allowlists and tenant/application scoping | CI-VALIDATED; DISABLED BY DEFAULT |
+| Transactional outbox and continuous worker component | Immutable transactional event outbox, bounded lease/retry/dead-letter worker and `WorkflowOutboxProcess` with authorised-scope discovery, bounded drain, cancellation and failure isolation | CI-VALIDATED; HOST OPERATIONS PENDING |
 
 ## 12. Publisher increment (CI-validated)
 
 `packages/workflows/workflow-definition-publisher.ts` now implements the first publisher slice. It accepts tenant, application, actor and correlation identity only through a trusted server-side context; validates an active workflow definition; sets the tenant/application RLS context; checks active tenant-application ownership and actor-application assignment using `FOR SHARE` locks in the same transaction; validates every activity's role and permission against the application-scoped role catalogue; assigns the next per-workflow version; stores a canonical SHA-256 digest and immutable snapshot; and appends the audit event in the same transaction. Assignment lookup errors and missing/revoked assignments fail closed. Tests cover successful publication, revoked tenant ownership, missing actor assignment, lookup failure and invalid definitions.
 
-The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. The exact PR head `b2579e6104cc3c2fe6cbfc889c56256d34895a73` passed all 12 associated GitHub Actions workflows, including typecheck/build/full tests, repeatable PostgreSQL migrations, release candidate build, six-family HTTP smoke, 228-requirement pilot matrix, QA/UAT technical simulations, G9 reconciliation and integrated validation. This is technical CI evidence only; it is not a production deployment or Business UAT authorization.
+Historical milestone note: this paragraph described the publisher-only increment before the subsequent role catalogue, durable execution service, opt-in API routes, transactional outbox and continuous worker process were merged. The current implementation and remaining operational boundary are recorded in Sections 11 and 13–16. Earlier PR-head evidence must not be mistaken for current-main evidence.
 
-**Exit criterion:** Do not label the workflow execution USP as IMPLEMENTED or TESTED until the full vertical slice and the integration evidence above exist on one exact commit.
+**Exit criterion (updated):** the technical execution slice may be labelled IMPLEMENTED / CI-VALIDATED only while the exact-main implementation and PostgreSQL integration evidence remain green. Do not label it production-ready or operationally complete until the trusted context provider, production dispatcher, independently hosted/supervised worker, monitoring/alerting, load/recovery evidence and runbooks are complete.
 
 
 ## 13. Application-scoped role assignment increment (CI-validated)

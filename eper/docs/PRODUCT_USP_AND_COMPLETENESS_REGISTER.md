@@ -2,7 +2,7 @@
 
 **Status:** Proposed product-control baseline  
 **Date:** 2026-10-31  
-**Repository baseline:** `main` at `a0a7265e17839171478d75f57898a69fb2132f57`  
+**Repository baseline:** `main` at `8b181f9dda2e8ff01d2e39d7e7e62e6accb2da96`  
 **Scope rule:** This register supplements the approved 228 requirements across Chapters 463–500. It does not replace, renumber, weaken, or silently reinterpret any approved requirement.
 
 ## 1. Product positioning
@@ -42,7 +42,7 @@ The initial dispositions below are conservative repository-audit starting points
 
 | ID | Capability | Initial disposition | Priority | Product outcome |
 |---|---|---|---|---|
-| USP-001 | Workflow execution engine | FOUNDATION / PARTIAL | P0 | Execute configured workflows with durable state, transitions, approvals, retries, and audit |
+| USP-001 | Workflow execution engine | IMPLEMENTED / CI-VALIDATED; OPERATIONS PARTIAL | P0 | Execute configured workflows with durable state, transitions, approvals, retries, and audit |
 | USP-002 | Low-code application and form builder | NOT_STARTED / DISCOVERY | P1 | Build reusable application screens, forms, and field rules through configuration |
 | USP-003 | AI business intelligence | FOUNDATION / DISCOVERY | P1 | Ask governed natural-language questions and receive source-linked operational insights |
 | USP-004 | Business rules and decision engine | PARTIAL / VERIFY | P1 | Versioned, testable rules shared across applications and workflows |
@@ -60,7 +60,7 @@ The initial dispositions below are conservative repository-audit starting points
 
 **USP-001 Workflow execution engine**
 
-Repository inspection found workflow-definition and role configuration, generated task-form previews, a PostgreSQL admin-configuration store/migration, and an opt-in durable admin-config API mode. The API also has a process-memory mode when durable mode is not enabled. The durable store persists configuration definitions, not running workflow instances or transition execution. The generated task preview actions do not execute business transactions, and the current workflow package exposes lifecycle state types rather than a complete instance execution service. Treat the execution engine as incomplete until all criteria below are evidenced.
+The merged implementation on `main` now includes application-scoped immutable workflow publication with version/digest pinning and a publication lifecycle ledger; PostgreSQL-backed workflow instances and append-only transitions; application-scoped role definitions and actor-role assignments; authorization re-checks, expected-version concurrency control, idempotent start/transition replay, same-transaction audit, and a transactional outbox. Opt-in admin/customer APIs expose publication, role administration, instance start and transitions; the workflow API remains disabled by default. The reusable `WorkflowOutboxProcess` continuously drains authorised scopes with bounded batches, retry/dead-letter handling and graceful cancellation. Exact-main technical CI/integration validation is recorded in the workflow design. This supports IMPLEMENTED / CI-VALIDATED for the execution slice—not production readiness: a trusted production context provider, real dispatcher, independently hosted/supervised worker, delivery dashboards/alerts, load/recovery testing and operational configuration remain outstanding.
 
 Acceptance criteria:
 - Persist workflow definitions and version history durably in PostgreSQL.
@@ -171,7 +171,7 @@ Acceptance criteria:
 | Sequence | Workstream | Exit condition |
 |---|---|---|
 | 0 | Reconcile active PRs, CI, persistence and API contracts | Exact-head checks, clean ownership, no duplicate/orphan work |
-| 1 | Workflow execution vertical slice | One tenant-scoped business workflow persists, executes, recovers, audits, and passes end-to-end tests |
+| 1 | Workflow runtime operationalization | Supply trusted production context and dispatcher, host/supervise the continuous worker, add delivery observability, and complete load/recovery evidence |
 | 2 | Low-code form/application vertical slice | A configured form creates a durable record and launches the workflow with RBAC and audit |
 | 3 | Governed AI BI vertical slice | A user asks a KPI question and receives a permission-checked, source-linked, reconciled answer |
 | 4 | P1 enterprise capabilities | Connector, SLA, document, search, commercial and governance criteria pass in prioritized slices |
@@ -195,11 +195,11 @@ For each USP ID, maintain:
 
 ## 7. Immediate next engineering actions
 
-1. Re-audit the current workflow, scheduler, PostgreSQL, authorization, audit, and event modules at the latest main head and active PR heads.
-2. Produce a dependency map and identify the smallest complete workflow execution vertical slice; do not duplicate existing scheduler/job infrastructure.
-3. Reuse existing workflow configuration and form contracts where sound; add execution/persistence contracts only where missing.
+1. Operationalize the merged workflow runtime: trusted context provider, production dispatcher, worker host lifecycle/supervision, delivery dashboards/alerts, and deployment configuration.
+2. Complete load, restart/recovery, dead-letter replay, and operational runbook evidence for the workflow runtime.
+3. Harden delegation, thresholds, and separation-of-duties policy in the application-scoped authorization model.
 4. Define the first low-code builder as schema-driven forms and page composition, not an unrestricted visual programming environment.
 5. Define AI BI as a governed read-only semantic query experience before adding predictive or agentic actions.
 6. Keep changes consolidated, tested, and traceable; merge only after required reviews and exact-head CI are green.
 
-**Current disposition:** product direction and proposed completeness criteria documented; no new feature is declared implemented, tested, accepted, or Business-UAT-ready by this register.
+**Current disposition (main `8b181f9`):** product direction and completeness criteria are documented. USP-001 workflow execution is IMPLEMENTED / CI-VALIDATED at the technical-slice level; runtime operations remain PARTIAL. Other USP dispositions remain conservative pending capability-specific evidence. No Business Acceptance or Business UAT authorization is implied.
