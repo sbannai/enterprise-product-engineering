@@ -128,7 +128,7 @@ export class PostgresCampaignSchedulerStore {
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const campaignId = required(input.campaignId, "CAMPAIGN_ID_REQUIRED");
     const createdBy = required(input.createdBy, "CAMPAIGN_ACTOR_REQUIRED");
-    if (!["once", "recurring", "event", "condition"].includes(input.triggerType)) throw new Error("CAMPAIGN_TRIGGER_TYPE_INVALID");
+    if (!["once", "recurring", "event"].includes(input.triggerType)) throw new Error("CAMPAIGN_TRIGGER_TYPE_INVALID");
     if (!TZ_PATTERN.test(input.timezone) || input.timezone.length > 128) throw new Error("CAMPAIGN_TIMEZONE_INVALID");
     try { new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(); }
     catch { throw new Error("CAMPAIGN_TIMEZONE_INVALID"); }
