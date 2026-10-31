@@ -267,7 +267,9 @@ test("event trigger fan-out is tenant/application scoped and idempotent", async 
   assert.match(calls[0].sql, /s\.tenant_id=\$1 AND s\.application_id=\$2/);
   assert.match(calls[0].sql, /trigger_type='event'/);
   assert.match(calls[0].sql, /schedule_definition->>'eventType'=\$5/);
-  assert.match(calls[0].sql, /'event:' \\|\\| \\$7 \\|\\| ':' \\|\\| s\\.id::text/);
+  assert.ok(calls[0].sql.includes("'event:' || $7 || ':' || s.id::text"));
+  assert.equal(calls[0].values[6].length, 64);
+  assert.match(calls[0].values[6], /^[a-f0-9]{64}$/);
   assert.equal(calls[0].values[6].length, 64);
   assert.match(calls[0].values[6], /^[a-f0-9]{64}$/);
   assert.match(calls[0].sql, /ON CONFLICT \(tenant_id, application_id, idempotency_key\) DO NOTHING/);
