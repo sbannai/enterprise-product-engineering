@@ -580,6 +580,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!["customer-admin", "application-admin", "campaign-approver"].includes(identity.roleKey)) {
+        sendApiError(request, response, 403, "CAMPAIGN_CREATE_FORBIDDEN", "A campaign management role is required to create schedules."); return;
+      }
       if (!options.campaignSchedulerStore) {
         sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
       }
