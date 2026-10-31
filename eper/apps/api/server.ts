@@ -848,7 +848,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const timezone = body.timezone;
       const scheduleDefinition = body.scheduleDefinition;
       if (typeof campaignId !== "string" || !campaignId.trim() || campaignId.length > 128 ||
-          !["once", "recurring", "event", "condition"].includes(String(triggerType)) ||
+          !["once", "recurring", "event"].includes(String(triggerType)) ||
           typeof timezone !== "string" || !timezone.trim() || timezone.length > 128 ||
           !scheduleDefinition || typeof scheduleDefinition !== "object" || Array.isArray(scheduleDefinition)) {
         sendApiError(request, response, 400, "INVALID_CAMPAIGN_SCHEDULE", "Required schedule fields are missing or invalid."); return;
