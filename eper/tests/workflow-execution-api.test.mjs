@@ -18,7 +18,12 @@ test("workflow execution API is opt-in and derives identity from trusted credent
     },
     async transition(input) { calls.push(input); return { instanceId: input.instanceId }; },
   };
-  const server = createAppServer({ workflowExecutionService });
+  const server = createAppServer({
+    workflowExecutionService,
+    workflowRoleDefinitionStore: {}, workflowActorRoleAssignmentStore: {},
+    workflowDefinitionPublisher: {},
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+  });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address(); assert.ok(address && typeof address === "object");
@@ -70,6 +75,7 @@ test("workflow administration requires both tenant ownership and active administ
     workflowRoleDefinitionStore: { async list() { listCalls++; return []; } },
     workflowActorRoleAssignmentStore: {},
     workflowDefinitionPublisher: {},
+    workflowExecutionService: { async start() { return {}; }, async transition() { return {}; } },
   });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
