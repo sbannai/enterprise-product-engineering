@@ -240,7 +240,7 @@ test("admin duplicate disposition validates canonical link and uses trusted tena
         rationale: "Same payment failure, same affected application, and identical reproduction evidence." }) });
     assert.equal(valid.status, 200);
     assert.equal(args.identity.tenantId, "tenant-a");
-    assert.equal(args.identity.actorId, "admin-1");
+    assert.equal(args.identity.actorId, "support-1");
     assert.equal(args.id, ticket.id);
     assert.equal(args.disposition, "duplicate");
     assert.equal(args.canonicalTicketId, "223e4567-e89b-12d3-a456-426614174000");
