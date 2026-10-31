@@ -16,7 +16,11 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
   assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
     "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 5 });
+  const poolEvents = [];
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 3000 });
+  pool.on("connect", (client) => poolEvents.push({ event: "connect", pid: client.processID }));
+  pool.on("acquire", (client) => poolEvents.push({ event: "acquire", pid: client.processID }));
+  pool.on("error", (error) => poolEvents.push({ event: "pool-error", message: error.message }));
   const tenantId = "scheduler-race-test-" + randomUUID();
   const applicationId = "app-race-" + randomUUID();
   const actorId = "integration-test";
@@ -71,36 +75,82 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
     const blocker = await pool.connect();
     try {
       await blocker.query("BEGIN");
-      await blocker.query(
+      const blockerRow = await blocker.query(
         "SELECT id FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3 FOR UPDATE",
         [tenantId, applicationId, scheduleId],
       );
+      assert.equal(blockerRow.rowCount, 1, "Expected the competing pause transaction to lock the schedule row");
+      const blockerPidResult = await blocker.query("SELECT pg_backend_pid() AS pid");
+      const blockerPid = Number(blockerPidResult.rows[0]?.pid);
+      assert.ok(Number.isInteger(blockerPid) && blockerPid > 0, "Expected a PostgreSQL backend PID for the blocker");
+
+      let dispatchOutcome = "pending";
+      let dispatchError = null;
       const dispatchPromise = store.beginExecutionDispatch({
         tenantId, applicationId, executionId, workerId: "race-worker",
+      }).then((result) => {
+        dispatchOutcome = String(result);
+        return result;
+      }, (error) => {
+        dispatchError = error instanceof Error ? error.message : String(error);
+        return false;
       });
 
-      // Do not rely on a fixed sleep: prove PostgreSQL has the dispatch transaction
-      // waiting on a lock before committing the competing pause.
+      // Do not rely on a fixed sleep or exact SQL-text formatting. Prove the
+      // dispatch transaction is blocked by this transaction using PostgreSQL's
+      // lock graph before committing the competing pause.
       const deadline = Date.now() + 5000;
       let dispatchIsWaiting = false;
       while (Date.now() < deadline) {
+        // pg_stat_activity snapshots are cached within a transaction; clear the
+        // snapshot so each poll can see the dispatch backend opened after BEGIN.
+        await blocker.query("SELECT pg_stat_clear_snapshot()");
         const waiting = await blocker.query(`
           SELECT 1
           FROM pg_stat_activity
           WHERE datname = current_database()
             AND pid <> pg_backend_pid()
-            AND wait_event_type = 'Lock'
-            AND query LIKE '%FOR UPDATE OF s, e%'
+            AND state = 'active'
+            AND $1::integer = ANY(pg_blocking_pids(pid))
+            AND query ILIKE '%eper_campaign_schedules%'
+            AND query ILIKE '%eper_campaign_executions%'
           LIMIT 1
-        `);
+        `, [blockerPid]);
         if (waiting.rowCount > 0) {
           dispatchIsWaiting = true;
           break;
         }
         await delay(25);
       }
-      assert.equal(dispatchIsWaiting, true,
-        "Dispatch fence never reached the expected PostgreSQL row-lock wait; race was not exercised");
+      if (!dispatchIsWaiting) {
+        const rowState = await blocker.query(`
+          SELECT s.status AS schedule_status, s.approval_status, s.trigger_type,
+                 e.status AS execution_status, e.locked_by, e.dispatch_started_at
+          FROM eper_campaign_schedules s
+          JOIN eper_campaign_executions e
+            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
+          WHERE s.tenant_id=$1 AND s.application_id=$2 AND s.id=$3 AND e.id=$4
+        `, [tenantId, applicationId, scheduleId, executionId]);
+        await blocker.query("SELECT pg_stat_clear_snapshot()");
+        const activity = await blocker.query(`
+          SELECT pid, datname, usename, application_name, state,
+                 wait_event_type, wait_event, query, pg_blocking_pids(pid) AS blockers
+          FROM pg_stat_activity
+          WHERE pid <> pg_backend_pid()
+          ORDER BY pid
+        `);
+        assert.fail("Dispatch lock wait not observed; " + JSON.stringify({
+          dispatchOutcome, dispatchError, row: rowState.rows[0] ?? null, activity: activity.rows,
+          pool: {
+            totalCount: pool.totalCount,
+            idleCount: pool.idleCount,
+            waitingCount: pool.waitingCount,
+            connectionTimeoutMillis: pool.options.connectionTimeoutMillis,
+          },
+          poolEvents,
+          blockerPid,
+        }));
+      }
 
       await blocker.query(
         "UPDATE eper_campaign_schedules SET status='paused', updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND id=$3",

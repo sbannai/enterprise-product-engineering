@@ -106,6 +106,11 @@ test("worker reports lost completion lease and records ambiguous outcome without
 test("worker treats explicit policy denial as terminal and never acquires dispatch fence", async () => {
   const controller = new AbortController();
   const store = fakeStore([execution()]);
+  store.failExecution = async (input) => {
+    store.calls.push(["fail", input]);
+    controller.abort();
+    return "dead_letter";
+  };
   let dispatchCalls = 0;
   await runCampaignExecutionWorker(store, async () => {
     dispatchCalls += 1;
@@ -212,6 +217,11 @@ test("worker does not call provider when the atomic dispatch fence is denied", a
   store.beginExecutionDispatch = async (input) => {
     store.calls.push(["dispatch-fence", input]);
     return false;
+  };
+  store.failExecution = async (input) => {
+    store.calls.push(["fail", input]);
+    controller.abort();
+    return "retry_wait";
   };
   let dispatchCalls = 0;
   await runCampaignExecutionWorker(store, async () => {

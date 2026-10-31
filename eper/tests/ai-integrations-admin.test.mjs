@@ -37,7 +37,7 @@ async function withServer(t, store, extraEnv = {}, agentDraftStore) {
   const keys = [
     "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
     "EPER_ADMIN_CONFIG_API_TOKEN", "EPER_ADMIN_CONFIG_API_ENABLED",
-    "EPER_AGENTS_API_ENABLED", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS", "EPER_AGENTS_PRINCIPAL_TENANTS_JSON",
+    "EPER_AGENTS_API_ENABLED", "EPER_AGENTS_REVIEWER_PRINCIPALS", "EPER_AGENTS_TENANT_ID", "EPER_AGENTS_PRINCIPAL_TOKENS", "EPER_AGENTS_PRINCIPAL_TENANTS_JSON",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
@@ -45,6 +45,7 @@ async function withServer(t, store, extraEnv = {}, agentDraftStore) {
     EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
     EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({ [ADMIN_TOKEN]: { tenantId: "tenant-a", actorId: "admin-a" } }),
     EPER_AGENTS_API_ENABLED: "true",
+    EPER_AGENTS_REVIEWER_PRINCIPALS: "reviewer-b",
     EPER_AGENTS_TENANT_ID: "tenant-a",
     EPER_AGENTS_PRINCIPAL_TOKENS: "maker-a=" + AGENT_TOKEN_A + ";reviewer-b=" + AGENT_TOKEN_B + ";maker-other=" + AGENT_TOKEN_C,
     EPER_AGENTS_PRINCIPAL_TENANTS_JSON: JSON.stringify({ "maker-a": "tenant-a", "reviewer-b": "tenant-a", "maker-other": "tenant-b" }),
