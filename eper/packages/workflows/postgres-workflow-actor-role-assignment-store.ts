@@ -122,6 +122,9 @@ export class PostgresWorkflowActorRoleAssignmentStore {
           JOIN eper_tenant_application_assignment ta
             ON ta.tenant_id = r.tenant_id AND ta.application_id = r.application_id
            AND ta.assignment_status = 'active'
+          JOIN eper_workflow_role_definition rd
+            ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+           AND rd.role_id = r.role_id AND rd.role_status = 'active'
           WHERE r.tenant_id = $1 AND r.application_id = $2 AND r.actor_id = $3
             AND r.assignment_status = 'active'
           ORDER BY r.role_id`,
