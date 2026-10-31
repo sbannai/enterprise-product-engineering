@@ -30,7 +30,7 @@ export interface CreateActionProposalResult {
 }
 export interface ActionProposalQueueItem {
   proposal: ActionProposal;
-  status: "pending" | "approved" | "rejected" | "revoked";
+  status: "pending" | "approved" | "rejected" | "revoked" | "expired";
 }
 
 export interface RecordActionDecisionInput extends ActionApprovalAuditContext {
@@ -393,6 +393,18 @@ export class PostgresActionApprovalStore {
                 p.side_effect_class, p.target_type, p.target_id, p.requested_by, p.requester_type,
                 p.payload, p.payload_hash, p.idempotency_key, p.correlation_id, p.created_at, p.expires_at,
                 CASE
+                  WHEN p.expires_at <= NOW() THEN 'expired'
+                  WHEN EXISTS (
+                    SELECT 1 FROM eper_action_approval_grants g
+                     WHERE g.tenant_id = p.tenant_id AND g.application_id = p.application_id
+                       AND g.proposal_id = p.proposal_id AND g.proposal_version = p.proposal_version
+                       AND g.expires_at > NOW()
+                       AND NOT EXISTS (
+                         SELECT 1 FROM eper_action_approval_decisions d
+                          WHERE d.tenant_id = g.tenant_id AND d.application_id = g.application_id
+                            AND d.approval_id = g.approval_id AND d.decision = 'revoke'
+                       )
+                  ) THEN 'approved'
                   WHEN EXISTS (
                     SELECT 1 FROM eper_action_approval_grants g
                      WHERE g.tenant_id = p.tenant_id AND g.application_id = p.application_id
