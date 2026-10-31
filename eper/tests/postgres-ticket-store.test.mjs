@@ -551,3 +551,49 @@ test("P1 confirmation rejects non-defects or missing evidence references", async
     );
   }
 });
+
+
+test("duplicate disposition requires a same-tenant canonical ticket and writes audit atomically", async () => {
+  const calls = [], auditEvents = [];
+  const row = { ...ticketRow, id: "ticket-1", duplicate_disposition: "duplicate",
+    canonical_ticket_id: "223e4567-e89b-12d3-a456-426614174000",
+    duplicate_rationale: "Same payment receipt failure and reproduction as canonical ticket.",
+    duplicate_disposition_by: "actor-a", duplicate_disposition_at: "2026-10-31T16:00:00.000Z" };
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/SELECT id, application_id, duplicate_disposition FROM eper_support_tickets/.test(sql)) {
+        return { rows: [{ id: "ticket-1", application_id: "app-a", duplicate_disposition: "needs_review" }], rowCount: 1 };
+      }
+      if (/SELECT id, duplicate_disposition FROM eper_support_tickets/.test(sql)) {
+        return { rows: [{ id: values[2], duplicate_disposition: "distinct" }], rowCount: 1 };
+      }
+      if (/UPDATE eper_support_tickets/.test(sql)) return { rows: [row], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    }, release() {},
+  };
+  const store = new PostgresTicketStore({ async connect() { return client; } }, async (event, tx) => {
+    auditEvents.push(event); await tx.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-duplicate')");
+  });
+  const result = await store.setDuplicateDisposition(identity, "ticket-1", "duplicate",
+    "223e4567-e89b-12d3-a456-426614174000",
+    "Same payment receipt failure and reproduction as canonical ticket.");
+  assert.equal(result.duplicateDisposition, "duplicate");
+  assert.equal(result.canonicalTicketId, "223e4567-e89b-12d3-a456-426614174000");
+  assert.equal(auditEvents[0].action, "ticket.duplicate_disposition_set");
+  assert.ok(calls.some(x => x.sql === "COMMIT"));
+  assert.ok(!calls.some(x => x.sql === "ROLLBACK"));
+});
+
+test("distinct confirmed P1 counter excludes duplicates and non-evidence tickets", async () => {
+  let query;
+  const client = { async query(sql, values = []) { query = { sql, values }; return { rows: [{ count: 7 }], rowCount: 1 }; }, release() {} };
+  const store = new PostgresTicketStore({ async connect() { return client; } }, async () => {});
+  assert.equal(await store.countDistinctConfirmedP1("tenant-a"), 7);
+  assert.match(query.sql, /severity = 'p1_confirmed'/);
+  assert.match(query.sql, /duplicate_disposition = 'distinct'/);
+  assert.match(query.sql, /evidence_reference IS NOT NULL/);
+  assert.match(query.sql, /assigned_to IS NOT NULL/);
+  assert.deepEqual(query.values, ["tenant-a"]);
+  await assert.rejects(() => store.countDistinctConfirmedP1(" tenant-a"), /ticket_tenant_scope_required/);
+});

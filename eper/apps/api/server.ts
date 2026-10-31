@@ -2120,7 +2120,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
     // Tenant-scoped support-admin ticket queue and controlled lifecycle mutations.
-    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|severity|assignment|replies))?$/.exec(requestUrl.pathname);
+    const adminTicketMatch = /^\/admin\/support\/tickets(?:\/([^/]+)\/(status|severity|duplicate-disposition|assignment|replies))?$/.exec(requestUrl.pathname);
     if (adminTicketMatch && (request.method === "GET" || request.method === "PATCH" || request.method === "POST")) {
       if (process.env.EPER_TICKETING_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
@@ -2190,8 +2190,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           });
           const hasMore = page.length > limit;
           const tickets = hasMore ? page.slice(0, limit) : page;
+          const distinctConfirmedP1Count = !canViewCrossTenant && typeof options.ticketStore.countDistinctConfirmedP1 === "function"
+            ? await options.ticketStore.countDistinctConfirmedP1(identity.tenantId) : null;
           sendJson(request, response, 200, {
-            tickets, limit, offset, hasMore,
+            tickets, limit, offset, hasMore, distinctConfirmedP1Count,
             scope: canViewCrossTenant ? "authorized_platform" : "tenant",
             ...(canViewCrossTenant ? {} : { tenantId: identity.tenantId }),
           });
@@ -2253,6 +2255,24 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 200, { ticket });
             return;
           }
+          if (adminTicketMatch[2] === "duplicate-disposition") {
+            const validDisposition = body.disposition === "needs_review" || body.disposition === "distinct" || body.disposition === "duplicate";
+            const canonicalTicketId = body.canonicalTicketId === undefined || body.canonicalTicketId === null
+              ? null : body.canonicalTicketId;
+            if (!validDisposition ||
+                (canonicalTicketId !== null && (typeof canonicalTicketId !== "string" || !/^[0-9a-f-]{36}$/i.test(canonicalTicketId))) ||
+                typeof body.rationale !== "string" || body.rationale.trim().length < 20 || body.rationale.trim().length > 1000 ||
+                Object.keys(body).some((key) => !["disposition", "canonicalTicketId", "rationale"].includes(key))) {
+              sendJson(request, response, 400, { error: "invalid_ticket_duplicate_disposition" });
+              return;
+            }
+            const ticket = await options.ticketStore.setDuplicateDisposition(
+              trustedIdentity, ticketId, body.disposition as "needs_review" | "distinct" | "duplicate", canonicalTicketId, body.rationale.trim(),
+            );
+            if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
+            sendJson(request, response, 200, { ticket });
+            return;
+          }
           if (adminTicketMatch[2] === "assignment") {
             if (!(body.assignedTo === null || (typeof body.assignedTo === "string" && /^[a-zA-Z0-9._:@-]{1,128}$/.test(body.assignedTo))) ||
                 Object.keys(body).some((key) => key !== "assignedTo")) {
@@ -2267,7 +2287,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         sendJson(request, response, 405, { error: "method_not_allowed" });
       } catch (error) {
-        if (error instanceof Error && error.message === "ticket_p1_evidence_required") {
+        if (error instanceof Error && error.message === "ticket_duplicate_canonical_invalid") {
+          sendJson(request, response, 409, { error: "ticket_duplicate_canonical_invalid" });
+        } else if (error instanceof Error && error.message === "ticket_p1_evidence_required") {
           sendJson(request, response, 409, { error: "ticket_p1_evidence_required" });
         } else if (error instanceof SyntaxError || error instanceof Error && error.message === "JSON_OBJECT_REQUIRED") {
           sendJson(request, response, 400, { error: "invalid_json" });
