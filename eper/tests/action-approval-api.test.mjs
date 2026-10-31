@@ -50,7 +50,7 @@ test("action approval API derives tenant and actor from trusted identity and del
   const proposal = {
     proposalId: "proposal-1", proposalVersion: 1, tenantId: "tenant-a", applicationId: "app-a",
     actionType: "crm.contact.update", sideEffectClass: "crm_mutation",
-    targetType: "contact", targetId: "contact-1", requestedBy: "admin-a",
+    targetType: "contact", targetId: "contact-1", requestedBy: "requester-a",
     requesterType: "human", payload: { name: "New name" }, payloadHash: "a".repeat(64),
     idempotencyKey: "approval-api-idempotency-01", createdAt: "2026-10-31T10:00:00.000Z",
     expiresAt: "2026-11-01T10:00:00.000Z", correlationId: "request-1",
