@@ -62,6 +62,7 @@ function validateDefinition(value: WorkflowDefinition): void {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       typeof value.id !== "string" || !/^[a-zA-Z0-9._-]{1,128}$/.test(value.id) ||
       typeof value.name !== "string" || !value.name.trim() || value.name.length > 200 ||
+      (value.description !== undefined && (typeof value.description !== "string" || value.description.length > 2_000)) ||
       value.status !== "ACTIVE" || !Array.isArray(value.activities) ||
       value.activities.length < 1 || value.activities.length > 200) {
     throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_ACTIVE_DEFINITION_REQUIRED", 400);
@@ -70,14 +71,31 @@ function validateDefinition(value: WorkflowDefinition): void {
   for (const activity of value.activities) {
     if (!activity || typeof activity.id !== "string" ||
         !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.id) || activityIds.has(activity.id) ||
-        typeof activity.title !== "string" || !activity.title.trim() ||
+        typeof activity.title !== "string" || !activity.title.trim() || activity.title.length > 200 ||
         !["TASK", "FORM", "APPROVAL"].includes(activity.type) ||
-        typeof activity.roleId !== "string" || !activity.roleId.trim() ||
+        typeof activity.roleId !== "string" || !/^[a-zA-Z0-9._-]{1,128}$/.test(activity.roleId) ||
         !["workflow:act", "workflow:approve"].includes(activity.permission) ||
         (activity.type === "APPROVAL" && activity.permission !== "workflow:approve") ||
         (activity.type !== "APPROVAL" && activity.permission !== "workflow:act") ||
-        !Array.isArray(activity.nextActivityIds) || !Array.isArray(activity.fields)) {
+        !Array.isArray(activity.nextActivityIds) || activity.nextActivityIds.length > 200 ||
+        new Set(activity.nextActivityIds).size !== activity.nextActivityIds.length ||
+        activity.nextActivityIds.some(id => typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,128}$/.test(id)) ||
+        !Array.isArray(activity.fields) || activity.fields.length > 100) {
       throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_INVALID_ACTIVITY", 400);
+    }
+    const fieldIds = new Set<string>();
+    for (const field of activity.fields) {
+      if (!field || typeof field.id !== "string" ||
+          !/^[a-zA-Z0-9._-]{1,128}$/.test(field.id) || fieldIds.has(field.id) ||
+          (field.label !== undefined && (typeof field.label !== "string" || !field.label.trim() || field.label.length > 200)) ||
+          !["text", "textarea", "number", "date", "select", "checkbox"].includes(field.type) ||
+          (field.required !== undefined && typeof field.required !== "boolean") ||
+          (field.options !== undefined && (!Array.isArray(field.options) || field.options.length > 100 ||
+            field.options.some(option => typeof option !== "string" || option.length > 200))) ||
+          (field.type === "select" && (!Array.isArray(field.options) || field.options.length < 1))) {
+        throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_INVALID_FIELD", 400);
+      }
+      fieldIds.add(field.id);
     }
     activityIds.add(activity.id);
   }
