@@ -667,13 +667,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           });
           sendApiSuccess(request, response, 200, { instance }); return;
         }
+        const transitionRoute = workflowTransitionRoute!;
         if (!allowedBodyKeys(body, ["expectedVersion", "idempotencyKey", "action", "payload", "targetActivityId"])) {
           sendApiError(request, response, 400, "INVALID_WORKFLOW_TRANSITION_BODY", "Only transition fields are accepted."); return;
         }
         const instance = await options.workflowExecutionService.transition({
-          tenantId: identity.tenantId, applicationId: workflowTransitionRoute[1], actorId: identity.actorId,
+          tenantId: identity.tenantId, applicationId: transitionRoute[1], actorId: identity.actorId,
           correlationId, environment, serviceVersion: options.serviceVersion,
-          instanceId: workflowTransitionRoute[2], expectedVersion: body.expectedVersion as number,
+          instanceId: transitionRoute[2], expectedVersion: body.expectedVersion as number,
           idempotencyKey: body.idempotencyKey as string, action: body.action as "submit" | "approve" | "reject" | "cancel",
           payload: body.payload as Record<string, unknown> | undefined,
           targetActivityId: body.targetActivityId as string | undefined,
