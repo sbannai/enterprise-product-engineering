@@ -144,3 +144,19 @@ test("publisher rejects activity types whose permissions do not match their acti
   );
   assert.equal(calls.length, 0);
 });
+
+
+test("publisher rejects malformed form fields before persistence", async () => {
+  const { calls, pool } = fixture();
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{
+        ...definition.activities[0],
+        fields: [{ id: "bad-field", type: "unsupported", required: true }],
+      }],
+    }),
+    error => error.code === "WORKFLOW_PUBLISH_INVALID_FIELD",
+  );
+  assert.equal(calls.length, 0);
+});
