@@ -60,7 +60,7 @@ The initial dispositions below are conservative repository-audit starting points
 
 **USP-001 Workflow execution engine**
 
-Repository documentation currently describes workflow configuration and generated task forms as previews; preview actions do not execute business transactions. Treat the execution engine as incomplete until all criteria below are evidenced.
+Repository inspection found workflow-definition and role configuration, generated task-form previews, a PostgreSQL admin-configuration store/migration, and an opt-in durable admin-config API mode. The API also has a process-memory mode when durable mode is not enabled. The durable store persists configuration definitions, not running workflow instances or transition execution. The generated task preview actions do not execute business transactions, and the current workflow package exposes lifecycle state types rather than a complete instance execution service. Treat the execution engine as incomplete until all criteria below are evidenced.
 
 Acceptance criteria:
 - Persist workflow definitions and version history durably in PostgreSQL.
