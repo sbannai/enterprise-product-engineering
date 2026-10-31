@@ -659,14 +659,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
 
         if (actionProposalDetail && request.method === "GET") {
-          const permission = await authorize("view_proposal");
-          if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_ACCESS_DENIED", "You are not allowed to view this proposal."); return; }
           const version = Number(requestUrl.searchParams.get("version") ?? "1");
           if (!Number.isSafeInteger(version) || version < 1) {
             sendApiError(request, response, 400, "ACTION_PROPOSAL_VERSION_INVALID", "A positive proposal version is required."); return;
           }
           const proposal = await store.getProposal({ tenantId: identity.tenantId, applicationId, proposalId: proposalId!, proposalVersion: version });
           if (!proposal) { sendApiError(request, response, 404, "ACTION_PROPOSAL_NOT_FOUND", "The action proposal was not found."); return; }
+          const permission = await authorize("view_proposal", {
+            proposalId: proposal.proposalId, proposalVersion: proposal.proposalVersion,
+            payloadHash: proposal.payloadHash, actionType: proposal.actionType,
+            sideEffectClass: proposal.sideEffectClass, targetType: proposal.targetType, targetId: proposal.targetId,
+          });
+          if (!permission.allowed) { sendApiError(request, response, 403, "ACTION_APPROVAL_ACCESS_DENIED", "You are not allowed to view this proposal."); return; }
           sendApiSuccess(request, response, 200, { proposal }); return;
         }
 
