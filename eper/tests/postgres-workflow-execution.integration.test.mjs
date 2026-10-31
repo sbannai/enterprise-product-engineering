@@ -6,6 +6,7 @@ import { PostgresWorkflowRoleDefinitionStore } from "../dist/packages/workflows/
 import { PostgresWorkflowActorRoleAssignmentStore } from "../dist/packages/workflows/postgres-workflow-actor-role-assignment-store.js";
 import { WorkflowDefinitionPublisher } from "../dist/packages/workflows/workflow-definition-publisher.js";
 import { PostgresWorkflowExecutionService } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
+import { PostgresWorkflowOutboxStore } from "../dist/packages/workflows/postgres-workflow-outbox-store.js";
 
 const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
 
@@ -171,6 +172,32 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(approvalReplay.status, "completed");
       assert.equal(approvalReplay.version, 3);
 
+      const outboxStore = new PostgresWorkflowOutboxStore(pool);
+      const outboxContext = { tenantId, applicationId };
+      const claimed = await outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 });
+      assert.equal(claimed.length, 3);
+      const byType = Object.fromEntries(claimed.map(event => [event.eventType, event]));
+      assert.ok(byType["workflow.instance.started"]);
+      assert.ok(byType["workflow.instance.submitted"]);
+      assert.ok(byType["workflow.instance.completed"]);
+      const competingClaim = await outboxStore.claim(outboxContext, { workerId: "worker-b", limit: 10, leaseSeconds: 60 });
+      assert.equal(competingClaim.length, 0, "a second worker must not claim unexpired leases");
+
+      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.started"].eventId, "worker-a");
+      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.completed"].eventId, "worker-a");
+      const firstFailure = await outboxStore.markFailed(outboxContext, byType["workflow.instance.submitted"].eventId, {
+        workerId: "worker-a", maxAttempts: 2, retryDelaySeconds: 0, error: "simulated transient delivery failure",
+      });
+      assert.deepEqual(firstFailure, { status: "pending", attempts: 1 });
+      const retry = await outboxStore.claim(outboxContext, { workerId: "worker-b", limit: 10, leaseSeconds: 60 });
+      assert.equal(retry.length, 1);
+      assert.equal(retry[0].eventType, "workflow.instance.submitted");
+      assert.equal(retry[0].attempts, 2);
+      const deadLetter = await outboxStore.markFailed(outboxContext, retry[0].eventId, {
+        workerId: "worker-b", maxAttempts: 2, retryDelaySeconds: 0, error: "simulated terminal delivery failure",
+      });
+      assert.deepEqual(deadLetter, { status: "dead_letter", attempts: 2 });
+
       const verify = await pool.connect();
       try {
         await verify.query("BEGIN");
@@ -215,7 +242,9 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
           [tenantId, applicationId, started.instanceId],
         );
         assert.equal(deliveries.rows.length, 3);
-        assert.ok(deliveries.rows.every(row => row.delivery_status === "pending" && Number(row.attempts) === 0));
+        assert.equal(deliveries.rows.filter(row => row.delivery_status === "delivered").length, 2);
+        assert.equal(deliveries.rows.filter(row => row.delivery_status === "dead_letter").length, 1);
+        assert.ok(deliveries.rows.every(row => Number(row.attempts) >= 1));
 
         const audit = await verify.query(
           `SELECT action FROM eper_audit_events
