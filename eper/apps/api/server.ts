@@ -2241,8 +2241,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               (typeof body.rationale === "string" && body.rationale.trim().length <= 1000);
             if (!validSeverity || !validRationale ||
                 Object.keys(body).some((key) => key !== "severity" && key !== "rationale") ||
-                (body.severity === "p1_confirmed" &&
-                  (typeof body.rationale !== "string" || body.rationale.trim().length < 20))) {
+                (typeof body.rationale !== "string" || body.rationale.trim().length < 20)) {
               sendJson(request, response, 400, { error: "invalid_ticket_severity_classification" });
               return;
             }
