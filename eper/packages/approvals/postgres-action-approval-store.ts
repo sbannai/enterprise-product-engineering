@@ -6,7 +6,6 @@ import {
   type ActionApprovalGateResult,
   type ActionProposal,
   type ApprovalActorType,
-  type ApprovalDecision,
   type ApprovalDecisionRecord,
 } from "./action-approval-contracts.js";
 
@@ -121,6 +120,10 @@ interface ExecutionRow {
 
 function validText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+function isCanonicalIsoTimestamp(value: string): boolean {
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
 }
 function validateScope(scope: ActionApprovalScope): void {
   if (!scope || !/^[A-Za-z0-9._-]{2,128}$/.test(scope.tenantId) ||
@@ -275,6 +278,7 @@ export class PostgresActionApprovalStore {
   ): Promise<CreateActionProposalResult> {
     validateScope(audit);
     if (proposal.tenantId !== audit.tenantId || proposal.applicationId !== audit.applicationId ||
+        !isCanonicalIsoTimestamp(proposal.createdAt) || !isCanonicalIsoTimestamp(proposal.expiresAt) ||
         hashActionProposal(proposal) !== proposal.payloadHash) {
       throw new Error("ACTION_PROPOSAL_SCOPE_OR_HASH_INVALID");
     }
@@ -441,6 +445,7 @@ export class PostgresActionApprovalStore {
       throw new Error("ACTION_EXECUTION_LEASE_INVALID");
     }
     const now = input.now ?? new Date().toISOString();
+    if (!isCanonicalIsoTimestamp(now)) throw new Error("ACTION_EXECUTION_TIMESTAMP_INVALID");
     const leaseExpiresAt = new Date(Date.parse(now) + leaseSeconds * 1000).toISOString();
     const client = await this.pool.connect();
     try {
@@ -569,6 +574,7 @@ export class PostgresActionApprovalStore {
       throw new Error("ACTION_EXECUTION_RESULT_HASH_INVALID");
     }
     const now = input.now ?? new Date().toISOString();
+    if (!isCanonicalIsoTimestamp(now)) throw new Error("ACTION_EXECUTION_TIMESTAMP_INVALID");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
