@@ -379,8 +379,9 @@ test("asset downloads enforce durable tenant ownership and actor membership with
       const deniedAddress = deniedServer.address(); assert.ok(deniedAddress && typeof deniedAddress === "object");
       const denied = await fetch("http://127.0.0.1:" + deniedAddress.port + "/customer/applications/app-a/assets/doc-a/download",
         { headers: { authorization: "Bearer " + token } });
-      assert.equal(denied.status, 403);
-      assert.deepEqual(await denied.json(), { error: "actor_not_assigned_to_application" });
+      // Keep asset existence non-disclosing: unauthorized application/actor access is 404.
+      assert.equal(denied.status, 404);
+      assert.deepEqual(await denied.json(), { error: "asset_not_found" });
       assert.equal(resolverCalls, 1, "storage provider must not be called for an unauthorized actor");
     } finally { await new Promise(resolve => deniedServer.close(resolve)); }
   } finally {
