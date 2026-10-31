@@ -596,3 +596,93 @@ test("scheduler readiness accepts schema with dispatch-fence migration applied",
   const store = new PostgresCampaignSchedulerStore(pool);
   await assert.doesNotReject(store.assertReady());
 });
+
+
+test("execution diagnostics expose durable error classifications within tenant and application scope", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("SELECT id, schedule_id, status, attempt_count")
+      ? [{
+          id: "execution-a", schedule_id: "schedule-a", status: "dead_letter", attempt_count: 2,
+          last_error_code: "DISPATCH_OUTCOME_UNKNOWN",
+          last_error_detail_code: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+          dispatch_started_at: "2030-01-01T10:00:00.000Z",
+          completed_at: "2030-01-01T10:00:05.000Z",
+          updated_at: "2030-01-01T10:00:05.000Z",
+        }]
+      : [],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const result = await store.getExecutionDiagnostics({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "execution-a",
+  });
+  assert.equal(result.status, "dead_letter");
+  assert.equal(result.lastErrorCode, "DISPATCH_OUTCOME_UNKNOWN");
+  assert.equal(result.lastErrorDetailCode, "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST");
+  const query = calls[0];
+  assert.match(query.sql, /WHERE tenant_id=\$1 AND application_id=\$2 AND id=\$3/);
+  assert.deepEqual(query.values, ["tenant-a", "app-a", "execution-a"]);
+  assert.doesNotMatch(query.sql, /payload|idempotency_key/);
+});
+
+test("completion lease loss is durably dead-lettered after the worker no longer owns the lease", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("UPDATE eper_campaign_executions") && sql.includes("locked_by=$4")) {
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql.includes("UPDATE eper_campaign_executions") && sql.includes("dispatch_started_at IS NOT NULL")) {
+      return {
+        rows: [{
+          status: "dead_letter",
+          last_error_code: "DISPATCH_OUTCOME_UNKNOWN",
+          last_error_detail_code: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+          attempt_count: 2,
+        }],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 1 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const outcome = await store.failExecution({
+    tenantId: "tenant-a",
+    applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    workerId: "worker-a",
+    errorCode: "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST",
+  });
+  assert.equal(outcome, "dead_letter");
+  const leaseOwnedUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("locked_by=$4"));
+  assert.ok(leaseOwnedUpdate, "the normal lease-owned failure update is attempted first");
+  const diagnosticUpdate = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions") && call.sql.includes("dispatch_started_at IS NOT NULL"));
+  assert.ok(diagnosticUpdate, "the dispatch-fenced row receives a diagnostic-only safety update after lease loss");
+  assert.match(diagnosticUpdate.sql, /status='dead_letter'/);
+  assert.match(diagnosticUpdate.sql, /last_error_code='DISPATCH_OUTCOME_UNKNOWN'/);
+  assert.equal(diagnosticUpdate.values[3], "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST");
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
+});
+
+test("scheduler readiness rejects a database missing the durable error-detail migration", async () => {
+  const { pool, calls } = fakePool(async () => ({
+    rows: [{
+      schedules_table: "eper_campaign_schedules",
+      executions_table: "eper_campaign_executions",
+      dispatch_started_column: "dispatch_started_at",
+      error_detail_column: null,
+    }],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.assertReady(), /EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED/);
+  assert.match(calls[0].sql, /last_error_detail_code/);
+});
+
+test("scheduler readiness accepts schema with dispatch-fence migration applied", async () => {
+  const { pool } = fakePool(async () => ({
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at", error_detail_column: "last_error_detail_code" }],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.doesNotReject(store.assertReady());
+});
