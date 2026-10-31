@@ -52,14 +52,14 @@ function waitForNextPass(signal: AbortSignal, milliseconds: number): Promise<voi
  * expressions. Delivery remains at-least-once, so dispatchers must deduplicate eventId.
  */
 export class WorkflowOutboxProcess {
-  private readonly options: ReturnType<typeof validateOptions>;
+  private readonly options: WorkflowOutboxProcessOptions & ReturnType<typeof validateOptions>;
 
   constructor(
     private readonly worker: WorkflowOutboxWorker,
     private readonly contexts: WorkflowOutboxContextSource,
     options: WorkflowOutboxProcessOptions = {},
   ) {
-    this.options = validateOptions(options);
+    this.options = { ...options, ...validateOptions(options) };
   }
 
   async run(signal: AbortSignal): Promise<void> {
