@@ -481,7 +481,7 @@ test("ticket conversation read returns not-found without reading replies for a t
 test("P1 classification persists rationale and trusted confirmation metadata atomically with audit", async () => {
   const calls = [];
   const row = {
-    ...ticketRow, severity: "p1_confirmed",
+    ...ticketRow, type: "defect", evidence_reference: "evidence://repro-123", severity: "p1_confirmed",
     p1_rationale: "Payment integrity is blocked for all users and receipts cannot be reconciled.",
     p1_confirmed_by: "actor-a",
     p1_confirmed_at: "2026-10-31T16:00:00.000Z",
@@ -489,7 +489,7 @@ test("P1 classification persists rationale and trusted confirmation metadata ato
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
-      if (/SELECT severity FROM eper_support_tickets/.test(sql)) return { rows: [{ severity: "p1_candidate" }], rowCount: 1 };
+      if (/SELECT severity, type, evidence_reference FROM eper_support_tickets/.test(sql)) return { rows: [{ severity: "p1_candidate", type: "defect", evidence_reference: "evidence://repro-123" }], rowCount: 1 };
       if (/UPDATE eper_support_tickets/.test(sql)) return { rows: [row], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
@@ -526,4 +526,27 @@ test("P1 confirmation without substantive rationale is rejected before database 
     /ticket_severity_rationale_required/,
   );
   assert.equal(connections, 0);
+});
+
+
+test("P1 confirmation rejects non-defects or missing evidence references", async () => {
+  for (const ticketDetails of [
+    { type: "feature_request", evidence_reference: "evidence://repro-123" },
+    { type: "defect", evidence_reference: null },
+  ]) {
+    const client = {
+      async query(sql) {
+        if (/SELECT severity, type, evidence_reference FROM eper_support_tickets/.test(sql)) {
+          return { rows: [{ severity: "p1_candidate", ...ticketDetails }], rowCount: 1 };
+        }
+        throw new Error("unexpected query: " + sql);
+      },
+      release() {},
+    };
+    const store = new PostgresTicketStore({ async connect() { return client; } }, async () => {});
+    await assert.rejects(
+      () => store.classifySeverity(identity, "ticket-1", "p1_confirmed", "Evidence indicates severe impact to payment integrity."),
+      /ticket_p1_evidence_required/,
+    );
+  }
 });
