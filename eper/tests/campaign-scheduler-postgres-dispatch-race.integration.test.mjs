@@ -16,7 +16,11 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
   assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
     "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 5 });
+  const poolEvents = [];
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 3000 });
+  pool.on("connect", (client) => poolEvents.push({ event: "connect", pid: client.processID }));
+  pool.on("acquire", (client) => poolEvents.push({ event: "acquire", pid: client.processID }));
+  pool.on("error", (error) => poolEvents.push({ event: "pool-error", message: error.message }));
   const tenantId = "scheduler-race-test-" + randomUUID();
   const applicationId = "app-race-" + randomUUID();
   const actorId = "integration-test";
@@ -137,7 +141,9 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
             totalCount: pool.totalCount,
             idleCount: pool.idleCount,
             waitingCount: pool.waitingCount,
+            connectionTimeoutMillis: pool.options.connectionTimeoutMillis,
           },
+          poolEvents,
           blockerPid,
         }));
       }
