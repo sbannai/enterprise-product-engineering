@@ -29,7 +29,7 @@ The campaign scheduler remains a separate subsystem. Its lease, retry, and dispa
 
 A running instance must pin an immutable snapshot of the exact active definition used at creation time. Later edits to the tenant's configured definition must not silently change in-flight instances.
 
-**Application-scope blocker:** the existing `eper_admin_configuration` table is keyed by (`tenant_id, resource_type`) and its workflow configuration has no `application_id`. It is therefore not a safe execution-definition authority for multiple applications within one tenant. Do not read the tenant-wide `workflows` blob and assume it belongs to the caller's application. The first implementation must introduce an application-scoped publication boundary in `eper_workflow_definition_versions`, populated only by a trusted publisher that receives tenant/application identity from server-side assignment context. Until that boundary exists, instance creation must remain disabled. Existing tenant-wide configuration may be used only as an administrative draft source; it must not be executed directly.
+**Application-scope blocker:** the existing `eper_admin_configuration` table is keyed by (`tenant_id, resource_type`) and its workflow configuration has no `application_id`. It is therefore not a safe execution-definition authority for multiple applications within one tenant. Do not read the tenant-wide `workflows` blob and assume it belongs to the caller's application. The first implementation must introduce an application-scoped publication boundary in `eper_workflow_definition_versions`, populated only by a trusted publisher that receives tenant/application identity from server-side assignment context. Until that boundary exists, instance creation must remain disabled. Existing tenant-wide configuration may be used only as an administrative draft source; it must not be executed directly. The current durable admin bearer mapping resolves only tenantId and actorId, not applicationId. A publication API must therefore accept an application selector only as an untrusted request parameter and verify it server-side against both the tenant-application ownership allowlist and the actor-application active assignment store before writing the versioned snapshot. Missing assignment stores or assignment lookup failures must fail closed.
 
 Minimum snapshot metadata:
 - tenant_id and application_id
@@ -107,7 +107,7 @@ Use composite tenant/application foreign keys and indexes for tenant-scoped list
 ## 7. Service/API boundary
 
 Keep transport-independent logic in `packages/workflows`:
-- `WorkflowDefinitionPublisher`: validates and creates immutable definition versions.
+- `WorkflowDefinitionPublisher`: validates and creates immutable definition versions only after trusted tenant/actor resolution plus server-side tenant-application and actor-application assignment checks.
 - `PostgresWorkflowExecutionStore`: transactional persistence and readiness checks.
 - `WorkflowExecutionService`: start, submit, approve, reject, cancel, get and list operations; owns transition guards and authorization.
 - `WorkflowExecutionError`: stable error codes/status mapping.
