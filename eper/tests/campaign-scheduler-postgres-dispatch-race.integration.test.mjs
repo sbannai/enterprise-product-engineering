@@ -187,7 +187,7 @@ test("PostgreSQL accepts a 256-character event ID with a bounded idempotency key
   skip: !enabled ? "Set EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL to an isolated, migrated test database" : false,
 }, async () => {
   const parsed = new URL(databaseUrl);
-  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\//, ""));
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
   assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
     "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
 
