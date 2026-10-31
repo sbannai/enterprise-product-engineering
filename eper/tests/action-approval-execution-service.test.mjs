@@ -77,6 +77,7 @@ test("rechecks owner policy and independent controls before claiming and dispatc
   const authorization = calls.find(item => item && item.operation === "execute_proposal");
   assert.equal(authorization.proposalHash, proposal.payloadHash);
   assert.equal(authorization.approvalId, approval.approvalId);
+  assert.equal(authorization.approverId, approval.approverId);
   const dispatch = calls.find(item => item && item.executionId === "execution-01");
   assert.equal(dispatch.idempotencyKey, proposal.idempotencyKey);
 });
