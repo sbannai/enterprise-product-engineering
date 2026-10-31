@@ -597,7 +597,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       };
       const authorize = async (
         operation: ActionApprovalAuthorizationOperation,
-        proposal?: { proposalId: string; proposalVersion: number; payloadHash: string; actionType: string; sideEffectClass: string; targetType: string; targetId: string },
+        proposal?: { proposalId?: string; proposalVersion?: number; payloadHash?: string; actionType?: string; sideEffectClass?: string; targetType?: string; targetId?: string },
       ) => authorizer({
         tenantId: identity.tenantId, applicationId, actorId: identity.actorId, operation,
         ...(proposal ? proposal : {}),
@@ -637,7 +637,6 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendApiError(request, response, 400, "ACTION_PROPOSAL_INVALID", "The action proposal fields are invalid."); return;
           }
           const permission = await authorize("create_proposal", {
-            proposalId: "", proposalVersion: 1, payloadHash: "",
             actionType: body.actionType, sideEffectClass: body.sideEffectClass,
             targetType: body.targetType, targetId: body.targetId,
           });
