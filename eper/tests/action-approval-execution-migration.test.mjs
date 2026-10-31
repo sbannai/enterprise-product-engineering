@@ -25,6 +25,8 @@ test("approval grants bind the exact proposal hash and enforce human maker-check
   assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_action_approval_decisions/);
   assert.match(sql, /decision IN \('approve','reject','revoke'\)/);
   assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_action_approval_decisions/);
+  assert.match(sql, /EPER_ACTION_APPROVAL_ACTOR_MISMATCH/);
+  assert.match(sql, /eper_action_approval_decisions_validate_actor/);
 });
 
 test("execution claims enforce one-use approval and idempotency with immutable identity", async () => {
