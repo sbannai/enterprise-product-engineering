@@ -315,7 +315,7 @@ test("PostgreSQL action approval ledger enforces scope, immutable decisions and 
           ) VALUES ($1,$2,$3,$4,1,$5,$6,'approve','different-approver','human',$7,$8,'policy-v1')`,
           [tenantId, applicationId, randomUUID(), proposalId, payloadHash, approvalId, now.toISOString(), expiresAt.toISOString()],
         ),
-        /EPER_ACTION_APPROVAL_ACTOR_MISMATCH/,
+        /EPER_ACTION_APPROVAL_PROVENANCE_MISMATCH/,
       );
       await client.query("ROLLBACK TO SAVEPOINT invalid_approval_actor");
       await client.query("RELEASE SAVEPOINT invalid_approval_actor");
