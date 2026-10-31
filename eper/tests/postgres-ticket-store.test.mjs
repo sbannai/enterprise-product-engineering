@@ -489,6 +489,7 @@ test("P1 classification persists rationale and trusted confirmation metadata ato
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (/SELECT severity FROM eper_support_tickets/.test(sql)) return { rows: [{ severity: "p1_candidate" }], rowCount: 1 };
       if (/UPDATE eper_support_tickets/.test(sql)) return { rows: [row], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
@@ -510,6 +511,7 @@ test("P1 classification persists rationale and trusted confirmation metadata ato
     ["tenant-a", "ticket-1", "p1_confirmed", rationale, "actor-a"]);
   assert.equal(auditEvents.length, 1);
   assert.equal(auditEvents[0].action, "ticket.severity_classified");
+  assert.equal(auditEvents[0].payload.previousSeverity, "p1_candidate");
   assert.equal(auditEvents[0].payload.confirmedBy, "actor-a");
   assert.ok(calls.some(x => x.sql === "COMMIT"));
   assert.ok(!calls.some(x => x.sql === "ROLLBACK"));
@@ -521,7 +523,7 @@ test("P1 confirmation without substantive rationale is rejected before database 
   const store = new PostgresTicketStore(pool, async () => {});
   await assert.rejects(
     () => store.classifySeverity(identity, "ticket-1", "p1_confirmed", "Too short"),
-    /ticket_p1_rationale_required/,
+    /ticket_severity_rationale_required/,
   );
   assert.equal(connections, 0);
 });
