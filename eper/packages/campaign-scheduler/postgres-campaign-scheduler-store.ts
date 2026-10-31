@@ -339,11 +339,11 @@ export class PostgresCampaignSchedulerStore {
           (id, schedule_id, tenant_id, application_id, scheduled_for, idempotency_key, payload)
          SELECT gen_random_uuid(), s.id, s.tenant_id, s.application_id, $3,
            'event:' || $7 || ':' || s.id::text,
-           jsonb_build_object('campaignId', s.campaign_id, 'eventType', $5, 'eventId', $4, 'eventPayload', $6::jsonb)
+           jsonb_build_object('campaignId', s.campaign_id, 'eventType', $5::text, 'eventId', $4::text, 'eventPayload', $6::jsonb)
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$1 AND s.application_id=$2
            AND s.trigger_type='event' AND s.status='scheduled' AND s.approval_status='approved'
-           AND s.schedule_definition->>'eventType'=$5
+           AND s.schedule_definition->>'eventType'=$5::text
          ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
          RETURNING id`,
         [tenantId, applicationId, occurredAt.toISOString(), eventId, eventType, JSON.stringify(payload),
