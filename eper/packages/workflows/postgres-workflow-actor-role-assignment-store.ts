@@ -283,9 +283,10 @@ export class PostgresWorkflowActorRoleAssignmentStore {
         `INSERT INTO eper_workflow_actor_role_assignment
           (tenant_id, application_id, actor_id, role_id, assignment_status, version,
            assigned_at, assigned_by, revoked_at, revoked_by, updated_at, updated_by)
-         VALUES ($1,$2,$3,$4,$5::varchar,1,NOW(),$6,
+         VALUES ($1,$2,$3,$4,$5::varchar,1,NOW(),$6::varchar(128),
                  CASE WHEN $5::varchar = 'revoked' THEN NOW() ELSE NULL END,
-                 CASE WHEN $5::varchar = 'revoked' THEN $6 ELSE NULL END,NOW(),$6)
+                 CASE WHEN $5::varchar = 'revoked' THEN $6::varchar(128) ELSE NULL END,
+                 NOW(),$6::varchar(128))
          ON CONFLICT (tenant_id, application_id, actor_id, role_id) DO UPDATE SET
            assignment_status = EXCLUDED.assignment_status,
            version = eper_workflow_actor_role_assignment.version + 1,
