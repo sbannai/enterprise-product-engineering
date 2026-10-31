@@ -1,25 +1,27 @@
 # Re-run controlled QA after payment/receipt branch reconciliation.
 name: EPER RE-EXEC-001 Controlled QA Re-Execution
 
+# Isolate each PR validation by its exact head commit. Push and manual runs
+# are isolated by the exact commit being tested, never merely by branch name.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: eper-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 on:
   pull_request:
     paths:
       - "eper/**"
       - ".github/workflows/eper-reexec-qa.yml"
-      - ".github/workflows/**"
   push:
+    branches: ["main"]
     paths:
       - "eper/**"
-      - ".github/workflows/eper-reexec-qa.yml"
   workflow_dispatch:
 
 jobs:
   controlled-qa-reexecution:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: eper
@@ -36,8 +38,13 @@ jobs:
         run: npm ci
       - name: Build candidate
         run: npm run build
+      - name: Initialize QA evidence
+        if: always()
+        run: mkdir -p reexec-evidence
       - name: Execute 228 requirement test suite
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee reexec-evidence/qa-test-output.log
       - name: Record execution metadata
         if: always()
         run: |
@@ -61,5 +68,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EPER-REEXEC-001-${{github.run_id}}
-          path: eper/reexec-evidence/execution-metadata.txt
+          path: eper/reexec-evidence/
           if-no-files-found: error

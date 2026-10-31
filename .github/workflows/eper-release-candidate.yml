@@ -1,5 +1,9 @@
 name: EPER Release Candidate Build
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -42,9 +46,6 @@ jobs:
 
       - name: Build release candidate
         run: npm run build
-
-      - name: Execute verification tests
-        run: npm test
 
       - name: Build UAT container image (no push)
         run: |

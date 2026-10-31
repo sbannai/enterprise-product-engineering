@@ -679,6 +679,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      if (!identity.applicationIds || identity.applicationIds.length === 0) {
+        sendJson(request, response, 403, { error: "customer_application_access_forbidden" }); return;
+      }
       let modulesConfig: unknown;
       let assignmentsConfig: unknown;
       let assetsConfig: unknown;
@@ -707,7 +710,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const allAssets: Record<string, unknown>[] = [];
       const applicationsWithAssets = new Set<string>();
+      const actorApplicationIds = new Set(identity.applicationIds);
       for (const assignedId of [...new Set(tenantAssignments as string[])]) {
+        if (!actorApplicationIds.has(assignedId)) continue;
         const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
         if (applicationAssets === undefined) continue;
         if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
@@ -770,6 +775,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         await assetAuditWriter({ tenantId: identity.tenantId, actorId: identity.actorId, action: "customer.asset.download", outcome, applicationId, assetId, requestId });
       };
       try {
+        if (!identity.applicationIds || !identity.applicationIds.includes(applicationId)) {
+          await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
+        }
         if (!assetAuditWriter) {
           // Downloads are high-risk reads: never issue a URL when audit persistence is unavailable.
           sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" }); return;
@@ -803,7 +811,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         let url: URL; const expiresAt = Date.parse(result.expiresAt); const now = Date.now();
         try { url = new URL(result.url); } catch { url = new URL("about:blank"); }
-        if (url.protocol !== "https:" || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
+        if (url.protocol !== "https:" || url.username || url.password || !configuredAssetStorageHosts.some((host) => host.toLowerCase() === url.hostname.toLowerCase()) || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt > now + 15 * 60 * 1000) {
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
         await audit("success");
