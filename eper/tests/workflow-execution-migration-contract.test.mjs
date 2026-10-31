@@ -9,7 +9,7 @@ test("workflow execution migration defines application-scoped immutable definiti
   assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_definition_versions/);
   assert.match(sql, /PRIMARY KEY \(tenant_id, application_id, workflow_id, definition_version\)/);
   assert.match(sql, /definition_digest char\(64\) NOT NULL CHECK/);
-  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, workflow_id, definition_version\)/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, workflow_id, definition_version, definition_digest\)/);
 });
 
 test("workflow execution migration defines durable instances, transition history and idempotency", async () => {
@@ -20,11 +20,11 @@ test("workflow execution migration defines durable instances, transition history
   assert.match(sql, /UNIQUE \(tenant_id, application_id, instance_id, idempotency_key\)/);
   assert.match(sql, /request_fingerprint char\(64\) NOT NULL CHECK/);
   assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, instance_id\)/);
-  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, transition_id\)/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, instance_id, transition_id\)/);
   assert.match(sql, /resulting_version bigint NOT NULL CHECK \(resulting_version > expected_version\)/);
 });
 
-test("workflow execution migration enforces tenant/application row-level security", async () => {
+test("workflow execution migration enforces tenant/application row-level security and uses its own ledger", async () => {
   const sql = await readFile(migrationUrl, "utf8");
   assert.match(sql, /ALTER TABLE %I ENABLE ROW LEVEL SECURITY/);
   assert.match(sql, /ALTER TABLE %I FORCE ROW LEVEL SECURITY/);
