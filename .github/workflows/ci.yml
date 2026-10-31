@@ -62,6 +62,12 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
         run: npm run migrate:audit
+      - name: Apply workflow execution, publication and role migrations to ephemeral CI database
+        run: npm run migrate:workflows
+      - name: Verify workflow migrations are safely repeatable
+        run: npm run migrate:workflows
+      - name: Live PostgreSQL workflow execution integration
+        run: node --test tests/postgres-workflow-execution.integration.test.mjs
       - name: Live PostgreSQL tenant and actor application assignment integration
         env:
           EPER_IDENTITY_ASSIGNMENT_LIVE_TESTS: "1"
