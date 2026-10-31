@@ -111,8 +111,9 @@ export class PostgresWorkflowActorRoleAssignmentStore {
     validateId(actorId, "actorId");
     const client = await this.pool.connect();
     try {
-      await client.query("SELECT set_config('eper.tenant_id', $1, false)", [tenantId]);
-      await client.query("SELECT set_config('eper.application_id', $1, false)", [applicationId]);
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
       const result = await client.query<{ role_id: string }>(
         `SELECT role_id FROM eper_workflow_actor_role_assignment
           WHERE tenant_id = $1 AND application_id = $2 AND actor_id = $3
@@ -120,7 +121,11 @@ export class PostgresWorkflowActorRoleAssignmentStore {
           ORDER BY role_id`,
         [tenantId, applicationId, actorId],
       );
+      await client.query("COMMIT");
       return result.rows.map(row => row.role_id);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally {
       client.release();
     }
