@@ -1269,7 +1269,7 @@ test("ticket API uses durable tenant ownership and actor membership without envi
   let storeCalls=0;
   const ticketStore={async assertReady(){},async list(){storeCalls++;return [];}};
   const tenantApplicationAssignmentStore={async listActive(tenantId){assert.equal(tenantId,"tenant-a");return ["app-a","app-b"];}};
-  const actorApplicationAssignmentStore={async isAssigned(tenantId,actorId,applicationId){assert.deepEqual([tenantId,actorId,applicationId],["tenant-a","actor-a","app-a"]);return true;}};
+  const actorApplicationAssignmentStore={async isAssigned(tenantId,actorId,applicationId){assert.equal(tenantId,"tenant-a");assert.equal(actorId,"actor-a");return applicationId==="app-a";}};
   await withServer({ticketStore,tenantApplicationAssignmentStore,actorApplicationAssignmentStore},async(base)=>{
     const allowed=await fetch(base+"/customer/applications/app-a/tickets",{headers:{authorization:"Bearer "+credential}});
     assert.equal(allowed.status,200);
