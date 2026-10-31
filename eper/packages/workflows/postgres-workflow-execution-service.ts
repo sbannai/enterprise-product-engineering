@@ -259,6 +259,49 @@ export class PostgresWorkflowExecutionService {
     private readonly serviceVersion?: string,
   ) {}
 
+  async assertReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ ready_tables: number | string; start_key_present: boolean }>(
+        `SELECT
+           (SELECT count(*)::int
+              FROM unnest(ARRAY[
+                'eper_workflow_definition_versions',
+                'eper_workflow_publication_events',
+                'eper_workflow_instances',
+                'eper_workflow_transitions',
+                'eper_workflow_idempotency',
+                'eper_workflow_actor_role_assignment',
+                'eper_workflow_role_definition'
+              ]) AS required(table_name)
+              JOIN pg_class c ON c.oid = to_regclass('public.' || required.table_name)
+             WHERE c.relrowsecurity AND c.relforcerowsecurity
+               AND EXISTS (
+                 SELECT 1 FROM pg_policies p
+                  WHERE p.schemaname = 'public'
+                    AND p.tablename = required.table_name
+                    AND p.policyname = 'tenant_application_isolation'
+               )
+           ) AS ready_tables,
+           EXISTS (
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'eper_workflow_instances'
+                AND column_name = 'start_idempotency_key'
+           ) AS start_key_present`,
+      );
+      const row = result.rows[0];
+      if (Number(row?.ready_tables) !== 7 || row?.start_key_present !== true) {
+        throw new Error("EPER_WORKFLOW_EXECUTION_SCHEMA_NOT_READY");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_WORKFLOW_EXECUTION_SCHEMA_NOT_READY") throw error;
+      throw new Error("EPER_WORKFLOW_EXECUTION_READINESS_FAILED", { cause: error });
+    } finally {
+      client.release();
+    }
+  }
+
   async start(input: StartWorkflowInstanceInput): Promise<WorkflowInstanceRecord> {
     validateContext(input);
     validateId(input.workflowId, "workflowId");
