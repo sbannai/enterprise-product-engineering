@@ -325,7 +325,8 @@ export class PostgresCampaignSchedulerStore {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const eventType = required(input.eventType, "CAMPAIGN_EVENT_TYPE_REQUIRED");
-    const eventId = required(input.eventId, "CAMPAIGN_EVENT_ID_REQUIRED", 256);
+    const eventId = typeof input.eventId === "string" ? input.eventId.trim() : "";
+    if (!eventId) throw new Error("CAMPAIGN_EVENT_ID_REQUIRED");
     if (eventType.length > 128 || eventId.length > 256) throw new Error("CAMPAIGN_EVENT_IDENTITY_INVALID");
     const occurredAt = new Date(input.occurredAt);
     if (!Number.isFinite(occurredAt.getTime())) throw new Error("CAMPAIGN_EVENT_OCCURRED_AT_INVALID");
