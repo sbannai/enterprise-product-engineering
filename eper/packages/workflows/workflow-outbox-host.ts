@@ -24,17 +24,21 @@ export async function runWorkflowOutboxWorkerHost(
   }
   const controller = new AbortController();
   let shutdownRequested = false;
+  let sigintRegistered = false;
+  let sigtermRegistered = false;
   const requestShutdown = () => {
     if (shutdownRequested) return;
     shutdownRequested = true;
     controller.abort();
   };
-  signalHost.on("SIGINT", requestShutdown);
-  signalHost.on("SIGTERM", requestShutdown);
   try {
+    signalHost.on("SIGINT", requestShutdown);
+    sigintRegistered = true;
+    signalHost.on("SIGTERM", requestShutdown);
+    sigtermRegistered = true;
     await runWorkflowOutboxRuntime(options, controller.signal);
   } finally {
-    signalHost.off("SIGINT", requestShutdown);
-    signalHost.off("SIGTERM", requestShutdown);
+    if (sigtermRegistered) signalHost.off("SIGTERM", requestShutdown);
+    if (sigintRegistered) signalHost.off("SIGINT", requestShutdown);
   }
 }
