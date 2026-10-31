@@ -96,6 +96,9 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
 
       const verify = await pool.connect();
       try {
+        await verify.query("BEGIN");
+        await verify.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await verify.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
         const instances = await verify.query(
           `SELECT status, version, definition_version, definition_digest
              FROM eper_workflow_instances
@@ -126,6 +129,10 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         assert.deepEqual(audit.rows.map(row => row.action), [
           "workflow.instance.start", "workflow.instance.transition",
         ]);
+        await verify.query("COMMIT");
+      } catch (error) {
+        try { await verify.query("ROLLBACK"); } catch { /* preserve original failure */ }
+        throw error;
       } finally { verify.release(); }
     } finally {
       // Workflow transition, idempotency, definition and audit ledgers are append-only;
