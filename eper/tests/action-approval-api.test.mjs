@@ -120,7 +120,15 @@ test("action approval API derives tenant and actor from trusted identity and del
     assert.equal(calls.decisions[0].policyVersion, "owner-policy-v1");
     assert.equal(calls.decisions[0].expiresAt, "2026-10-31T18:00:00.000Z");
     assert.equal(typeof calls.decisions[0].approvalId, "string");
-    assert.equal(calls.authorizations.some(item => item.operation === "approve_proposal"), true);
+    const approvalAuthorization = calls.authorizations.find(item => item.operation === "approve_proposal");
+    assert.equal(typeof approvalAuthorization.proposalHash, "string");
+    const revoked = await fetch(path + "/proposal-1/decisions", {
+      method: "POST", headers, body: JSON.stringify({ decision: "revoke", approvalId: "approval-existing" }),
+    });
+    assert.equal(revoked.status, 201);
+    const revokeAuthorization = calls.authorizations.find(item => item.operation === "revoke_approval");
+    assert.equal(revokeAuthorization.approvalId, "approval-existing");
+    assert.equal(calls.decisions.length, 2);
   } finally {
     await new Promise(resolve => server.close(resolve));
     restoreEnvironment(previous);
