@@ -101,6 +101,7 @@ Use a dedicated migration directory under `eper/packages/workflows/migrations` a
 - `eper_workflow_instances`: current instance projection, pinned definition version/digest, current activity, data, status and optimistic version.
 - `eper_workflow_transitions`: append-only transition history with actor, action, version pair, idempotency key, correlation and payload digest.
 - `eper_workflow_idempotency`: request digest and stored response/transition identifier, unique by tenant/application/instance/key.
+- `eper_workflow_actor_role_assignment`: durable actor-to-role membership keyed by tenant/application/actor/role. Grants require active tenant/application ownership and active actor/application membership under row locks; mutations append audit evidence in the same transaction. The table enforces tenant/application RLS. Runtime authorization must resolve the activity's required role against this store, never from request JSON or the tenant-wide role configuration blob.
 
 Use composite tenant/application foreign keys and indexes for tenant-scoped list/history reads. Add CHECK constraints for statuses/actions, bounded identifiers, positive versions, JSON object payloads, and unique idempotency keys. Avoid storing sensitive form fields in audit payloads; store only approved business fields in instance data and a digest/reference in audit.
 
