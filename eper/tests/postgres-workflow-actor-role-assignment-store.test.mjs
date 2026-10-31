@@ -25,6 +25,9 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus =
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
+        return { rows: [{ role_id: "finance-approver" }, { role_id: "expense-reviewer" }], rowCount: 2 };
+      }
       if (sql.includes("eper_tenant_application_assignment")) {
         return { rows: [{ assignment_status: tenantStatus }], rowCount: 1 };
       }
@@ -41,9 +44,6 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus =
         return { rows: [row], rowCount: 1 };
       }
       if (sql.includes("SELECT last_event_hash")) return { rows: [{ last_event_hash: null }], rowCount: 1 };
-      if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
-        return { rows: [{ role_id: "finance-approver" }, { role_id: "expense-reviewer" }], rowCount: 2 };
-      }
       return { rows: [], rowCount: 1 };
     },
     release() { calls.push({ sql: "RELEASE" }); },
