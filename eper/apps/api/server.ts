@@ -543,6 +543,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const workflowPublishRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/publish$/.exec(requestUrl.pathname);
     const workflowStartRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/instances$/.exec(requestUrl.pathname);
     const workflowTransitionRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-instances\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/transitions$/i.exec(requestUrl.pathname);
+    const actionProposalCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals$/.exec(requestUrl.pathname);
+    const actionProposalDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(requestUrl.pathname);
+    const actionProposalDecisions = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/decisions$/.exec(requestUrl.pathname);
 
     const workflowError = (error: unknown): void => {
       const message = error instanceof Error ? error.message : "WORKFLOW_OPERATION_FAILED";
