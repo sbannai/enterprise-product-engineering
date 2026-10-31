@@ -46,3 +46,43 @@ test("workflow execution API is opt-in and derives identity from trusted credent
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+test("workflow administration requires both tenant ownership and active administrator application assignment", async () => {
+  const keys = ["EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_ADMIN_CONFIG_API_ENABLED",
+    "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "workflow-admin-api-test-token-00000000000000001";
+  process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = "true";
+  process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
+  process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
+  process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "admin-a" },
+  });
+  let assigned = false;
+  let listCalls = 0;
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+      assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "admin-a", "app-a"]);
+      return assigned;
+    } },
+    workflowRoleDefinitionStore: { async list() { listCalls++; return []; } },
+    workflowActorRoleAssignmentStore: {},
+    workflowDefinitionPublisher: {},
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/admin/applications/app-a/workflow-roles";
+    const headers = { authorization: "Bearer " + token };
+    assert.equal((await fetch(url, { headers })).status, 403);
+    assert.equal(listCalls, 0);
+    assigned = true;
+    assert.equal((await fetch(url, { headers })).status, 200);
+    assert.equal(listCalls, 1);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
