@@ -113,6 +113,7 @@ export class ActionApprovalExecutionService {
       proposalVersion: proposal.proposalVersion,
       proposalHash: proposal.payloadHash,
       approvalId: approval.approvalId,
+      approverId: approval.approverId,
       actionType: proposal.actionType,
       sideEffectClass: proposal.sideEffectClass,
       targetType: proposal.targetType,
