@@ -131,3 +131,16 @@ test("publisher rejects missing, disabled or insufficient application role grant
     assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")), false);
   }
 });
+
+
+test("publisher rejects activity types whose permissions do not match their action", async () => {
+  const { calls, pool } = fixture();
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{ ...definition.activities[0], type: "TASK", permission: "workflow:approve" }],
+    }),
+    error => error.code === "WORKFLOW_PUBLISH_INVALID_ACTIVITY",
+  );
+  assert.equal(calls.length, 0);
+});
