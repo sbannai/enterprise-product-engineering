@@ -475,7 +475,14 @@ test("PostgreSQL action approval store persists proposals, maker-checker decisio
       const created = await store.createProposal(proposal, context);
       assert.equal(created.replayed, false);
       assert.equal(created.proposal.payloadHash, proposal.payloadHash);
-      const replay = await store.createProposal(proposal, context);
+      const replayEnvelope = {
+        ...proposalEnvelope,
+        proposalId: "retry-proposal-" + suffix,
+        createdAt: new Date(Date.parse(proposalEnvelope.createdAt) + 1000).toISOString(),
+        correlationId: "retry-correlation-" + suffix,
+      };
+      const replayProposal = { ...replayEnvelope, payloadHash: hashActionProposal(replayEnvelope) };
+      const replay = await store.createProposal(replayProposal, context);
       assert.equal(replay.replayed, true);
       assert.equal(replay.proposal.proposalId, proposal.proposalId);
 
