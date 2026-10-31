@@ -196,6 +196,27 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         );
         assert.deepEqual(transitions.rows.map(row => row.action), ["start", "submit", "approve"]);
 
+        const outbox = await verify.query(
+          `SELECT event_type, event_version, payload
+             FROM eper_workflow_outbox_events
+            WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
+            ORDER BY event_version`,
+          [tenantId, applicationId, started.instanceId],
+        );
+        assert.deepEqual(outbox.rows.map(row => row.event_type), [
+          "workflow.instance.started", "workflow.instance.submitted", "workflow.instance.completed",
+        ]);
+        assert.deepEqual(outbox.rows.map(row => Number(row.event_version)), [1, 2, 3]);
+        const deliveries = await verify.query(
+          `SELECT delivery_status, attempts FROM eper_workflow_outbox_delivery
+            WHERE tenant_id = $1 AND application_id = $2
+              AND event_id IN (SELECT event_id FROM eper_workflow_outbox_events
+                                WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3)`,
+          [tenantId, applicationId, started.instanceId],
+        );
+        assert.equal(deliveries.rows.length, 3);
+        assert.ok(deliveries.rows.every(row => row.delivery_status === "pending" && Number(row.attempts) === 0));
+
         const audit = await verify.query(
           `SELECT action FROM eper_audit_events
             WHERE tenant_id = $1 AND application_id = $2
