@@ -186,6 +186,14 @@ export class PostgresWorkflowActorRoleAssignmentStore {
       }
 
       if (status === "active") {
+        const roleDefinition = await client.query<{ role_status: string }>(
+          `SELECT role_status FROM eper_workflow_role_definition
+            WHERE tenant_id = $1 AND application_id = $2 AND role_id = $3 FOR SHARE`,
+          [input.tenantId, input.applicationId, input.roleId],
+        );
+        if (roleDefinition.rows[0]?.role_status !== "active") {
+          throw new Error("WORKFLOW_ROLE_ASSIGNMENT_ROLE_NOT_ACTIVE");
+        }
         const actorAssignment = await client.query<{ assignment_status: string }>(
           `SELECT assignment_status FROM eper_actor_application_assignment
             WHERE tenant_id = $1 AND actor_id = $2 AND application_id = $3 FOR SHARE`,
