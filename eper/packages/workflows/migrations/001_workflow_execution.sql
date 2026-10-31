@@ -113,6 +113,4 @@ BEGIN
   END LOOP;
 END $$;
 
-INSERT INTO eper_schema_migrations(version) VALUES ('001_workflow_execution')
-ON CONFLICT (version) DO NOTHING;
 COMMIT;
