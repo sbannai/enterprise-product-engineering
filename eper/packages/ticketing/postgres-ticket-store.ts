@@ -238,11 +238,15 @@ export class PostgresTicketStore {
     try {
       await client.query("BEGIN");
       const current = await client.query<Record<string, unknown>>(
-        "SELECT severity FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+        "SELECT severity, type, evidence_reference FROM eper_support_tickets WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
         [identity.tenantId, ticketId],
       );
       if (!current.rows[0]) { await client.query("ROLLBACK"); return null; }
       const previousSeverity = String(current.rows[0].severity);
+      if (severity === "p1_confirmed" &&
+          (current.rows[0].type !== "defect" || typeof current.rows[0].evidence_reference !== "string" || !current.rows[0].evidence_reference.trim())) {
+        throw new Error("ticket_p1_evidence_required");
+      }
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_support_tickets
          SET severity = $3,
