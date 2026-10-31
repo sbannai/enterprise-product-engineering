@@ -130,6 +130,12 @@ export class ActionApprovalExecutionService {
       throw new Error("ACTION_EXECUTION_INDEPENDENT_CONTROL_DENIED:" + (controls.reasonCode ?? "CONTROL_DENIED"));
     }
 
+    // Re-sample after all remote/policy/control I/O. The transactional claim
+    // must evaluate expiry and revocation against the time at the claim boundary,
+    // not the earlier snapshot used to evaluate independent controls.
+    const claimNow = this.now();
+    if (!canonicalNow(claimNow)) throw new Error("ACTION_EXECUTION_TIMESTAMP_INVALID");
+
     const claimInput: ClaimActionExecutionInput = {
       ...this.options.auditContext,
       tenantId: proposal.tenantId,
@@ -141,7 +147,7 @@ export class ActionApprovalExecutionService {
       authorizationGranted: true,
       auditAvailable: true,
       consentAndIndependentControlsAllowed: true,
-      now,
+      now: claimNow,
     };
     const claim = await this.options.store.claimExecution(claimInput);
     if (claim.status === "succeeded") return claim;
