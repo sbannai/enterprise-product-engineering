@@ -135,6 +135,30 @@ export class WorkflowDefinitionPublisher {
         throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_ACTOR_APPLICATION_NOT_ASSIGNED", 403);
       }
 
+      // Every activity role and permission must exist in this application's durable role catalogue.
+      // The row lock prevents a concurrent role disable or permission change from racing publication.
+      const requiredRoleGrants = new Map<string, Set<string>>();
+      for (const activity of snapshot.activities) {
+        const permissions = requiredRoleGrants.get(activity.roleId) ?? new Set<string>();
+        permissions.add(activity.permission);
+        requiredRoleGrants.set(activity.roleId, permissions);
+      }
+      for (const [roleId, permissions] of requiredRoleGrants) {
+        const role = await client.query<{ role_status: string; permissions: string[] | string }>(
+          `SELECT role_status, permissions FROM eper_workflow_role_definition
+            WHERE tenant_id = $1 AND application_id = $2 AND role_id = $3
+            FOR SHARE`,
+          [context.tenantId, context.applicationId, roleId],
+        );
+        const roleRow = role.rows[0];
+        const granted = roleRow
+          ? (typeof roleRow.permissions === "string" ? JSON.parse(roleRow.permissions) : roleRow.permissions)
+          : [];
+        if (roleRow?.role_status !== "active" || [...permissions].some(permission => !granted.includes(permission))) {
+          throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_ROLE_PERMISSION_NOT_GRANTED", 403);
+        }
+      }
+
       // Serialize version allocation even when the workflow has no prior version row.
       // The transaction-scoped advisory lock closes the empty-result FOR UPDATE race.
       await client.query(
