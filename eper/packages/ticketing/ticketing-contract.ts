@@ -1,7 +1,7 @@
 export const TICKET_TYPES = ["defect", "feedback", "feature_request", "question"] as const;
 export type TicketType = typeof TICKET_TYPES[number];
 
-export const TICKET_SEVERITIES = ["p1_candidate", "p2", "p3", "p4"] as const;
+export const TICKET_SEVERITIES = ["p1_candidate", "p1_confirmed", "p2", "p3", "p4"] as const;
 export type TicketSeverity = typeof TICKET_SEVERITIES[number];
 
 export const TICKET_STATUSES = ["new", "triaged", "assigned", "in_progress", "resolved", "closed"] as const;
@@ -29,6 +29,9 @@ export interface TicketRecord extends CreateTicketInput {
   createdBy: string;
   status: TicketStatus;
   severity: TicketSeverity;
+  p1Rationale?: string | null;
+  p1ConfirmedBy?: string | null;
+  p1ConfirmedAt?: string | null;
   assignedTo: string | null;
   createdAt: string;
   updatedAt: string;
