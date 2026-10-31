@@ -119,6 +119,67 @@ test("campaign schedule creation rejects non-management roles before store acces
   assert.equal(createCalls, 0);
 });
 
+test("campaign schedule creation hides cross-tenant application IDs before store access", async (t) => {
+  let createCalls = 0;
+  const { base } = await withServer(t, {
+    async createSchedule(input) { createCalls += 1; return { ...schedule, ...input, id: "unexpected" }; },
+  });
+  const otherTenantToken = "another-test-token-with-at-least-32-characters";
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    method: "POST",
+    headers: { authorization: `Bearer ${otherTenantToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ campaignId: "campaign-a", triggerType: "once", timezone: "Asia/Kolkata", scheduleDefinition: { at: "2030-01-01T10:00:00+05:30" } }),
+  });
+  assert.equal(response.status, 404);
+  assert.equal(createCalls, 0, "cross-tenant create must not reach the scheduler store");
+});
+
+test("campaign schedule creation passes the trusted tenant, application and actor to persistence", async (t) => {
+  let captured;
+  const { base } = await withServer(t, {
+    async createSchedule(input) { captured = input; return { ...schedule, ...input, id: "schedule-trusted-scope" }; },
+  });
+  const scheduleDefinition = { at: "2030-01-01T10:00:00+05:30" };
+  const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ campaignId: "campaign-a", triggerType: "once", timezone: "Asia/Kolkata", scheduleDefinition }),
+  });
+  assert.equal(response.status, 202);
+  assert.deepEqual(captured, {
+    tenantId: "tenant-a", applicationId: "app-a", campaignId: "campaign-a",
+    triggerType: "once", timezone: "Asia/Kolkata", scheduleDefinition, createdBy: "actor-a",
+  });
+});
+
+test("campaign schedule routes remain hidden when the scheduler feature flag is disabled", async (t) => {
+  let storeCalls = 0;
+  const { base } = await withServer(t, {
+    async createSchedule() { storeCalls += 1; return schedule; },
+    async listSchedules() { storeCalls += 1; return [schedule]; },
+    async getSchedule() { storeCalls += 1; return schedule; },
+    async approveAndSchedule() { storeCalls += 1; return schedule; },
+    async getExecutionDiagnostics() { storeCalls += 1; return {}; },
+  });
+  const enabled = process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED;
+  process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED = "false";
+  try {
+    const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+    const responses = await Promise.all([
+      fetch(base + "/customer/applications/app-a/campaign-schedules", { headers }),
+      fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1", { headers }),
+      fetch(base + "/customer/applications/app-a/campaign-schedules", { method: "POST", headers, body: JSON.stringify({ campaignId: "campaign-a", triggerType: "once", timezone: "UTC", scheduleDefinition: { at: "2030-01-01T00:00:00Z" } }) }),
+      fetch(base + "/customer/applications/app-a/campaign-schedules/schedule-1/pause", { method: "POST", headers }),
+      fetch(base + "/customer/applications/app-a/campaign-executions/execution-1", { headers }),
+    ]);
+    assert.deepEqual(responses.map(response => response.status), [404, 404, 404, 404, 404]);
+    assert.equal(storeCalls, 0, "disabled scheduler routes must not reach persistence");
+  } finally {
+    if (enabled === undefined) delete process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED;
+    else process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED = enabled;
+  }
+});
+
 test("campaign schedule creation rejects missing required fields", async (t) => {
   const { base } = await withServer(t);
   const response = await fetch(base + "/customer/applications/app-a/campaign-schedules", {
