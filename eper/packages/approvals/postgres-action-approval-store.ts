@@ -28,6 +28,10 @@ export interface CreateActionProposalResult {
   proposal: ActionProposal;
   replayed: boolean;
 }
+export interface ActionProposalQueueItem {
+  proposal: ActionProposal;
+  status: "pending" | "approved" | "rejected" | "revoked";
+}
 
 export interface RecordActionDecisionInput extends ActionApprovalAuditContext {
   proposalId: string;
@@ -327,6 +331,89 @@ export class PostgresActionApprovalStore {
       }
       await client.query("COMMIT");
       return { proposal: stored, replayed: true };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getProposal(
+    scope: ActionApprovalScope & { proposalId: string; proposalVersion: number },
+  ): Promise<ActionProposal | null> {
+    validateScope(scope);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setRls(client, scope);
+      const result = await client.query<ProposalRow>(
+        `SELECT proposal_id, proposal_version, tenant_id, application_id, action_type,
+                side_effect_class, target_type, target_id, requested_by, requester_type,
+                payload, payload_hash, idempotency_key, correlation_id, created_at, expires_at
+           FROM eper_action_proposals
+          WHERE tenant_id = $1 AND application_id = $2
+            AND proposal_id = $3 AND proposal_version = $4`,
+        [scope.tenantId, scope.applicationId, scope.proposalId, scope.proposalVersion],
+      );
+      await client.query("COMMIT");
+      return result.rows[0] ? mapProposal(result.rows[0]) : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listProposals(
+    scope: ActionApprovalScope,
+    limit = 50,
+  ): Promise<ActionProposalQueueItem[]> {
+    validateScope(scope);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("ACTION_PROPOSAL_LIST_LIMIT_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setRls(client, scope);
+      const result = await client.query<ProposalRow & { approval_status: ActionProposalQueueItem["status"] }>(
+        `SELECT p.proposal_id, p.proposal_version, p.tenant_id, p.application_id, p.action_type,
+                p.side_effect_class, p.target_type, p.target_id, p.requested_by, p.requester_type,
+                p.payload, p.payload_hash, p.idempotency_key, p.correlation_id, p.created_at, p.expires_at,
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM eper_action_approval_grants g
+                     WHERE g.tenant_id = p.tenant_id AND g.application_id = p.application_id
+                       AND g.proposal_id = p.proposal_id AND g.proposal_version = p.proposal_version
+                       AND NOT EXISTS (
+                         SELECT 1 FROM eper_action_approval_decisions d
+                          WHERE d.tenant_id = g.tenant_id AND d.application_id = g.application_id
+                            AND d.approval_id = g.approval_id AND d.decision = 'revoke'
+                       )
+                  ) THEN 'approved'
+                  WHEN EXISTS (
+                    SELECT 1 FROM eper_action_approval_grants g
+                     WHERE g.tenant_id = p.tenant_id AND g.application_id = p.application_id
+                       AND g.proposal_id = p.proposal_id AND g.proposal_version = p.proposal_version
+                  ) THEN 'revoked'
+                  WHEN EXISTS (
+                    SELECT 1 FROM eper_action_approval_decisions d
+                     WHERE d.tenant_id = p.tenant_id AND d.application_id = p.application_id
+                       AND d.proposal_id = p.proposal_id AND d.proposal_version = p.proposal_version
+                       AND d.decision = 'reject'
+                  ) THEN 'rejected'
+                  ELSE 'pending'
+                END AS approval_status
+           FROM eper_action_proposals p
+          WHERE p.tenant_id = $1 AND p.application_id = $2
+          ORDER BY p.created_at DESC, p.proposal_id, p.proposal_version DESC
+          LIMIT $3`,
+        [scope.tenantId, scope.applicationId, limit],
+      );
+      await client.query("COMMIT");
+      return result.rows.map(row => ({ proposal: mapProposal(row), status: row.approval_status }));
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
