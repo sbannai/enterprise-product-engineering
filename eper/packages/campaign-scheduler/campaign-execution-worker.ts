@@ -46,7 +46,7 @@ export async function runCampaignExecutionWorker(
   while (!options.signal?.aborted) {
     let executions: CampaignExecutionRecord[];
     try {
-      await store.recoverStaleExecutions();
+      await store.recoverStaleExecutions(300, maxAttempts);
       await store.materializeDueOneTimeSchedules();
       await store.materializeDueRecurringSchedules();
       executions = await store.claimExecutions(options.workerId, batchSize);
