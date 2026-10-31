@@ -52,8 +52,17 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         permissions: ["workflow:view", "workflow:act"], status: "active",
         expectedVersion: 0, changedBy: actorId, environment, correlationId,
       });
+      await roleStore.replace({
+        tenantId, applicationId, roleId: "finance-approver", name: "Finance approver",
+        permissions: ["workflow:view", "workflow:approve"], status: "active",
+        expectedVersion: 0, changedBy: actorId, environment, correlationId,
+      });
       await assignmentStore.assign({
         tenantId, applicationId, actorId, roleId, changedBy: actorId,
+        expectedVersion: 0, environment, correlationId,
+      });
+      await assignmentStore.assign({
+        tenantId, applicationId, actorId, roleId: "finance-approver", changedBy: actorId,
         expectedVersion: 0, environment, correlationId,
       });
 
@@ -61,7 +70,10 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         id: workflowId, name: "Expense submission", status: "ACTIVE",
         activities: [{
           id: "submit-expense", title: "Submit expense", type: "TASK",
-          roleId, permission: "workflow:act", nextActivityIds: [], fields: [],
+          roleId, permission: "workflow:act", nextActivityIds: ["approve-expense"], fields: [],
+        }, {
+          id: "approve-expense", title: "Approve expense", type: "APPROVAL",
+          roleId: "finance-approver", permission: "workflow:approve", nextActivityIds: [], fields: [],
         }],
       };
       const published = await publisher.publish({
@@ -73,7 +85,9 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         tenantId, applicationId, actorId, correlationId, environment,
         workflowId, idempotencyKey: "start-" + suffix, businessReference: "EXP-" + suffix, data: {},
       };
-      const started = await service.start(startInput);
+      const concurrentStarts = await Promise.all([service.start(startInput), service.start(startInput)]);
+      const started = concurrentStarts[0];
+      assert.equal(concurrentStarts[1].instanceId, started.instanceId);
       assert.equal(started.status, "running");
       assert.equal(started.version, 1);
       assert.equal(started.currentActivityId, "submit-expense");
@@ -83,10 +97,31 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         instanceId: started.instanceId, expectedVersion: 1,
         idempotencyKey: "transition-" + suffix, action: "submit", payload: {},
       };
-      const completed = await service.transition(transitionInput);
+      const duplicateSubmits = await Promise.all([
+        service.transition(transitionInput), service.transition(transitionInput),
+      ]);
+      const submitted = duplicateSubmits[0];
+      assert.equal(duplicateSubmits[1].version, 2);
+      assert.equal(submitted.status, "running");
+      assert.equal(submitted.version, 2);
+      assert.equal(submitted.currentActivityId, "approve-expense");
+
+      const approveInputs = [
+        { ...transitionInput, expectedVersion: 2, idempotencyKey: "approve-a-" + suffix, action: "approve" },
+        { ...transitionInput, expectedVersion: 2, idempotencyKey: "approve-b-" + suffix, action: "approve" },
+      ];
+      const approvalResults = await Promise.allSettled(approveInputs.map(input => service.transition(input)));
+      const successfulApproval = approvalResults.find(result => result.status === "fulfilled");
+      const failedApproval = approvalResults.find(result => result.status === "rejected");
+      assert.equal(approvalResults.filter(result => result.status === "fulfilled").length, 1);
+      assert.equal(approvalResults.filter(result => result.status === "rejected").length, 1);
+      assert.equal(failedApproval.reason.code, "WORKFLOW_EXECUTION_INSTANCE_TERMINAL");
+      const completed = successfulApproval.value;
       assert.equal(completed.status, "completed");
-      assert.equal(completed.version, 2);
+      assert.equal(completed.version, 3);
       assert.equal(completed.currentActivityId, null);
+      const successfulApprovalIndex = approvalResults.findIndex(result => result.status === "fulfilled");
+      const successfulApprovalInput = approveInputs[successfulApprovalIndex];
 
       // A new service object simulates process recreation; the database is the authority.
       const restartedService = new PostgresWorkflowExecutionService(pool, "workflow-integration-test-restarted");
@@ -94,8 +129,11 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(startReplay.instanceId, started.instanceId);
       assert.equal(startReplay.version, 1);
       const transitionReplay = await restartedService.transition(transitionInput);
-      assert.equal(transitionReplay.status, "completed");
+      assert.equal(transitionReplay.status, "running");
       assert.equal(transitionReplay.version, 2);
+      const approvalReplay = await restartedService.transition(successfulApprovalInput);
+      assert.equal(approvalReplay.status, "completed");
+      assert.equal(approvalReplay.version, 3);
 
       const verify = await pool.connect();
       try {
@@ -110,7 +148,7 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         );
         assert.equal(instances.rows.length, 1);
         assert.equal(instances.rows[0].status, "completed");
-        assert.equal(Number(instances.rows[0].version), 2);
+        assert.equal(Number(instances.rows[0].version), 3);
         assert.equal(Number(instances.rows[0].definition_version), 1);
         assert.equal(String(instances.rows[0].definition_digest).trim(), published.definitionDigest);
 
@@ -120,7 +158,7 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
             ORDER BY resulting_version`,
           [tenantId, applicationId, started.instanceId],
         );
-        assert.deepEqual(transitions.rows.map(row => row.action), ["start", "submit"]);
+        assert.deepEqual(transitions.rows.map(row => row.action), ["start", "submit", "approve"]);
 
         const audit = await verify.query(
           `SELECT action FROM eper_audit_events
@@ -130,7 +168,7 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
           [tenantId, applicationId, started.instanceId],
         );
         assert.deepEqual(audit.rows.map(row => row.action).sort(), [
-          "workflow.instance.start", "workflow.instance.transition",
+          "workflow.instance.start", "workflow.instance.transition", "workflow.instance.transition",
         ].sort());
         await verify.query("COMMIT");
       } catch (error) {
