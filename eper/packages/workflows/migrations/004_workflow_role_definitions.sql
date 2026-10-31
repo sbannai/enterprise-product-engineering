@@ -2,14 +2,15 @@
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS eper_workflow_role_definition (
-  tenant_id varchar(128) NOT NULL,
-  application_id varchar(128) NOT NULL,
-  role_id varchar(128) NOT NULL,
+  tenant_id varchar(128) NOT NULL CHECK (length(btrim(tenant_id)) BETWEEN 1 AND 128),
+  application_id varchar(128) NOT NULL CHECK (length(btrim(application_id)) BETWEEN 1 AND 128),
+  role_id varchar(128) NOT NULL CHECK (length(btrim(role_id)) BETWEEN 1 AND 128),
   name varchar(200) NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 200),
   description varchar(2000),
   permissions jsonb NOT NULL CHECK (
     jsonb_typeof(permissions) = 'array'
     AND jsonb_array_length(permissions) BETWEEN 1 AND 6
+    AND permissions <@ '["workflow:view","workflow:act","workflow:approve","workflow:admin","role:assign","access:manage"]'::jsonb
   ),
   role_status varchar(16) NOT NULL DEFAULT 'active'
     CHECK (role_status IN ('active','disabled')),
