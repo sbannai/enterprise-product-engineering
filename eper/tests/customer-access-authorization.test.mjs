@@ -78,7 +78,7 @@ test("agent job reads enforce durable tenant ownership and actor membership with
     return actorAllowed;
   } };
   // The request should be rejected before the job store is queried for denied identities.
-  const pool = { async query() { observed.push(["job-store-query"]); return { rows: [] }; } };
+  const pool = { async connect() { return { async query(sql) { if (String(sql).startsWith("SELECT")) observed.push(["job-store-query"]); return { rows: [] }; }, release() {} }; } };
   const server = createAppServer({ capabilityPool: pool, tenantApplicationAssignmentStore: tenantStore,
     actorApplicationAssignmentStore: actorStore });
   try {
@@ -118,7 +118,7 @@ test("agent job reads enforce durable tenant ownership and actor membership with
 test("AI draft routes enforce durable tenant and actor assignments before draft creation", async () => {
   const values = {
     EPER_AGENTS_API_ENABLED: "true",
-    EPER_AGENTS_PRINCIPAL_TOKENS: "maker=" + "agent-draft-durable-token-000000000000000000",
+    EPER_AGENTS_PRINCIPAL_TOKENS: "maker=" + "agent-draft-durable-token-000000000000000000" + ";reviewer=" + "agent-draft-reviewer-token-000000000000000000",
     EPER_AGENTS_PRINCIPAL_TENANTS_JSON: JSON.stringify({ maker: "tenant-a" }),
     EPER_AGENTS_PRINCIPAL_ACTORS_JSON: JSON.stringify({ maker: "actor-a" }),
     EPER_AGENTS_REVIEWER_PRINCIPALS: "reviewer",
