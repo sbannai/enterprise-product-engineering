@@ -714,6 +714,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
           "Execution diagnostics authorization is not configured for durable assignments."); return;
       }
+      let tenantAssigned = false;
+      let actorAssigned = false;
       try {
         const tenantApplications = options.tenantApplicationAssignmentStore
           ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
@@ -724,13 +726,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
                   ? (parsed as Record<string, unknown>)[identity.tenantId] : [];
               } catch { return []; }
             })();
-        const tenantAssigned = Array.isArray(tenantApplications) && tenantApplications.includes(applicationId);
-        const actorAssigned = options.actorApplicationAssignmentStore
+        tenantAssigned = Array.isArray(tenantApplications) && tenantApplications.includes(applicationId);
+        actorAssigned = options.actorApplicationAssignmentStore
           ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
           : identity.applicationIds?.includes(applicationId) === true;
-        if (!tenantAssigned || !actorAssigned) {
-          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
-        }
+      } catch {
+        sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+          "Execution diagnostics authorization is temporarily unavailable."); return;
+      }
+      if (!tenantAssigned || !actorAssigned) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
         const diagnostics = await options.campaignSchedulerStore.getExecutionDiagnostics({
           tenantId: identity.tenantId, applicationId, executionId: campaignExecutionDiagnostic[2],
         });
@@ -739,7 +746,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       } catch (error) {
         const invalid = error instanceof Error && error.message === "CAMPAIGN_EXECUTION_ID_INVALID";
         sendApiError(request, response, invalid ? 400 : 503,
-          invalid ? "INVALID_EXECUTION_ID" : "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+          invalid ? "INVALID_EXECUTION_ID" : "CAMPAIGN_EXECUTION_DIAGNOSTICS_READ_FAILED",
           "Execution diagnostics could not be retrieved."); return;
       }
     }
