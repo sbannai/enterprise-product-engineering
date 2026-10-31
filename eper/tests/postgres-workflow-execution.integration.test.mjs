@@ -97,6 +97,42 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         instanceId: started.instanceId, expectedVersion: 1,
         idempotencyKey: "transition-" + suffix, action: "submit", payload: {},
       };
+
+      // Establish valid memberships in a different application and tenant; neither scope
+      // may read or mutate the original instance, even when the instance UUID is known.
+      const otherTenantId = "wf-tenant-other-" + suffix;
+      const otherApplicationId = "wf-app-other-" + suffix;
+      const otherActorId = "wf-actor-other-" + suffix;
+      const isolationClient = await pool.connect();
+      try {
+        await isolationClient.query(
+          `INSERT INTO eper_tenant_application_assignment
+            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,'active',$3,$3), ($4,$5,'active',$6,$6)`,
+          [tenantId, otherApplicationId, actorId, otherTenantId, applicationId, otherActorId],
+        );
+        await isolationClient.query(
+          `INSERT INTO eper_actor_application_assignment
+            (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,$3,'active',$2,$2), ($4,$5,$6,'active',$5,$5)`,
+          [tenantId, actorId, otherApplicationId, otherTenantId, otherActorId, applicationId],
+        );
+      } finally { isolationClient.release(); }
+
+      await assert.rejects(
+        service.transition({
+          ...transitionInput, applicationId: otherApplicationId,
+          idempotencyKey: "cross-app-" + suffix,
+        }),
+        error => error.code === "WORKFLOW_EXECUTION_INSTANCE_NOT_FOUND" && error.statusCode === 404,
+      );
+      await assert.rejects(
+        service.transition({
+          ...transitionInput, tenantId: otherTenantId, actorId: otherActorId,
+          idempotencyKey: "cross-tenant-" + suffix,
+        }),
+        error => error.code === "WORKFLOW_EXECUTION_INSTANCE_NOT_FOUND" && error.statusCode === 404,
+      );
       const duplicateSubmits = await Promise.all([
         service.transition(transitionInput), service.transition(transitionInput),
       ]);
