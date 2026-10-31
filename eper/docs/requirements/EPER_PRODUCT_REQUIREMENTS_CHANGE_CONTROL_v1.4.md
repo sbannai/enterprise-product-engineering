@@ -40,9 +40,9 @@ Every new feature addition increments the document's MINOR version. A correction
 | 1.1.0 | Teal Horizon product theme and Light default | EPER-UI-THEME-001 | Owner selected Teal Horizon with Light appearance on 2026-10-31 |
 | 1.2.0 | User-facing theme changer and appearance selection | EPER-UI-THEME-002 | Feature addition recorded; implementation/evidence required |
 | 1.3.0 | Role switcher and role-context navigation | EPER-UI-RBAC-001 | Feature addition recorded; UI switching must never bypass server authorization |
-| 1.4.0 | Collapsible/expandable application navigation | EPER-UI-NAV-001 | Feature addition recorded; keyboard and responsive behaviour required |
+| 1.4.0 | Collapsible/expandable application navigation | EPER-UI-NAV-001 | Feature addition recorded; keyboard and responsive behaviour required |\n| 1.5.0 | Approval-controlled external actions and CRM writes | EPER-ACT-APPROVAL-001 | Owner-directed mandatory human approval control; implementation/evidence outstanding |
 
-**Current controlled version: 1.4.0.** The next new feature addition must create version 1.5.0 and a new requirement ID. The history above establishes the version increments for the theme and shell features in the current scope; it does not imply that all those features have passed implementation acceptance.
+**Current controlled version: 1.5.0.** The next new feature addition must create version 1.6.0 and a new requirement ID. The history above establishes the version increments for the theme and shell features in the current scope; it does not imply that all those features have passed implementation acceptance.
 
 ## 3. New requirements introduced by this document
 
@@ -178,6 +178,49 @@ The application shall provide an accessible control to collapse and expand the p
 
 **Traceability:** Shared application shell; navigation component; responsive layout; accessibility and UI regression tests.
 
+### 3.5 EPER-ACT-APPROVAL-001 — Human approval gate for external actions and CRM writes
+
+**Introduced in:** 1.5.0  
+**Priority:** P0 — security, governance and customer trust  
+**Decision source:** Explicit owner direction: human approval is mandatory for every external action and every CRM write.
+
+EPER shall prevent an external side effect or CRM mutation from executing unless a valid, durable, attributable human approval exists for the exact proposed action and the exact version of the proposal being executed. Creating a draft, generating an AI recommendation, approving a workflow step unrelated to the side effect, or merely marking a draft as approved shall not itself execute an external action.
+
+**Scope**
+- External communications, publication, sending, scheduling, audience export, provider/API actions, and other side effects outside EPER.
+- All CRM create, update, merge, delete, stage-change, assignment, and bulk mutation operations, whether initiated by a user, workflow, integration, or AI agent.
+- Internal workflow state transitions that do not create an external side effect or CRM mutation are not automatically subject to this external-action approval gate; they remain subject to normal workflow authorization.
+
+**Functional requirements**
+1. Every proposed side effect shall be persisted as a versioned action proposal with tenant/application scope, action type, target/resource, requester, source job/draft, canonical payload hash, idempotency key, creation time and expiry.
+2. Approval shall be a separate durable record identifying the human approver, authenticated principal, effective role/delegation, decision, decision time, reason/comment, proposal ID/version/hash, tenant/application and correlation ID.
+3. The proposal creator shall not approve their own proposal. Approval must be performed by a distinct authorized human principal; service/system identities cannot satisfy the human approval requirement.
+4. Approval must be scoped to the exact proposal hash and version. Any material payload, target, recipient, audience, CRM field, amount, or action change invalidates the prior approval and requires a new decision.
+5. Approval policy and approver authority shall be checked server-side at decision time and again immediately before execution. Missing, expired, revoked, stale, mismatched, or unverifiable approval shall fail closed.
+6. Execution shall be a distinct operation from approval. It shall atomically claim/consume the approved proposal using a durable idempotency key and record the execution boundary before invoking an adapter; retries must not create duplicate effects.
+7. The executor shall revalidate tenant/application scope, current actor/service identity, action permission, approval validity, proposal hash/version and any configured separation-of-duties or threshold policy immediately before dispatch.
+8. Approval shall not override consent, opt-out/suppression, data protection, provider readiness, commercial limits, or any other independent authorization gate.
+9. Rejection, expiry, revocation, failed authorization, execution attempt, success, retry and dead-letter outcomes shall be attributable and durably audited. Approval records and audit evidence shall be append-only; corrections are new events, not destructive edits.
+10. The system shall expose no live external execution path until durable approval persistence, enforcement, audit/outbox coupling, idempotency and negative tests are complete and enabled by an explicit deployment configuration.
+11. If approval storage, authorization, audit persistence or policy lookup is unavailable, the operation shall not execute. No in-memory approval fallback is permitted.
+12. The user interface and APIs shall distinguish proposed, awaiting approval, approved, rejected, expired, revoked, executing, executed, failed and cancelled states; preview-only controls shall never be represented as live enforcement.
+
+**Acceptance criteria**
+- A requester cannot approve their own proposal, including through API payload manipulation or role/context switching.
+- A different but unauthorized human cannot approve; a service identity cannot approve.
+- Approval for proposal version N cannot authorize changed version N+1 or a different target/recipient.
+- Expired, revoked, rejected, missing, stale or unresolvable approval blocks execution with a stable reason code and no adapter invocation.
+- A CRM write and an external action both require this gate; internal workflow-only events do not accidentally trigger external dispatch.
+- Concurrent/replayed execution attempts produce at most one logical effect under the idempotency contract.
+- Tenant/application cross-scope approval and execution attempts are denied.
+- Approval decision, execution attempt and outcome are auditable with approver, requester, action, payload hash, tenant/application, correlation and idempotency references.
+- Approval/audit storage failure fails closed; no external adapter is called.
+- Tests cover positive approval, maker-checker, tampering, stale hash, expiry, revocation, policy outage, audit failure, tenant isolation, replay and concurrency.
+
+**Traceability:** Native CRM write service; workflow outbox dispatcher; agent execution router; authorization and delegation policy; PostgreSQL approval/action-proposal persistence; immutable audit; transactional outbox; API/UI review queue; security and concurrency tests.
+
+**Status:** Owner-directed requirement recorded. Design, implementation, migration, API/UI, provider adapters and exact-head test evidence remain outstanding. This requirement does not authorize enabling any external provider or Business UAT.
+
 ## 4. Cross-layer implementation and evidence matrix
 
 Every feature addition must be mapped through all applicable layers. A blank or “not applicable” entry requires a reason and owner approval.
@@ -241,4 +284,4 @@ Every feature addition must be mapped through all applicable layers. A blank or 
 
 ## 8. Next version
 
-The next independently approved feature addition will create **EPER-PRD-ADD v1.5.0** and a new permanent requirement ID. The document history must remain append-only; prior version rows and requirement IDs must not be edited away.
+The next independently approved feature addition will create **EPER-PRD-ADD v1.6.0** and a new permanent requirement ID. The document history must remain append-only; prior version rows and requirement IDs must not be edited away.
