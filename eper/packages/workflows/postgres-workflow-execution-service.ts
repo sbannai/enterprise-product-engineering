@@ -230,6 +230,35 @@ async function authorizeAdmin(
   if (!result.rows[0]) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_PERMISSION_DENIED", 403);
   return result.rows[0].role_id;
 }
+type WorkflowOutboxEventType =
+  | "workflow.instance.started" | "workflow.instance.submitted" | "workflow.instance.approved"
+  | "workflow.instance.rejected" | "workflow.instance.cancelled" | "workflow.instance.completed";
+
+async function appendWorkflowOutboxEvent(
+  client: AuditSqlClient,
+  context: WorkflowExecutionContext,
+  instanceId: string,
+  transitionId: string,
+  eventType: WorkflowOutboxEventType,
+  eventVersion: number,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const eventId = randomUUID();
+  await client.query(
+    `INSERT INTO eper_workflow_outbox_events
+      (tenant_id, application_id, event_id, instance_id, transition_id, event_type, event_version, payload)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+    [context.tenantId, context.applicationId, eventId, instanceId, transitionId,
+      eventType, eventVersion, JSON.stringify(payload)],
+  );
+  await client.query(
+    `INSERT INTO eper_workflow_outbox_delivery
+      (tenant_id, application_id, event_id, delivery_status, attempts, available_at)
+     VALUES ($1,$2,$3,'pending',0,NOW())`,
+    [context.tenantId, context.applicationId, eventId],
+  );
+}
+
 function chooseNextActivity(activity: WorkflowActivity, targetActivityId?: string): string | null {
   if (activity.nextActivityIds.length === 0) {
     if (targetActivityId) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_TARGET_NOT_ALLOWED", 422);
@@ -272,7 +301,9 @@ export class PostgresWorkflowExecutionService {
                 'eper_workflow_transitions',
                 'eper_workflow_idempotency',
                 'eper_workflow_actor_role_assignment',
-                'eper_workflow_role_definition'
+                'eper_workflow_role_definition',
+                'eper_workflow_outbox_events',
+                'eper_workflow_outbox_delivery'
               ]) AS required(table_name)
               JOIN pg_class c ON c.oid = to_regclass('public.' || required.table_name)
              WHERE c.relrowsecurity AND c.relforcerowsecurity
@@ -291,7 +322,7 @@ export class PostgresWorkflowExecutionService {
            ) AS start_key_present`,
       );
       const row = result.rows[0];
-      if (Number(row?.ready_tables) !== 7 || row?.start_key_present !== true) {
+      if (Number(row?.ready_tables) !== 9 || row?.start_key_present !== true) {
         throw new Error("EPER_WORKFLOW_EXECUTION_SCHEMA_NOT_READY");
       }
     } catch (error) {
@@ -406,6 +437,12 @@ export class PostgresWorkflowExecutionService {
         [input.tenantId, input.applicationId, instanceId, input.idempotencyKey,
           requestFingerprint, transitionId, JSON.stringify(response)],
       );
+      await appendWorkflowOutboxEvent(client, input, instanceId, transitionId,
+        "workflow.instance.started", 1, {
+          workflowId: input.workflowId, definitionVersion: response.definitionVersion,
+          instanceId, currentActivityId: firstActivity.id, dataDigest: digest(data),
+          correlationId: input.correlationId,
+        });
       await appendAuditEventInTransaction(client, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.actorId, action: "workflow.instance.start", outcome: "success",
@@ -558,6 +595,19 @@ export class PostgresWorkflowExecutionService {
         [input.tenantId, input.applicationId, input.instanceId, input.idempotencyKey,
           requestFingerprint, transitionId, JSON.stringify(response)],
       );
+      const eventType: WorkflowOutboxEventType = nextStatus === "completed"
+        ? "workflow.instance.completed"
+        : input.action === "submit" ? "workflow.instance.submitted"
+        : input.action === "approve" ? "workflow.instance.approved"
+        : input.action === "reject" ? "workflow.instance.rejected"
+        : "workflow.instance.cancelled";
+      await appendWorkflowOutboxEvent(client, input, input.instanceId, transitionId,
+        eventType, nextVersion, {
+          workflowId: instance.workflow_id, instanceId: input.instanceId,
+          action: input.action, resultingStatus: nextStatus, resultingVersion: nextVersion,
+          fromActivityId: instance.current_activity_id, toActivityId: nextActivityId,
+          payloadDigest: digest(payload), correlationId: input.correlationId,
+        });
       await appendAuditEventInTransaction(client, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.actorId, action: "workflow.instance.transition", outcome: "success",
