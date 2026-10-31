@@ -75,7 +75,7 @@ test("role assignment reads set tenant/application RLS context transaction-local
   const roles = await new PostgresWorkflowActorRoleAssignmentStore(pool)
     .listActiveRoleIds(input.tenantId, input.applicationId, input.actorId);
   assert.deepEqual(roles, ["finance-approver", "expense-reviewer"]);
-  assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.values[1] === true));
-  assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.values[1] === true));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(', true)')));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.sql.includes(', true)')));
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
