@@ -115,10 +115,16 @@ export class PostgresWorkflowActorRoleAssignmentStore {
       await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
       await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
       const result = await client.query<{ role_id: string }>(
-        `SELECT role_id FROM eper_workflow_actor_role_assignment
-          WHERE tenant_id = $1 AND application_id = $2 AND actor_id = $3
-            AND assignment_status = 'active'
-          ORDER BY role_id`,
+        `SELECT r.role_id FROM eper_workflow_actor_role_assignment r
+          JOIN eper_actor_application_assignment aa
+            ON aa.tenant_id = r.tenant_id AND aa.application_id = r.application_id
+           AND aa.actor_id = r.actor_id AND aa.assignment_status = 'active'
+          JOIN eper_tenant_application_assignment ta
+            ON ta.tenant_id = r.tenant_id AND ta.application_id = r.application_id
+           AND ta.assignment_status = 'active'
+          WHERE r.tenant_id = $1 AND r.application_id = $2 AND r.actor_id = $3
+            AND r.assignment_status = 'active'
+          ORDER BY r.role_id`,
         [tenantId, applicationId, actorId],
       );
       await client.query("COMMIT");
