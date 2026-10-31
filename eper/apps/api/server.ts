@@ -562,7 +562,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const identity = resolveAdminConfigIdentity(request);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
-      if (!options.tenantApplicationAssignmentStore ||
+      if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
           !options.workflowRoleDefinitionStore || !options.workflowActorRoleAssignmentStore ||
           !options.workflowDefinitionPublisher) {
         sendApiError(request, response, 503, "WORKFLOW_ADMIN_UNAVAILABLE", "Workflow administration is not configured."); return;
@@ -572,6 +572,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
         if (!tenantApplications.includes(applicationId)) {
           sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+        if (!(await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId))) {
+          sendApiError(request, response, 403, "ADMIN_NOT_ASSIGNED_TO_APPLICATION", "The administrator is not assigned to this application."); return;
         }
         const environment = options.adminConfigEnvironment ?? "sandbox";
         const correlationId = resolveApiRequestId(request);
