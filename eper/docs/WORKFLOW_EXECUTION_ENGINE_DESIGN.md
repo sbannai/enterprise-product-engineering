@@ -215,7 +215,7 @@ Unit and migration contract tests cover role definition writes, successful grant
 - Instance projection update, append-only transition row, idempotency response and audit event are committed in one transaction. A transaction-scoped advisory lock serializes retries with the same idempotency key; the instance row lock and expected-version check protect concurrent state changes.
 - Live PostgreSQL integration tests verify one instance under concurrent duplicate starts, submit idempotency under concurrent duplicate requests, exactly one winner for competing approvals at the same expected version, cross-application and cross-tenant isolation, service recreation, original-response replay, exact definition pin, and atomic audit/transition records.
 
-The workflow migration runner now applies all five workflow migrations and the CI lane applies them twice to verify repeatability. The execution service's startup readiness check verifies all seven tenant/application-RLS tables and the start-idempotency column; the live PostgreSQL integration test exercises the role, assignment and execution readiness checks. The exact PR head `3b44a13362442635d124dad4f5f1996dec8c595e` passed all 12 associated GitHub Actions workflows, including the concurrent live PostgreSQL workflow execution integration, readiness checks and full PostgreSQL-backed test suite.
+The workflow migration runner now applies all six workflow migrations and the CI lane applies them twice to verify repeatability. The execution service's startup readiness check verifies all seven tenant/application-RLS tables and the start-idempotency column; the live PostgreSQL integration test exercises the role, assignment and execution readiness checks. The exact PR head `ec5080af429e3847d270d1428b6a48d63d3c1b1b` passed all 12 associated GitHub Actions workflows, including the concurrent live PostgreSQL workflow execution integration, readiness checks and full PostgreSQL-backed test suite.
 
 **Remaining boundary:** the service is now exposed through the opt-in HTTP route layer described in section 15. Do not enable the execution feature or authorize Business UAT until production-like tenant bootstrap, admin credential provisioning, concurrent transition stress tests, operational monitoring and all existing UAT entry-gate evidence are complete.
 
@@ -240,6 +240,21 @@ Admin identity comes from the server-side `EPER_ADMIN_CONFIG_IDENTITIES_JSON` ma
 
 Customer identity comes from `EPER_CUSTOMER_ACCESS_IDENTITIES_JSON`. Tenant and actor IDs are never accepted from request bodies; application ID and workflow/instance IDs are taken from the route, validated, and checked by the durable service. Request bodies use explicit allowlists for idempotency, business reference/data, expected version, action, payload and target activity.
 
-The API contract tests cover customer authentication, body identity spoofing rejection, admin tenant ownership and active admin application membership, execution context propagation, and the disabled-by-default feature flag. Publisher and store behavior are covered by dedicated unit and live PostgreSQL integration tests. The exact PR head `3b44a13362442635d124dad4f5f1996dec8c595e` passed all 12 associated GitHub Actions workflows, including the API identity-boundary tests and the integrated PostgreSQL validation.
+The API contract tests cover customer authentication, body identity spoofing rejection, admin tenant ownership and active admin application membership, execution context propagation, and the disabled-by-default feature flag. Publisher and store behavior are covered by dedicated unit and live PostgreSQL integration tests. The exact PR head `ec5080af429e3847d270d1428b6a48d63d3c1b1b` passed all 12 associated GitHub Actions workflows, including the API identity-boundary tests and the integrated PostgreSQL validation.
 
 **Deployment decision:** do not set the workflow feature flag in a hosted or UAT environment yet. The route layer is CI-validated, but production-like tenant bootstrap, admin credential provisioning, concurrent transition stress tests, operational monitoring and all existing Business UAT entry-gate evidence remain outstanding. No cloud resources were provisioned.
+
+
+## 16. Continuous workflow outbox process (CI-validated)
+
+The workflow outbox now has both a bounded delivery pass (`WorkflowOutboxWorker.runOnce`) and a long-running host process (`WorkflowOutboxProcess.run(signal)`).
+
+- The process repeatedly obtains authorised tenant/application scopes from an injected `WorkflowOutboxContextSource`, deduplicates repeated scopes, and drains each scope in bounded batches.
+- When events are available it continues draining without waiting for a cron expression or request traffic. When no events are available, it uses a bounded idle poll interval to avoid a hot loop.
+- A scope-level database or dispatch failure is reported and isolated; other scopes in the same pass continue. Observability callback failures cannot terminate delivery.
+- The process accepts an `AbortSignal` for graceful shutdown and passes it to the context source. Per-event delivery remains at-least-once; external dispatchers must deduplicate by immutable `eventId`.
+- Tests cover continuous drain behavior, duplicate context discovery, per-scope failure isolation, graceful cancellation and option bounds.
+
+The exact PR head `ec5080af429e3847d270d1428b6a48d63d3c1b1b` passed all 12 associated GitHub Actions workflows, including TypeScript typecheck/build, the full test suite, live PostgreSQL workflow execution and same-commit integrated validation.
+
+**Remaining boundary:** this process is a reusable worker component, not yet an independently deployed worker service. A trusted context provider, production dispatcher, host lifecycle/supervision, delivery dashboards/alerts and deployment-specific operational configuration must be supplied before production activation. The workflow feature remains disabled by default and Business UAT remains unauthorized pending all existing entry-gate evidence.
