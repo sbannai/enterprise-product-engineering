@@ -207,8 +207,8 @@ test("campaign schedule API uses durable tenant and actor assignment stores", as
   };
   const actorApplicationAssignmentStore = {
     async isAssigned(tenantId, actorId, applicationId) {
-      assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
-      return true;
+      assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]);
+      return applicationId === "app-a";
     },
   };
   const { base } = await withServer(t, { tenantApplicationAssignmentStore, actorApplicationAssignmentStore });
