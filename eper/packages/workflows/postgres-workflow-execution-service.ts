@@ -291,9 +291,16 @@ export class PostgresWorkflowExecutionService {
         if (prior.rows[0].start_request_fingerprint?.trim() !== requestFingerprint) {
           throw new WorkflowExecutionError("WORKFLOW_EXECUTION_IDEMPOTENCY_CONFLICT", 409);
         }
-        const existing = mapInstance(prior.rows[0]);
+        const original = await client.query<{ response: Record<string, unknown> | string }>(
+          `SELECT response FROM eper_workflow_idempotency
+            WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3
+              AND idempotency_key = $4`,
+          [input.tenantId, input.applicationId, prior.rows[0].instance_id, input.idempotencyKey],
+        );
+        if (!original.rows[0]) throw new Error("WORKFLOW_EXECUTION_START_IDEMPOTENCY_RECORD_MISSING");
+        const replay = parseObject(original.rows[0].response);
         await client.query("COMMIT");
-        return existing;
+        return replay as unknown as WorkflowInstanceRecord;
       }
 
       await assertMembership(client, input);
@@ -315,6 +322,7 @@ export class PostgresWorkflowExecutionService {
       const definition = parseDefinition(published.definition);
       const firstActivity = definition.activities[0];
       if (!firstActivity) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_DEFINITION_HAS_NO_ACTIVITIES", 422);
+      validateActivityPayload(firstActivity.fields, data);
       await authorizeRole(client, input, firstActivity.roleId, firstActivity.permission);
 
       const instanceId = randomUUID();
@@ -392,6 +400,10 @@ export class PostgresWorkflowExecutionService {
     try {
       await client.query("BEGIN");
       await setRlsContext(client, input.tenantId, input.applicationId);
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [JSON.stringify([input.tenantId, input.applicationId, input.instanceId, input.idempotencyKey])],
+      );
       const prior = await client.query<TransitionRow>(
         `SELECT request_fingerprint, response FROM eper_workflow_idempotency
           WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3 AND idempotency_key = $4`,
