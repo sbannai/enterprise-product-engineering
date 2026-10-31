@@ -2190,8 +2190,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           });
           const hasMore = page.length > limit;
           const tickets = hasMore ? page.slice(0, limit) : page;
+          const distinctConfirmedP1Count = !canViewCrossTenant && typeof options.ticketStore.countDistinctConfirmedP1 === "function"
+            ? await options.ticketStore.countDistinctConfirmedP1(identity.tenantId) : null;
           sendJson(request, response, 200, {
-            tickets, limit, offset, hasMore,
+            tickets, limit, offset, hasMore, distinctConfirmedP1Count,
             scope: canViewCrossTenant ? "authorized_platform" : "tenant",
             ...(canViewCrossTenant ? {} : { tenantId: identity.tenantId }),
           });
@@ -2265,7 +2267,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               return;
             }
             const ticket = await options.ticketStore.setDuplicateDisposition(
-              trustedIdentity, ticketId, body.disposition, canonicalTicketId, body.rationale.trim(),
+              trustedIdentity, ticketId, body.disposition as "needs_review" | "distinct" | "duplicate", canonicalTicketId, body.rationale.trim(),
             );
             if (!ticket) { sendJson(request, response, 404, { error: "ticket_not_found" }); return; }
             sendJson(request, response, 200, { ticket });

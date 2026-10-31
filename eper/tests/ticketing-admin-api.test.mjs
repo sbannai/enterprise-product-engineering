@@ -57,6 +57,7 @@ test("admin ticket queue is tenant-scoped and uses configured support role", asy
     assert.equal(response.status, 200);
     assert.equal(args.identity.tenantId, "tenant-a");
     assert.equal(args.filter.applicationId, "app-a");
+    assert.equal((await response.json().catch(() => ({}))).distinctConfirmedP1Count, undefined);
   });
 });
 
