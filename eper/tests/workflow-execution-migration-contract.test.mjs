@@ -72,3 +72,17 @@ test("workflow actor role assignments are application-scoped and forced through 
   assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
   assert.match(sql, /current_setting\('eper\.application_id', true\)/);
 });
+
+
+test("workflow role catalogue stores application-scoped permission grants", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/004_workflow_role_definitions.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_role_definition/);
+  assert.match(sql, /PRIMARY KEY \(tenant_id, application_id, role_id\)/);
+  assert.match(sql, /permissions jsonb NOT NULL CHECK/);
+  assert.match(sql, /role_status varchar\(16\) NOT NULL/);
+  assert.match(sql, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /FORCE ROW LEVEL SECURITY/);
+  assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
+  assert.match(sql, /current_setting\('eper\.application_id', true\)/);
+  assert.match(sql, /eper_workflow_actor_role_assignment_role_fk/);
+});
