@@ -397,12 +397,12 @@ test("PostgreSQL action approval ledger enforces scope, immutable decisions and 
         "SELECT rolsuper FROM pg_roles WHERE rolname = current_user",
       );
       if (currentRole.rows[0]?.rolsuper) {
-        await client.query(`DO $
-          BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_action_rls_test') THEN
-              CREATE ROLE eper_action_rls_test NOLOGIN NOSUPERUSER NOBYPASSRLS;
-            END IF;
-          END $`);
+        const testRole = await client.query(
+          "SELECT 1 FROM pg_roles WHERE rolname = 'eper_action_rls_test'",
+        );
+        if (testRole.rows.length === 0) {
+          await client.query("CREATE ROLE eper_action_rls_test NOLOGIN NOSUPERUSER NOBYPASSRLS");
+        }
         await client.query("GRANT SELECT ON eper_action_proposals TO eper_action_rls_test");
         await client.query("BEGIN");
         await client.query("SELECT set_config('eper.tenant_id', $1, true)", ["different-tenant-" + suffix]);
