@@ -29,7 +29,7 @@ test("event fan-out accepts event IDs through 256 characters and rejects longer 
   assert.equal(calls.length, 1, "256-character event ID must reach the idempotent insert");
   assert.equal(calls[0].values[6].length, 64, "event idempotency identity must fit the bounded database key");
   assert.match(calls[0].values[6], /^[a-f0-9]{64}$/);
-  assert.equal(calls[0].values[6], createHash("sha256").update("lead.created").update("\\0").update("evt-123").digest("hex"));
+  assert.equal(calls[0].values[6], createHash("sha256").update("lead.created").update("\0").update("evt-123").digest("hex"));
   await assert.rejects(store.enqueueEventExecutions({
     tenantId: "tenant-a", applicationId: "app-a", eventType: "lead.created",
     eventId: "e".repeat(257), occurredAt: "2030-01-01T00:00:00.000Z",
