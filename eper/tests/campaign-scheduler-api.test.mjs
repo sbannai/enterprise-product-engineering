@@ -15,8 +15,8 @@ async function withServer(t, overrides = {}, assignmentStores = {}, durableAssig
   process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED = "true";
   if (durableAssignments) process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" },
-    ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin" },
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
+    ["another-test-token-with-at-least-32-characters"]: { tenantId: "tenant-b", actorId: "actor-b", roleKey: "customer-admin", applicationIds: ["app-b"] },
   });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"], "tenant-b": ["app-b"] });
   const store = {
