@@ -171,7 +171,7 @@ export function evaluateActionApprovalGate(input: ActionApprovalGateInput): Acti
   if (input.executionScope.applicationId !== proposal.applicationId) return { allowed: false, reason: "APPLICATION_SCOPE_MISMATCH" };
   if (!approval) return { allowed: false, reason: "APPROVAL_MISSING" };
   if (approval.decision !== "approve") return { allowed: false, reason: "APPROVAL_NOT_APPROVED" };
-  if (approval.approverType !== "human" || !validText(approval.approverId)) {
+  if (!validText(approval.approvalId) || approval.approverType !== "human" || !validText(approval.approverId)) {
     return { allowed: false, reason: "HUMAN_APPROVER_REQUIRED" };
   }
   if (approval.approverId === proposal.requestedBy) {
