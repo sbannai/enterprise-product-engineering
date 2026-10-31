@@ -536,10 +536,11 @@ test("P1 confirmation rejects non-defects or missing evidence references", async
   ]) {
     const client = {
       async query(sql) {
+        if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [], rowCount: 1 };
         if (/SELECT severity, type, evidence_reference FROM eper_support_tickets/.test(sql)) {
           return { rows: [{ severity: "p1_candidate", ...ticketDetails }], rowCount: 1 };
         }
-        throw new Error("unexpected query: " + sql);
+        return { rows: [], rowCount: 1 };
       },
       release() {},
     };

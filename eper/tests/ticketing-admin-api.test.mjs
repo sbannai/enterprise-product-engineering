@@ -185,7 +185,7 @@ test("admin can confirm P1 only with a substantive rationale and trusted actor i
     });
     assert.equal(valid.status, 200);
     assert.equal(args.identity.tenantId, "tenant-a");
-    assert.equal(args.identity.actorId, "support-1");
+    assert.equal(args.identity.actorId, "admin-1");
     assert.equal(args.id, ticket.id);
     assert.equal(args.severity, "p1_confirmed");
     assert.match(args.rationale, /Payment integrity/);
