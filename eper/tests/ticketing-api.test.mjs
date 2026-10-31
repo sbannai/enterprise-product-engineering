@@ -1207,6 +1207,12 @@ test("customer can read and post replies only for an assigned application's tick
     assert.equal(listedPayload.success, true);
     assert.deepEqual(listedPayload.data.replies, [reply]);
 
+    const internalAttempt = await fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
+      method: "POST", headers, body: JSON.stringify({ body: "This must not become an internal note", visibility: "internal" }),
+    });
+    assert.equal(internalAttempt.status, 400);
+    assert.equal(calls.length, 1, "customer visibility override must be rejected before storage");
+
     const posted = await fetch(base + "/customer/applications/app-a/tickets/" + ticketId + "/replies", {
       method: "POST", headers, body: JSON.stringify({ body: "Still seeing the issue" }),
     });
