@@ -17,7 +17,7 @@ const definition = {
   }],
 };
 
-function fixture({ tenantStatus = "active", actorStatus = "active", failTenantLookup = false } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus = "active", rolePermissions = ["workflow:approve"], failTenantLookup = false } = {}) {
   const calls = [];
   const client = {
     async query(sql, values = []) {
@@ -28,6 +28,9 @@ function fixture({ tenantStatus = "active", actorStatus = "active", failTenantLo
       }
       if (sql.includes("eper_actor_application_assignment")) {
         return { rows: actorStatus ? [{ assignment_status: actorStatus }] : [], rowCount: 1 };
+      }
+      if (sql.includes("eper_workflow_role_definition")) {
+        return { rows: roleStatus ? [{ role_status: roleStatus, permissions: rolePermissions }] : [], rowCount: roleStatus ? 1 : 0 };
       }
       if (sql.includes("ORDER BY definition_version DESC")) return { rows: [{ definition_version: 3 }], rowCount: 1 };
       if (sql.includes("INSERT INTO eper_workflow_definition_versions")) {
@@ -110,4 +113,21 @@ test("publisher rejects draft definitions and malformed activity graphs before d
     error => error.code === "WORKFLOW_PUBLISH_UNKNOWN_NEXT_ACTIVITY",
   );
   assert.equal(calls.length, 0);
+});
+
+
+test("publisher rejects missing, disabled or insufficient application role grants", async () => {
+  for (const options of [
+    { roleStatus: null },
+    { roleStatus: "disabled", rolePermissions: ["workflow:approve"] },
+    { roleStatus: "active", rolePermissions: ["workflow:view"] },
+  ]) {
+    const { calls, pool } = fixture(options);
+    await assert.rejects(
+      new WorkflowDefinitionPublisher(pool).publish(context, definition),
+      error => error.code === "WORKFLOW_PUBLISH_ROLE_PERMISSION_NOT_GRANTED" && error.statusCode === 403,
+    );
+    assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+    assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")), false);
+  }
 });
