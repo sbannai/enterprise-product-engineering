@@ -40,3 +40,18 @@ test("workflow execution migration enforces tenant/application row-level securit
   assert.match(runner, /eper_workflow_schema_migrations/);
   assert.match(runner, /packages.*workflows.*migrations/);
 });
+
+
+test("workflow publication lifecycle is append-only, application-scoped and concurrency-safe", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/002_workflow_publication_events.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_publication_events/);
+  assert.match(sql, /event_type varchar\(16\) NOT NULL CHECK \(event_type IN \('published','retired'\)\)/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, workflow_id, definition_version\)/);
+  assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_publication_events/);
+  assert.match(sql, /BEFORE TRUNCATE ON eper_workflow_publication_events/);
+  assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
+  assert.match(sql, /current_setting\('eper\.application_id', true\)/);
+  const publisher = await readFile(new URL("../packages/workflows/workflow-definition-publisher.ts", import.meta.url), "utf8");
+  assert.match(publisher, /pg_advisory_xact_lock\(hashtextextended\(\$1, 0\)\)/);
+  assert.match(publisher, /INSERT INTO eper_workflow_publication_events/);
+});
