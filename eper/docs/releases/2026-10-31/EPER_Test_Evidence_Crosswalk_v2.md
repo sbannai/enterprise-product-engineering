@@ -16,10 +16,17 @@
 | TC-UX-001 | `eper/tests/admin-feedback-ticketing-ui.test.mjs`; `eper/tests/admin-workflow-ui.test.mjs`; `eper/tests/admin-pricing-ui.test.mjs`; `eper/tests/campaign-scheduler-wireframe.test.mjs` | Selected UI contracts and responsiveness | Accessibility/keyboard/screen-reader audit remains explicit acceptance task |
 | TC-DB-001..002 | `eper/tests/postgres-core-adapters.test.mjs`; `eper/tests/postgres-transaction.test.mjs`; relevant PostgreSQL integration suites | Durable store contracts, transaction behavior, database integration | Backup/restore, failover fencing, RPO/RTO drills remain not evidenced by these suites |
 
-## PR #273 same-head CI snapshot
-Head: `690960661e4d0def87d2a527a844e0c9c0678c22`.
+## PR #273 verified CI and artifact evidence — 31 Oct 2026
 
-Latest observed on head `21d57243719afa0071c811a46cd0df8cc98db3e3`: dedicated 228 Requirement Pilot Test Matrix run #5443 completed SUCCESS and uploaded artifact `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-41202791142` (artifact ID 13042674658). Six-Family Capability HTTP Smoke, G9 Reconciliation CI and Controlled UAT Technical Simulation also completed SUCCESS. At the latest check, integrated validation, EPER CI, Release Candidate Build, Controlled QA Re-Execution and Container Runtime Smoke were still in progress; Payment API + PostgreSQL + receipt contracts was also still in progress within integrated validation. The integrated-validation workflow's own 228/38 job was skipped, but the separate dedicated pilot-matrix workflow ran and passed. Do not label the whole PR green until all required checks finish.
+The earlier CI snapshot above was superseded by the following completed runs on the PR's current head `daac7419f670ea54753e432b5d44de1786c8e4b7` (the workflow executes the PR merge ref for its matrix artifact):
+
+- Dedicated 228 Requirement Pilot Test Matrix: run #5444 / run ID `41202845883`, SUCCESS. Artifact `EPER-REEXEC-003-228-REQUIREMENT-TEST-MATRIX-41202845883`, artifact ID `13043083648`.
+- Artifact inspection: the matrix JSON identifies merge commit `bba95c644adf99f5ca36bb0544ee030a4af71ccc`, whose second parent is PR head `daac7419f670ea54753e432b5d44de1786c8e4b7`. It records **38/38 chapters PASS**, **259/259 automated tests PASS**, and **228/228 requirement IDs** mapped to test source and named execution output with `chapterSuiteStatus=PASS`. All 228 statuses are explicitly `AUTOMATED_PILOT_TEST_PASS_NOT_BUSINESS_UAT`.
+- Local pilot HTTP smoke: **28/28 checks PASS** across the **9 chapters that expose HTTP pilot apps**. The other 29 chapters have no HTTP app in this run's scope; this is not 38-chapter HTTP coverage. Checks include health, unauthenticated access denial and unknown-route handling where applicable.
+- Integrated Validation run #5444 / run ID `41202845981`, attempt 2: SUCCESS. Payment API + PostgreSQL + receipt contracts, full PostgreSQL-enabled test suite, migrations and migration repeatability passed; six-family runtime, release/G9 and readiness evidence jobs passed. Its embedded 228-matrix job is intentionally skipped for pull requests; the separate matrix workflow above supplied that evidence.
+- On the PR head, EPER CI, six-family HTTP smoke, G9, controlled technical simulation, container runtime smoke, release candidate build and controlled QA re-execution also completed SUCCESS.
+
+Evidence boundaries: the matrix artifact's recorded commit is the synthetic PR merge commit, not the branch head SHA itself; its parent relationship ties it to the reviewed PR head. These are automated pilot/technical results, not business acceptance. Artifact metadata explicitly records `businessAcceptance=NOT_EXECUTED` and `formalUatSignoff=NOT_EXECUTED`.
 
 ## Acceptance gaps to close
 1. Re-run the 228/38 requirement pilot matrix on the documentation head or record a justified skip and separate approved evidence.
