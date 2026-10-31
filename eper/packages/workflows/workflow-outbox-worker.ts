@@ -44,8 +44,8 @@ export class WorkflowOutboxWorker {
     this.maxRetryDelaySeconds = options.maxRetryDelaySeconds ?? 3600;
     this.leaseSeconds = options.leaseSeconds ?? 60;
     if (!Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 100 ||
-        !Number.isSafeInteger(this.baseRetryDelaySeconds) || this.baseRetryDelaySeconds < 0 ||
-        !Number.isSafeInteger(this.maxRetryDelaySeconds) || this.maxRetryDelaySeconds < this.baseRetryDelaySeconds ||
+        !Number.isSafeInteger(this.baseRetryDelaySeconds) || this.baseRetryDelaySeconds < 0 || this.baseRetryDelaySeconds > 86_400 ||
+        !Number.isSafeInteger(this.maxRetryDelaySeconds) || this.maxRetryDelaySeconds < this.baseRetryDelaySeconds || this.maxRetryDelaySeconds > 86_400 ||
         !Number.isSafeInteger(this.leaseSeconds) || this.leaseSeconds < 10 || this.leaseSeconds > 3600) {
       throw new Error("WORKFLOW_OUTBOX_WORKER_OPTIONS_INVALID");
     }
