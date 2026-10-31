@@ -72,6 +72,7 @@ export type ActionApprovalGateResult =
       | "APPROVAL_HASH_MISMATCH"
       | "APPROVAL_EXPIRED"
       | "APPROVAL_REVOKED"
+      | "APPROVAL_ID_REQUIRED"
       | "AUTHORIZATION_DENIED"
       | "AUDIT_UNAVAILABLE"
       | "INDEPENDENT_CONTROL_DENIED"
@@ -97,7 +98,7 @@ function canonical(value: unknown, seen = new Set<object>()): string {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) throw new Error("ACTION_PROPOSAL_PAYLOAD_INVALID");
     seen.add(value);
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     const result = "{" + entries.map(([key, item]) => {
       if (item === undefined) throw new Error("ACTION_PROPOSAL_PAYLOAD_INVALID");
       return JSON.stringify(key) + ":" + canonical(item, seen);
@@ -171,7 +172,8 @@ export function evaluateActionApprovalGate(input: ActionApprovalGateInput): Acti
   if (input.executionScope.applicationId !== proposal.applicationId) return { allowed: false, reason: "APPLICATION_SCOPE_MISMATCH" };
   if (!approval) return { allowed: false, reason: "APPROVAL_MISSING" };
   if (approval.decision !== "approve") return { allowed: false, reason: "APPROVAL_NOT_APPROVED" };
-  if (!validText(approval.approvalId) || approval.approverType !== "human" || !validText(approval.approverId)) {
+  if (!validText(approval.approvalId)) return { allowed: false, reason: "APPROVAL_ID_REQUIRED" };
+  if (approval.approverType !== "human" || !validText(approval.approverId)) {
     return { allowed: false, reason: "HUMAN_APPROVER_REQUIRED" };
   }
   if (approval.approverId === proposal.requestedBy) {
