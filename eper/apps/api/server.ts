@@ -29,6 +29,7 @@ import { handleAgentJobRoute } from "./agent-job-routes.js";
 import { appendAuditEvent, type AuditSqlPool } from "../../packages/audit/audit-event-store.js";
 import { renderAgentConsole } from "./agent-console.js";
 import { renderAgentToolsConfiguration } from "./agent-tools-config.js";
+import { renderCampaignSchedulerConsole } from "./campaign-scheduler-ui.js";
 import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_TYPES } from "../../packages/ticketing/ticketing-contract.js";
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 import type { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
@@ -693,6 +694,63 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    // Safe, tenant/actor-scoped execution diagnostics; never expose execution payloads or provider data.
+    const campaignExecutionDiagnostic = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-executions\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    if (campaignExecutionDiagnostic && ["GET", "HEAD"].includes(request.method ?? "")) {
+      if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!["customer-admin", "application-admin", "campaign-approver"].includes(identity.roleKey)) {
+        sendApiError(request, response, 403, "CAMPAIGN_DIAGNOSTICS_FORBIDDEN", "A campaign operator role is required."); return;
+      }
+      if (!options.campaignSchedulerStore) {
+        sendApiError(request, response, 503, "CAMPAIGN_SCHEDULER_UNAVAILABLE", "Campaign scheduling is not configured."); return;
+      }
+      const applicationId = campaignExecutionDiagnostic[1];
+      if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres" &&
+          (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore)) {
+        sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+          "Execution diagnostics authorization is not configured for durable assignments."); return;
+      }
+      let tenantAssigned = false;
+      let actorAssigned = false;
+      try {
+        const tenantApplications = options.tenantApplicationAssignmentStore
+          ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+          : (() => {
+              try {
+                const parsed: unknown = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+                return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                  ? (parsed as Record<string, unknown>)[identity.tenantId] : [];
+              } catch { return []; }
+            })();
+        tenantAssigned = Array.isArray(tenantApplications) && tenantApplications.includes(applicationId);
+        actorAssigned = options.actorApplicationAssignmentStore
+          ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+          : identity.applicationIds?.includes(applicationId) === true;
+      } catch {
+        sendApiError(request, response, 503, "CAMPAIGN_DIAGNOSTICS_AUTHORIZATION_UNAVAILABLE",
+          "Execution diagnostics authorization is temporarily unavailable."); return;
+      }
+      if (!tenantAssigned || !actorAssigned) {
+        sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+      }
+      try {
+        const diagnostics = await options.campaignSchedulerStore.getExecutionDiagnostics({
+          tenantId: identity.tenantId, applicationId, executionId: campaignExecutionDiagnostic[2],
+        });
+        if (!diagnostics) { sendApiError(request, response, 404, "EXECUTION_NOT_FOUND", "The execution was not found."); return; }
+        sendApiSuccess(request, response, 200, { execution: diagnostics }); return;
+      } catch (error) {
+        const invalid = error instanceof Error && error.message === "CAMPAIGN_EXECUTION_ID_INVALID";
+        sendApiError(request, response, invalid ? 400 : 503,
+          invalid ? "INVALID_EXECUTION_ID" : "CAMPAIGN_EXECUTION_DIAGNOSTICS_READ_FAILED",
+          "Execution diagnostics could not be retrieved."); return;
+      }
+    }
+
     // Campaign schedule read APIs: tenant identity is server-derived, and application assignment
     // is checked independently before any database lookup.
     const campaignCollection = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-schedules$/.exec(requestUrl.pathname);
@@ -797,7 +855,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const timezone = body.timezone;
       const scheduleDefinition = body.scheduleDefinition;
       if (typeof campaignId !== "string" || !campaignId.trim() || campaignId.length > 128 ||
-          !["once", "recurring", "event", "condition"].includes(String(triggerType)) ||
+          !["once", "recurring", "event"].includes(String(triggerType)) ||
           typeof timezone !== "string" || !timezone.trim() || timezone.length > 128 ||
           !scheduleDefinition || typeof scheduleDefinition !== "object" || Array.isArray(scheduleDefinition)) {
         sendApiError(request, response, 400, "INVALID_CAMPAIGN_SCHEDULE", "Required schedule fields are missing or invalid."); return;
@@ -2320,6 +2378,18 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           : 422;
         sendJson(request, response, status, { error: status === 422 ? "capability_execution_failed" : message });
       }
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/customer/campaign-schedules-ui") {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+      });
+      response.end(renderCampaignSchedulerConsole());
       return;
     }
 

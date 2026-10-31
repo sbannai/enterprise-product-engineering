@@ -22,7 +22,7 @@ function fakeStore(claimed = []) {
   const calls = [];
   return {
     calls,
-    async recoverStaleExecutions() { calls.push("recover"); return 0; },
+    async recoverStaleExecutions(...args) { calls.push(["recover", ...args]); return 0; },
     async materializeDueOneTimeSchedules() { calls.push("materialize-once"); return 0; },
     async materializeDueRecurringSchedules() { calls.push("materialize-recurring"); return 0; },
     async claimExecutions(workerId, batchSize) { calls.push(["claim", workerId, batchSize]); return claimed.splice(0); },
@@ -54,7 +54,7 @@ test("worker processes claimed executions asynchronously and completes with tena
   assert.equal(complete[1].applicationId, "app-a");
   assert.equal(complete[1].workerId, "worker-a");
   assert.deepEqual(complete[1].result, { accepted: true });
-  assert.deepEqual(store.calls.slice(0, 4), ["recover", "materialize-once", "materialize-recurring", ["claim", "worker-a", 10]]);
+  assert.deepEqual(store.calls.slice(0, 4), [["recover", 300, 5], "materialize-once", "materialize-recurring", ["claim", "worker-a", 10]]);
 });
 
 test("worker records dispatch failures for bounded retry handling", async () => {

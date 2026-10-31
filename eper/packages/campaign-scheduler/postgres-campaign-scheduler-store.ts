@@ -93,13 +93,16 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null;
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null;
       }>(
         `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
                 to_regclass('public.eper_campaign_executions')::text AS executions_table,
                 (SELECT column_name FROM information_schema.columns
                  WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                   AND column_name='dispatch_started_at') AS dispatch_started_column`,
+                   AND column_name='dispatch_started_at') AS dispatch_started_column,
+                (SELECT column_name FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                   AND column_name='last_error_detail_code') AS error_detail_column`,
       );
       if (!result.rows[0]?.schedules_table || !result.rows[0]?.executions_table) {
         throw new Error("EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED");
@@ -107,10 +110,14 @@ export class PostgresCampaignSchedulerStore {
       if (!result.rows[0]?.dispatch_started_column) {
         throw new Error("EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED");
       }
+      if (!result.rows[0]?.error_detail_column) {
+        throw new Error("EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED");
+      }
     } catch (error) {
       if (error instanceof Error && (
         error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED" ||
-        error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED"
+        error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED" ||
+        error.message === "EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED"
       )) throw error;
       throw new Error("EPER_CAMPAIGN_SCHEDULER_READINESS_CHECK_FAILED", { cause: error });
     } finally { client.release(); }
@@ -121,7 +128,7 @@ export class PostgresCampaignSchedulerStore {
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const campaignId = required(input.campaignId, "CAMPAIGN_ID_REQUIRED");
     const createdBy = required(input.createdBy, "CAMPAIGN_ACTOR_REQUIRED");
-    if (!["once", "recurring", "event", "condition"].includes(input.triggerType)) throw new Error("CAMPAIGN_TRIGGER_TYPE_INVALID");
+    if (!["once", "recurring", "event"].includes(input.triggerType)) throw new Error("CAMPAIGN_TRIGGER_TYPE_INVALID");
     if (!TZ_PATTERN.test(input.timezone) || input.timezone.length > 128) throw new Error("CAMPAIGN_TIMEZONE_INVALID");
     try { new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(); }
     catch { throw new Error("CAMPAIGN_TIMEZONE_INVALID"); }
@@ -257,11 +264,26 @@ export class PostgresCampaignSchedulerStore {
           [tenantId, applicationId, input.scheduleId],
         );
         if (dispatchStarted.rows.length) throw new Error("CAMPAIGN_DISPATCH_ALREADY_STARTED");
-        await client.query(
+        const cancelledExecutions = await client.query<{ id: string }>(
           `UPDATE eper_campaign_executions SET status='cancelled', updated_at=now(), locked_at=NULL, locked_by=NULL
-           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')`,
+           WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3 AND status IN ('queued','retry_wait','running')
+           RETURNING id`,
           [tenantId, applicationId, input.scheduleId],
         );
+        for (const execution of cancelledExecutions.rows) {
+          try {
+            await appendAuditEventInTransaction(client, {
+              tenantId, applicationId, environment: this.auditEnvironment,
+              actorType: "human", actorId,
+              action: "campaign_execution_cancelled", outcome: "success",
+              reasonCode: "CAMPAIGN_SCHEDULE_CANCELLED_BEFORE_DISPATCH_FENCE",
+              resourceType: "campaign-execution", resourceId: String(execution.id),
+              source: "api", operationName: "campaign.execution.cancel",
+              serviceVersion: this.serviceVersion,
+              payload: { resultingStatus: "cancelled", scheduleId: input.scheduleId },
+            });
+          } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+        }
       }
       const schedule = mapSchedule(result.rows[0]);
       await this.appendLifecycleAudit(client, { tenantId, applicationId, actorId, action: "campaign_schedule_" + input.action, resourceId: schedule.id, operationName: "campaign.schedule." + input.action, payload: { resultingStatus: schedule.status, approvalStatus: schedule.approvalStatus } });
@@ -439,6 +461,7 @@ export class PostgresCampaignSchedulerStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("CAMPAIGN_CLAIM_LIMIT_INVALID");
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       const result = await client.query<Record<string, unknown>>(
         `WITH due AS (
            SELECT e.id FROM eper_campaign_executions e
@@ -458,6 +481,21 @@ export class PostgresCampaignSchedulerStore {
          RETURNING e.*`,
         [worker, limit],
       );
+      for (const row of result.rows) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+            environment: this.auditEnvironment, actorType: "service", actorId: worker,
+            action: "campaign_execution_claimed", outcome: "success",
+            reasonCode: "CAMPAIGN_EXECUTION_WORKER_LEASE_ACQUIRED",
+            resourceType: "campaign-execution", resourceId: String(row.id),
+            source: "job", operationName: "campaign.execution.claim",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: "running", attemptCount: Number(row.attempt_count) },
+          });
+        } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      }
+      await client.query("COMMIT");
       return result.rows.map((row) => {
         const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
         return {
@@ -468,6 +506,9 @@ export class PostgresCampaignSchedulerStore {
           availableAt: new Date(row.available_at as string | Date).toISOString(),
         };
       });
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally { client.release(); }
   }
 
@@ -512,6 +553,18 @@ export class PostgresCampaignSchedulerStore {
            AND dispatch_started_at IS NULL`,
         [tenantId, applicationId, input.executionId, workerId],
       );
+      try {
+        await appendAuditEventInTransaction(client, {
+          tenantId, applicationId, environment: this.auditEnvironment,
+          actorType: "service", actorId: workerId,
+          action: "campaign_execution_dispatch_started", outcome: "success",
+          reasonCode: "CAMPAIGN_DISPATCH_FENCE_ACQUIRED",
+          resourceType: "campaign-execution", resourceId: input.executionId,
+          source: "job", operationName: "campaign.execution.dispatch_start",
+          serviceVersion: this.serviceVersion,
+          payload: { resultingStatus: "running", dispatchFenceAcquired: true },
+        });
+      } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
       await client.query("COMMIT");
       return true;
     } catch (error) {
@@ -581,13 +634,33 @@ export class PostgresCampaignSchedulerStore {
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
-      const result = await client.query(
+      await client.query("BEGIN");
+      const result = await client.query<{ id: string; attempt_count: number }>(
         `UPDATE eper_campaign_executions
-         SET status='succeeded', result=$5::jsonb, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4`,
+         SET status='succeeded', result=$5::jsonb, last_error_code=NULL, last_error_detail_code=NULL, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         RETURNING id, attempt_count`,
         [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {})],
       );
-      return result.rowCount === 1;
+      if (result.rows.length === 1) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId, applicationId, environment: this.auditEnvironment,
+            actorType: "service", actorId: workerId,
+            action: "campaign_execution_succeeded", outcome: "success",
+            reasonCode: "CAMPAIGN_EXECUTION_COMPLETED",
+            resourceType: "campaign-execution", resourceId: input.executionId,
+            source: "job", operationName: "campaign.execution.complete",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: "succeeded", attemptCount: Number(result.rows[0].attempt_count) },
+          });
+        } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      }
+      await client.query("COMMIT");
+      return result.rows.length === 1;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
     } finally { client.release(); }
   }
 
@@ -605,7 +678,7 @@ export class PostgresCampaignSchedulerStore {
       const result = await client.query<{ id: string }>(
         `UPDATE eper_campaign_executions
          SET status='retry_wait', attempt_count=GREATEST(attempt_count - 1, 0),
-             available_at=now(), last_error_code=NULL, updated_at=now(),
+             available_at=now(), last_error_code=NULL, last_error_detail_code=NULL, updated_at=now(),
              locked_at=NULL, locked_by=NULL, completed_at=NULL
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
            AND locked_by=$4 AND dispatch_started_at IS NULL
@@ -636,6 +709,41 @@ export class PostgresCampaignSchedulerStore {
     } finally { client.release(); }
   }
 
+  /** Return a safe, tenant-scoped operational view; never expose execution payloads or provider data. */
+  async getExecutionDiagnostics(input: {
+    tenantId: string; applicationId: string; executionId: string;
+  }): Promise<{
+    executionId: string; scheduleId: string; status: CampaignExecutionStatus; attemptCount: number;
+    lastErrorCode: string | null; lastErrorDetailCode: string | null;
+    dispatchStartedAt: string | null; completedAt: string | null; updatedAt: string;
+  } | null> {
+    const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
+    const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
+    if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT id, schedule_id, status, attempt_count, last_error_code, last_error_detail_code,
+                dispatch_started_at, completed_at, updated_at
+         FROM eper_campaign_executions
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3
+         LIMIT 1`,
+        [tenantId, applicationId, input.executionId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const iso = (value: unknown): string | null => value ? new Date(value as string | Date).toISOString() : null;
+      return {
+        executionId: String(row.id), scheduleId: String(row.schedule_id),
+        status: row.status as CampaignExecutionStatus, attemptCount: Number(row.attempt_count),
+        lastErrorCode: row.last_error_code == null ? null : String(row.last_error_code),
+        lastErrorDetailCode: row.last_error_detail_code == null ? null : String(row.last_error_detail_code),
+        dispatchStartedAt: iso(row.dispatch_started_at), completedAt: iso(row.completed_at),
+        updatedAt: new Date(row.updated_at as string | Date).toISOString(),
+      };
+    } finally { client.release(); }
+  }
+
   async failExecution(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
     errorCode: string; maxAttempts?: number; baseDelaySeconds?: number;
@@ -653,20 +761,62 @@ export class PostgresCampaignSchedulerStore {
     }
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ status: "retry_wait" | "dead_letter" }>(
+      await client.query("BEGIN");
+      const result = await client.query<{
+        status: "retry_wait" | "dead_letter"; last_error_code: string;
+        last_error_detail_code: string | null; attempt_count: number;
+      }>(
         `UPDATE eper_campaign_executions
          SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN 'dead_letter' ELSE 'retry_wait' END,
              last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE $6 END,
+             last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN $8 ELSE NULL END,
              available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN available_at
                ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN now() ELSE NULL END
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
-            AND (locked_by=$4 OR dispatch_started_at IS NOT NULL)
-         RETURNING status`,
-        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds],
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
+        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds, errorCode],
       );
-      return result.rows[0]?.status ?? "not_owned";
+      let row = result.rows[0];
+      if (!row && errorCode === "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST") {
+        // The completion update can fail precisely because this worker no longer owns
+        // the lease. Do not leave a fenced execution running or lose the diagnostic:
+        // persist only the ambiguity-safe dead-letter state, without requiring the old lease.
+        const diagnostic = await client.query<{
+          status: "dead_letter"; last_error_code: string;
+          last_error_detail_code: string | null; attempt_count: number;
+        }>(
+          `UPDATE eper_campaign_executions
+           SET status='dead_letter', last_error_code='DISPATCH_OUTCOME_UNKNOWN',
+               last_error_detail_code=$4, updated_at=now(), locked_at=NULL, locked_by=NULL,
+               completed_at=COALESCE(completed_at, now())
+           WHERE tenant_id=$1 AND application_id=$2 AND id=$3
+             AND dispatch_started_at IS NOT NULL
+             AND (status='running' OR (status='dead_letter' AND last_error_code='DISPATCH_OUTCOME_UNKNOWN'))
+           RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
+          [tenantId, applicationId, input.executionId, errorCode],
+        );
+        row = diagnostic.rows[0];
+      }
+      if (!row) { await client.query("COMMIT"); return "not_owned"; }
+      try {
+        await appendAuditEventInTransaction(client, {
+          tenantId, applicationId, environment: this.auditEnvironment,
+          actorType: "service", actorId: workerId,
+          action: row.status === "dead_letter" ? "campaign_execution_dead_lettered" : "campaign_execution_retry_scheduled",
+          outcome: "failure", reasonCode: row.last_error_detail_code ?? row.last_error_code,
+          resourceType: "campaign-execution", resourceId: input.executionId,
+          source: "job", operationName: row.status === "dead_letter" ? "campaign.execution.dead_letter" : "campaign.execution.retry",
+          serviceVersion: this.serviceVersion,
+          payload: { resultingStatus: row.status, attemptCount: Number(row.attempt_count), safetyClassification: row.last_error_code, errorDetailCode: row.last_error_detail_code },
+        });
+      } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      await client.query("COMMIT");
+      return row.status;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
     } finally { client.release(); }
   }
 
@@ -678,19 +828,45 @@ export class PostgresCampaignSchedulerStore {
     }
     const client = await this.pool.connect();
     try {
-      const result = await client.query(
+      await client.query("BEGIN");
+      const result = await client.query<{
+        id: string; tenant_id: string; application_id: string; status: "retry_wait" | "dead_letter";
+        last_error_code: string; last_error_detail_code: string | null; attempt_count: number;
+      }>(
         `UPDATE eper_campaign_executions
          SET status=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN 'dead_letter' ELSE 'retry_wait' END,
              last_error_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'DISPATCH_OUTCOME_UNKNOWN' ELSE 'WORKER_LEASE_EXPIRED' END,
+             last_error_detail_code=CASE WHEN dispatch_started_at IS NOT NULL THEN 'WORKER_LEASE_EXPIRED' ELSE NULL END,
              available_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN available_at
                ELSE now() + (LEAST(15 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $2 THEN now() ELSE NULL END
-         WHERE status='running' AND locked_at < now() - ($1 * interval '1 second')`,
+         WHERE status='running' AND locked_at < now() - ($1 * interval '1 second')
+         RETURNING id, tenant_id, application_id, status, last_error_code, last_error_detail_code, attempt_count`,
         [staleAfterSeconds, maxAttempts],
       );
-      return result.rowCount ?? 0;
+      for (const row of result.rows) {
+        try {
+          await appendAuditEventInTransaction(client, {
+            tenantId: String(row.tenant_id), applicationId: String(row.application_id),
+            environment: this.auditEnvironment, actorType: "service", actorId: "campaign-scheduler-recovery",
+            action: row.status === "dead_letter" ? "campaign_execution_dead_lettered" : "campaign_execution_retry_scheduled",
+            outcome: "failure", reasonCode: row.last_error_detail_code ?? row.last_error_code,
+            resourceType: "campaign-execution", resourceId: String(row.id),
+            source: "job", operationName: row.status === "dead_letter" ? "campaign.execution.recovery_dead_letter" : "campaign.execution.recovery_retry",
+            serviceVersion: this.serviceVersion,
+            payload: { resultingStatus: row.status, attemptCount: Number(row.attempt_count), safetyClassification: row.last_error_code, errorDetailCode: row.last_error_detail_code, recovery: true },
+          });
+        } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
+      }
+      await client.query("COMMIT");
+      return result.rowCount ?? result.rows.length;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
     } finally { client.release(); }
   }
+
+
 
 }
