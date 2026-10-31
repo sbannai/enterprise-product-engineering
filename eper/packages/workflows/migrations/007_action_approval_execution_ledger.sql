@@ -163,6 +163,30 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION eper_validate_action_approval_decision()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+DECLARE grant_approver_id varchar(128);
+BEGIN
+  IF NEW.decision = 'approve' THEN
+    SELECT approver_id INTO grant_approver_id
+      FROM eper_action_approval_grants
+     WHERE tenant_id = NEW.tenant_id
+       AND application_id = NEW.application_id
+       AND approval_id = NEW.approval_id
+       AND proposal_id = NEW.proposal_id
+       AND proposal_version = NEW.proposal_version
+       AND proposal_hash = NEW.proposal_hash;
+    IF grant_approver_id IS NULL OR grant_approver_id <> NEW.actor_id THEN
+      RAISE EXCEPTION 'EPER_ACTION_APPROVAL_ACTOR_MISMATCH'
+        USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION eper_guard_action_execution_claim_update()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -229,6 +253,11 @@ DROP TRIGGER IF EXISTS eper_action_approval_grants_no_truncate ON eper_action_ap
 CREATE TRIGGER eper_action_approval_grants_no_truncate
 BEFORE TRUNCATE ON eper_action_approval_grants
 FOR EACH STATEMENT EXECUTE FUNCTION eper_reject_action_ledger_mutation();
+
+DROP TRIGGER IF EXISTS eper_action_approval_decisions_validate_actor ON eper_action_approval_decisions;
+CREATE TRIGGER eper_action_approval_decisions_validate_actor
+BEFORE INSERT ON eper_action_approval_decisions
+FOR EACH ROW EXECUTE FUNCTION eper_validate_action_approval_decision();
 
 DROP TRIGGER IF EXISTS eper_action_approval_decisions_no_update ON eper_action_approval_decisions;
 CREATE TRIGGER eper_action_approval_decisions_no_update
