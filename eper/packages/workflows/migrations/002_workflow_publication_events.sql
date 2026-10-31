@@ -44,6 +44,25 @@ CREATE TRIGGER eper_workflow_publication_no_truncate
 BEFORE TRUNCATE ON eper_workflow_publication_events
 FOR EACH STATEMENT EXECUTE FUNCTION eper_reject_workflow_publication_mutation();
 
+-- Protect every append-only workflow ledger from bulk truncation as well.
+DROP TRIGGER IF EXISTS eper_workflow_definitions_no_truncate
+  ON eper_workflow_definition_versions;
+CREATE TRIGGER eper_workflow_definitions_no_truncate
+BEFORE TRUNCATE ON eper_workflow_definition_versions
+FOR EACH STATEMENT EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
+
+DROP TRIGGER IF EXISTS eper_workflow_transitions_no_truncate
+  ON eper_workflow_transitions;
+CREATE TRIGGER eper_workflow_transitions_no_truncate
+BEFORE TRUNCATE ON eper_workflow_transitions
+FOR EACH STATEMENT EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
+
+DROP TRIGGER IF EXISTS eper_workflow_idempotency_no_truncate
+  ON eper_workflow_idempotency;
+CREATE TRIGGER eper_workflow_idempotency_no_truncate
+BEFORE TRUNCATE ON eper_workflow_idempotency
+FOR EACH STATEMENT EXECUTE FUNCTION eper_reject_workflow_ledger_mutation();
+
 ALTER TABLE eper_workflow_publication_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eper_workflow_publication_events FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_application_isolation
