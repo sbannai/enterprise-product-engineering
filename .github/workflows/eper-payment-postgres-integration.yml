@@ -15,6 +15,13 @@ on:
       - ".github/workflows/eper-payment-postgres-integration.yml"
       - "eper/packages/payments/**"
       - "eper/packages/pricing/**"
+      - "eper/packages/audit/migrations/**"
+      - "eper/packages/campaign-scheduler/**"
+      - "eper/scripts/migrate-audit.mjs"
+      - "eper/scripts/migrate-campaign-scheduler.mjs"
+      - "eper/scripts/select-campaign-scheduler-database-url.mjs"
+      - "eper/tests/campaign-scheduler-*.test.mjs"
+      - "eper/tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs"
       - "eper/apps/api/main.ts"
       - "eper/apps/api/server.ts"
       - "eper/apps/api/payments.ts"
@@ -120,8 +127,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply all payment migrations through the deployment runner
         run: npm run migrate:payments
+      - name: Apply durable audit schema migrations
+        run: npm run migrate:audit
+      - name: Apply campaign scheduler migrations
+        run: npm run migrate:campaign-scheduler
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
+      - name: Exercise PostgreSQL campaign dispatch race and event idempotency
+        env:
+          EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: node --test tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs
 
       - name: Upload payment diagnostic evidence
         if: always()
