@@ -132,6 +132,12 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
         `);
         assert.fail("Dispatch lock wait not observed; " + JSON.stringify({
           dispatchOutcome, dispatchError, row: rowState.rows[0] ?? null, activity: activity.rows,
+          pool: {
+            totalCount: pool.totalCount,
+            idleCount: pool.idleCount,
+            waitingCount: pool.waitingCount,
+          },
+          blockerPid,
         }));
       }
 
