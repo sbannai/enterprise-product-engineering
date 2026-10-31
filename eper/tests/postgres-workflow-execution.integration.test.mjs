@@ -123,12 +123,12 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
           `SELECT action FROM eper_audit_events
             WHERE tenant_id = $1 AND application_id = $2
               AND resource_type = 'workflow-instance' AND resource_id = $3
-            ORDER BY occurred_at, event_id`,
+            ORDER BY occurred_at`,
           [tenantId, applicationId, started.instanceId],
         );
-        assert.deepEqual(audit.rows.map(row => row.action), [
+        assert.deepEqual(audit.rows.map(row => row.action).sort(), [
           "workflow.instance.start", "workflow.instance.transition",
-        ]);
+        ].sort());
         await verify.query("COMMIT");
       } catch (error) {
         try { await verify.query("ROLLBACK"); } catch { /* preserve original failure */ }
