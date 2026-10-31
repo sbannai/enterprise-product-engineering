@@ -4,15 +4,20 @@ name: EPER CI
 # Full-suite and same-commit end-to-end validation live in eper-integrated-validation.yml.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 on:
   workflow_dispatch:
   push:
     branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main", "reconcile/payment-153-168-integration"]
+    paths:
+      - "eper/**"
 
 jobs:
   build-and-test:
@@ -74,13 +79,29 @@ jobs:
       # The same-commit integrated-validation workflow owns the full EPER
       # suite and payment/receipt contracts. Keep capability-specific live
       # PostgreSQL conformance here because it is unique to this CI lane.
+      - name: Initialize CI diagnostic evidence
+        if: always()
+        run: mkdir -p reexec-evidence/ci-logs
       - name: Live PostgreSQL capability conformance (RLS, audit immutability, rollback)
         env:
           EPER_CAPABILITY_LIVE_TESTS: "1"
-        run: node --test tests/postgres-capability-live.integration.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/postgres-capability-live.integration.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-capability-live.log
       - name: UAT preflight regression tests
-        run: python3 -m unittest discover -s uat/tests -p 'test_*.py' -v
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s uat/tests -p 'test_*.py' -v 2>&1 | tee reexec-evidence/ci-logs/uat-preflight.log
       - name: Read-only business UAT readiness audit
         run: |
           python3 uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
           python3 -c "import json; d=json.load(open('/tmp/b01-readiness.json')); print(json.dumps({'readiness': d['readiness'], 'counts': d['counts'], 'blockers': [{'gate': b['gate'], 'count': b['count']} for b in d['blockers']], 'integrityErrors': d['integrityErrors']}, indent=2))"
+
+      - name: Upload CI diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-CI-DIAGNOSTICS-${{ github.run_id }}
+          path: eper/reexec-evidence/ci-logs/
+          if-no-files-found: warn
+          retention-days: 14
