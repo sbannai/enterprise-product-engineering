@@ -179,19 +179,19 @@ Migration `002_workflow_publication_events.sql` adds an append-only publication 
 | Tenant-scoped durable admin configuration | Existing PostgreSQL store and integration test | FOUNDATION; deployment mode is opt-in |
 | Application-scoped immutable workflow definition versions | Publisher writes immutable snapshots, serializes version allocation with a transaction advisory lock, and appends a publication lifecycle event plus audit record atomically; all 12 workflows passed on `daf6a9bdc7f179a037e947d4510346665310355b` | CI-VALIDATED |
 | Immutable workflow definition versions | SHA-256 snapshot digest, append-only definition and publication ledgers, RLS, UPDATE/DELETE/TRUNCATE guards; exact-head build and test suite passed | CI-VALIDATED |
-| Durable workflow instances | Schema foundation added; store/service not implemented | FOUNDATION |
+| Durable workflow instances | PostgreSQL instance projection with exact definition version/digest pinning; start service and real PostgreSQL persistence test passed | CI-VALIDATED |
 | Application-scoped role catalogue | `004_workflow_role_definitions.sql` and `PostgresWorkflowRoleDefinitionStore` provide versioned role definitions and permission grants under tenant/application RLS with atomic audit writes | CI-VALIDATED |
 | Application-scoped actor role assignments | `003_workflow_actor_role_assignments.sql` and `PostgresWorkflowActorRoleAssignmentStore` provide audited grant/revoke, optimistic versioning and atomic permission checks against active tenant, application, actor and role state | CI-VALIDATED |
-| Transactional state transitions | Schema foundation added; transition service and atomic audit integration not implemented | NOT_STARTED |
-| Workflow instance audit history | Not evidenced | NOT_STARTED |
-| Restart/concurrency/idempotency behavior | Not evidenced for workflow instances | NOT_STARTED |
-| End-to-end workflow execution API | Not evidenced | NOT_STARTED |
+| Transactional state transitions | Submit/approve/reject/cancel state machine implemented with expected-version checks, role authorization, field validation, branching, idempotency and same-transaction audit | CI-VALIDATED |
+| Workflow instance audit history | Start and transition audit events persisted atomically with state, transition and idempotency records; real PostgreSQL integration passed | CI-VALIDATED |
+| Restart/concurrency/idempotency behavior | Service recreation and duplicate start/transition replay tested against PostgreSQL; advisory locks serialize same idempotency key and instance row locks serialize state changes; concurrent stress test remains | CI-VALIDATED; STRESS TEST PENDING |
+| End-to-end workflow execution API | Service layer is not yet wired to HTTP routes or enabled by a feature flag | NOT_STARTED |
 
 ## 12. Publisher increment (CI-validated)
 
 `packages/workflows/workflow-definition-publisher.ts` now implements the first publisher slice. It accepts tenant, application, actor and correlation identity only through a trusted server-side context; validates an active workflow definition; sets the tenant/application RLS context; checks active tenant-application ownership and actor-application assignment using `FOR SHARE` locks in the same transaction; validates every activity's role and permission against the application-scoped role catalogue; assigns the next per-workflow version; stores a canonical SHA-256 digest and immutable snapshot; and appends the audit event in the same transaction. Assignment lookup errors and missing/revoked assignments fail closed. Tests cover successful publication, revoked tenant ownership, missing actor assignment, lookup failure and invalid definitions.
 
-The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. The exact PR head `daf6a9bdc7f179a037e947d4510346665310355b` passed all 12 associated GitHub Actions workflows, including typecheck/build/full tests, repeatable PostgreSQL migrations, release candidate build, six-family HTTP smoke, 228-requirement pilot matrix, QA/UAT technical simulations, G9 reconciliation and integrated validation. This is technical CI evidence only; it is not a production deployment or Business UAT authorization.
+The publisher is not yet wired to an HTTP route and does not start or transition workflow instances. The exact PR head `f74bf85bae69bbe11dac6b02fb8c95092321ed85` passed all 12 associated GitHub Actions workflows, including typecheck/build/full tests, repeatable PostgreSQL migrations, release candidate build, six-family HTTP smoke, 228-requirement pilot matrix, QA/UAT technical simulations, G9 reconciliation and integrated validation. This is technical CI evidence only; it is not a production deployment or Business UAT authorization.
 
 **Exit criterion:** Do not label the workflow execution USP as IMPLEMENTED or TESTED until the full vertical slice and the integration evidence above exist on one exact commit.
 
@@ -203,3 +203,18 @@ The branch adds `003_workflow_actor_role_assignments.sql`, `004_workflow_role_de
 Unit and migration contract tests cover role definition writes, successful grant/audit, inactive actor and disabled-role denial, explicit permission checks, transaction-local RLS context, application-scoped constraints and publication-ledger controls. One QA fixture-ordering defect was corrected; the subsequent full exact-head test suite and all 12 GitHub Actions workflows passed on `daf6a9bdc7f179a037e947d4510346665310355b`.
 
 **Remaining boundary:** the role-assignment store is not yet wired to an admin API or workflow transition authorization. The execution service must query this store for the activity's required role on every transition. Workflow instance persistence, transition/idempotency handling, restart recovery and API integration remain outstanding.
+
+
+## 14. Durable workflow execution service (CI-validated)
+
+`PostgresWorkflowExecutionService` implements the first executable service slice:
+
+- `start` resolves the latest publication event, rejects retired/unpublished workflows, verifies the immutable definition digest, checks active tenant/application and actor/application membership, authorizes the first activity's role/permission, and creates a durable instance pinned to the exact definition version and digest.
+- Start idempotency is stored on the instance with a request fingerprint and a unique tenant/application key. A retry returns the original start response; key reuse with a different request is rejected.
+- `transition` locks the instance, enforces the expected version, reloads the pinned definition and verifies its digest, rechecks current membership and activity permission, validates submitted fields, enforces allowed next-activity branches, and supports submit, approve, reject and cancel.
+- Instance projection update, append-only transition row, idempotency response and audit event are committed in one transaction. A transaction-scoped advisory lock serializes retries with the same idempotency key; the instance row lock and expected-version check protect concurrent state changes.
+- Request retries after service recreation are covered by a live PostgreSQL integration test. The test verifies one instance, start and submit transitions, original start replay, completed transition replay, exact definition pin, and audit events.
+
+The workflow migration runner now applies all five workflow migrations and the CI lane applies them twice to verify repeatability. The exact PR head `f74bf85bae69bbe11dac6b02fb8c95092321ed85` passed all 12 associated GitHub Actions workflows, including the new live PostgreSQL workflow execution integration and the full PostgreSQL-backed test suite.
+
+**Remaining boundary:** the service is not yet exposed through an HTTP route. The role definition and assignment stores are also not yet wired to an application admin API. Do not enable the execution feature or authorize Business UAT until trusted route context, admin authorization, API contracts, negative isolation tests and the remaining UAT entry-gate evidence are complete.
