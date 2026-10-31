@@ -86,3 +86,22 @@ test("workflow administration requires both tenant ownership and active administ
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+test("workflow execution routes are hidden when the feature flag is disabled", async () => {
+  const previous = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED;
+  delete process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED;
+  const server = createAppServer({ workflowExecutionService: { async start() { throw new Error("must not execute"); } } });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications/app-a/workflows/onboarding/instances", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previous === undefined) delete process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED;
+    else process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = previous;
+  }
+});
