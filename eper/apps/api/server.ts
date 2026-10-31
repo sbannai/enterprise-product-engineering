@@ -695,7 +695,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
     // Safe, tenant/actor-scoped execution diagnostics; never expose execution payloads or provider data.
-    const campaignExecutionDiagnostic = /^\\/customer\\/applications\\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\\/campaign-executions\\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
+    const campaignExecutionDiagnostic = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/campaign-executions\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(requestUrl.pathname);
     if (campaignExecutionDiagnostic && ["GET", "HEAD"].includes(request.method ?? "")) {
       if (process.env.EPER_CAMPAIGN_SCHEDULER_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
