@@ -21,6 +21,7 @@ export interface ActionApprovalAuthorizationRequest {
   proposalId?: string;
   proposalVersion?: number;
   proposalHash?: string;
+  approvalId?: string;
   actionType?: string;
   sideEffectClass?: string;
   targetType?: string;
