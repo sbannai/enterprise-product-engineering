@@ -419,6 +419,12 @@ export class PostgresActionApprovalStore {
                     SELECT 1 FROM eper_action_approval_grants g
                      WHERE g.tenant_id = p.tenant_id AND g.application_id = p.application_id
                        AND g.proposal_id = p.proposal_id AND g.proposal_version = p.proposal_version
+                       AND g.expires_at <= NOW()
+                  ) THEN 'expired'
+                  WHEN EXISTS (
+                    SELECT 1 FROM eper_action_approval_grants g
+                     WHERE g.tenant_id = p.tenant_id AND g.application_id = p.application_id
+                       AND g.proposal_id = p.proposal_id AND g.proposal_version = p.proposal_version
                   ) THEN 'revoked'
                   WHEN EXISTS (
                     SELECT 1 FROM eper_action_approval_decisions d
