@@ -476,3 +476,52 @@ test("ticket conversation read returns not-found without reading replies for a t
   assert.equal(calls.filter(call => /SELECT \* FROM eper_support_ticket_replies/.test(call.sql)).length, 0);
   assert.deepEqual(calls[0].values, ["tenant-a", "ticket-outside-scope", "app-a"]);
 });
+
+
+test("P1 classification persists rationale and trusted confirmation metadata atomically with audit", async () => {
+  const calls = [];
+  const row = {
+    ...ticketRow, severity: "p1_confirmed",
+    p1_rationale: "Payment integrity is blocked for all users and receipts cannot be reconciled.",
+    p1_confirmed_by: "actor-a",
+    p1_confirmed_at: "2026-10-31T16:00:00.000Z",
+  };
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (/UPDATE eper_support_tickets/.test(sql)) return { rows: [row], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } };
+  const auditEvents = [];
+  const store = new PostgresTicketStore(pool, async (event, txClient) => {
+    auditEvents.push(event);
+    await txClient.query("INSERT INTO eper_audit_events (event_id) VALUES ('audit-p1')");
+  });
+  const rationale = row.p1_rationale;
+  const result = await store.classifySeverity(identity, "ticket-1", "p1_confirmed", rationale);
+  assert.equal(result.severity, "p1_confirmed");
+  assert.equal(result.p1Rationale, rationale);
+  assert.equal(result.p1ConfirmedBy, "actor-a");
+  assert.equal(result.p1ConfirmedAt, "2026-10-31T16:00:00.000Z");
+  assert.deepEqual(calls.find(x => /UPDATE eper_support_tickets/.test(x.sql)).values,
+    ["tenant-a", "ticket-1", "p1_confirmed", rationale, "actor-a"]);
+  assert.equal(auditEvents.length, 1);
+  assert.equal(auditEvents[0].action, "ticket.severity_classified");
+  assert.equal(auditEvents[0].payload.confirmedBy, "actor-a");
+  assert.ok(calls.some(x => x.sql === "COMMIT"));
+  assert.ok(!calls.some(x => x.sql === "ROLLBACK"));
+});
+
+test("P1 confirmation without substantive rationale is rejected before database access", async () => {
+  let connections = 0;
+  const pool = { async connect() { connections++; throw new Error("must not connect"); } };
+  const store = new PostgresTicketStore(pool, async () => {});
+  await assert.rejects(
+    () => store.classifySeverity(identity, "ticket-1", "p1_confirmed", "Too short"),
+    /ticket_p1_rationale_required/,
+  );
+  assert.equal(connections, 0);
+});
