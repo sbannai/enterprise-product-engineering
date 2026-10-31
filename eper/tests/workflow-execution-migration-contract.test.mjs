@@ -96,3 +96,18 @@ test("workflow instance starts have a unique, fingerprinted idempotency key", as
   assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS eper_workflow_instances_start_idempotency_idx/);
   assert.match(sql, /WHERE start_idempotency_key IS NOT NULL/);
 });
+
+
+test("workflow outbox is append-only, tenant-scoped and has a separate delivery projection", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/006_workflow_outbox.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_outbox_events/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_outbox_delivery/);
+  assert.match(sql, /UNIQUE \(tenant_id, application_id, transition_id, event_type\)/);
+  assert.match(sql, /FOREIGN KEY \(tenant_id, application_id, instance_id, transition_id\)/);
+  assert.match(sql, /BEFORE UPDATE OR DELETE ON eper_workflow_outbox_events/);
+  assert.match(sql, /BEFORE TRUNCATE ON eper_workflow_outbox_events/);
+  assert.match(sql, /FORCE ROW LEVEL SECURITY/);
+  assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
+  assert.match(sql, /current_setting\('eper\.application_id', true\)/);
+  assert.match(sql, /delivery_status IN \('pending','processing','delivered','dead_letter'\)/);
+});
