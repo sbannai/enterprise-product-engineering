@@ -328,26 +328,42 @@ test("PostgreSQL action approval ledger enforces scope, immutable decisions and 
         [tenantId, applicationId, eventId, executionId, approvalId],
       );
 
+      await client.query("SAVEPOINT expected_rejection");
       await assert.rejects(
         client.query("UPDATE eper_action_proposals SET payload = '{}'::jsonb WHERE tenant_id = $1 AND application_id = $2 AND proposal_id = $3", [tenantId, applicationId, proposalId]),
         /EPER_ACTION_LEDGER_APPEND_ONLY/,
       );
+      await client.query("ROLLBACK TO SAVEPOINT expected_rejection");
+      await client.query("RELEASE SAVEPOINT expected_rejection");
+      await client.query("SAVEPOINT expected_rejection");
       await assert.rejects(
         client.query("UPDATE eper_action_approval_grants SET expires_at = NOW() WHERE tenant_id = $1 AND application_id = $2 AND approval_id = $3", [tenantId, applicationId, approvalId]),
         /EPER_ACTION_LEDGER_APPEND_ONLY/,
       );
+      await client.query("ROLLBACK TO SAVEPOINT expected_rejection");
+      await client.query("RELEASE SAVEPOINT expected_rejection");
+      await client.query("SAVEPOINT expected_rejection");
       await assert.rejects(
         client.query("UPDATE eper_action_approval_decisions SET decision = 'revoke' WHERE tenant_id = $1 AND application_id = $2 AND decision_id = $3", [tenantId, applicationId, decisionId]),
         /EPER_ACTION_LEDGER_APPEND_ONLY/,
       );
+      await client.query("ROLLBACK TO SAVEPOINT expected_rejection");
+      await client.query("RELEASE SAVEPOINT expected_rejection");
+      await client.query("SAVEPOINT expected_rejection");
       await assert.rejects(
         client.query("UPDATE eper_action_execution_events SET event_type = 'failed' WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3", [tenantId, applicationId, eventId]),
         /EPER_ACTION_LEDGER_APPEND_ONLY/,
       );
+      await client.query("ROLLBACK TO SAVEPOINT expected_rejection");
+      await client.query("RELEASE SAVEPOINT expected_rejection");
+      await client.query("SAVEPOINT expected_rejection");
       await assert.rejects(
         client.query("UPDATE eper_action_execution_claims SET approval_id = 'different-approval' WHERE tenant_id = $1 AND application_id = $2 AND execution_id = $3", [tenantId, applicationId, executionId]),
         /EPER_ACTION_EXECUTION_IDENTITY_IMMUTABLE/,
       );
+      await client.query("ROLLBACK TO SAVEPOINT expected_rejection");
+      await client.query("RELEASE SAVEPOINT expected_rejection");
+      await client.query("SAVEPOINT expected_rejection");
       await assert.rejects(
         client.query(
           `INSERT INTO eper_action_execution_claims (
@@ -359,6 +375,8 @@ test("PostgreSQL action approval ledger enforces scope, immutable decisions and 
         ),
         /duplicate key|unique constraint/i,
       );
+      await client.query("ROLLBACK TO SAVEPOINT expected_rejection");
+      await client.query("RELEASE SAVEPOINT expected_rejection");
 
       await client.query("COMMIT");
 
