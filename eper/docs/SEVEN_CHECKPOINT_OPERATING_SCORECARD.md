@@ -506,3 +506,41 @@ The current open list contains PR #323 and PR #325 only. Both are drafts; neithe
 - No PR is being merged by this update.
 - No external/provider dispatch is being triggered; no chargeable AWS resources are being provisioned.
 - Repository protection has not been changed. An owner-approved configuration change remains necessary.
+
+
+## Live evidence update — 2026-11-01 22:16 IST
+
+**Current main, dynamically resolved:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`. PR #324 is merged as this exact main commit. All ten push-triggered main workflows completed successfully on this SHA; representative exact-commit evidence: [EPER CI — 41327033352](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033352), [same-commit integrated validation — 41327033337](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033337), [controlled QA — 41327033377](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033377), [browser OIDC E2E — 41327033298](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033298), [228/38 matrix — 41327033302](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033302), and [G9 — 41327033313](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033313). The main commit is still unprotected; branch metadata reports `protected=false`, required-check enforcement off, and the repository rulesets collection is empty.
+
+### Identity and PostgreSQL integration now on main
+
+- PR #324 merged at `a554990cb7f4969bb218aad7a2e9944aec62fa05`; exact PR head `5ccc7543478ab011a5265faafb3eef524b2416ca` had 14/14 successful exact-head workflows.
+- Exact PR-head fresh-clone run [41326152192](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152192): `npm run dev:verify` passed with 1,170 passed / 0 failed; all seven PostgreSQL migration groups applied and repeated; disposable backup/restore passed with 59 source/restored base tables.
+- Exact PR-head browser lifecycle [41326152230](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152230): Chromium login, protected settings, logout and post-revocation denial passed (1/1).
+- The merge commit has its own 10/10 successful push workflows listed above. The fresh-clone result remains labelled as PR-head evidence, not as a merge-commit workflow.
+- The tested IdP is synthetic/local. Live provider onboarding, durable role/delegation resolution, token rotation and support-admin browser authentication remain open.
+
+### Current documentation PR #323
+
+- The previous exact head `2756f9636211a7b13352cc4e3020e27f09849bfe` was based directly on current main and had 10/10 successful exact-head workflows. Fresh-clone run [41327677822](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327677822) passed `npm run dev:verify` (1,170 passed / 0 failed), applied and repeated all seven migration groups, and passed disposable backup/restore (59 source/restored base tables).
+- Its change set is limited to `eper/DEVELOPER_SETUP.md` (corrects the guide to include all seven migration groups and repeatability checks) and this scorecard. This append creates a new PR head; the prior green checks must not be treated as validation for that new head until rerun.
+
+### Campaign worker successor and PR consolidation
+
+- PR #325 was closed unmerged after the stacked base PR #324 merged. Its clean-mainline successor is [PR #326](https://github.com/sbannai/enterprise-product-engineering/pull/326), base `main`, head `7446ed23b3545f3cb74b9a4239532bdf340ce3e9`, 5 commits ahead / 0 behind, five changed files, draft and mergeable.
+- All 12 exact-head workflows on #326 completed successfully. [EPER CI — 41327722184](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722184) passed typecheck/build and live PostgreSQL workflow/assignment/capability conformance. [Fresh-clone — 41327722225](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722225) passed with 1,175 tests / 0 failures; all seven migration groups were applied and repeated; disposable backup/restore passed with 59 source/restored base tables. [Controlled QA — 41327722105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722105) reported 1,156 tests, 1,139 passed, 0 failed, 17 skipped; all five process-level worker startup guard tests passed. [PostgreSQL scheduler/payment integration — 41327722301](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722301) passed real database transaction, dispatch-race and event-idempotency checks. [Integrated validation — 41327722204](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722204) passed; the separate [228/38 matrix — 41327722095](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722095) also passed.
+- PR #326 delivers a separate worker process entrypoint, disabled-by-default startup, durable PostgreSQL/audit schema readiness, explicit worker identity, adapter path confinement, graceful shutdown and a deployment-owned adapter interface. No provider adapter is included; external dispatch remains impossible from this PR as submitted.
+- Remaining worker closure: restricted worker database role/context, reviewed live-policy authorization adapter, downstream idempotency contract, real-PostgreSQL restart/recovery, independent host supervision, health/metrics/alerts and deployment runbook.
+- PR #327 is a documentation-only scorecard refresh that overlaps this PR's scorecard update. This PR also contains the developer-setup correction, so #327 is being closed as superseded by #323 to retain one authoritative documentation change.
+
+### Seven-checkpoint status at this evidence point
+
+1. **v34-to-228 requirements reconciliation — AMBER.** Approved 228 requirements / 38 chapters remain unchanged. All 45 v34 candidates and their acceptance criteria remain preserved as additive v1.6.0 draft candidates pending owner disposition; no baseline change is implied.
+2. **Fresh-clone developer setup — GREEN for the validated PR heads.** PR #323 previous head passed the corrected documented setup; PR #326 passed clean install, all seven migration groups and repeatability, 1,175 tests, and disposable restore. The new #323 evidence append requires its own exact-head rerun.
+3. **PostgreSQL persistence — GREEN for local/CI integration and disposable restore.** Live transaction, tenant/application assignment, RLS/audit/rollback, scheduler dispatch-race and idempotency tests passed; production recovery objectives and a second-engineer restore rehearsal remain.
+4. **Identity/OIDC — AMBER.** Browser start/callback/logout, secure session/CSRF cookies, revocation and selected tenant/application access are integrated. Synthetic IdP only; production-provider onboarding, role/delegation, token rotation and support-admin auth remain.
+5. **Customer workspace/support — AMBER.** Customer ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity and internal-note separation have test evidence. Full export, SLA timers/escalation, attachment lifecycle, notifications and support-admin browser authentication remain.
+6. **Scheduler/workflow operations — AMBER.** Durable leases/fencing, idempotency, retry/dead-letter and policy-denial tests exist; #326 adds a separate fail-closed worker entrypoint. No reviewed adapter, restricted worker DB role, independent supervisor, operational metrics/alerts or restart/recovery proof yet.
+7. **Release/continuity — AMBER.** Clean-clone and disposable restore evidence exist on exact PR heads; main push CI is green. Main protection/required checks are disabled, production recovery and independent second-engineer release/rollback remain unproven.
+
+**Safety:** Preserve the approved 228/38 baseline. No PR was merged by this update; no external/provider dispatch or chargeable AWS provisioning was performed.
