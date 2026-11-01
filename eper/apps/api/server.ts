@@ -457,6 +457,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres" && !options.customerIdentitySessionStore) {
     throw new Error("CUSTOMER_IDENTITY_SESSION_STORE_REQUIRED_IN_POSTGRES_MODE");
   }
+  if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres" &&
+      (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore)) {
+    throw new Error("CUSTOMER_IDENTITY_REQUIRES_DURABLE_TENANT_AND_ACTOR_APPLICATION_ASSIGNMENT_STORES");
+  }
   if (process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE === "postgres") {
     if (!options.actorApplicationAssignmentStore) {
       throw new Error("CUSTOMER_ACTOR_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
