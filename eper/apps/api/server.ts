@@ -2235,11 +2235,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const csrfValid = verifyCustomerBrowserCsrf({
             method: request.method,
             origin: request.headers.origin,
-            expectedOrigin: process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+            expectedOrigin: options.customerOidcPublicOrigin ?? process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
             cookieHeader: request.headers.cookie,
             csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
             sessionToken,
-            secret: process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+            secret: options.customerCsrfSecret ?? process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
           });
           if (!csrfValid) {
             sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",
