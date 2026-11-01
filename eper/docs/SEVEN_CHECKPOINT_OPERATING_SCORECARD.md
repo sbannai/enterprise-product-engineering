@@ -254,3 +254,14 @@ No PR was merged by this evidence update. The 228 approved requirements, 38 chap
 - **Current open PRs:** #319 scorecard evidence update; #320 customer settings browser-session integration; #321 all-migration repeatability verification. All remain unmerged.
 
 This correction supersedes the prior status snapshots only where newer exact-head results are listed above. No approved requirements or chapters were changed.
+
+
+## Mainline advancement and current PR heads — 2026-11-01
+
+- **Current main SHA:** `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17`. This is the merge commit for PR #321, so the all-seven-migration repeatability change is now on main.
+- **PR #321:** merged as `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17`. Its exact head `c48ebd65f038951651f529bdfb17eb983524e4af` completed all 10 applicable Actions successfully on merge candidate `91c0942963780e47987a5d040d378635d3534d86`. The exact fresh-clone run [41289449907](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449907) proved all seven migration groups apply and repeat, all 1,148 tests pass with zero failures, and disposable PostgreSQL backup/restore passes (59 base tables; 7 ledgers). The exact-head CI and controlled QA runs [41289449915](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449915) and [41289449931](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449931) also completed successfully. The merge SHA returned no separate PR-triggered run/status contexts; the merge commit is current main.
+- **PR #320 successor validation:** the customer-settings browser-session branch was advanced after its first test-only failure was corrected. Current head is `5e712320ca4b3ab3ea89495becbedfc366bdf949`; it adds an explicit tenant-assignment denial case in addition to session-required, bearer-denial, actor-assignment denial and safe-settings filtering. Its prior head `994d6dec9077ed83d99e87182dc3d796e65b00d3` had all 11 applicable checks pass, but those runs are not current-head evidence after this additional test commit. The new head must complete its own checks against the current main base before acceptance.
+- **PR #319 documentation branch:** this scorecard branch is being advanced to incorporate current main `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17` and the PR #321 merge. Prior green checks on older documentation heads are not evidence for the new head.
+- **Current open PRs:** #319 (this scorecard record) and #320 (customer settings browser-session integration). PR #321 is merged and is no longer open.
+
+The mainline now has reproducible fresh-clone verification for all seven migration groups, including repeatability and disposable backup/restore. Production recovery certification, complete OIDC browser login, full support SLA/notification lifecycle, worker-host supervision and independent second-engineer release proof remain separate open capabilities.
