@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { AuditSqlPool, AuditSqlClient } from "../audit/audit-event-store.js";
+import type { AuditSqlPool } from "../audit/audit-event-store.js";
 
 export interface CustomerOidcSubjectBinding {
   issuer: string; subject: string; tenantId: string; actorId: string;
@@ -31,10 +31,10 @@ export class PostgresCustomerIdentitySessionStore {
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('eper.identity_service', 'true', true)");
-      const result = await client.query<{ bindings: string | null; sessions: string | null; events: string | null }>(
-        "SELECT to_regclass('public.eper_customer_oidc_subject_bindings')::text AS bindings, to_regclass('public.eper_customer_browser_sessions')::text AS sessions, to_regclass('public.eper_customer_identity_events')::text AS events",
+      const result = await client.query<{ bindings: string | null; sessions: string | null; events: string | null; loginTransactions: string | null }>(
+        "SELECT to_regclass('public.eper_customer_oidc_subject_bindings')::text AS bindings, to_regclass('public.eper_customer_browser_sessions')::text AS sessions, to_regclass('public.eper_customer_identity_events')::text AS events, to_regclass('public.eper_customer_oidc_login_transactions')::text AS login_transactions",
       );
-      if (!result.rows[0]?.bindings || !result.rows[0]?.sessions || !result.rows[0]?.events) throw new Error("EPER_CUSTOMER_IDENTITY_SCHEMA_NOT_APPLIED");
+      if (!result.rows[0]?.bindings || !result.rows[0]?.sessions || !result.rows[0]?.events || !result.rows[0]?.loginTransactions) throw new Error("EPER_CUSTOMER_IDENTITY_SCHEMA_NOT_APPLIED");
       await client.query("COMMIT");
     } catch (error) { try { await client.query("ROLLBACK"); } catch {} throw error; }
     finally { client.release(); }
