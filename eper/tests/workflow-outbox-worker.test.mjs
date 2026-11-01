@@ -45,6 +45,16 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   assert.equal(calls.find(call => call.method === "claim").options.maxAttempts, 2);
 });
 
+test("outbox worker includes claim-time dead-letter sweep in pass metrics", async () => {
+  const claimed = Object.assign([], { deadLettered: 3 });
+  const store = { async claim() { return claimed; } };
+  const worker = new WorkflowOutboxWorker(store, { async dispatch() {} }, { workerId: "worker-01" });
+  const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1);
+  assert.deepEqual(result, {
+    claimed: 0, delivered: 0, retried: 0, deadLettered: 3, leaseLost: 0, interrupted: 0,
+  });
+});
+
 test("outbox worker rejects unsafe retry and lease settings", () => {
   const store = { async claim() { return []; } };
   assert.throws(
