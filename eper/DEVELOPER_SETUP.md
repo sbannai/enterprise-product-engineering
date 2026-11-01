@@ -50,9 +50,9 @@ The command:
 1. Refuses non-loopback database hosts and database names that do not identify a local/dev/test/sandbox database.
 2. Verifies the selected PostgreSQL database identity.
 3. Runs TypeScript typecheck and build.
-4. Applies payment, audit, workflow, campaign-scheduler, capability and ticketing migrations in the same order as the CI lanes.
-5. Re-runs workflow, ticketing and capability migrations to check repeatability.
-6. Runs the full `npm test` suite with live actor/application assignment and capability PostgreSQL integration tests enabled and scheduler PostgreSQL integration pointed at the local database.
+4. Applies all seven PostgreSQL migration groups in the same order as CI: payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity (including durable OIDC state and customer-session schema).
+5. Re-runs all seven migration groups in that same order to prove migration repeatability; no group is omitted from the repeatability pass.
+6. Runs the full `npm test` suite with live identity tenant/actor assignment and capability PostgreSQL integration tests enabled, and scheduler PostgreSQL integration pointed at the same local database.
 
 Expected final marker: `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`. A skipped opt-in integration test is not proof of live PostgreSQL behavior; inspect test output and confirm the relevant tests report as passed.
 
