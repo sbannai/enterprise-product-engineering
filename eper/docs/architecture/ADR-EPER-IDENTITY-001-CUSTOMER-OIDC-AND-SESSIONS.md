@@ -52,7 +52,7 @@ Implement a provider-neutral OpenID Connect (OIDC) Authorization Code flow with 
 
 Introduce PostgreSQL tables for:
 - OIDC subject bindings (issuer, subject, tenant, actor, active/revoked, version, provisioning metadata).
-- Login transactions (state hash, nonce hash, PKCE verifier hash or encrypted verifier, expiry, one-time consumption).
+- Login transactions (state hash, nonce hash, encrypted, recoverable PKCE verifier, expiry, one-time consumption).
 - Browser sessions (session hash, issuer/subject binding, tenant/actor reference, created/last-seen/idle/absolute expiry, revoked metadata, rotation lineage).
 
 Apply RLS or equivalent tenant isolation to tenant-scoped rows. Keep security-critical session lookup/revocation keyed by an opaque hash and use narrow service permissions. Never log tokens, authorization codes, PKCE verifiers, cookies or secrets. Audit login success/failure, subject binding changes, session creation/rotation/revocation and authorization denials without recording credentials.
