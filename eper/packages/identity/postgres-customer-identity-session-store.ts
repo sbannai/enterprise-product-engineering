@@ -86,6 +86,7 @@ export class PostgresCustomerIdentitySessionStore {
   async createLoginTransaction(input: { stateHash: string; nonceHash: string; pkceVerifierCiphertext: string; issuer: string; redirectUri: string; expiresAt: Date }): Promise<void> {
     if (!/^[a-f0-9]{64}$/.test(input.stateHash) || !/^[a-f0-9]{64}$/.test(input.nonceHash)) throw new Error("EPER_OIDC_TRANSACTION_HASH_INVALID");
     validId(input.pkceVerifierCiphertext, "pkceVerifierCiphertext", 8192);
+    if (input.pkceVerifierCiphertext.length < 32) throw new Error("EPER_OIDC_PKCE_CIPHERTEXT_INVALID");
     validId(input.issuer, "issuer", 2048); validId(input.redirectUri, "redirectUri", 2048);
     if (!(input.expiresAt instanceof Date) || input.expiresAt <= new Date() || input.expiresAt.getTime() > Date.now() + 10 * 60_000) {
       throw new Error("EPER_OIDC_TRANSACTION_EXPIRY_INVALID");
