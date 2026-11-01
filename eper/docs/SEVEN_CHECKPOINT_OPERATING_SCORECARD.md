@@ -199,3 +199,17 @@ Do not overwrite historical evidence. Append dated updates or link immutable run
 - **Owner:** EPER product owner / engineering operations.
 
 **Evidence interpretation:** These statuses describe only the stated engineering scope. Passing automated checks do not establish production readiness or owner acceptance. The 228 approved requirements, 38 chapters, no-charge cloud boundary and human-approval boundary remain unchanged.
+
+
+## Post-merge live-state correction — 2026-11-01
+
+The preceding 13:55 snapshot recorded PR #318 while it was still open. A subsequent live repository read shows that PR #318 has merged. Preserve the preceding record as historical evidence; this section supersedes only its current-head and PR-state fields.
+
+- **Current main SHA:** `91a8e3bdbe579fd1d3b123305bb422f4efc44bac`, the PR #318 merge commit.
+- **PR #318:** merged; PR head `ebf1d4e71803b38dae192c72d3c5024224dcf0a0`; merge candidate tested by its PR workflows `77901cf17a1928e5069b4fa1e837b5b756d820a2`; final merge SHA `91a8e3bdbe579fd1d3b123305bb422f4efc44bac`. The 11 applicable PR-head workflows completed successfully, including EPER CI, controlled QA, the 228/38 chapter matrix, PostgreSQL integration, release candidate build, integrated validation and six-family HTTP smoke. The merge SHA itself returned no separate PR-triggered workflow run or combined-status contexts in the available repository integration. The next main-derived PR validation is therefore tracked below rather than inferred from the merge state.
+- **Current open product PR #320:** [secure customer settings with browser sessions](https://github.com/sbannai/enterprise-product-engineering/pull/320), base `91a8e3bdbe579fd1d3b123305bb422f4efc44bac`, head `f164e81e2d1566219718b2a2eab79a61bd7d6876`, merge candidate `e9ffb94ffe70d2d0fbc1acae72189a2db4d62ae1`. It adds durable browser-session, tenant-assignment and actor-assignment checks to the customer settings GET route; bearer identity-map fallback is rejected in PostgreSQL mode and only safe presentation settings are returned. Its two completed lanes at this snapshot are the 228/38 matrix and six-family HTTP smoke (both successful); EPER CI, controlled QA, payment contract and container smoke are in progress; G9, PostgreSQL payment-store, technical simulation and release-candidate lanes are queued. No failure or cancellation has been observed in this exact-head snapshot. Do not treat queued/in-progress lanes as passed.
+- **Checkpoint 4 delta:** Customer application-list session protection is now merged on main. Customer settings session protection is under exact-head validation in #320. Production OIDC login/callback/logout routes, session issuance/rotation, role resolution and browser E2E remain incomplete; do not describe this as production login.
+- **Checkpoint 5 delta:** No change to support-completeness blockers. The customer settings route adds another browser-session-protected workspace surface, but SLA/escalation evidence, attachment lifecycle, notification delivery, full export semantics and support-admin browser authentication remain open.
+- **Next action:** Complete exact-head validation of #320, then continue the customer browser-session integration across the remaining workspace routes without bypassing durable tenant/application assignments.
+
+The 228 approved requirements, 38 chapters, PostgreSQL local/CI scope, no-charge cloud boundary and human-approval boundary remain unchanged.
