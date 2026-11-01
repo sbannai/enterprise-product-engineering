@@ -115,7 +115,9 @@ test("workflow outbox is append-only, tenant-scoped and has a separate delivery 
 
 test("outbox claim bounds crash-recovered leases by the configured attempt budget", async () => {
   const source = await readFile(new URL("../packages/workflows/postgres-workflow-outbox-store.ts", import.meta.url), "utf8");
-  assert.match(source, /UPDATE eper_workflow_outbox_delivery[\s\S]*delivery_status = 'dead_letter'[\s\S]*WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS/);\n  assert.match(source, /delivery_status = 'pending'[\s\S]*OR \(delivery_status = 'processing'[\s\S]*locked_at <= NOW\(\)/, "pending rows over a lowered attempt budget must also be dead-lettered");\n  assert.match(source, /WORKFLOW_OUTBOX_MAX_ATTEMPTS_EXHAUSTED/);
+  assert.match(source, /UPDATE eper_workflow_outbox_delivery[\s\S]*delivery_status = 'dead_letter'[\s\S]*WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS/);
+  assert.match(source, /delivery_status = 'pending'[\s\S]*OR \(delivery_status = 'processing'[\s\S]*locked_at <= NOW\(\)/, "pending rows over a lowered attempt budget must also be dead-lettered");
+  assert.match(source, /WORKFLOW_OUTBOX_MAX_ATTEMPTS_EXHAUSTED/);
   assert.match(source, /AND attempts >= \$4::int/);
   assert.match(source, /delivery_status = 'pending' AND available_at <= NOW\(\) AND attempts < \$6::int/);
   assert.match(source, /delivery_status = 'processing'[\s\S]*attempts < \$6::int/);
