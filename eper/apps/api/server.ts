@@ -1142,7 +1142,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Browser-session context is application-scoped and uses durable authorization only.
     // This read-only endpoint deliberately does not fall back to bearer credential mappings.
-    const browserSessionContext = /^\\/customer\\/applications\\/([A-Za-z0-9][A-Za-z0-9._-]{1,99})\\/session$/.exec(requestUrl.pathname);
+    const browserSessionContext = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{1,99})\/session$/.exec(requestUrl.pathname);
     if (browserSessionContext && request.method === "GET") {
       if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
           !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
