@@ -29,7 +29,7 @@ import type { PostgresTenantApplicationAssignmentStore } from "../../packages/id
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import type { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
 import { completeCustomerOidcBrowserLogin } from "../../packages/identity/customer-oidc-callback.js";
-import { normalizeCustomerReturnPath, serializeCustomerOidcStateCookie, serializeClearedCustomerOidcStateCookie } from "../../packages/identity/customer-oidc-browser-flow.js";
+import { normalizeCustomerReturnPath, readCustomerOidcReturnPath, serializeCustomerOidcReturnCookie, serializeClearedCustomerOidcReturnCookie, serializeCustomerOidcStateCookie, serializeClearedCustomerOidcStateCookie } from "../../packages/identity/customer-oidc-browser-flow.js";
 import { CUSTOMER_SESSION_COOKIE, createCustomerCsrfToken, serializeCustomerSessionCookie, serializeCustomerCsrfCookie, serializeClearedCustomerCookies } from "../../packages/identity/customer-browser-security.js";
 import { resolveCustomerBrowserIdentity } from "../../packages/identity/customer-browser-session-authorization.js";
 import { parseCookieHeader, verifyCustomerBrowserCsrf } from "../../packages/identity/customer-browser-security.js";
@@ -562,7 +562,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       try {
         const login = await options.customerOidcClient.beginLogin(oidcStore);
-        response.writeHead(302, { location: login.authorizationUrl, "cache-control": "no-store", "set-cookie": serializeCustomerOidcStateCookie(login.state) });
+        const returnCookie = serializeCustomerOidcReturnCookie(requestUrl.searchParams.get("returnTo") ?? undefined, options.customerOidcPublicOrigin);
+        response.writeHead(302, { location: login.authorizationUrl, "cache-control": "no-store",
+          "set-cookie": [serializeCustomerOidcStateCookie(login.state), returnCookie] });
         response.end(); return;
       } catch {
         sendApiError(request, response, 503, "CUSTOMER_OIDC_START_FAILED", "Customer login could not be started."); return;
@@ -578,13 +580,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const login = await completeCustomerOidcBrowserLogin({ client: options.customerOidcClient, store: oidcStore,
           cookieHeader: request.headers.cookie, code, state, correlationId: resolveApiRequestId(request) });
         const csrf = createCustomerCsrfToken(login.sessionToken, options.customerCsrfSecret);
-        response.writeHead(302, { location: normalizeCustomerReturnPath("/", options.customerOidcPublicOrigin), "cache-control": "no-store",
-          "set-cookie": [serializeCustomerSessionCookie(login.sessionToken, 8 * 60 * 60), serializeCustomerCsrfCookie(csrf, 8 * 60 * 60), serializeClearedCustomerOidcStateCookie()] });
+        const returnPath = readCustomerOidcReturnPath(request.headers.cookie, options.customerOidcPublicOrigin);
+        response.writeHead(302, { location: normalizeCustomerReturnPath(returnPath, options.customerOidcPublicOrigin), "cache-control": "no-store",
+          "set-cookie": [serializeCustomerSessionCookie(login.sessionToken, 8 * 60 * 60), serializeCustomerCsrfCookie(csrf, 8 * 60 * 60),
+            serializeClearedCustomerOidcStateCookie(), serializeClearedCustomerOidcReturnCookie()] });
         response.end(); return;
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         const safeCode = /^EPER_[A-Z0-9_]{3,100}$/.test(message) ? message : "CUSTOMER_OIDC_CALLBACK_FAILED";
-        response.writeHead(302, { location: "/?authentication_error=" + encodeURIComponent(safeCode), "cache-control": "no-store", "set-cookie": serializeClearedCustomerOidcStateCookie() });
+        response.writeHead(302, { location: "/?authentication_error=" + encodeURIComponent(safeCode), "cache-control": "no-store",
+          "set-cookie": [serializeClearedCustomerOidcStateCookie(), serializeClearedCustomerOidcReturnCookie()] });
         response.end(); return;
       }
     }
