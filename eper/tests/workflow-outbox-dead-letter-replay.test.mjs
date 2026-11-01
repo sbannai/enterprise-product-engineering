@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { replayWorkflowOutboxDeadLetter } from "../dist/packages/workflows/workflow-outbox-dead-letter-replay.js";
 
-const context = { tenantId: "tenant-a", applicationId: "app-a", actorId: "operator-1", correlationId: "corr-001" };
+const context = { tenantId: "tenant-a", applicationId: "app-a", actorId: "operator-1", correlationId: "corr-001", environment: "sandbox" };
 const input = {
   eventId: "123e4567-e89b-42d3-a456-426614174000",
   workerId: "operator-console",
