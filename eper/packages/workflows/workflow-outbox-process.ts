@@ -91,7 +91,6 @@ export class WorkflowOutboxProcess {
             total.deadLettered += result.deadLettered;
             total.leaseLost += result.leaseLost;
             total.interrupted += result.interrupted;
-            total.leaseLost += result.leaseLost;
           } catch (error) {
             try { this.options.onError?.(error, context); } catch { /* observability callbacks must not stop delivery */ }
           }
