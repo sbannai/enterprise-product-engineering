@@ -5,6 +5,11 @@ import { createServer as createProbeServer } from "node:http";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 test("browser OIDC login grants protected settings, logout revokes access", async () => {
+  const proxyKeys = ["HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","http_proxy","https_proxy","all_proxy","NO_PROXY","no_proxy"];
+  const proxyPrevious = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]));
+  for (const key of proxyKeys) delete process.env[key];
+  process.env.NO_PROXY = "127.0.0.1,localhost";
+  process.env.no_proxy = process.env.NO_PROXY;
   const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   Object.assign(process.env, {
@@ -58,5 +63,6 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     if(browser) await browser.close();
     if(server) await new Promise(resolve=>server.close(resolve));
     for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+    for(const [key,value] of Object.entries(proxyPrevious)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
   }
 });
