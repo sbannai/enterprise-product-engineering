@@ -46,7 +46,12 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
 });
 
 test("outbox worker includes claim-time dead-letter sweep in pass metrics", async () => {
-  const claimed = Object.assign([], { deadLettered: 3 });
+  const claimed = [];
+  Object.defineProperty(claimed, "deadLettered", {
+    value: 3, enumerable: false, configurable: false, writable: false,
+  });
+  assert.deepEqual(Object.keys(claimed), [], "sweep metadata must not enumerate as an event");
+  assert.equal(claimed.deadLettered, 3);
   const store = { async claim() { return claimed; } };
   const worker = new WorkflowOutboxWorker(store, { async dispatch() {} }, { workerId: "worker-01" });
   const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1);
