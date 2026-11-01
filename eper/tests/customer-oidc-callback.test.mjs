@@ -10,6 +10,7 @@ const binding = { issuer: "https://issuer.example.test", subject: "subject-1", t
 function fixture(overrides = {}) {
   const calls = [];
   const store = {
+    createLoginTransaction: async () => { calls.push("createTransaction"); },
     consumeLoginTransaction: async () => { calls.push("consume"); return { nonceHash: "x", pkceVerifierCiphertext: "x", issuer: binding.issuer, redirectUri: "https://app.example.test/callback" }; },
     resolveSubject: async () => { calls.push("resolveSubject"); return binding; },
     createSession: async (input) => { calls.push(["createSession", input]); return { sessionToken: "t".repeat(43), session: {} }; },
