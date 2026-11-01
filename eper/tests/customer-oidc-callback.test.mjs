@@ -76,3 +76,23 @@ test("callback rejects unsafe session lifetime configuration", async () => {
   }), { message: "EPER_CUSTOMER_SESSION_LIFETIME_INVALID" });
   assert.deepEqual(f.calls, ["completeLogin", "resolveSubject"]);
 });
+
+test("replayed or expired one-time OIDC transaction cannot reach subject resolution", async () => {
+  const f = fixture({
+    completeLogin: async () => { f.calls.push("completeLogin"); throw new Error("EPER_OIDC_STATE_INVALID_OR_REPLAYED"); },
+  });
+  await assert.rejects(() => completeCustomerOidcBrowserLogin({
+    client: f.client, store: f.store, cookieHeader, code: "auth-code",
+    state, correlationId: "request-1",
+  }), { message: "EPER_OIDC_STATE_INVALID_OR_REPLAYED" });
+  assert.deepEqual(f.calls, ["completeLogin"]);
+});
+
+test("malformed authorization code is rejected without consuming transaction", async () => {
+  const f = fixture();
+  await assert.rejects(() => completeCustomerOidcBrowserLogin({
+    client: f.client, store: f.store, cookieHeader, code: " ",
+    state, correlationId: "request-1",
+  }), { message: "EPER_OIDC_CALLBACK_INVALID" });
+  assert.deepEqual(f.calls, []);
+});
