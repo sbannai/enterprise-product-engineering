@@ -111,3 +111,25 @@ test("workflow outbox is append-only, tenant-scoped and has a separate delivery 
   assert.match(sql, /current_setting\('eper\.application_id', true\)/);
   assert.match(sql, /delivery_status IN \('pending','processing','delivered','dead_letter'\)/);
 });
+
+
+test("workflow outbox replay audit is immutable, tenant-scoped and preserves attempt history", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/008_workflow_outbox_replay_audit.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS eper_workflow_outbox_replay_audit/);
+  assert.match(sql, /UNIQUE \(tenant_id, application_id, idempotency_key\)/);
+  assert.match(sql, /prior_attempts integer NOT NULL/);
+  assert.match(sql, /prior_last_error varchar\(2000\)/);
+  assert.match(sql, /BEFORE UPDATE ON eper_workflow_outbox_replay_audit/);
+  assert.match(sql, /BEFORE DELETE ON eper_workflow_outbox_replay_audit/);
+  assert.match(sql, /BEFORE TRUNCATE ON eper_workflow_outbox_replay_audit/);
+  assert.match(sql, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /FORCE ROW LEVEL SECURITY/);
+  assert.match(sql, /current_setting\('eper\.tenant_id', true\)/);
+  assert.match(sql, /current_setting\('eper\.application_id', true\)/);
+  const replay = await readFile(new URL("../packages/workflows/workflow-outbox-dead-letter-replay.ts", import.meta.url), "utf8");
+  assert.match(replay, /rd\.permissions \? 'workflow:admin'/);
+  assert.match(replay, /appendAuditEventInTransaction/);
+  assert.match(replay, /delivery_status = 'dead_letter'/);
+  assert.doesNotMatch(replay, /attempts\s*=/);
+  assert.match(replay, /WORKFLOW_OUTBOX_REPLAY_IDEMPOTENCY_CONFLICT/);
+});
