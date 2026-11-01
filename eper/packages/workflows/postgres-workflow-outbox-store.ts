@@ -22,10 +22,17 @@ export interface WorkflowOutboxEvent {
   attempts: number;
 }
 
+export interface WorkflowOutboxClaimedEvents extends Array<WorkflowOutboxEvent> {
+  /** Rows moved to dead-letter state by this claim pass before new claims were selected. */
+  deadLettered: number;
+}
+
 export interface WorkflowOutboxClaimOptions {
   workerId: string;
   limit?: number;
   leaseSeconds?: number;
+  /** Maximum claim attempts, including attempts lost to worker crashes or expired leases. */
+  maxAttempts?: number;
 }
 
 export interface WorkflowOutboxFailureOptions {
@@ -77,30 +84,53 @@ async function setRls(client: AuditSqlClient, context: WorkflowOutboxContext): P
 export class PostgresWorkflowOutboxStore {
   constructor(private readonly pool: AuditSqlPool) {}
 
-  async claim(context: WorkflowOutboxContext, options: WorkflowOutboxClaimOptions): Promise<WorkflowOutboxEvent[]> {
+  async claim(context: WorkflowOutboxContext, options: WorkflowOutboxClaimOptions): Promise<WorkflowOutboxClaimedEvents> {
     await setRlsValidation(context);
     validateId(options.workerId, "workerId");
     const limit = options.limit ?? 20;
     const leaseSeconds = options.leaseSeconds ?? 60;
+    const maxAttempts = options.maxAttempts ?? 8;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("WORKFLOW_OUTBOX_CLAIM_LIMIT_INVALID");
     }
     if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds < 10 || leaseSeconds > 3600) {
       throw new Error("WORKFLOW_OUTBOX_LEASE_SECONDS_INVALID");
     }
+    if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 100) {
+      throw new Error("WORKFLOW_OUTBOX_MAX_ATTEMPTS_INVALID");
+    }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await setRls(client, context);
+      // Crashes before markFailed must still consume the finite attempt budget.
+      // Also handle pending rows if the configured budget is lowered.
+      const swept = await client.query<{ event_id: string }>(
+        `UPDATE eper_workflow_outbox_delivery
+            SET delivery_status = 'dead_letter', locked_at = NULL, locked_by = NULL,
+                last_error = COALESCE(last_error, CASE WHEN delivery_status = 'processing'
+                  THEN 'WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS'
+                  ELSE 'WORKFLOW_OUTBOX_MAX_ATTEMPTS_EXHAUSTED' END),
+                updated_at = NOW()
+          WHERE tenant_id = $1 AND application_id = $2
+            AND attempts >= $4::int
+            AND (
+              delivery_status = 'pending'
+              OR (delivery_status = 'processing'
+                  AND locked_at <= NOW() - ($3::int * INTERVAL '1 second'))
+            )
+          RETURNING event_id`,
+        [context.tenantId, context.applicationId, leaseSeconds, maxAttempts],
+      );
       const result = await client.query<EventRow>(
         `WITH candidates AS (
            SELECT tenant_id, application_id, event_id
              FROM eper_workflow_outbox_delivery
             WHERE tenant_id = $1 AND application_id = $2
               AND (
-                (delivery_status = 'pending' AND available_at <= NOW())
+                (delivery_status = 'pending' AND available_at <= NOW() AND attempts < $6::int)
                 OR
-                (delivery_status = 'processing' AND locked_at <= NOW() - ($4::int * INTERVAL '1 second'))
+                (delivery_status = 'processing' AND locked_at <= NOW() - ($4::int * INTERVAL '1 second') AND attempts < $6::int)
               )
             ORDER BY available_at, event_id
             LIMIT $3
@@ -118,10 +148,50 @@ export class PostgresWorkflowOutboxStore {
          RETURNING e.event_id, e.tenant_id, e.application_id, e.instance_id,
                    e.transition_id, e.event_type, e.event_version, e.payload,
                    e.occurred_at, d.attempts`,
-        [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId],
+        [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId, maxAttempts],
       );
       await client.query("COMMIT");
-      return result.rows.map(mapEvent);
+      const claimed = result.rows.map(mapEvent) as WorkflowOutboxClaimedEvents;
+      Object.defineProperty(claimed, "deadLettered", {
+        value: swept.rows.length,
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+      return claimed;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Extends only a still-live lease owned by this worker; never resurrects an expired claim. */
+  async renewLease(
+    context: WorkflowOutboxContext,
+    eventId: string,
+    workerId: string,
+    leaseSeconds: number,
+  ): Promise<boolean> {
+    validateUuid(eventId);
+    validateId(workerId, "workerId");
+    if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds < 10 || leaseSeconds > 3600) {
+      throw new Error("WORKFLOW_OUTBOX_LEASE_SECONDS_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setRls(client, context);
+      const result = await client.query<{ event_id: string }>(
+        `UPDATE eper_workflow_outbox_delivery
+            SET locked_at = clock_timestamp(), updated_at = clock_timestamp()
+          WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
+            AND delivery_status = 'processing' AND locked_by = $4
+            AND locked_at > clock_timestamp() - ($5::int * INTERVAL '1 second')
+          RETURNING event_id`,
+        [context.tenantId, context.applicationId, eventId, workerId, leaseSeconds],
+      );
+      await client.query("COMMIT");
+      return Boolean(result.rows[0]);
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;

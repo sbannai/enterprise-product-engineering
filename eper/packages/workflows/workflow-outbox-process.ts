@@ -1,6 +1,7 @@
 import type { WorkflowOutboxContext } from "./postgres-workflow-outbox-store.js";
 import {
   WorkflowOutboxWorker,
+  WorkflowOutboxRunError,
   type WorkflowOutboxRunResult,
 } from "./workflow-outbox-worker.js";
 
@@ -65,7 +66,7 @@ export class WorkflowOutboxProcess {
   async run(signal: AbortSignal): Promise<void> {
     while (!signal.aborted) {
       const total: WorkflowOutboxRunResult & { contextsVisited: number } = {
-        claimed: 0, delivered: 0, retried: 0, deadLettered: 0, contextsVisited: 0,
+        claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0, contextsVisited: 0,
       };
       try {
         const listed = await this.contexts.listActiveContexts(signal);
@@ -84,12 +85,22 @@ export class WorkflowOutboxProcess {
           if (signal.aborted) break;
           total.contextsVisited += 1;
           try {
-            const result = await this.worker.runOnce(context, this.options.batchSize);
+            const result = await this.worker.runOnce(context, this.options.batchSize, signal);
             total.claimed += result.claimed;
             total.delivered += result.delivered;
             total.retried += result.retried;
             total.deadLettered += result.deadLettered;
+            total.leaseLost += result.leaseLost;
+            total.interrupted += result.interrupted;
           } catch (error) {
+            if (error instanceof WorkflowOutboxRunError) {
+              total.claimed += error.result.claimed;
+              total.delivered += error.result.delivered;
+              total.retried += error.result.retried;
+              total.deadLettered += error.result.deadLettered;
+              total.leaseLost += error.result.leaseLost;
+              total.interrupted += error.result.interrupted;
+            }
             try { this.options.onError?.(error, context); } catch { /* observability callbacks must not stop delivery */ }
           }
         }
