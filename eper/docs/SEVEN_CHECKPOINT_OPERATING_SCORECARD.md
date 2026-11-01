@@ -265,3 +265,14 @@ This correction supersedes the prior status snapshots only where newer exact-hea
 - **Current open PRs:** #319 (this scorecard record) and #320 (customer settings browser-session integration). PR #321 is merged and is no longer open.
 
 The mainline now has reproducible fresh-clone verification for all seven migration groups, including repeatability and disposable backup/restore. Production recovery certification, complete OIDC browser login, full support SLA/notification lifecycle, worker-host supervision and independent second-engineer release proof remain separate open capabilities.
+
+
+## Final exact-head closeout snapshot — 2026-11-01
+
+- Main SHA remains `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17`.
+- PR #319 current head `a4340502c2d3d55b0d2358fc7bc74749ff4faa21`, merge candidate `efd3982d2342777506af86b8cd9a5fc81278047d`: all nine applicable exact-head Actions completed successfully, including EPER CI, controlled QA, 228/38 chapter matrix, G9, six-family HTTP smoke, container smoke, release build and same-commit integrated validation.
+- PR #320 current head `5e712320ca4b3ab3ea89495becbedfc366bdf949`, merge candidate `793b9f1f02b4d33472a0cdd45602d1a74e8fe17a`: all eleven applicable exact-head Actions completed successfully. Controlled QA recorded 1,113 passed and zero failed; the session, tenant-assignment denial, actor-assignment denial and safe-settings assertions passed.
+- Current open PRs remain #319 and #320. PR #318 and #321 are merged into main. No merge was issued by this scorecard update.
+- The two current PR merge candidates are based on main `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17`; no stale pre-#321 green run is used as current evidence.
+
+This is the final live-state correction for this reporting cycle. Earlier snapshots remain historical records.
