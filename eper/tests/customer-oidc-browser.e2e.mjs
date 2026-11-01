@@ -80,7 +80,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByRole("link",{name:"Sign in with your organization"}).click();
     await page.getByRole("link",{name:"Continue sign in"}).click();
     await page.waitForURL("**/customer-portal-preview");
-    await page.waitForFunction(()=>{const text=document.getElementById("connectResult")?.textContent||"";return text!=="Checking your customer session…";});
+    await page.waitForFunction(()=>{const text=document.getElementById("connectResult")?.textContent||"";return text==="Your organization session is active."||text==="Sign in through your organization to open your workspace."||text==="Could not verify your customer session. Sign in again or try shortly.";});
     const connectionMessage=await page.locator("#connectResult").textContent();
     assert.equal(connectionMessage,"Your organization session is active.",
       "browser workspace bootstrap failed; customer responses="+JSON.stringify(customerResponses)+" page errors="+JSON.stringify(pageErrors));
