@@ -330,3 +330,20 @@ test("customer portal context fails closed to Home when tenant module configurat
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+test("durable customer identity mode refuses missing identity and assignment stores", () => {
+  const names = ["EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE"];
+  const prior = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
+  try {
+    assert.throws(() => createAppServer(), { message: "CUSTOMER_IDENTITY_SESSION_STORE_REQUIRED_IN_POSTGRES_MODE" });
+    assert.throws(() => createAppServer({ customerIdentitySessionStore: {} }), { message: "CUSTOMER_IDENTITY_REQUIRES_DURABLE_TENANT_AND_ACTOR_APPLICATION_ASSIGNMENT_STORES" });
+  } finally {
+    for (const name of names) {
+      if (prior[name] === undefined) delete process.env[name];
+      else process.env[name] = prior[name];
+    }
+  }
+});
