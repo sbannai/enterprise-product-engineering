@@ -23,6 +23,7 @@ export interface WorkflowOutboxRunResult {
   retried: number;
   deadLettered: number;
   leaseLost: number;
+  interrupted: number;
 }
 
 class WorkflowOutboxLeaseLostError extends Error {
@@ -59,15 +60,15 @@ export class WorkflowOutboxWorker {
     }
   }
 
-  async runOnce(context: WorkflowOutboxContext, limit = 20): Promise<WorkflowOutboxRunResult> {
+  async runOnce(context: WorkflowOutboxContext, limit = 20, signal?: AbortSignal): Promise<WorkflowOutboxRunResult> {
     const events = await this.store.claim(context, {
       workerId: this.options.workerId, limit, leaseSeconds: this.leaseSeconds,
     });
     const result: WorkflowOutboxRunResult = {
-      claimed: events.length, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0,
+      claimed: events.length, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0,
     };
     // All claims begin processing immediately; serial dispatch would let later leases expire in a local queue.
-    await Promise.all(events.map(event => this.processClaim(context, event, result)));
+    await Promise.all(events.map(event => this.processClaim(context, event, result, signal)));
     return result;
   }
 
@@ -75,9 +76,16 @@ export class WorkflowOutboxWorker {
     context: WorkflowOutboxContext,
     event: WorkflowOutboxEvent,
     result: WorkflowOutboxRunResult,
+    shutdownSignal?: AbortSignal,
   ): Promise<void> {
     const controller = new AbortController();
     let leaseLost = false;
+    let shutdownRequested = shutdownSignal?.aborted ?? false;
+    const requestShutdown = () => {
+      shutdownRequested = true;
+      controller.abort(shutdownSignal?.reason ?? new Error("WORKFLOW_OUTBOX_SHUTDOWN"));
+    };
+    if (shutdownSignal) shutdownSignal.addEventListener("abort", requestShutdown, { once: true });
     let renewalInFlight: Promise<void> | null = null;
     const heartbeatMs = Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3));
     const heartbeat = setInterval(() => {
@@ -99,7 +107,15 @@ export class WorkflowOutboxWorker {
     }, heartbeatMs);
 
     try {
+      if (shutdownRequested) {
+        result.interrupted += 1;
+        return;
+      }
       await this.dispatcher.dispatch(event, controller.signal);
+      if (shutdownRequested) {
+        result.interrupted += 1;
+        return;
+      }
       // Stop scheduling renewals before acknowledging; an interval tick must not race markDelivered.
       clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
@@ -109,6 +125,11 @@ export class WorkflowOutboxWorker {
     } catch (error) {
       clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
+      if (shutdownRequested) {
+        // Preserve the claimed row for lease-expiry recovery; cancellation may leave provider outcome ambiguous.
+        result.interrupted += 1;
+        return;
+      }
       if (leaseLost || error instanceof WorkflowOutboxLeaseLostError) {
         // Ownership is gone: do not acknowledge or mutate a lease now owned by another worker.
         result.leaseLost += 1;
@@ -128,6 +149,7 @@ export class WorkflowOutboxWorker {
     } finally {
       clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
+      shutdownSignal?.removeEventListener("abort", requestShutdown);
     }
   }
 }
