@@ -36,3 +36,9 @@ export {
   serializeCustomerOidcStateCookie,
   verifyCustomerOidcBrowserState,
 } from "./customer-oidc-browser-flow.js";
+
+export {
+  completeCustomerOidcBrowserLogin,
+  type CompleteCustomerOidcBrowserLoginInput,
+  type CustomerOidcCallbackClient,
+} from "./customer-oidc-callback.js";
