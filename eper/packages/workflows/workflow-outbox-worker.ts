@@ -67,8 +67,17 @@ export class WorkflowOutboxWorker {
     const result: WorkflowOutboxRunResult = {
       claimed: events.length, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0,
     };
-    // All claims begin processing immediately; serial dispatch would let later leases expire in a local queue.
-    await Promise.all(events.map(event => this.processClaim(context, event, result, signal)));
+    // Start every claim immediately, but do not let one bookkeeping failure detach sibling work.
+    const settled = await Promise.allSettled(
+      events.map(event => this.processClaim(context, event, result, signal)),
+    );
+    const failures = settled.filter(
+      (item): item is PromiseRejectedResult => item.status === "rejected",
+    );
+    if (failures.length === 1) throw failures[0].reason;
+    if (failures.length > 1) {
+      throw new AggregateError(failures.map(item => item.reason), "WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED");
+    }
     return result;
   }
 
