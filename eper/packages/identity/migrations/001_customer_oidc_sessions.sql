@@ -103,7 +103,8 @@ BEGIN
       t
     );
   END LOOP;
-END $;
+END;
+$;
 
 ALTER TABLE eper_customer_oidc_login_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eper_customer_oidc_login_transactions FORCE ROW LEVEL SECURITY;
