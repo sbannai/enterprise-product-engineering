@@ -48,3 +48,14 @@ test("workflow configuration enforces bounded collections and rejects unsafe fie
     }],
   }]), /invalid_workflow_form_field/);
 });
+
+
+test("workflow:admin grants view and act but does not grant approval", () => {
+  const service = new WorkflowConfigurationService();
+  service.replaceRoles([{
+    id: "administrator", name: "Administrator", members: ["admin-1"], permissions: ["workflow:admin"],
+  }]);
+  assert.equal(service.checkAccess("admin-1", "workflow:view").allowed, true);
+  assert.equal(service.checkAccess("admin-1", "workflow:act").allowed, true);
+  assert.equal(service.checkAccess("admin-1", "workflow:approve").allowed, false);
+});
