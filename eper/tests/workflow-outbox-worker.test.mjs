@@ -188,3 +188,29 @@ test("outbox worker waits for sibling claims to settle before surfacing bookkeep
   );
   assert.equal(siblingFinished, true, "runOnce must not reject while another claimed dispatch is still active");
 });
+
+
+test("outbox worker attaches partial counters when a sibling claim fails bookkeeping", async () => {
+  const batch = events.slice(0, 2);
+  const store = {
+    async claim() { return batch; },
+    async renewLease() { return true; },
+    async markDelivered() {},
+    async markFailed() { throw new Error("acknowledgement database unavailable"); },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch(event) {
+      if (event.eventId === batch[0].eventId) throw new Error("provider rejected event");
+    },
+  }, { workerId: "worker-01", leaseSeconds: 10 });
+  let failure;
+  try {
+    await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 2);
+  } catch (error) {
+    failure = error;
+  }
+  assert.match(failure?.message ?? "", /WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED/);
+  assert.deepEqual(failure.result, {
+    claimed: 2, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0,
+  });
+});
