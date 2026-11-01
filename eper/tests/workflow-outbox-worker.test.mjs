@@ -42,6 +42,7 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   assert.equal(failures[0].options.retryDelaySeconds, 3);
   assert.equal(failures[1].options.retryDelaySeconds, 6);
   assert.equal(failures.every(call => call.options.workerId === "worker-01"), true);
+  assert.equal(calls.find(call => call.method === "claim").options.maxAttempts, 2);
 });
 
 test("outbox worker rejects unsafe retry and lease settings", () => {
