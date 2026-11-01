@@ -222,3 +222,25 @@ test("outbox worker attaches partial counters when a sibling claim fails bookkee
     claimed: 2, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0,
   });
 });
+
+
+test("outbox worker stops renewing a non-cooperative dispatch after shutdown", async () => {
+  const event = events[0];
+  const renewals = [];
+  const store = {
+    async claim() { return [event]; },
+    async renewLease() { renewals.push(event.eventId); return true; },
+    async markDelivered() {},
+    async markFailed() {},
+  };
+  const shutdown = new AbortController();
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch() {
+      await new Promise(() => {});
+    },
+  }, { workerId: "worker-01", leaseSeconds: 10 });
+  void worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1, shutdown.signal);
+  shutdown.abort(new Error("host shutdown"));
+  await new Promise(resolve => setTimeout(resolve, 3_600));
+  assert.deepEqual(renewals, [], "a non-cooperative dispatcher must not keep extending its lease after shutdown");
+});
