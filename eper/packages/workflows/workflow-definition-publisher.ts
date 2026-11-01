@@ -5,7 +5,7 @@ import {
   type AuditSqlClient,
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
-import type { WorkflowDefinition } from "./workflow-configuration.js";
+import { workflowPermissionGranted, type WorkflowDefinition, type WorkflowPermission } from "./workflow-configuration.js";
 
 export interface WorkflowPublisherContext {
   tenantId: string;
@@ -174,7 +174,8 @@ export class WorkflowDefinitionPublisher {
         const granted = roleRow
           ? (typeof roleRow.permissions === "string" ? JSON.parse(roleRow.permissions) : roleRow.permissions)
           : [];
-        if (roleRow?.role_status !== "active" || [...permissions].some(permission => !granted.includes(permission))) {
+        if (roleRow?.role_status !== "active" || [...permissions].some(permission =>
+          !workflowPermissionGranted(granted as WorkflowPermission[], permission as WorkflowPermission))) {
           throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_ROLE_PERMISSION_NOT_GRANTED", 403);
         }
       }
