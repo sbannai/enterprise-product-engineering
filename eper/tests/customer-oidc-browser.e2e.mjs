@@ -41,7 +41,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
       customerOidcPublicOrigin:origin,customerCsrfSecret:"c".repeat(48)});
     await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",resolve);});
     const base="http://127.0.0.1:"+server.address().port;
-    browser=await chromium.launch({headless:true,args:["--proxy-server=direct://","--proxy-bypass-list=*","--host-resolver-rules=MAP localhost 127.0.0.1"]});
+    browser=await chromium.launch({headless:true,args:["--no-proxy-server","--proxy-server=direct://","--proxy-bypass-list=<-loopback>;127.0.0.1;localhost"]});
     const page=await browser.newPage();
     await page.route("https://idp.example.test/**",route=>route.fulfill({status:200,contentType:"text/html",
       body:`<a href="${base}/customer/auth/oidc/callback?code=browser-code&state=${state}">Continue sign in</a>`}));
