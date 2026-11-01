@@ -17,7 +17,7 @@ function fakePool({ binding = true, session = true, subject = true } = {}) {
       if (/SELECT s\.tenant_id/.test(sql)) return {rows:session?[{tenant_id:"tenant-a",actor_id:"actor-a",issuer:"https://id.example",subject:"subject-a",created_at:"2026-11-01T00:00:00.000Z",last_seen_at:"2026-11-01T00:00:00.000Z",idle_expires_at:"2026-11-01T00:30:00.000Z",absolute_expires_at:"2026-11-01T08:00:00.000Z"}]:[],rowCount:session?1:0};
       if (/UPDATE eper_customer_browser_sessions SET revoked_at/.test(sql)) return {rows:[{tenant_id:"tenant-a",actor_id:"actor-a"}],rowCount:1};
       if (/UPDATE eper_customer_oidc_subject_bindings SET binding_status/.test(sql)) return {rows:[{tenant_id:"tenant-a",actor_id:"actor-a"}],rowCount:1};
-      if (/to_regclass/.test(sql)) return {rows:[{bindings:"eper_customer_oidc_subject_bindings",sessions:"eper_customer_browser_sessions",events:"eper_customer_identity_events"}],rowCount:1};
+      if (/to_regclass/.test(sql)) return {rows:[{bindings:"eper_customer_oidc_subject_bindings",sessions:"eper_customer_browser_sessions",events:"eper_customer_identity_events",login_transactions:"eper_customer_oidc_login_transactions"}],rowCount:1};
       return {rows:[],rowCount:1};
     },
     release() {}
@@ -27,7 +27,14 @@ function fakePool({ binding = true, session = true, subject = true } = {}) {
 const base={issuer:"https://id.example",subject:"subject-a",tenantId:"tenant-a",actorId:"actor-a",correlationId:"identity-test-001"};
 
 
-test("OIDC login transaction is stored by state hash and consumed exactly once",async()=>{
+
+test("identity store readiness requires all durable identity tables",async()=>{
+  const {calls,pool}=fakePool(); const store=new PostgresCustomerIdentitySessionStore(pool);
+  await store.assertReady();
+  assert.ok(calls.some(c=>/to_regclass/.test(c.sql)));
+  assert.equal(calls.at(-1).sql,"COMMIT");
+});
+\ntest("OIDC login transaction is stored by state hash and consumed exactly once",async()=>{
   const {calls,pool}=fakePool(); const store=new PostgresCustomerIdentitySessionStore(pool);
   const state="random-state-value"; const stateHash=createHash("sha256").update(state).digest("hex");
   await store.createLoginTransaction({stateHash,nonceHash:"b".repeat(64),pkceVerifierCiphertext:"v1.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",issuer:base.issuer,redirectUri:"https://eper.example/customer/auth/callback",expiresAt:new Date(Date.now()+5*60_000)});
