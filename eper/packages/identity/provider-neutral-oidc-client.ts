@@ -155,7 +155,7 @@ export class ProviderNeutralOidcClient {
     if (!jwk) throw new Error("EPER_OIDC_SIGNING_KEY_NOT_FOUND");
     if ((header.alg === "RS256" || header.alg === "PS256") && jwk.kty !== "RSA" ||
         header.alg === "ES256" && (jwk.kty !== "EC" || jwk.crv !== "P-256")) throw new Error("EPER_OIDC_SIGNING_KEY_TYPE_INVALID");
-    const publicKey = createPublicKey({ key: jwk, format: "jwk" });
+    const publicKey = createPublicKey({ key: jwk as never, format: "jwk" });
     const signed = Buffer.from(parts[0] + "." + parts[1], "ascii");
     const signature = Buffer.from(parts[2], "base64url");
     const verifyOptions = header.alg === "PS256"
