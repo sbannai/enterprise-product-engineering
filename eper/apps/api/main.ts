@@ -15,6 +15,7 @@ import { PostgresAgentDraftStore } from "../../packages/agents/postgres-agent-dr
 import { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
+import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -29,7 +30,11 @@ const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
 const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled;
+const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
+if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
+  throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
+}
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled || customerIdentityPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
 const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
@@ -101,6 +106,9 @@ if (auditMode !== "disabled" && auditMode !== "postgres") {
 if (auditMode === "postgres" && !paymentPool) {
   throw new Error("EPER_AUDIT_REQUIRES_POSTGRES_PAYMENT_PERSISTENCE");
 }
+if (customerIdentityPersistenceMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("CUSTOMER_IDENTITY_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
 const auditEnvironment = process.env.EPER_AUDIT_ENVIRONMENT ?? "uat";
 if (!["production", "uat", "sandbox"].includes(auditEnvironment)) {
   throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
@@ -130,6 +138,10 @@ const tenantApplicationAssignmentStore = actorAssignmentMode === "postgres" && p
   : undefined;
 if (tenantApplicationAssignmentStore) await tenantApplicationAssignmentStore.assertReady();
 tenantApplicationAssignmentStoreForEntitlements = tenantApplicationAssignmentStore;
+const customerIdentitySessionStore = customerIdentityPersistenceMode === "postgres" && paymentPool
+  ? new PostgresCustomerIdentitySessionStore(paymentPool)
+  : undefined;
+if (customerIdentitySessionStore) await customerIdentitySessionStore.assertReady();
 
 const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
@@ -211,7 +223,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
-  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
+  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore,
