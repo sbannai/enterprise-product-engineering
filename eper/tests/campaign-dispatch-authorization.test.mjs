@@ -85,14 +85,16 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
 for (const policyCase of [
   {
     name: "approval revocation",
-    livePolicy: { approvalStatus: "revoked", consentStatus: "granted" },
+    initialPolicy: { approvalStatus: "approved", consentStatus: "granted" },
+    changedPolicy: { approvalStatus: "revoked", consentStatus: "granted" },
     isAuthorized(policy) {
       return policy.approvalStatus === "approved" && policy.consentStatus === "granted";
     },
   },
   {
     name: "consent withdrawal",
-    livePolicy: { approvalStatus: "approved", consentStatus: "withdrawn" },
+    initialPolicy: { approvalStatus: "approved", consentStatus: "granted" },
+    changedPolicy: { approvalStatus: "approved", consentStatus: "withdrawn" },
     isAuthorized(policy) {
       return policy.approvalStatus === "approved" && policy.consentStatus === "granted";
     },
@@ -101,6 +103,7 @@ for (const policyCase of [
   test("worker does not dispatch after live " + policyCase.name, async () => {
     const controller = new AbortController();
     let claimed = false;
+    let livePolicy = { ...policyCase.initialPolicy };
     let providerCalls = 0;
     let failed = null;
     const execution = {
@@ -112,7 +115,14 @@ for (const policyCase of [
       async recoverStaleExecutions() {},
       async materializeDueOneTimeSchedules() {},
       async materializeDueRecurringSchedules() {},
-      async claimExecutions() { if (claimed) return []; claimed = true; return [execution]; },
+      async claimExecutions() {
+        if (claimed) return [];
+        claimed = true;
+        // Simulate a policy change after the durable execution claim but before
+        // the worker's fresh authorization check and dispatch fence.
+        livePolicy = { ...policyCase.changedPolicy };
+        return [execution];
+      },
       async beginExecutionDispatch() {
         throw new Error("dispatch fence must not be acquired after live policy revocation");
       },
@@ -124,7 +134,11 @@ for (const policyCase of [
       return { outcome: {} };
     }, {
       workerId: "test-worker", signal: controller.signal, idleDelayMs: 100,
-      authorizeDispatch: async () => policyCase.isAuthorized(policyCase.livePolicy),
+      authorizeDispatch: async (claimedExecution) => {
+        assert.equal(claimedExecution.id, execution.id);
+        assert.equal(claimed, true, "authorization must run after execution claim");
+        return policyCase.isAuthorized(livePolicy);
+      },
     });
     assert.equal(providerCalls, 0);
     assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_POLICY_DENIED");
