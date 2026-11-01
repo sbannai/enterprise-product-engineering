@@ -146,10 +146,10 @@ export class PostgresWorkflowOutboxStore {
       await setRls(client, context);
       const result = await client.query<{ event_id: string }>(
         `UPDATE eper_workflow_outbox_delivery
-            SET locked_at = NOW(), updated_at = NOW()
+            SET locked_at = clock_timestamp(), updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $4
-            AND locked_at > NOW() - ($5::int * INTERVAL '1 second')
+            AND locked_at > clock_timestamp() - ($5::int * INTERVAL '1 second')
           RETURNING event_id`,
         [context.tenantId, context.applicationId, eventId, workerId, leaseSeconds],
       );
