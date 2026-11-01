@@ -14,7 +14,7 @@ The host composes the runtime with a restricted platform-worker PostgreSQL pool 
 - Claims are protected by tenant/application scope and a time-limited worker lease.
 - Each claimed event starts processing immediately; a serial in-memory queue is avoided so later claims do not age while waiting locally.
 - The worker renews each live lease during long dispatches. Renewal never resurrects an expired lease. If renewal fails, the dispatcher receives an aborted signal and the old worker does not acknowledge or mutate the event.
-- Expired processing rows that exceed the configured attempt budget are moved to dead-letter state by the store's claim-time sweep. Pending rows that exceed a subsequently lowered budget are also dead-lettered.
+- Expired processing rows that have exhausted the configured attempt budget are moved to dead-letter state by the store's claim-time sweep. Pending rows that exceed a subsequently lowered budget are also dead-lettered. This covers crashes before `markFailed()` can run.
 - Retry delay is exponential and capped by the configured maximum. The attempt budget and lease duration are validated at construction.
 
 ## Graceful shutdown
