@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { PostgresCustomerIdentitySessionStore } from "../dist/packages/identity/postgres-customer-identity-session-store.js";
 
-function fakePool({ binding = true, session = true, subject = true } = {}) {
+function fakePool({ binding = true, session = true, subject = true, expiredSession = false } = {}) {
   const calls=[];
   const client={
     async query(sql,values=[]) {
@@ -15,6 +15,7 @@ function fakePool({ binding = true, session = true, subject = true } = {}) {
       if (/SELECT 1 FROM eper_customer_oidc_subject_bindings/.test(sql)) return {rows:[],rowCount:binding?1:0};
       if (/INSERT INTO eper_customer_browser_sessions/.test(sql)) return {rows:[{created_at:"2026-11-01T00:00:00.000Z",last_seen_at:values[5],idle_expires_at:values[6],absolute_expires_at:values[7]}],rowCount:1};
       if (/SELECT s\.tenant_id/.test(sql)) return {rows:session?[{tenant_id:"tenant-a",actor_id:"actor-a",issuer:"https://id.example",subject:"subject-a",created_at:"2026-11-01T00:00:00.000Z",last_seen_at:"2026-11-01T00:00:00.000Z",idle_expires_at:"2026-11-01T00:30:00.000Z",absolute_expires_at:"2026-11-01T08:00:00.000Z"}]:[],rowCount:session?1:0};
+      if (/SET revoked_at=\$2,revoked_reason='expired'/.test(sql)) return {rows:expiredSession?[{tenant_id:"tenant-a",actor_id:"actor-a"}]:[],rowCount:expiredSession?1:0};
       if (/UPDATE eper_customer_browser_sessions SET revoked_at/.test(sql)) return {rows:[{tenant_id:"tenant-a",actor_id:"actor-a"}],rowCount:1};
       if (/UPDATE eper_customer_oidc_subject_bindings SET binding_status/.test(sql)) return {rows:[{tenant_id:"tenant-a",actor_id:"actor-a"}],rowCount:1};
       if (/to_regclass/.test(sql)) return {rows:[{bindings:"eper_customer_oidc_subject_bindings",sessions:"eper_customer_browser_sessions",events:"eper_customer_identity_events",login_transactions:"eper_customer_oidc_login_transactions"}],rowCount:1};
@@ -97,6 +98,18 @@ test("session resolution slides idle expiry but never beyond absolute expiry",as
 test("session resolution denies missing, expired or revoked sessions",async()=>{
   const {pool}=fakePool({session:false}); const store=new PostgresCustomerIdentitySessionStore(pool);
   assert.equal(await store.resolveSession("test-session-token-value",new Date("2026-11-01T00:10:00.000Z")),null);
+});
+
+test("expired browser session is revoked and audited exactly once",async()=>{
+  const {calls,pool}=fakePool({session:false,expiredSession:true});
+  const store=new PostgresCustomerIdentitySessionStore(pool);
+  assert.equal(await store.resolveSession("expired-session-token",new Date("2026-11-01T00:10:00.000Z")),null);
+  const expiry=calls.filter(c=>/session.expired/.test(c.sql));
+  assert.equal(expiry.length,1);
+  assert.equal(expiry[0].values[0],"tenant-a");
+  assert.equal(expiry[0].values[1],"actor-a");
+  assert.match(expiry[0].values[3],/^session-expiry:[a-f0-9]{64}$/);
+  assert.equal(calls.at(-1).sql,"COMMIT");
 });
 
 test("logout revokes the server-side session and records an identity event",async()=>{
