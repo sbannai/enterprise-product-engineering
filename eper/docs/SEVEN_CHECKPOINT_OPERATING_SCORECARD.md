@@ -243,3 +243,14 @@ The 228 approved requirements, 38 chapters, PostgreSQL local/CI scope, no-charge
 - [#321 — verify repeatability of all PostgreSQL migration groups](https://github.com/sbannai/enterprise-product-engineering/pull/321), head `c48ebd65f038951651f529bdfb17eb983524e4af`.
 
 No PR was merged by this evidence update. The 228 approved requirements, 38 chapters, no-charge cloud boundary and human-approval boundary remain unchanged.
+
+
+## Final live validation correction — 2026-11-01
+
+- **Main remains** `91a8e3bdbe579fd1d3b123305bb422f4efc44bac`.
+- **PR #320 current head** `994d6dec9077ed83d99e87182dc3d796e65b00d3`, merge candidate `311e4048b3db9b0cfde820fdac58852955c90862`: all 11 applicable exact-head Actions completed successfully. The corrected customer-settings browser-session test passed; the controlled QA suite recorded 1,112 passed, zero failed, 17 skipped. The earlier failing run belonged to superseded head `f164e81e2d1566219718b2a2eab79a61bd7d6876` and is not current-head evidence.
+- **PR #321 current head** `c48ebd65f038951651f529bdfb17eb983524e4af`, merge candidate `91c0942963780e47987a5d040d378635d3534d86`: all 10 applicable exact-head Actions completed successfully, including fresh-clone developer setup and same-commit integrated validation. The fresh-clone run applied and repeated all seven migration groups, completed 1,148 tests with zero failures, and passed disposable PostgreSQL backup/restore with 59 base tables and 7 migration-ledger tables.
+- **PR #319 documentation head** is now `59bf7d55c236631ab98cdbd75296ce396fe5e646` (base `91a8e3bdbe579fd1d3b123305bb422f4efc44bac`). Its previous head `8ae2b41b434bb797946f21de787ce8653ca053a6` had nine successful runs, but those results are stale after this documentation-head change. On the current head, G9, chapter matrix, six-family smoke, technical simulation, release build, controlled QA and container smoke are complete-success; EPER CI and integrated validation remain in progress. No failed or cancelled current-head run has been observed.
+- **Current open PRs:** #319 scorecard evidence update; #320 customer settings browser-session integration; #321 all-migration repeatability verification. All remain unmerged.
+
+This correction supersedes the prior status snapshots only where newer exact-head results are listed above. No approved requirements or chapters were changed.
