@@ -151,7 +151,14 @@ export class PostgresWorkflowOutboxStore {
         [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId, maxAttempts],
       );
       await client.query("COMMIT");
-      return Object.assign(result.rows.map(mapEvent), { deadLettered: swept.rows.length });
+      const claimed = result.rows.map(mapEvent) as WorkflowOutboxClaimedEvents;
+      Object.defineProperty(claimed, "deadLettered", {
+        value: swept.rows.length,
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+      return claimed;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
