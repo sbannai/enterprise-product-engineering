@@ -47,3 +47,16 @@ When `EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL` is unset, the test intentionall
 - If an execution reaches `dead_letter` with `DISPATCH_OUTCOME_UNKNOWN`, inspect durable execution and provider records before taking action. Do not automatically reset the fence or requeue the execution.
 - Preserve audit records and the execution idempotency key during incident review.
 - Record environment, build SHA, migration state, test evidence, and operator approval in the release/UAT evidence before requesting acceptance.
+
+## Dedicated worker process
+
+The API process does not start the campaign worker. Run the worker as a separately supervised process so API restarts and worker restarts have independent lifecycles:
+
+`npm run build`
+`npm run start:campaign-worker`
+
+The worker is disabled unless `EPER_CAMPAIGN_SCHEDULER_WORKER_ENABLED=true`. It requires `EPER_AUDIT_PERSISTENCE=postgres`, `EPER_PAYMENT_DATABASE_URL` (or the supported `DATABASE_URL` fallback), `EPER_CAMPAIGN_SCHEDULER_WORKER_ID`, and `EPER_CAMPAIGN_WORKER_ADAPTER_MODULE`.
+
+The adapter module must be a compiled JavaScript file under `dist/packages/campaign-scheduler/adapters/` and export `createCampaignWorkerAdapter({ pool, env })`. The factory must return both `authorizeDispatch(execution)` and `dispatch(execution)`. Authorization must re-read current tenant/application assignment, schedule approval, consent, quiet-hours and channel policy; it must fail closed on missing or unavailable policy data. Dispatch must pass `execution.idempotencyKey` to the provider and return a structured outcome. No built-in permissive or no-op adapter is supplied.
+
+The worker validates scheduler and audit schemas before claiming work, handles SIGINT/SIGTERM by stopping its loop, and closes its dedicated PostgreSQL pool on exit. Keep the worker disabled until a reviewed deployment-owned adapter exists and has its own contract/integration tests. API and worker pools are separate; include both in the database connection budget.
