@@ -388,3 +388,58 @@ This update supersedes the prior current-head snapshot where PR #320 was describ
 - The 45 v34 candidates remain additive v1.6.0 DRAFT; do not promote them without owner disposition.
 - No external/provider dispatch or chargeable cloud provisioning was performed.
 - No merge was performed by this reporting update.
+
+
+## Live evidence refresh — 2026-11-01 21:26 IST
+
+This section supersedes earlier PR #324 head/status statements above without rewriting historical snapshots.
+
+### Dynamically resolved refs and current exact-head Actions
+
+- Current main: `098a47459b9be486aa6bd67f4e8c093cdbc38b99`.
+- Current PR #323 documentation head before this scorecard append: `52ee5fa2f880edcca7f45ba21de831aefdbdce5d`; 10 exact-head workflows completed, 7 successful and 3 failed.
+- Current PR #324 identity/browser head: `5ccc7543478ab011a5265faafb3eef524b2416ca`; it now incorporates current main (47 commits ahead, 0 behind) and all 14 exact-head workflows completed successfully.
+- Only PRs #323 and #324 are open. Both remain drafts and mergeable. No review submissions or unresolved review threads were returned.
+- Main branch metadata reports `protected=false`; the repository rulesets endpoint returns an empty list. Detailed branch-protection settings are inaccessible to the integration (HTTP 403), so no required-check configuration is asserted.
+
+### Main and documentation-branch failures
+
+Main has eight push-triggered workflows on its exact SHA: six successful and two failed.
+- [Main controlled QA — 41293757246](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757246) fails when `customer-oidc-callback.test.mjs` imports missing `dist/packages/identity/customer-oidc-callback.js`.
+- [Main integrated validation — 41293757271](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757271) fails for the same missing callback implementation.
+- Main build/typecheck, the separate 228/38 matrix, six-family smoke, container smoke, release build and G9 lanes pass.
+
+PR #323 has ten exact-head runs: seven successful and three failed:
+- [Fresh-clone setup — 41318792242](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41318792242): the full suite fails on the same missing callback module (1,149 passed, 1 failed); backup/restore was not reached.
+- [Controlled QA — 41318792384](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41318792384): same import failure (1,113 passed, 1 failed, 17 skipped).
+- [Integrated validation — 41318792194](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41318792194): payment/PostgreSQL constituent fails on the same import.
+- The callback implementation belongs to the existing PR #324. Do not duplicate it on this documentation branch.
+
+### PR #324 exact-head evidence
+
+All fourteen workflows for `5ccc7543478ab011a5265faafb3eef524b2416ca` completed successfully; no queued, in-progress, failed or cancelled current-head runs remain.
+
+- [EPER CI — 41326152242](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152242) — typecheck/build and live PostgreSQL workflow, tenant/actor assignment and capability conformance checks passed.
+- [Controlled QA — 41326152180](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152180) — 1,151 tests, 1,134 passed, 0 failed, 0 cancelled, 17 skipped. The bad-signature regression now passes.
+- [Fresh-clone/PostgreSQL — 41326152192](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152192) — `npm run dev:verify` passed with 1,170 passed, 0 failed. All seven migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing, identity) were applied and repeated. Disposable backup/restore passed with 59 source/restored base tables and 7 migration-ledger tables.
+- [Browser OIDC E2E — 41326152230](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152230) — Chromium login, protected settings access, logout and post-logout denial passed (1/1).
+- [PostgreSQL payment-store/scheduler integration — 41326152200](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152200) — live PostgreSQL transactions, dispatch-race and event-idempotency checks passed.
+- [228/38 matrix — 41326152217](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152217), [six-family HTTP smoke — 41326152262](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152262), [container smoke — 41326152274](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152274), [release build — 41326152196](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152196), [G9 — 41326152255](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152255), [payment contracts — 41326152235](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152235), [workflow config — 41326152266](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152266) and [same-commit integrated validation — 41326152172](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152172) — all successful.
+
+The fresh-clone workflow path filter on PR #324 now includes API, package/migration and test changes, so identity/runtime changes trigger the clean-runner PostgreSQL verification.
+
+### Product and continuity assessment
+
+1. **v34-to-228 reconciliation — AMBER.** All 45 v34 candidates are preserved and technically classified: zero exact full-coverage matches, 45 partial-support links, 45 additive v1.6.0 draft candidates, four approval-control overlaps, and zero changes to the approved 228 requirements / 38 chapters. Owner disposition remains pending.
+2. **Fresh-clone setup — GREEN on PR #324 exact head; not integrated on main.** Clean install, `npm run dev:verify`, seven migration groups and repeatability, full live PostgreSQL suite and disposable backup/restore all pass on #324.
+3. **PostgreSQL — GREEN on PR #324 exact head; production recovery remains open.** Local repeatability, live transactions and disposable restore are proven; no production restore drill or second-engineer recovery rehearsal is evidenced.
+4. **Identity/OIDC — AMBER.** Provider-neutral protocol checks, browser start/callback/logout, secure session/CSRF flow, durable session storage and tenant/application assignment checks pass on #324. Browser E2E uses a synthetic local IdP, not a live production provider. Role/delegation resolution, token rotation and support-admin browser authentication remain.
+5. **Customer workspace/support — AMBER.** Customer ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity and internal-note separation have implementation/test evidence. Export remains current-page CSV; full export, SLA timers/escalation, attachment lifecycle, notifications and support-admin browser auth remain.
+6. **Scheduler/workflow operations — AMBER.** Durable claims, lease renewal/fencing, idempotency, retry/dead-letter, policy-denial and shutdown behavior have regression evidence. The API process does not start an independent worker and `package.json` has no worker start command. A separately supervised worker host, explicit approved dispatcher, production metrics/alerts and recovery runbook remain.
+7. **Release/continuity — AMBER.** Exact-head build/container, fresh-clone and disposable restore evidence pass on #324. Main is unprotected and has no repository rulesets. Independent second-engineer release/rollback rehearsal remains unproven.
+
+### Merged foundation evidence and boundaries
+
+- PR #306 merge SHA `6e8dd438e5091b1802d65e4f29951389fe077859`: its PR head had 13/13 successful workflows; the merge SHA had 9/9 successful push workflows and is an ancestor of current main.
+- PR #310 merge SHA `88b9708d748c19dc80a1a2d7ad4960914451db7e`: its PR head had 12/12 successful workflows; the merge SHA had six successful, one failed and one cancelled push workflows. The failed merge-SHA QA was `callback rejects a bad signature` (missing expected rejection); the cancelled integrated workflow is not acceptance. The current #324 exact-head bad-signature regression passes.
+- No PR was merged, no external/provider action was dispatched, and no chargeable cloud resource was provisioned. The approved 228 requirements and 38 chapters remain unchanged.
