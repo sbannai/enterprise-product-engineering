@@ -1,8 +1,8 @@
 # EPER Seven-Checkpoint Operating Scorecard
 
 **Purpose:** Durable, evidence-led operating model for the seven-checkpoint engineering brief.  
-**Baseline at creation:** `a1b93decff2f292a0a81453c27801607ca5f7946`  
-**Last reviewed:** 2026-11-01  
+**Baseline at creation:** `main` (resolved when branch created on 2026-11-01)  
+**Last reviewed:** 2026-11-01 16:44 UTC  
 **Approved product baseline:** 228 requirements across 38 chapters.  
 **Authority:** This scorecard operationalizes reporting; it does not change requirements or authorize UAT/production.
 
@@ -70,8 +70,8 @@ Track CI, integrated same-commit validation, six-family HTTP smoke, container ru
 Track all open PRs, branch head/base SHAs, exact-head CI, unresolved review threads, mergeability, superseded branches, issue linkage and resulting main SHA. Require branch protection and required checks through an owner-approved repository configuration change. Never merge a stale green head without rerunning checks on the updated head.
 
 **Evidence:** GitHub PR state, review threads, Actions runs, merge SHA, branch/ruleset settings.  
-**Current focus:** PR #302 (continuity charter) has been merged as `a1b93decff2f292a0a81453c27801607ca5f7946`.  
-**Next action:** Reconcile the open-PR list and prepare a separately reviewed branch-protection/ruleset change; do not assume protection is active.
+**Current focus:** PR #324 OIDC identity/session foundation is merged to main. PR #326 is a clean-mainline replacement for the stacked campaign-worker PR #325; it is draft, 5 commits ahead / 0 behind, with no exact-head CI reported yet. PR #323 remains a stale documentation branch based on pre-#324 history.  
+**Next action:** Reconcile or supersede stale PRs #323 and #325, obtain exact-head CI for #326, and prepare a separately reviewed branch-protection/ruleset change; do not assume protection is active.
 
 ### 7. Workflow publisher/runtime implementation
 **Question:** Can published workflows execute continuously and safely under load, failure, retry, restart and operational intervention?
@@ -79,10 +79,19 @@ Track all open PRs, branch head/base SHAs, exact-head CI, unresolved review thre
 Track publisher, runtime worker, durable claim/lease lifecycle, lease renewal, fencing, attempt exhaustion, dead-letter inspection/replay, approved dispatcher, worker hosting/supervision, metrics/alerts, load/recovery and audit. A replay must not itself be described as external dispatch.
 
 **Evidence:** Runtime code and tests, worker deployment manifests/configuration, lease/fencing tests, dead-letter audit records, metrics/alerts and failure-injection evidence.  
-**Current focus:** Lease renewal/fencing and dead-letter claim-time handling are integrated; audited tenant-scoped dead-letter inspection/replay is integrated. Production dispatcher, restricted platform-worker context, independent host supervision, delivery dashboards/alerts, load/recovery evidence and deployment configuration remain operational closure items.  
-**Next action:** Complete and test the restricted worker context and approved dispatcher path, then prove restart/recovery and delivery observability.
+**Current focus:** Mainline worker-loop behavior has coverage for idempotency-key propagation, bounded retry, lease-loss ambiguity, policy denial, authorization outage and shutdown around the dispatch fence. Draft PR #326 adds a separate worker entrypoint, PostgreSQL readiness, fail-closed configuration, adapter interface and five process-level startup guard tests. Exact-head CI, provider adapter contract, real-PostgreSQL restart/recovery, independent host supervision, dashboards/alerts and deployment configuration remain outstanding.  
+**Next action:** Obtain exact-head CI for #326, then add real-PostgreSQL recovery and deployment-owned adapter authorization/idempotency contract tests before considering merge.
 
 ## Baseline snapshot (2026-11-01)
+
+**Dated evidence refresh — 2026-11-01 16:44 UTC**
+
+- PR #324 merged: browser-bound OIDC transaction guards and identity/session foundation. Previously recorded exact-head validation: 14/14 workflows passed, including fresh-clone/PostgreSQL verification (1,170 passed / 0 failed), seven migration groups applied and repeated, disposable backup/restore, and browser OIDC E2E. Do not interpret this as a fresh post-merge main run.
+- PR #326 opened from current `main` as a clean replacement for the historically stacked PR #325. Current head: `7446ed23b3545f3cb74b9a4239532bdf340ce3e9`; 5 commits ahead / 0 behind; five changed files. It includes a separate worker entrypoint, adapter contract, worker start script, operating guide and five process-level startup guard tests. It is draft and no exact-head CI checks are reported yet.
+- PR #325 remains open and historically diverged; #326 is its clean-mainline successor. Do not merge both.
+- PR #323 remains stale relative to the post-#324 mainline and needs reconciliation; its v34 crosswalk findings remain: 228 approved baseline requirements / 38 chapters preserved; 45 v34 candidates preserved; 0 exact full coverage; 45 partially supported by shared controls; 45 additive v1.6.0 draft candidates pending owner approval; four overlap the human-approval control.
+- Current open PR inventory observed: #323, #325 and #326. #326 has no reviews or inline review threads at this refresh.
+
 
 - Integrated main SHA at creation: `a1b93decff2f292a0a81453c27801607ca5f7946`.
 - PR #302 continuity charter merged; merge SHA above.
