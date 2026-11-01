@@ -119,5 +119,6 @@ test("outbox claim bounds crash-recovered leases by the configured attempt budge
   assert.match(source, /AND attempts >= \$4::int/);
   assert.match(source, /delivery_status = 'pending' AND available_at <= NOW\(\) AND attempts < \$6::int/);
   assert.match(source, /delivery_status = 'processing'[\s\S]*attempts < \$6::int/);
-  assert.match(source, /maxAttempts: this.maxAttempts/);
+  const worker = await readFile(new URL("../packages/workflows/workflow-outbox-worker.ts", import.meta.url), "utf8");
+  assert.match(worker, /maxAttempts: this.maxAttempts/);
 });
