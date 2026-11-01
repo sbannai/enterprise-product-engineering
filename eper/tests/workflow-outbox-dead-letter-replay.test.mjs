@@ -43,6 +43,7 @@ test("dead-letter replay requires admin authorization and tenant-scoped RLS", as
   assert.equal(result.alreadyApplied, false);
   assert.ok(calls.some(c => c.sql.includes("set_config('eper.tenant_id'")));
   assert.ok(calls.some(c => c.sql.includes("rd.permissions ? 'workflow:admin'")));
+  assert.ok(calls.some(c => c.sql.includes("pg_advisory_xact_lock(hashtextextended($1, 0))")));
   assert.ok(calls.some(c => c.sql.includes("INSERT INTO eper_workflow_outbox_replay_audit")));
   assert.ok(calls.some(c => c.sql.includes("INSERT INTO eper_audit_events")));
   const update = calls.find(c => c.sql.includes("UPDATE eper_workflow_outbox_delivery"));
