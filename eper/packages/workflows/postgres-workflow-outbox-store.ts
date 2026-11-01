@@ -40,6 +40,12 @@ export interface WorkflowOutboxFailureResult {
   attempts: number;
 }
 
+export interface WorkflowOutboxDeadLetter {
+  event: WorkflowOutboxEvent;
+  lastError: string | null;
+  updatedAt: string;
+}
+
 type EventRow = {
   event_id: string; tenant_id: string; application_id: string; instance_id: string;
   transition_id: string; event_type: WorkflowOutboxEventType; event_version: number | string;
@@ -126,6 +132,53 @@ export class PostgresWorkflowOutboxStore {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
     } finally { client.release(); }
+  }
+
+
+  /** Read-only, tenant/application-scoped dead-letter inspection for an authorized admin surface. */
+  async listDeadLetters(
+    context: WorkflowOutboxContext,
+    limit = 50,
+  ): Promise<WorkflowOutboxDeadLetter[]> {
+    await setRlsValidation(context);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      throw new Error("WORKFLOW_OUTBOX_DEAD_LETTER_LIMIT_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setRls(client, context);
+      const result = await client.query<EventRow & {
+        last_error: string | null;
+        updated_at: string | Date;
+      }>(
+        `SELECT e.event_id, e.tenant_id, e.application_id, e.instance_id,
+                e.transition_id, e.event_type, e.event_version, e.payload,
+                e.occurred_at, d.attempts, d.last_error, d.updated_at
+           FROM eper_workflow_outbox_delivery d
+           JOIN eper_workflow_outbox_events e
+             ON e.tenant_id = d.tenant_id
+            AND e.application_id = d.application_id
+            AND e.event_id = d.event_id
+          WHERE d.tenant_id = $1
+            AND d.application_id = $2
+            AND d.delivery_status = 'dead_letter'
+          ORDER BY d.updated_at ASC, d.event_id ASC
+          LIMIT $3`,
+        [context.tenantId, context.applicationId, limit],
+      );
+      await client.query("COMMIT");
+      return result.rows.map(row => ({
+        event: mapEvent(row),
+        lastError: row.last_error,
+        updatedAt: new Date(row.updated_at).toISOString(),
+      }));
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async markDelivered(context: WorkflowOutboxContext, eventId: string, workerId: string): Promise<void> {
