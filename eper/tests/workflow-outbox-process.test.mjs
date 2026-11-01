@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { WorkflowOutboxProcess } from "../dist/packages/workflows/workflow-outbox-process.js";
+import { WorkflowOutboxRunError } from "../dist/packages/workflows/workflow-outbox-worker.js";
 
 test("outbox process continuously drains authorized scopes and deduplicates context discovery", async () => {
   const controller = new AbortController();
@@ -105,8 +106,10 @@ test("outbox process includes partial worker counters when a claim fails", async
   const errors = [];
   const worker = {
     async runOnce() {
-      const error = new Error("WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED");
-      error.result = { claimed: 2, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 };
+      const error = new WorkflowOutboxRunError(
+        [new Error("bookkeeping failure")],
+        { claimed: 2, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 },
+      );
       throw error;
     },
   };
