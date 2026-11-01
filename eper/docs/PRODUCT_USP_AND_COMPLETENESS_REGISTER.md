@@ -1,8 +1,8 @@
 # EPER Product USP & Completeness Register
 
 **Status:** Proposed product-control baseline  
-**Date:** 2026-10-31  
-**Repository baseline:** `main` at `8b181f9dda2e8ff01d2e39d7e7e62e6accb2da96`  
+**Date:** 2026-11-01  
+**Repository baseline:** `main` at `b33ca6daba19c8629cfbe199db1391368d9b4148`  
 **Scope rule:** This register supplements the approved 228 requirements across Chapters 463–500. It does not replace, renumber, weaken, or silently reinterpret any approved requirement.
 
 ## 1. Product positioning
@@ -60,7 +60,7 @@ The initial dispositions below are conservative repository-audit starting points
 
 **USP-001 Workflow execution engine**
 
-The merged implementation on `main` now includes application-scoped immutable workflow publication with version/digest pinning and a publication lifecycle ledger; PostgreSQL-backed workflow instances and append-only transitions; application-scoped role definitions and actor-role assignments; authorization re-checks, expected-version concurrency control, idempotent start/transition replay, same-transaction audit, and a transactional outbox. Opt-in admin/customer APIs expose publication, role administration, instance start and transitions; the workflow API remains disabled by default. The reusable `WorkflowOutboxProcess` continuously drains authorised scopes with bounded batches, retry/dead-letter handling and graceful cancellation. Exact-main technical CI/integration validation is recorded in the workflow design. This supports IMPLEMENTED / CI-VALIDATED for the execution slice—not production readiness: a trusted production context provider, real dispatcher, independently hosted/supervised worker, delivery dashboards/alerts, load/recovery testing and operational configuration remain outstanding.
+The merged implementation on `main` now includes application-scoped immutable workflow publication with version/digest pinning and a publication lifecycle ledger; PostgreSQL-backed workflow instances and append-only transitions; application-scoped role definitions and actor-role assignments; authorization re-checks, expected-version concurrency control, idempotent start/transition replay, same-transaction audit, and a transactional outbox. Opt-in admin/customer APIs expose publication, role administration, instance start and transitions; the workflow API remains disabled by default. The reusable `WorkflowOutboxProcess` continuously drains authorised scopes with bounded batches, retry/dead-letter handling and graceful cancellation. Exact-main technical CI/integration validation is recorded in the workflow design. This supports IMPLEMENTED / CI-VALIDATED for the execution slice—not production readiness: the PostgreSQL scope-discovery adapter (`PostgresWorkflowOutboxContextSource`) and SIGINT/SIGTERM shutdown adapter (`runWorkflowOutboxWorkerHost`) exist, but the production host must wire a restricted platform-worker pool and approved dispatcher, independently supervise/restart the worker, and provide delivery dashboards/alerts, load/recovery evidence and deployment configuration. The merged reliability hardening now renews live leases during long dispatches, fences lease loss so a stale worker cannot acknowledge or mutate an event, sweeps exhausted events into dead-letter state during claims, and includes those rows in worker pass metrics. PR #301 adds tenant/application-scoped dead-letter inspection and audited replay through an authenticated admin API and Delivery Operations UI. Replay only requeues work; it does not dispatch to an external provider. Production operation remains incomplete until a restricted platform-worker context source, approved dispatcher, independent host supervision, delivery dashboards/alerts, and load/recovery evidence are supplied.
 
 Acceptance criteria:
 - Persist workflow definitions and version history durably in PostgreSQL.
@@ -202,4 +202,7 @@ For each USP ID, maintain:
 5. Define AI BI as a governed read-only semantic query experience before adding predictive or agentic actions.
 6. Keep changes consolidated, tested, and traceable; merge only after required reviews and exact-head CI are green.
 
-**Current disposition (main `8b181f9`):** product direction and completeness criteria are documented. USP-001 workflow execution is IMPLEMENTED / CI-VALIDATED at the technical-slice level; runtime operations remain PARTIAL. Other USP dispositions remain conservative pending capability-specific evidence. No Business Acceptance or Business UAT authorization is implied.
+**Current disposition (main `b33ca6d`):** product direction and completeness criteria are documented. USP-001 workflow execution is IMPLEMENTED / CI-VALIDATED at the technical-slice level; runtime operations remain PARTIAL. Other USP dispositions remain conservative pending capability-specific evidence. No Business Acceptance or Business UAT authorization is implied.
+
+
+**Baseline refresh (2026-11-01):** The current `main` baseline is `b33ca6daba19c8629cfbe199db1391368d9b4148`. The merged PR heads for the outbox reliability hardening and admin operations slice passed their reported exact-head CI checks before merge. No check-run result is yet recorded here for this merge commit itself. This confirms only the constituent technical validation; it does not upgrade workflow operations to production-ready or business-accepted status.
