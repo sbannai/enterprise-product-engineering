@@ -1,5 +1,7 @@
 # EPER — EM-OPS Chapters 463–500
 
+- Fresh-clone developer setup and local PostgreSQL verification: [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
+
 Generated implementation baseline for 228 requirements. This commit is source generation only; it does not claim build, test, UAT, release, production, or certification evidence.
 
 

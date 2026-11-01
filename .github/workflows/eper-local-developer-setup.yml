@@ -1,0 +1,57 @@
+name: EPER Fresh-Clone Developer Setup
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "eper/DEVELOPER_SETUP.md"
+      - "eper/docker-compose.local.yml"
+      - "eper/scripts/dev-verify.mjs"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - ".github/workflows/eper-local-developer-setup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-clone-postgres-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_local_ci_password
+          POSTGRES_DB: eper_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://eper:eper_local_ci_password@127.0.0.1:5432/eper_test
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Validate local Compose definition
+        run: docker compose -f docker-compose.local.yml config --quiet
+      - name: Install from lockfile on clean runner
+        run: npm ci
+      - name: Run the same one-command developer verification documented for a fresh clone
+        run: npm run dev:verify
