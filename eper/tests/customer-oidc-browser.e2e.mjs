@@ -74,16 +74,20 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     const page=await context.newPage();
     const customerResponses=[];
     const pageErrors=[];
+    const requestFailures=[];
+    const consoleErrors=[];
     page.on("response",response=>{const url=new URL(response.url());if(url.pathname.startsWith("/customer/"))customerResponses.push(url.pathname+" "+response.status());});
     page.on("pageerror",error=>pageErrors.push(error.message));
+    page.on("requestfailed",request=>{if(request.url().includes("/customer/"))requestFailures.push(request.url()+" "+request.failure()?.errorText);});
+    page.on("console",message=>{if(message.type()==="error")consoleErrors.push(message.text());});
     await page.goto(origin+"/customer-portal-preview");
     await page.getByRole("link",{name:"Sign in with your organization"}).click();
     await page.getByRole("link",{name:"Continue sign in"}).click();
     await page.waitForURL("**/customer-portal-preview");
-    await page.waitForFunction(()=>{const text=document.getElementById("connectResult")?.textContent||"";return text==="Your organization session is active."||text==="Sign in through your organization to open your workspace."||text==="Could not verify your customer session. Sign in again or try shortly.";});
+    await page.waitForTimeout(1200);
     const connectionMessage=await page.locator("#connectResult").textContent();
     assert.equal(connectionMessage,"Your organization session is active.",
-      "browser workspace bootstrap failed; customer responses="+JSON.stringify(customerResponses)+" page errors="+JSON.stringify(pageErrors));
+      "browser workspace bootstrap failed; message="+connectionMessage+" url="+page.url()+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
     await page.getByLabel("Title").fill("Browser-authenticated support request");
     await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
