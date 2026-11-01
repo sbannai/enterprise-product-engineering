@@ -33,7 +33,7 @@ const requestToken=token;
 const button=el("exportFilteredTickets");
 button.disabled=true;
 const columns=["id","title","type","severity","status","applicationId","createdBy","assignedTo","createdAt","updatedAt"];
-const csvCell=value=>{const text=String(value??"");const safe=/^[\\s]*[=+\\-@]/.test(text)?"'"+text:text;return '"'+safe.replace(/"/g,'""')+'"';};
+const csvCell=value=>{const text=String(value??"");const safe=/^[\s]*[=+\-@]/.test(text)?"'"+text:text;return '"'+safe.replace(/"/g,'""')+'"';};
 const filters=[["filterStatus","status"],["filterType","type"],["filterSeverity","severity"],["filterApplication","applicationId"],["filterSearch","search"]].map(([id,key])=>[key,el(id).value.trim()]).filter(([,value])=>value);
 const rows=[];
 let offset=0;
@@ -51,8 +51,8 @@ offset+=page.length;
 }
 if(requestToken!==token)return;
 if(!rows.length){el("queueStatus").textContent="No tickets match the current filters.";return;}
-const csv=[columns.join(","),...rows.map(ticket=>columns.map(column=>csvCell(ticket[column])).join(","))].join("\\r\\n");
-const url=URL.createObjectURL(new Blob(["\\uFEFF",csv],{type:"text/csv;charset=utf-8"}));
+const csv=[columns.join(","),...rows.map(ticket=>columns.map(column=>csvCell(ticket[column])).join(","))].join("\r\n");
+const url=URL.createObjectURL(new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"}));
 const link=document.createElement("a");link.href=url;link.download="eper-support-tickets-filtered-export.csv";link.hidden=true;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 el("queueStatus").textContent="Exported "+rows.length+" tickets matching the current filters across all pages.";
 }catch(e){if(requestToken===token)el("queueStatus").textContent="Filtered export failed: "+e.message;}
