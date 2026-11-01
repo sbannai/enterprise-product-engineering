@@ -47,7 +47,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     // Keep Chromium responsible for navigation, cookie storage, redirects, fetch and
     // user interaction. Bridge loopback HTTP through Node because hosted runners can
     // expose loopback to Node while Chromium's network namespace cannot resolve it.
-    await page.route(url => url.startsWith(base + "/"), async route => {
+    await page.route(base + "/**", async route => {
       const request = route.request();
       const upstream = await fetch(request.url(), {
         method: request.method(),
