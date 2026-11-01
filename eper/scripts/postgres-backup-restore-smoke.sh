@@ -45,7 +45,7 @@ pg_dump --format=custom --no-owner --no-acl --file="$backup_file" "$DATABASE_URL
 test -s "$backup_file"
 pg_restore --list "$backup_file" >/dev/null
 
-restore_db_name="$(node -e 'const u = new URL(process.env.RESTORE_DATABASE_URL); console.log(decodeURIComponent(u.pathname.replace(/^\//, ""));')"
+restore_db_name="$(node -e 'const u = new URL(process.env.RESTORE_DATABASE_URL); console.log(decodeURIComponent(u.pathname.replace(/^\//, "")));')"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$restore_db_name\""
 pg_restore --exit-on-error --no-owner --no-acl --dbname="$RESTORE_DATABASE_URL" "$backup_file"
 
