@@ -544,3 +544,80 @@ The current open list contains PR #323 and PR #325 only. Both are drafts; neithe
 7. **Release/continuity — AMBER.** Clean-clone and disposable restore evidence exist on exact PR heads; main push CI is green. Main protection/required checks are disabled, production recovery and independent second-engineer release/rollback remain unproven.
 
 **Safety:** Preserve the approved 228/38 baseline. No PR was merged by this update; no external/provider dispatch or chargeable AWS provisioning was performed.
+
+
+## Live evidence refresh — 2026-11-02 01:15 IST
+
+**Current main, resolved dynamically:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`.  
+**Change since the previous live update:** no main SHA change. This refresh rechecked the open PR list, exact-head workflow runs and job logs, current main push workflows, the merged #306/#310/#324 ancestry, support/identity code boundaries, and the current worker branch. No code change or merge was made during this assessment.
+
+### Current main evidence
+
+The branch endpoint resolves `main` to `a554990cb7f4969bb218aad7a2e9944aec62fa05` (commit date 2026-11-01 16:34:31Z). The following exact-main push workflows completed successfully:
+
+- [EPER CI — 41327033352](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033352)
+- [Same-commit integrated validation — 41327033337](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033337)
+- [Controlled QA — 41327033377](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033377)
+- [Chromium customer OIDC lifecycle — 41327033298](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033298)
+- [228 requirements / 38 chapter matrix — 41327033302](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033302)
+- [Six-family HTTP smoke — 41327033272](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033272)
+- [Container runtime smoke — 41327033358](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033358)
+- [G9 reconciliation — 41327033313](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033313)
+- [Workflow configuration validation — 41327033325](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033325)
+
+The Chromium run uses a synthetic local IdP and proves browser login, protected customer settings access, logout and post-revocation denial. It is not evidence of a live production identity-provider onboarding.
+
+### Current open PRs and exact-head validation
+
+The live open-PR query returns PR #323 and PR #326 only. Both remain drafts, mergeable and based on current main; compare results show zero commits behind. Review submissions and inline review-thread lists are empty.
+
+**PR #323 — developer setup / requirements crosswalk / scorecard**
+- Exact head: `7ec9442fe4cbb800961f021c29a5c56ba3154121`; 7 commits ahead, 0 behind; two changed files.
+- All Actions runs currently associated with this exact head completed successfully. Relevant exact-head evidence:
+  - [Fresh-clone developer setup — 41328380905](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380905): `npm run dev:verify`, 1,170 passed / 0 failed / 0 skipped; all seven migration groups applied and repeated; disposable backup/restore passed with 59 source/restored base tables and seven migration-ledger tables.
+  - [EPER CI — 41328380898](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380898): typecheck/build, live PostgreSQL workflow and tenant/actor application-assignment tests, capability RLS, append-only audit and rollback checks passed.
+  - [Controlled QA — 41328380947](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380947): 1,151 tests; 1,134 passed, 0 failed, 17 skipped.
+  - [Integrated validation — 41328380970](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380970), [228/38 matrix — 41328380965](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380965), [release build — 41328380893](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380893), [container smoke — 41328380927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380927), [six-family HTTP smoke — 41328380910](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380910), and [G9 — 41328380974](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380974) completed successfully.
+- The fresh-clone job log explicitly ran the clean lockfile install, documented `npm run dev:verify`, and PostgreSQL 16 backup/restore smoke. The test log ended with 1,170 tests, zero failures and zero skips; restore reported 59 source/restored base tables and seven migration-ledger tables.
+- Requirements remain unchanged: 228 approved requirements / 38 chapters preserved; 45 v34 source candidates and acceptance criteria retained as additive v1.6.0 draft scope pending owner disposition. The crosswalk records zero exact full-coverage matches, 45 partial shared-control links, and four overlaps with the existing human-approval control.
+
+**PR #326 — dedicated campaign worker process**
+- Exact head: `7446ed23b3545f3cb74b9a4239532bdf340ce3e9`; 5 commits ahead, 0 behind; five changed files.
+- All Actions runs currently associated with this exact head completed successfully. Relevant exact-head evidence:
+  - [Fresh-clone developer setup — 41327722225](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722225): `npm run dev:verify`, 1,175 passed / 0 failed / 0 skipped; seven migration groups applied and repeated; disposable backup/restore passed with 59 source/restored base tables and seven migration-ledger tables.
+  - [EPER CI — 41327722184](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722184): typecheck/build, live PostgreSQL workflow and tenant/actor application-assignment tests, capability RLS, audit immutability and rollback checks passed.
+  - [Controlled QA — 41327722105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722105): 1,156 tests; 1,139 passed, 0 failed, 17 skipped; five worker-entrypoint startup guard tests passed.
+  - [PostgreSQL payment/scheduler integration — 41327722301](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722301): live PostgreSQL payment transactions/constraints, dispatch-fence race and event-idempotency checks passed.
+  - [Integrated validation — 41327722204](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722204), [228/38 matrix — 41327722095](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722095), [release build — 41327722168](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722168), [container smoke — 41327722176](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722176), [six-family HTTP smoke — 41327722190](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722190), [G9 — 41327722114](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722114), and [payment contracts — 41327722201](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722201) completed successfully.
+- The worker process is separately invokable and disabled by default. It requires PostgreSQL/audit readiness, an explicit worker ID, a deployment-owned adapter module and graceful shutdown. The adapter contract requires current tenant/application policy authorization and downstream idempotency.
+- Remaining operational proof: no reviewed deployment adapter, no demonstrated restricted worker-specific database role/context, no independent process supervisor, no metrics/alerts, no real-PostgreSQL worker restart/recovery drill, and no adapter authorization/idempotency contract test. Keep it disabled; do not trigger provider actions.
+
+### Merged foundation verification
+
+- PR #306 merged as `6e8dd438e5091b1802d65e4f29951389fe077859`; current main is 14 commits ahead and 0 behind that merge SHA.
+- PR #310 merged as `88b9708d748c19dc80a1a2d7ad4960914451db7e`; current main is 13 commits ahead and 0 behind that merge SHA.
+- PR #324 merged as `a554990cb7f4969bb218aad7a2e9944aec62fa05`, identical to current main.
+- These are verified merged ancestors; #306 and #310 are not open work.
+
+### Product boundary findings
+
+- **Identity:** provider-neutral OIDC discovery/JWKS and ID-token validation are implemented. Browser routes, state/nonce/PKCE callback binding, secure HttpOnly session cookie, CSRF cookie/verification, durable session resolution/revocation and browser E2E are integrated. Each customer request rechecks active tenant applications and actor/application assignment; OIDC claims do not supply the role. The browser test uses a synthetic local IdP. Production-provider onboarding, durable role/delegation resolution, token rotation and support-admin browser authentication remain unproven.
+- **Customer support:** customer ticket create/list/reply APIs use tenant/application/actor scope; customer reply reads exclude internal notes. Admin queue, assignment, status, severity/P1 rationale, duplicate disposition and internal/customer-visible replies are implemented. The current admin console still requests a support-admin bearer credential and sends a Bearer Authorization header. Its CSV action exports only the currently loaded page. The ticket contract/store does not show SLA due-time, response/resolution timers or escalation fields. Full filtered-queue export, SLA timers/escalation, attachments/notifications and support-admin browser session integration remain.
+- **Scheduler/workflow:** the mainline execution loop has durable claims, lease renewal/fencing, idempotency, bounded retries, dead-letter handling and authorization before the dispatch fence; the exact-head PostgreSQL dispatch-race test passes. PR #326 adds the separate process, but no production adapter or independent operational host/recovery evidence is present.
+- **Release/continuity:** clean-clone setup and disposable restore are reproducible on the two exact PR heads. An independent second-engineer handover/release/rollback has not been demonstrated.
+
+### Seven-checkpoint status (scorecard terminology)
+
+| Checkpoint | Status | Delivered capability and exact evidence | Blocker / next action |
+|---|---|---|---|
+| 1. Product USP and positioning | AMBER | Approved 228/38 baseline preserved; v34 crosswalk and 45 candidate rows retained in PR #323; exact-head 228/38 matrix [41328380965](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41328380965) passed. | Obtain owner disposition of all 45 additive candidates; do not change the approved baseline. |
+| 2. CI and persistence foundations | GREEN for local/CI scope | Fresh-clone `dev:verify`, seven-group migration/repeatability, live PostgreSQL tests and disposable restore pass on #323/#326 exact heads; see runs 41328380905 and 41327722225. | Independent engineer bootstrap and recovery rehearsal; production recovery objectives remain outside this proof. |
+| 3. Architecture and execution boundaries | AMBER | OIDC session resolution rechecks tenant/application and actor/application assignment per request; secure cookie/CSRF and fail-closed behavior have code/test evidence on main. | Live provider onboarding, durable role/delegation and token rotation; support-admin browser auth. |
+| 4. Workflow execution design and schema | AMBER | Durable workflow/outbox, lease/fencing, idempotency, retry/dead-letter and PostgreSQL dispatch-race evidence; #326 process entrypoint is separately invokable. | Reviewed adapter, restricted worker context, supervisor, metrics/alerts and restart/recovery proof. |
+| 5. Integrated validation | GREEN for current technical lanes | Exact main SHA `a554990...` has successful EPER CI, integrated validation, QA, browser OIDC, 228/38 matrix, six-family, container and G9 runs listed above. | Expand full customer workspace/support browser coverage; CI pass does not certify untested product operations. |
+| 6. PR consolidation and governance | AMBER | Only #323/#326 are open; exact heads are 0 behind main, all associated Actions runs succeeded, no submitted reviews or unresolved threads. Main branch metadata reports `protected=false`; repository rulesets collection is empty. | Obtain review and owner-approved branch protection/required checks; reconcile historical branch refs before declaring no orphan work. |
+| 7. Workflow publisher/runtime implementation | AMBER | Continuous worker loop, lease renewal/fencing, bounded retries, dead-letter and idempotency tests pass; #326 adds fail-closed worker process startup. | Keep disabled until restricted identity, reviewed adapter, supervision, metrics, failure/restart recovery and operator runbooks are proven. |
+
+**Owner:** repository owner / accountable engineering and operations owners; candidate disposition and repository governance require owner decision.  
+**Next actions:** review the two current PRs; complete support-admin browser authentication and end-to-end support journey; then close worker identity/adapter/supervision/recovery and repository governance.  
+**Safety:** no PR merged, no provider dispatch triggered, and no chargeable cloud resources provisioned by this refresh.
