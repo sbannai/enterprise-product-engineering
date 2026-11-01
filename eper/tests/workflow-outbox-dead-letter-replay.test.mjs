@@ -45,7 +45,10 @@ test("dead-letter replay requires admin authorization and tenant-scoped RLS", as
   assert.ok(calls.some(c => c.sql.includes("rd.permissions ? 'workflow:admin'")));
   assert.ok(calls.some(c => c.sql.includes("pg_advisory_xact_lock(hashtextextended($1, 0))")));
   assert.ok(calls.some(c => c.sql.includes("INSERT INTO eper_workflow_outbox_replay_audit")));
-  assert.ok(calls.some(c => c.sql.includes("INSERT INTO eper_audit_events")));
+  const auditInsert = calls.find(c => c.sql.includes("INSERT INTO eper_audit_events"));
+  assert.ok(auditInsert, "replay must append the audit event");
+  assert.deepEqual(JSON.parse(auditInsert.values[7]), ["workflow-admin"], "audit effectiveRoles must record the selected role id");
+  assert.equal(JSON.parse(auditInsert.values[25]).grantedPermission, "workflow:admin");
   const update = calls.find(c => c.sql.includes("UPDATE eper_workflow_outbox_delivery"));
   assert.match(update.sql, /delivery_status = 'dead_letter'/);
   assert.doesNotMatch(update.sql, /attempts\s*=/);
