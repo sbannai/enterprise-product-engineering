@@ -47,13 +47,15 @@ async function listen(server) {
 test("action approval API derives tenant and actor from trusted identity and delegates policy decisions", async () => {
   const previous = saveEnvironment();
   const token = configureEnvironment();
+  const proposalExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const approvalExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const proposal = {
     proposalId: "proposal-1", proposalVersion: 1, tenantId: "tenant-a", applicationId: "app-a",
     actionType: "crm.contact.update", sideEffectClass: "crm_mutation",
     targetType: "contact", targetId: "contact-1", requestedBy: "requester-a",
     requesterType: "human", payload: { name: "New name" }, payloadHash: "a".repeat(64),
     idempotencyKey: "approval-api-idempotency-01", createdAt: "2026-10-31T10:00:00.000Z",
-    expiresAt: "2026-11-01T10:00:00.000Z", correlationId: "request-1",
+    expiresAt: proposalExpiresAt, correlationId: "request-1",
   };
   const calls = { created: [], decisions: [], authorizations: [] };
   const store = {
@@ -68,10 +70,10 @@ test("action approval API derives tenant and actor from trusted identity and del
   const authorizer = async request => {
     calls.authorizations.push(request);
     if (request.operation === "create_proposal") {
-      return { allowed: true, proposalExpiresAt: "2026-11-01T10:00:00.000Z" };
+      return { allowed: true, proposalExpiresAt };
     }
     if (request.operation === "approve_proposal") {
-      return { allowed: true, policyVersion: "owner-policy-v1", approvalExpiresAt: "2026-10-31T18:00:00.000Z" };
+      return { allowed: true, policyVersion: "owner-policy-v1", approvalExpiresAt };
     }
     return { allowed: true, policyVersion: "owner-policy-v1" };
   };
@@ -118,7 +120,7 @@ test("action approval API derives tenant and actor from trusted identity and del
     assert.equal(calls.decisions[0].decision, "approve");
     assert.equal(calls.decisions[0].actorId, "admin-a");
     assert.equal(calls.decisions[0].policyVersion, "owner-policy-v1");
-    assert.equal(calls.decisions[0].expiresAt, "2026-10-31T18:00:00.000Z");
+    assert.equal(calls.decisions[0].expiresAt, approvalExpiresAt);
     assert.equal(typeof calls.decisions[0].approvalId, "string");
     const approvalAuthorization = calls.authorizations.find(item => item.operation === "approve_proposal");
     assert.equal(typeof approvalAuthorization.proposalHash, "string");
