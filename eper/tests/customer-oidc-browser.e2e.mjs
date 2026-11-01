@@ -44,6 +44,26 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     const page=await browser.newPage();
     await page.route("https://idp.example.test/**",route=>route.fulfill({status:200,contentType:"text/html",
       body:`<a href="${base}/customer/auth/oidc/callback?code=browser-code&state=${state}">Continue sign in</a>`}));
+    // Keep Chromium responsible for navigation, cookie storage, redirects, fetch and
+    // user interaction. Bridge loopback HTTP through Node because hosted runners can
+    // expose loopback to Node while Chromium's network namespace cannot resolve it.
+    await page.route(url => url.startsWith(base + "/"), async route => {
+      const request = route.request();
+      const upstream = await fetch(request.url(), {
+        method: request.method(),
+        headers: request.headers(),
+        body: ["GET", "HEAD"].includes(request.method()) ? undefined : request.postDataBuffer(),
+        redirect: "manual",
+      });
+      const headers = Object.fromEntries(upstream.headers.entries());
+      const setCookies = upstream.headers.getSetCookie?.() ?? [];
+      if (setCookies.length) headers["set-cookie"] = setCookies.join(", ");
+      await route.fulfill({
+        status: upstream.status,
+        headers,
+        body: Buffer.from(await upstream.arrayBuffer()),
+      });
+    });
     await page.goto(base+"/customer/auth/oidc/start?returnTo="+encodeURIComponent("/customer/settings?applicationId=app-01"));
     await page.getByRole("link",{name:"Continue sign in"}).click();
     await page.waitForURL("**/customer/settings?applicationId=app-01");
