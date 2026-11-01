@@ -173,6 +173,12 @@ if (customerOidcEnabled) {
       publicOrigin.username || publicOrigin.password || publicOrigin.hash) {
     throw new Error("CUSTOMER_OIDC_PUBLIC_ORIGIN_INVALID");
   }
+  let callbackUrl: URL;
+  try { callbackUrl = new URL(redirectUri); } catch { throw new Error("CUSTOMER_OIDC_REDIRECT_URI_INVALID"); }
+  if (callbackUrl.origin !== publicOrigin.origin || callbackUrl.pathname !== "/customer/auth/oidc/callback" ||
+      callbackUrl.search || callbackUrl.hash || callbackUrl.username || callbackUrl.password) {
+    throw new Error("CUSTOMER_OIDC_REDIRECT_URI_INVALID");
+  }
   if (process.env.NODE_ENV === "production" && !customerOidcPublicOrigin.startsWith("https://")) {
     throw new Error("PRODUCTION_CUSTOMER_OIDC_REQUIRES_HTTPS_PUBLIC_ORIGIN");
   }
