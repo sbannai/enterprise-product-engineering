@@ -13,6 +13,9 @@ on:
       - "eper/scripts/dev-verify.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
+      - "eper/apps/api/**"
+      - "eper/packages/**"
+      - "eper/tests/**"
       - ".github/workflows/eper-local-developer-setup.yml"
   workflow_dispatch:
 

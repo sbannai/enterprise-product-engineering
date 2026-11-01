@@ -443,3 +443,66 @@ The fresh-clone workflow path filter on PR #324 now includes API, package/migrat
 - PR #306 merge SHA `6e8dd438e5091b1802d65e4f29951389fe077859`: its PR head had 13/13 successful workflows; the merge SHA had 9/9 successful push workflows and is an ancestor of current main.
 - PR #310 merge SHA `88b9708d748c19dc80a1a2d7ad4960914451db7e`: its PR head had 12/12 successful workflows; the merge SHA had six successful, one failed and one cancelled push workflows. The failed merge-SHA QA was `callback rejects a bad signature` (missing expected rejection); the cancelled integrated workflow is not acceptance. The current #324 exact-head bad-signature regression passes.
 - No PR was merged, no external/provider action was dispatched, and no chargeable cloud resource was provisioned. The approved 228 requirements and 38 chapters remain unchanged.
+
+
+## Live delivery update — 2026-11-01 22:05 IST
+
+**Dynamically resolved current main:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`.  
+**Change since the 21:26 evidence point:** PR #324 has merged into main. Its merge commit is the current main head; the previously failing callback import is now present on main.
+
+### Current-main exact-commit validation
+
+All ten push-triggered workflows for main `a554990cb7f4969bb218aad7a2e9944aec62fa05` completed successfully (10/10; no queued, in-progress, failed, or cancelled runs):
+- [EPER CI — 41327033352](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033352): typecheck/build, migration lanes, live PostgreSQL workflow/tenant-assignment/capability checks passed.
+- [Same-commit integrated validation — 41327033337](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033337): payment/PostgreSQL, container/six-family, 228/38 matrix and release/G9 constituent lanes passed.
+- [Controlled QA — 41327033377](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033377): completed successfully.
+- [Chromium browser OIDC E2E — 41327033298](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033298): real-browser login, protected settings, logout and post-revocation denial passed (1/1).
+- [228 requirements / 38 chapter matrix — 41327033302](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033302): all chapter suites and the 228-row matrix passed.
+- [Six-family HTTP smoke — 41327033272](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033272), [container smoke — 41327033358](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033358), [G9 reconciliation — 41327033313](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033313) and [workflow configuration — 41327033325](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033325): all passed.
+
+The main push workflow set does not include the fresh-clone/backup-restore workflow. That evidence is recorded separately against the exact PR #324 head below; it is not relabelled as a merge-commit run.
+
+### PR #324 — merged identity/browser implementation
+
+- PR #324 is closed and merged. Its merge commit is current main: `a554990cb7f4969bb218aad7a2e9944aec62fa05`.
+- Exact PR head: `5ccc7543478ab011a5265faafb3eef524b2416ca`; all 14 PR-head workflows completed successfully.
+- Exact PR-head fresh-clone run [41326152192](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152192): `npm run dev:verify` completed with 1,170 passed and 0 failed; all seven PostgreSQL migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing, identity) were applied and repeated; disposable PostgreSQL backup/restore passed with 59 source/restored base tables and 7 migration-ledger tables.
+- Exact PR-head Chromium OIDC run [41326152230](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326152230): 1/1 browser lifecycle passed.
+- Merge-commit/current-main push checks are separately identified above: 10/10 passed. Do not conflate those with the PR-head fresh-clone run.
+
+Identity is now integrated in main for the tested browser lifecycle. The browser E2E uses a synthetic local IdP. Live production-provider onboarding, durable role/delegation resolution, session-token rotation and support-admin browser authentication remain unproven/outstanding.
+
+### Current open PRs and exact-head evidence
+
+The current open list contains PR #323 and PR #325 only. Both are drafts; neither has submitted reviews or unresolved inline review threads.
+
+**PR #323 — documentation and requirements/scorecard reconciliation**
+- Exact old head: `4904275280a603a3c7841d5fe901698e5aa0ca6b`.
+- Its ten exact-head workflows completed: seven success, three failure.
+- Controlled QA [41326463168](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326463168) and fresh-clone [41326462711](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326462711) both failed because that old head lacked `customer-oidc-callback.js`; the full test suite reported one import failure. The fresh-clone backup/restore step was skipped.
+- This is now a stale-base integration dependency because the implementation has since merged into main. The documentation branch is being brought forward onto current main; all new validation must run on the new exact head.
+- The branch's developer guide correction describes all seven migration groups and repeats all seven. Preserve it.
+
+**PR #325 — dedicated campaign worker process**
+- Exact old head: `45ab93d0a8911e34838dacbfa77347d41bb5aa2a`; it was stacked on PR #324, which has now merged.
+- Five exact-head workflows completed successfully: controlled QA [41326883447](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326883447), PostgreSQL payment/scheduler integration [41326883378](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326883378), payment contracts [41326883398](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326883398), 228/38 matrix [41326883408](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41326883408), plus the remaining exact-head technical build lane.
+- The current patch adds a separately invokable worker entrypoint, fail-closed enablement, PostgreSQL/audit schema readiness, explicit worker identity, deployment-owned adapter loading, graceful signal cancellation and a dedicated database pool. No provider adapter is supplied, so this code cannot perform an external dispatch by itself.
+- The existing QA logs exercise campaign execution-worker core behavior but do not mention the new entrypoint. Dedicated fail-closed entrypoint tests are being added before fresh validation.
+- Since the PR was based on the now-merged #324 branch, it is being rebased onto current main and its base will be changed to `main` so its diff contains only worker-runtime changes.
+
+### Seven-checkpoint assessment
+
+1. **Product USP / v34-to-228 — AMBER.** The approved 228 requirements and 38 chapters remain unchanged. All 45 v34 source candidates and their acceptance criteria remain preserved; they are additive v1.6.0 draft candidates pending owner disposition. No baseline expansion is implied.
+2. **Fresh-clone / PostgreSQL — GREEN for the exact #324 candidate; current-main CI is green.** The #324 PR-head fresh-clone proof covers clean install, all seven migration groups and repeatability, 1,170 passing tests and disposable restore. A new fresh-clone run on the rebased documentation head is still required to validate the final handover text.
+3. **Identity / architecture — AMBER.** Browser OIDC callback, secure session/CSRF lifecycle, logout revocation and selected tenant/application authorization are integrated and CI-validated. Production IdP onboarding, role/delegation, token rotation and support-admin auth remain.
+4. **Workflow schema / execution — AMBER.** Durable workflow/outbox, lease/fencing, idempotency, retry/dead-letter and PostgreSQL dispatch-race evidence exist. The new campaign worker entrypoint is a separate process but still has no reviewed provider adapter, restricted worker DB identity proof, deployment supervisor, metrics/alerts or recovery drill.
+5. **Integrated validation — GREEN on current main for the listed push lanes.** Main `a554990...` has 10/10 completed successful push workflows. This is technical CI evidence only; it does not certify untested production operations.
+6. **PR consolidation / governance — AMBER.** #324 is merged. #323 is being rebased to current main; #325 is being detached from the merged #324 base and retargeted to main. Main remains `protected=false` with no repository rulesets; required-check enforcement is not active.
+7. **Release / continuity — AMBER.** Clean-clone and disposable restore passed on the #324 PR head; main's post-merge CI is green. Main branch protection, production recovery, independent second-engineer handover/release, worker supervision and operational alerting remain open.
+
+### Scope and safety
+
+- Preserve the 228 approved requirements and 38 chapters; keep all 45 v34 candidates additive and pending owner disposition.
+- No PR is being merged by this update.
+- No external/provider dispatch is being triggered; no chargeable AWS resources are being provisioned.
+- Repository protection has not been changed. An owner-approved configuration change remains necessary.

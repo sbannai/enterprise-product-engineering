@@ -191,7 +191,24 @@ export class PostgresCustomerIdentitySessionStore {
          FOR UPDATE OF s`,
         [sessionHash,now],
       );
-      if (!result.rows[0]) { await client.query("ROLLBACK"); return null; }
+      if (!result.rows[0]) {
+        // Expiry is a one-time state transition: persist it and emit one event.
+        // Unknown tokens and already-revoked sessions remain deliberately untraceable here.
+        const expired = await client.query<Record<string, unknown>>(
+          "UPDATE eper_customer_browser_sessions SET revoked_at=$2,revoked_reason='expired' WHERE session_hash=$1 AND revoked_at IS NULL AND (idle_expires_at<=$2 OR absolute_expires_at<=$2) RETURNING tenant_id,actor_id",
+          [sessionHash,now],
+        );
+        if (expired.rows[0]) {
+          await client.query(
+            "INSERT INTO eper_customer_identity_events (tenant_id,actor_id,action,outcome,resource_hash,correlation_id,metadata) VALUES ($1,$2,'session.expired','success',$3,$4,'{}'::jsonb)",
+            [expired.rows[0].tenant_id,expired.rows[0].actor_id,sessionHash,`session-expiry:${sessionHash}`],
+          );
+          await client.query("COMMIT");
+          return null;
+        }
+        await client.query("ROLLBACK");
+        return null;
+      }
       const row=result.rows[0];
       const idleExpiry = new Date(Math.min(new Date(row.absolute_expires_at as string|Date).getTime(), now.getTime()+30*60*1000));
       await client.query("UPDATE eper_customer_browser_sessions SET last_seen_at=$2,idle_expires_at=$3 WHERE session_hash=$1",[sessionHash,now,idleExpiry]);
