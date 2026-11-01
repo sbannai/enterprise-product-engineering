@@ -26,6 +26,13 @@ export interface WorkflowOutboxRunResult {
   interrupted: number;
 }
 
+export class WorkflowOutboxRunError extends AggregateError {
+  constructor(errors: unknown[], readonly result: WorkflowOutboxRunResult) {
+    super(errors, "WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED");
+    this.name = "WorkflowOutboxRunError";
+  }
+}
+
 class WorkflowOutboxLeaseLostError extends Error {
   constructor() {
     super("WORKFLOW_OUTBOX_LEASE_LOST");
@@ -74,9 +81,8 @@ export class WorkflowOutboxWorker {
     const failures = settled.filter(
       (item): item is PromiseRejectedResult => item.status === "rejected",
     );
-    if (failures.length === 1) throw failures[0].reason;
-    if (failures.length > 1) {
-      throw new AggregateError(failures.map(item => item.reason), "WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED");
+    if (failures.length > 0) {
+      throw new WorkflowOutboxRunError(failures.map(item => item.reason), { ...result });
     }
     return result;
   }
