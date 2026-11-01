@@ -102,10 +102,11 @@ export class ProviderNeutralOidcClient {
     const verifier = decryptVerifier(transaction.pkceVerifierCiphertext, this.config.pkceEncryptionKey);
     const form = new URLSearchParams({
       grant_type: "authorization_code", code, redirect_uri: this.config.redirectUri,
-      client_id: this.config.clientId, code_verifier: verifier,
+      code_verifier: verifier,
     });
     const headers: Record<string, string> = { "content-type": "application/x-www-form-urlencoded", accept: "application/json" };
     if (this.config.clientSecret) headers.authorization = "Basic " + Buffer.from(this.config.clientId + ":" + this.config.clientSecret).toString("base64");
+    else form.set("client_id", this.config.clientId);
     const response = await this.fetcher(discovery.token_endpoint, {
       method: "POST", headers, body: form, signal: AbortSignal.timeout(8000),
     });
