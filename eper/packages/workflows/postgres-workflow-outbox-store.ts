@@ -26,6 +26,8 @@ export interface WorkflowOutboxClaimOptions {
   workerId: string;
   limit?: number;
   leaseSeconds?: number;
+  /** Maximum claim attempts, including attempts lost to worker crashes or expired leases. */
+  maxAttempts?: number;
 }
 
 export interface WorkflowOutboxFailureOptions {
@@ -82,25 +84,42 @@ export class PostgresWorkflowOutboxStore {
     validateId(options.workerId, "workerId");
     const limit = options.limit ?? 20;
     const leaseSeconds = options.leaseSeconds ?? 60;
+    const maxAttempts = options.maxAttempts ?? 8;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("WORKFLOW_OUTBOX_CLAIM_LIMIT_INVALID");
     }
     if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds < 10 || leaseSeconds > 3600) {
       throw new Error("WORKFLOW_OUTBOX_LEASE_SECONDS_INVALID");
     }
+    if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 100) {
+      throw new Error("WORKFLOW_OUTBOX_MAX_ATTEMPTS_INVALID");
+    }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await setRls(client, context);
+      // A worker may die after claiming an event without recording a dispatch failure.
+      // Expired leases must consume the same finite attempt budget as explicit failures.
+      await client.query(
+        `UPDATE eper_workflow_outbox_delivery
+            SET delivery_status = 'dead_letter', locked_at = NULL, locked_by = NULL,
+                last_error = COALESCE(last_error, 'WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS'),
+                updated_at = NOW()
+          WHERE tenant_id = $1 AND application_id = $2
+            AND delivery_status = 'processing'
+            AND locked_at <= NOW() - ($3::int * INTERVAL '1 second')
+            AND attempts >= $4::int`,
+        [context.tenantId, context.applicationId, leaseSeconds, maxAttempts],
+      );
       const result = await client.query<EventRow>(
         `WITH candidates AS (
            SELECT tenant_id, application_id, event_id
              FROM eper_workflow_outbox_delivery
             WHERE tenant_id = $1 AND application_id = $2
               AND (
-                (delivery_status = 'pending' AND available_at <= NOW())
+                (delivery_status = 'pending' AND available_at <= NOW() AND attempts < $6::int)
                 OR
-                (delivery_status = 'processing' AND locked_at <= NOW() - ($4::int * INTERVAL '1 second'))
+                (delivery_status = 'processing' AND locked_at <= NOW() - ($4::int * INTERVAL '1 second') AND attempts < $6::int)
               )
             ORDER BY available_at, event_id
             LIMIT $3
@@ -118,7 +137,7 @@ export class PostgresWorkflowOutboxStore {
          RETURNING e.event_id, e.tenant_id, e.application_id, e.instance_id,
                    e.transition_id, e.event_type, e.event_version, e.payload,
                    e.occurred_at, d.attempts`,
-        [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId],
+        [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId, maxAttempts],
       );
       await client.query("COMMIT");
       return result.rows.map(mapEvent);
