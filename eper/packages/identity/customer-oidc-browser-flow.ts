@@ -40,11 +40,11 @@ export function normalizeCustomerReturnPath(candidate: string | undefined, publi
   const fallback = "/";
   if (typeof candidate !== "string" || candidate.length === 0 || candidate.length > 2048 ||
       !candidate.startsWith("/") || candidate.startsWith("//") ||
-      candidate.includes("\\") || /[\\u0000-\\u001f\\u007f]/.test(candidate)) return fallback;
+      candidate.includes("\\") || /[\u0000-\u001f\u007f]/.test(candidate)) return fallback;
   let decoded: string;
   try { decoded = decodeURIComponent(candidate); } catch { return fallback; }
   if (decoded.startsWith("//") || decoded.includes("\\") ||
-      /[\\u0000-\\u001f\\u007f]/.test(decoded)) return fallback;
+      /[\u0000-\u001f\u007f]/.test(decoded)) return fallback;
   try {
     const base = new URL(publicOrigin);
     if (base.protocol !== "https:" && !(base.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname))) return fallback;
