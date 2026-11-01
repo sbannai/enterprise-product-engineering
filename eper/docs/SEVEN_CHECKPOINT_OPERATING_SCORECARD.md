@@ -294,3 +294,38 @@ This is the final live-state correction for this reporting cycle. Earlier snapsh
 ### Documentation branch reconciliation
 
 This update supersedes the prior current-head snapshot where PR #320 was described as open. Earlier dated sections remain historical evidence and are not rewritten. Current main is `a9d3eb677220b540350166c4a5d7fa8576e5ad50`; PR #319's prior branch is behind/diverged and must not be merged without reconciliation.
+
+## Live evidence update — 2026-11-01 (OIDC browser-transaction guard)
+
+**Current main SHA:** `a9d3eb677220b540350166c4a5d7fa8576e5ad50`.
+
+### Official seven-checkpoint status
+
+1. **Product USP and positioning — AMBER.** The v34-to-228 crosswalk preserves all 45 source candidates, makes no unsupported exact REQ-ID mappings, and records 45 additive v1.6.0 draft candidates. Owner disposition remains open; the approved 228 requirements and 38 chapters are unchanged.
+2. **CI and persistence foundations — GREEN for local/CI scope.** Current main `dev-verify.mjs` contains all seven migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity) and repeats the same seven. The source blob `82c033e18e3912624bb4d556bfd26f47248138bc` is identical to the PR #321 tested head. Fresh-clone run [41289449907](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449907) on PR #321 head `c48ebd65f038951651f529bdfb17eb983524e4af` passed all seven apply/repeat groups, 1,148 tests with zero failures, and disposable backup/restore (59 source/restored base tables; 7 migration-ledger tables). No direct workflow/status context was returned for current main SHA `a9d3eb6`; this is not production recovery certification.
+3. **Architecture and execution boundaries — AMBER.** OIDC protocol and durable session/assignment foundations exist. Browser-session authorization is integrated for customer tickets, application listing and settings. Production login/callback/logout, session issuance/rotation, durable role resolution and remaining workspace-route integration are incomplete. No identity or role is inferred from arbitrary OIDC claims.
+4. **Workflow execution design and schema — AMBER.** Durable workflow definitions/versions, role assignments, execution state, transitions, transactional outbox, leases/fencing, retry/dead-letter and audited dead-letter operations are implemented and have CI coverage. A full restart/duplicate-delivery lifecycle proof against an independently supervised worker host remains outstanding.
+5. **Integrated validation — AMBER.** PR #324's exact head passed its nine applicable Actions, including controlled QA, chapter matrix, technical simulation and same-commit integrated validation. The current main merge SHA has no separate workflow runs or combined-status contexts returned by the available integration; do not infer merge-SHA acceptance from PR-head success.
+6. **PR consolidation and governance — AMBER.** Current open PRs are #323 (scorecard/developer-guide documentation) and #324 (OIDC browser transaction guards). PR #320 is merged as current main `a9d3eb677220b540350166c4a5d7fa8576e5ad50`. PR #319 was closed unmerged and superseded by #323; its fresh-clone documentation correction was carried forward. Branch-protection/ruleset configuration remains unverified and requires owner-approved hardening.
+7. **Workflow publisher/runtime implementation — AMBER.** Worker/process logic, lease renewal/fencing, retry/dead-letter and audit operations exist. The API package exposes only the API start script; the API startup does not instantiate an independently supervised outbox/scheduler worker. Restricted platform-worker context, approved dispatcher, host supervision/restart policy, production metrics/alerts, load and recovery evidence remain open.
+
+### PR #324 — browser-bound OIDC transaction guard
+
+- Current exact head: `18e31d4c058feb2ee7fe180329d510a16022fb15`, based directly on main `a9d3eb677220b540350166c4a5d7fa8576e5ad50`.
+- All nine applicable exact-head Actions completed successfully: EPER CI [41293166633](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166633), controlled QA [41293166620](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166620), 228/38 matrix [41293166652](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166652), G9 [41293166662](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166662), six-family HTTP smoke [41293166636](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166636), container smoke [41293166638](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166638), release build [41293166625](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166625), technical simulation [41293166640](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166640) and integrated validation [41293166675](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293166675).
+- Controlled QA recorded 1,119 passed, zero failed and 17 skipped. The chapter matrix recorded 259 passed and zero failed.
+- Delivered in this slice: host-only short-lived HttpOnly/Secure/SameSite=Lax state cookie, constant-time callback-state comparison, duplicate/missing/mismatched-state rejection, state-cookie clearing, and same-origin return-path normalization that rejects unsafe absolute/protocol-relative/backslash/control/encoded-separator forms.
+- This PR does **not** implement login-start/callback/logout routes, session issuance/rotation, durable role resolution or browser E2E. Issue [#322](https://github.com/sbannai/enterprise-product-engineering/issues/322) remains the implementation objective. Do not describe PR #324 as production customer login.
+
+### PR #323 — scorecard and fresh-clone documentation
+
+- Current head before this append: `b80296f0aba5986dab96dcd437b6feb6ff81ce90`; it is documentation-only and has no PR-triggered Actions or commit-status contexts.
+- The branch updates `eper/DEVELOPER_SETUP.md` to document the exact seven-group apply/repeat sequence in current main `dev-verify.mjs`. The prior closed-unmerged PR #319 branch is superseded; the documentation correction is carried in this successor.
+- No approved requirement or chapter changes, no chargeable cloud resources and no real external/provider dispatch.
+
+### Current merge and evidence boundaries
+
+- PR #306 merge SHA `6e8dd438e5091b1802d65e4f29951389fe077859` is an ancestor of current main; current main is 11 commits ahead and zero behind.
+- PR #321 merge SHA `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17` is an ancestor of current main.
+- PR #320 exact head `5e712320ca4b3ab3ea89495becbedfc366bdf949` had 11/11 applicable PR-head workflows pass (controlled QA: 1,113 passed, zero failed). It merged as current main `a9d3eb677220b540350166c4a5d7fa8576e5ad50`; no separate merge-SHA Actions or combined-status contexts were returned.
+- No chargeable cloud resources were provisioned and no real provider/external dispatch was triggered.
