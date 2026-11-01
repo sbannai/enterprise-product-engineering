@@ -18,7 +18,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({"tenant-01":{"app-01":{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
   });
   const state="s".repeat(43), sessionToken="t".repeat(43);
-  let origin="", active=false, server, browser;
+  let origin="https://eper.test", backendOrigin="", active=false, server, browser;
   const store={
     async createLoginTransaction(){},
     async consumeLoginTransaction(){return {nonceHash:"n",pkceVerifierCiphertext:"p",issuer:"https://idp.example.test",redirectUri:origin+"/customer/auth/oidc/callback"};},
@@ -37,12 +37,12 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"0.0.0.0",resolve);});
     const address=server.address();
     assert.ok(address && typeof address !== "string");
-    origin="http://127.0.0.1:"+address.port;
-    serverOptions.customerOidcPublicOrigin=origin;
+    backendOrigin="http://127.0.0.1:"+address.port;
     const base=origin;
     browser=await chromium.launch({headless:true,args:["--no-proxy-server","--proxy-server=direct://","--proxy-bypass-list=*"]});
-    const page=await browser.newPage();
-    await page.route("**/*", async route => {
+    const context=await browser.newContext({ignoreHTTPSErrors:true});
+    const page=await context.newPage();
+    await context.route("**/*", async route => {
       const request = route.request();
       const requestUrl = new URL(request.url());
       if (requestUrl.hostname === "idp.example.test") {
@@ -54,7 +54,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
       // Chromium owns navigation, cookie storage, redirects, fetch and user input.
       // Node bridges only the local HTTP transport for runners where Chromium cannot
       // resolve loopback, while requests still reach the real EPER server.
-      const upstream = await fetch(request.url(), {
+      const upstream = await fetch(backendOrigin + requestUrl.pathname + requestUrl.search, {
         method: request.method(),
         headers: request.headers(),
         body: ["GET", "HEAD"].includes(request.method()) ? undefined : request.postDataBuffer(),
