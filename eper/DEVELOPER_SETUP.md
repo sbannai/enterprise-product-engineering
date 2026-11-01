@@ -79,7 +79,19 @@ npm start
 
 The base API process is not proof that every optional capability is enabled. Payment, ticketing, workflow, scheduler, agent and customer routes have explicit configuration/readiness gates. Configure only the local feature flags and test identities required for the capability being developed. Do not add real provider credentials or enable outbound messaging/publication during routine local verification.
 
-## 6. Stop and reset local PostgreSQL
+## 6. Prove backup and restore locally
+
+After migrations have been applied, install PostgreSQL client utilities and run the disposable restore drill:
+
+```bash
+export DATABASE_URL='postgres://eper:local-only-password@127.0.0.1:5432/eper_test_local'
+export RESTORE_DATABASE_URL='postgres://eper:local-only-password@127.0.0.1:5432/eper_restore_test'
+bash scripts/postgres-backup-restore-smoke.sh
+```
+
+See [POSTGRES_BACKUP_RESTORE_RUNBOOK.md](docs/POSTGRES_BACKUP_RESTORE_RUNBOOK.md) for the safety checks and the difference between a local restore smoke and production recovery certification.
+
+## 7. Stop and reset local PostgreSQL
 
 Stop while preserving data:
 
@@ -95,13 +107,13 @@ docker compose -f docker-compose.local.yml down -v
 
 Never run the destructive reset against a shared database.
 
-## 7. What this setup proves—and what it does not
+## 8. What this setup proves—and what it does not
 
 A successful `dev:verify` run proves the selected checkout typechecks/builds, the local migration sequence executes, repeatability checks pass, and the tests actually enabled in that run pass against the disposable local database. Preserve the commit SHA and full command output with the evidence.
 
 It does not prove production scale, production backup/restore, cloud deployment, external provider delivery, business acceptance or Business UAT. Those require separate evidence and authorization.
 
-## 8. CI equivalence and handover
+## 9. CI equivalence and handover
 
 The canonical CI sequence is in `.github/workflows/ci.yml` and `.github/workflows/eper-integrated-validation.yml`. When changing migrations, keep the local script and CI migration order aligned. A new engineer should be able to clone the repository, start PostgreSQL, run `npm ci`, run `npm run dev:verify`, and reproduce the same tests without relying on a prior chat or private workstation state.
 
