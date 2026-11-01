@@ -103,12 +103,15 @@ export class PostgresWorkflowOutboxStore {
       await client.query(
         `UPDATE eper_workflow_outbox_delivery
             SET delivery_status = 'dead_letter', locked_at = NULL, locked_by = NULL,
-                last_error = COALESCE(last_error, 'WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS'),
+                last_error = COALESCE(last_error, CASE WHEN delivery_status = 'processing' THEN 'WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS' ELSE 'WORKFLOW_OUTBOX_MAX_ATTEMPTS_EXHAUSTED' END),
                 updated_at = NOW()
           WHERE tenant_id = $1 AND application_id = $2
-            AND delivery_status = 'processing'
-            AND locked_at <= NOW() - ($3::int * INTERVAL '1 second')
-            AND attempts >= $4::int`,
+            AND attempts >= $4::int
+            AND (
+              delivery_status = 'pending'
+              OR (delivery_status = 'processing'
+                  AND locked_at <= NOW() - ($3::int * INTERVAL '1 second'))
+            )`,
         [context.tenantId, context.applicationId, leaseSeconds, maxAttempts],
       );
       const result = await client.query<EventRow>(
