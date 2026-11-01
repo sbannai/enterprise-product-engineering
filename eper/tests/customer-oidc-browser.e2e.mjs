@@ -75,7 +75,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     assert.equal(logout,204);
     const denied=await page.goto(origin+"/customer/settings?applicationId=app-01");
     assert.equal(denied.status(),401);
-    assert.equal((await denied.json()).error,"UNAUTHENTICATED");
+    assert.equal((await denied.json()).error.code,"UNAUTHENTICATED");
   } finally {
     if(browser) await browser.close();
     if(tlsServer) await new Promise(resolve=>tlsServer.close(resolve));
