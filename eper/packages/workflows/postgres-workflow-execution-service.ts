@@ -201,7 +201,9 @@ async function authorizeRole(
         ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
        AND rd.role_id = r.role_id AND rd.role_status = 'active'
      WHERE r.tenant_id = $1 AND r.application_id = $2 AND r.actor_id = $3
-       AND r.role_id = $4 AND r.assignment_status = 'active' AND rd.permissions ? $5
+       AND r.role_id = $4 AND r.assignment_status = 'active'
+       AND (rd.permissions ? $5 OR
+         ($5 IN ('workflow:view', 'workflow:act') AND rd.permissions ? 'workflow:admin'))
      LIMIT 1 FOR SHARE OF r, aa, ta, rd`,
     [context.tenantId, context.applicationId, context.actorId, roleId, permission],
   );
