@@ -12,7 +12,7 @@ test("outbox process continuously drains authorized scopes and deduplicates cont
       workerCalls++;
       assert.deepEqual(context, { tenantId: "tenant-a", applicationId: "app-a" });
       assert.equal(limit, 5);
-      return { claimed: workerCalls === 1 ? 1 : 0, delivered: workerCalls === 1 ? 1 : 0, retried: 0, deadLettered: 0, leaseLost: 0 };
+      return { claimed: workerCalls === 1 ? 1 : 0, delivered: workerCalls === 1 ? 1 : 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 };
     },
   };
   const contexts = {
@@ -36,8 +36,8 @@ test("outbox process continuously drains authorized scopes and deduplicates cont
   assert.equal(discoveries, 2);
   assert.equal(workerCalls, 2);
   assert.deepEqual(passes, [
-    { claimed: 1, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, contextsVisited: 1 },
-    { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, contextsVisited: 1 },
+    { claimed: 1, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0, contextsVisited: 1 },
+    { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0, contextsVisited: 1 },
   ]);
 });
 
@@ -49,7 +49,7 @@ test("outbox process reports a tenant-scope failure and continues other scopes",
     async runOnce(context) {
       workerCalls.push(context.applicationId);
       if (context.applicationId === "app-a") throw new Error("database unavailable");
-      return { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0 };
+      return { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 };
     },
   };
   const contexts = {
@@ -71,7 +71,7 @@ test("outbox process reports a tenant-scope failure and continues other scopes",
 });
 
 test("outbox process rejects unsafe polling and context limits", () => {
-  const worker = { async runOnce() { return { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0 }; } };
+  const worker = { async runOnce() { return { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 }; } };
   const contexts = { async listActiveContexts() { return []; } };
   assert.throws(() => new WorkflowOutboxProcess(worker, contexts, { idlePollMs: 1 }), /WORKFLOW_OUTBOX_PROCESS_OPTIONS_INVALID/);
   assert.throws(() => new WorkflowOutboxProcess(worker, contexts, { maxContextsPerPass: 20_000 }), /WORKFLOW_OUTBOX_PROCESS_OPTIONS_INVALID/);
