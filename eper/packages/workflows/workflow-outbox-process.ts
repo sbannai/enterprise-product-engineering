@@ -84,11 +84,13 @@ export class WorkflowOutboxProcess {
           if (signal.aborted) break;
           total.contextsVisited += 1;
           try {
-            const result = await this.worker.runOnce(context, this.options.batchSize);
+            const result = await this.worker.runOnce(context, this.options.batchSize, signal);
             total.claimed += result.claimed;
             total.delivered += result.delivered;
             total.retried += result.retried;
             total.deadLettered += result.deadLettered;
+            total.leaseLost += result.leaseLost;
+            total.interrupted += result.interrupted;
             total.leaseLost += result.leaseLost;
           } catch (error) {
             try { this.options.onError?.(error, context); } catch { /* observability callbacks must not stop delivery */ }
