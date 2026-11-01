@@ -164,3 +164,27 @@ test("outbox worker propagates shutdown cancellation and leaves ambiguous claims
   assert.deepEqual(calls, []);
   assert.deepEqual(result, { claimed: 1, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 1 });
 });
+
+
+test("outbox worker waits for sibling claims to settle before surfacing bookkeeping failures", async () => {
+  const batch = events.slice(0, 2);
+  let siblingFinished = false;
+  const store = {
+    async claim() { return batch; },
+    async renewLease() { return true; },
+    async markDelivered() {},
+    async markFailed() { throw new Error("database acknowledgement unavailable"); },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch(event) {
+      if (event.eventId === batch[0].eventId) throw new Error("provider rejected event");
+      await new Promise(resolve => setTimeout(resolve, 30));
+      siblingFinished = true;
+    },
+  }, { workerId: "worker-01", leaseSeconds: 10 });
+  await assert.rejects(
+    () => worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 2),
+    /database acknowledgement unavailable/,
+  );
+  assert.equal(siblingFinished, true, "runOnce must not reject while another claimed dispatch is still active");
+});
