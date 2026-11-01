@@ -96,8 +96,10 @@ export class WorkflowOutboxWorker {
     const controller = new AbortController();
     let leaseLost = false;
     let shutdownRequested = shutdownSignal?.aborted ?? false;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     const requestShutdown = () => {
       shutdownRequested = true;
+      if (heartbeat) if (heartbeat) clearInterval(heartbeat);
       controller.abort(shutdownSignal?.reason ?? new Error("WORKFLOW_OUTBOX_SHUTDOWN"));
     };
     if (shutdownSignal) {
@@ -107,8 +109,8 @@ export class WorkflowOutboxWorker {
     }
     let renewalInFlight: Promise<void> | null = null;
     const heartbeatMs = Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3));
-    const heartbeat = setInterval(() => {
-      if (renewalInFlight || leaseLost) return;
+    if (!shutdownRequested) heartbeat = setInterval(() => {
+      if (shutdownRequested || renewalInFlight || leaseLost) return;
       renewalInFlight = (async () => {
         try {
           const renewed = await this.store.renewLease(
@@ -136,13 +138,13 @@ export class WorkflowOutboxWorker {
         return;
       }
       // Stop scheduling renewals before acknowledging; an interval tick must not race markDelivered.
-      clearInterval(heartbeat);
+      if (heartbeat) clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       if (leaseLost) throw new WorkflowOutboxLeaseLostError();
       await this.store.markDelivered(context, event.eventId, this.options.workerId);
       result.delivered += 1;
     } catch (error) {
-      clearInterval(heartbeat);
+      if (heartbeat) clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       if (shutdownRequested) {
         // Preserve the claimed row for lease-expiry recovery; cancellation may leave provider outcome ambiguous.
@@ -166,7 +168,7 @@ export class WorkflowOutboxWorker {
       if (failure.status === "dead_letter") result.deadLettered += 1;
       else result.retried += 1;
     } finally {
-      clearInterval(heartbeat);
+      if (heartbeat) clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       shutdownSignal?.removeEventListener("abort", requestShutdown);
     }
