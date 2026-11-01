@@ -77,3 +77,57 @@ test("worker fails closed if fresh authorization lookup throws", async () => {
   assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE");
   assert.equal(failed?.maxAttempts, 4);
 });
+
+
+// The worker receives a fresh policy decision immediately before acquiring the
+// irreversible dispatch fence. These regressions prove that approval revocation
+// and consent withdrawal both stop dispatch without touching the provider.
+for (const policyCase of [
+  {
+    name: "approval revocation",
+    livePolicy: { approvalStatus: "revoked", consentStatus: "granted" },
+    isAuthorized(policy) {
+      return policy.approvalStatus === "approved" && policy.consentStatus === "granted";
+    },
+  },
+  {
+    name: "consent withdrawal",
+    livePolicy: { approvalStatus: "approved", consentStatus: "withdrawn" },
+    isAuthorized(policy) {
+      return policy.approvalStatus === "approved" && policy.consentStatus === "granted";
+    },
+  },
+]) {
+  test("worker does not dispatch after live " + policyCase.name, async () => {
+    const controller = new AbortController();
+    let claimed = false;
+    let providerCalls = 0;
+    let failed = null;
+    const execution = {
+      id: "exec-live-policy", scheduleId: "schedule-live-policy", tenantId: "tenant-a", applicationId: "app-a",
+      scheduledFor: "2026-10-27T08:00:00.000Z", status: "running", attemptCount: 1,
+      idempotencyKey: "campaign:schedule-live-policy:run-1", payload: {}, availableAt: "2026-10-27T08:00:00.000Z",
+    };
+    const store = {
+      async recoverStaleExecutions() {},
+      async materializeDueOneTimeSchedules() {},
+      async materializeDueRecurringSchedules() {},
+      async claimExecutions() { if (claimed) return []; claimed = true; return [execution]; },
+      async beginExecutionDispatch() {
+        throw new Error("dispatch fence must not be acquired after live policy revocation");
+      },
+      async failExecution(input) { failed = input; controller.abort(); return "dead_letter"; },
+      async completeExecution() { throw new Error("must not complete an unauthorized execution"); },
+    };
+    await runCampaignExecutionWorker(store, async () => {
+      providerCalls += 1;
+      return { outcome: {} };
+    }, {
+      workerId: "test-worker", signal: controller.signal, idleDelayMs: 100,
+      authorizeDispatch: async () => policyCase.isAuthorized(policyCase.livePolicy),
+    });
+    assert.equal(providerCalls, 0);
+    assert.equal(failed?.errorCode, "CAMPAIGN_DISPATCH_POLICY_DENIED");
+    assert.equal(failed?.maxAttempts, 1);
+  });
+}
