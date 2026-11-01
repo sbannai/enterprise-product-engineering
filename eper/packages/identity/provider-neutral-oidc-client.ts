@@ -15,7 +15,7 @@ export interface ProviderNeutralOidcConfig {
 }
 interface OidcDiscovery { issuer: string; authorization_endpoint: string; token_endpoint: string; jwks_uri: string; }
 interface JwkSet { keys: Array<JsonWebKey & { kid?: string; use?: string; alg?: string }> }
-interface JwtHeader { alg: string; kid: string; typ?: string; }
+interface JwtHeader { alg: string; kid: string; typ?: string; crit?: unknown; }
 interface JwtClaims { iss: string; sub: string; aud: string | string[]; exp: number; iat?: number; nbf?: number; nonce: string; azp?: string; [key: string]: unknown; }
 
 function sha256(value: string): string { return createHash("sha256").update(value, "utf8").digest("hex"); }
@@ -148,7 +148,7 @@ export class ProviderNeutralOidcClient {
     if (parts.length !== 3) throw new Error("EPER_OIDC_JWT_FORMAT_INVALID");
     const header = parseJsonSegment<JwtHeader>(parts[0]);
     const claims = parseJsonSegment<JwtClaims>(parts[1]);
-    if (!["RS256", "PS256", "ES256"].includes(header.alg) || typeof header.kid !== "string" || !header.kid) throw new Error("EPER_OIDC_JWT_ALGORITHM_UNSUPPORTED");
+    if (!["RS256", "PS256", "ES256"].includes(header.alg) || typeof header.kid !== "string" || !header.kid || header.crit !== undefined) throw new Error("EPER_OIDC_JWT_ALGORITHM_UNSUPPORTED");
     let jwks = await this.jwks(discovery);
     let jwk = jwks.keys.find(key => key.kid === header.kid && (!key.use || key.use === "sig") && (!key.alg || key.alg === header.alg));
     if (!jwk) { jwks = await this.jwks(discovery, true); jwk = jwks.keys.find(key => key.kid === header.kid && (!key.use || key.use === "sig") && (!key.alg || key.alg === header.alg)); }
@@ -168,6 +168,7 @@ export class ProviderNeutralOidcClient {
         audience.length > 1 && claims.azp !== this.config.clientId ||
         claims.azp !== undefined && claims.azp !== this.config.clientId ||
         !Number.isFinite(claims.exp) || claims.exp <= nowSeconds ||
+        !Number.isFinite(claims.iat) ||
         claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > nowSeconds) ||
         claims.iat !== undefined && (!Number.isFinite(claims.iat) || claims.iat > nowSeconds + 60) ||
         typeof claims.sub !== "string" || !claims.sub.trim() || claims.sub.length > 512 ||
