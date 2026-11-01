@@ -14,6 +14,8 @@ import { PostgresWorkflowRoleDefinitionStore } from "../../packages/workflows/po
 import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflows/postgres-workflow-actor-role-assignment-store.js";
 import { WorkflowDefinitionPublisher, WorkflowDefinitionPublishError } from "../../packages/workflows/workflow-definition-publisher.js";
 import { PostgresWorkflowExecutionService, WorkflowExecutionError } from "../../packages/workflows/postgres-workflow-execution-service.js";
+import { PostgresWorkflowOutboxStore } from "../../packages/workflows/postgres-workflow-outbox-store.js";
+import { replayWorkflowOutboxDeadLetter, type WorkflowOutboxReplayContext } from "../../packages/workflows/workflow-outbox-dead-letter-replay.js";
 import { AdminConfigurationConflictError, PostgresAdminConfigurationStore, type AdminConfigurationResource } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
@@ -446,7 +448,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -543,6 +545,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const workflowPublishRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/publish$/.exec(requestUrl.pathname);
     const workflowStartRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/instances$/.exec(requestUrl.pathname);
     const workflowTransitionRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-instances\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/transitions$/i.exec(requestUrl.pathname);
+    const workflowOutboxDeadLetters = /^\\/admin\\/applications\\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\\/workflow-outbox\\/dead-letters$/.exec(requestUrl.pathname);
+    const workflowOutboxReplayRoute = /^\\/admin\\/applications\\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\\/workflow-outbox\\/dead-letters\\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\\/replay$/i.exec(requestUrl.pathname);
     const actionProposalCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals$/.exec(requestUrl.pathname);
     const actionProposalDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(requestUrl.pathname);
     const actionProposalDecisions = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/decisions$/.exec(requestUrl.pathname);
@@ -832,6 +836,92 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendApiSuccess(request, response, 201, { published }); return;
         }
       } catch (error) { workflowError(error); return; }
+    }
+
+
+    if (workflowOutboxDeadLetters || workflowOutboxReplayRoute) {
+      if (process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveAdminConfigIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
+          !options.workflowActorRoleAssignmentStore) {
+        sendApiError(request, response, 503, "WORKFLOW_OUTBOX_ADMIN_UNAVAILABLE", "Workflow outbox administration is not configured."); return;
+      }
+      const applicationId = (workflowOutboxDeadLetters ?? workflowOutboxReplayRoute)![1];
+      const outboxStore = options.workflowOutboxStore ??
+        (options.capabilityPool ? new PostgresWorkflowOutboxStore(options.capabilityPool as unknown as AuditSqlPool) : undefined);
+      const replay = options.workflowOutboxReplay ??
+        (options.capabilityPool ? replayWorkflowOutboxDeadLetter : undefined);
+      if (!outboxStore || (workflowOutboxReplayRoute && !replay)) {
+        sendApiError(request, response, 503, "WORKFLOW_OUTBOX_ADMIN_UNAVAILABLE", "Workflow outbox persistence is not configured."); return;
+      }
+      try {
+        const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
+        if (!tenantApplications.includes(applicationId)) {
+          sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+        }
+        if (!(await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId))) {
+          sendApiError(request, response, 403, "ADMIN_NOT_ASSIGNED_TO_APPLICATION", "The administrator is not assigned to this application."); return;
+        }
+        const roleIds = await options.workflowActorRoleAssignmentStore.listActiveRoleIds(identity.tenantId, applicationId, identity.actorId);
+        let isWorkflowAdmin = false;
+        for (const roleId of roleIds) {
+          if (await options.workflowActorRoleAssignmentStore.hasPermission(identity.tenantId, applicationId, identity.actorId, roleId, "workflow:admin")) {
+            isWorkflowAdmin = true; break;
+          }
+        }
+        if (!isWorkflowAdmin) {
+          sendApiError(request, response, 403, "WORKFLOW_OUTBOX_ADMIN_PERMISSION_REQUIRED", "The workflow administrator permission is required."); return;
+        }
+        if (workflowOutboxDeadLetters) {
+          if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+          const rawLimit = requestUrl.searchParams.get("limit");
+          const limit = rawLimit === null ? 50 : Number(rawLimit);
+          if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+            sendApiError(request, response, 400, "WORKFLOW_OUTBOX_DEAD_LETTER_LIMIT_INVALID", "The list limit must be between 1 and 200."); return;
+          }
+          const deadLetters = await outboxStore.listDeadLetters({ tenantId: identity.tenantId, applicationId }, limit);
+          sendApiSuccess(request, response, 200, { deadLetters }); return;
+        }
+        if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+        const body = await readJson(request);
+        if (!allowedBodyKeys(body, ["reason", "idempotencyKey"]) ||
+            typeof body.reason !== "string" || !body.reason.trim() || body.reason.length > 2000 ||
+            typeof body.idempotencyKey !== "string" || body.idempotencyKey.trim().length < 16 ||
+            body.idempotencyKey !== body.idempotencyKey.trim() || body.idempotencyKey.length > 128) {
+          sendApiError(request, response, 400, "WORKFLOW_OUTBOX_REPLAY_INPUT_INVALID", "A reason and unique idempotency key are required."); return;
+        }
+        const environment = options.adminConfigEnvironment ?? "sandbox";
+        const context: WorkflowOutboxReplayContext = {
+          tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+          correlationId: resolveApiRequestId(request), environment,
+        };
+        const result = await replay!(options.capabilityPool as unknown as AuditSqlPool, context, {
+          eventId: workflowOutboxReplayRoute![2], workerId: "operator-" + randomUUID(),
+          reason: body.reason, idempotencyKey: body.idempotencyKey,
+        });
+        sendApiSuccess(request, response, result.alreadyApplied ? 200 : 202, { replay: result }); return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "WORKFLOW_OUTBOX_ADMIN_FAILED";
+        if (error instanceof SyntaxError || message === "JSON_OBJECT_REQUIRED") {
+          sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required."); return;
+        }
+        if (message === "REQUEST_BODY_TOO_LARGE") {
+          sendApiError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body is too large."); return;
+        }
+        const status = /NOT_FOUND/.test(message) ? 404
+          : /PERMISSION_DENIED/.test(message) ? 403
+          : /CONFLICT|IDEMPOTENCY|STATE_CONFLICT/.test(message) ? 409
+          : /INVALID|REQUIRED/.test(message) ? 400 : 503;
+        const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "WORKFLOW_OUTBOX_ADMIN_FAILED";
+        sendApiError(request, response, status, code, "The workflow outbox operation could not be completed."); return;
+      }
     }
 
     if (workflowStartRoute || workflowTransitionRoute) {
