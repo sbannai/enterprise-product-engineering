@@ -1,6 +1,7 @@
 import type { WorkflowOutboxContext } from "./postgres-workflow-outbox-store.js";
 import {
   WorkflowOutboxWorker,
+  WorkflowOutboxRunError,
   type WorkflowOutboxRunResult,
 } from "./workflow-outbox-worker.js";
 
@@ -92,6 +93,14 @@ export class WorkflowOutboxProcess {
             total.leaseLost += result.leaseLost;
             total.interrupted += result.interrupted;
           } catch (error) {
+            if (error instanceof WorkflowOutboxRunError) {
+              total.claimed += error.result.claimed;
+              total.delivered += error.result.delivered;
+              total.retried += error.result.retried;
+              total.deadLettered += error.result.deadLettered;
+              total.leaseLost += error.result.leaseLost;
+              total.interrupted += error.result.interrupted;
+            }
             try { this.options.onError?.(error, context); } catch { /* observability callbacks must not stop delivery */ }
           }
         }
