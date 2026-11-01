@@ -4,7 +4,7 @@
 **Source register export:** `eper/docs/requirements/source/EPER_CW_Wireframe_v34_Requirements_Source_Export.csv`  
 **Source date:** 2026-10-27  
 **Review baseline:** `a1b93decff2f292a0a81453c27801607ca5f7946`  
-**Status:** Source preserved; additive requirement reconciliation is pending.  
+**Status:** Technical reconciliation completed and recorded in `EPER_V34_TO_228_REQUIREMENTS_CROSSWALK.md`; all 45 candidates remain additive v1.6.0 draft pending owner approval and feature-level acceptance evidence.  
 **Owner instruction:** Use wireframe v34 as the customer/admin workspace baseline. Future changes must be added to the controlled requirements register and shared.
 
 ## 1. Protect the existing approved baseline
@@ -25,16 +25,21 @@ The Library workbook was labelled “v1.5.0 draft”, which conflicts with that 
 - Retain all 45 source IDs and statements during reconciliation; do not discard or silently rewrite them.
 - Version 1.6.0 remains draft until the mapping and owner approval are recorded.
 
-## 3. Mandatory reconciliation before implementation promotion
+## 3. Technical reconciliation result (2026-11-01)
 
-For every `EPER-CW-001…045` row, record one disposition:
+The controlled crosswalk `EPER_V34_TO_228_REQUIREMENTS_CROSSWALK.md` now records the complete disposition of all 45 preserved source rows:
 
-1. **MAP_TO_EXISTING** — identify the exact existing `REQ-463xx…REQ-500xx` requirement(s) and acceptance criterion that fully cover it.
-2. **ADDITIVE_1_6_0** — demonstrate that no existing approved requirement fully covers it; retain the new ID and add testable acceptance criteria.
-3. **SPLIT_OR_COMPOSITE** — split the candidate into independently testable requirements or identify all linked existing requirements.
-4. **OWNER_DECISION_REQUIRED** — retain unchanged and block implementation until the ambiguity is resolved.
+| Reconciliation result | Count | Disposition |
+|---|---:|---|
+| Exact full coverage by an approved 228 requirement | 0 | No exact REQ/acceptance-criterion match is asserted |
+| Partial support from shared baseline controls | 45 | Reuse applicable SRS-002…SRS-020 and XX01–XX06 controls; these do not satisfy feature acceptance |
+| Additive candidate requirements | 45 | Retained as `ADDITIVE_1_6_0_DRAFT`; not approved for release |
+| Existing v1.5.0 approval-control overlap | 4 | CW-007, CW-011, CW-018 and CW-020 reference `EPER-ACT-APPROVAL-001` and must preserve its human-approval rule |
+| Changes to approved 228 IDs or 38 chapters | 0 | Baseline unchanged |
 
-Do not infer mappings from a broad capability label or the XX01–XX06 pattern. Each mapping needs a specific acceptance-criterion comparison. Multiple v34 rows may map to one existing requirement and one v34 row may need multiple mappings; record the relationship explicitly.
+The 228 baseline available for this comparison provides common engineering controls and capability patterns, but does not provide exact domain-specific customer-workspace acceptance criteria for these 45 features. Therefore, the crosswalk deliberately records **zero exact matches** rather than inventing REQ-463xx…REQ-500xx links. The 45 source IDs, original statements and acceptance criteria remain preserved in the source export.
+
+This completes the **technical classification** of v34 against the available approved baseline. It does not constitute owner approval of v1.6.0, proof that any feature is implemented, or production acceptance. Any future evidence of exact coverage must identify the specific approved REQ ID and acceptance criterion and update the crosswalk/register without deleting source IDs.
 
 ## 4. Reconciliation fields
 
@@ -68,12 +73,11 @@ The controlled v1.6.0 register must carry these additional fields for every cand
 
 ## 6. Next engineering sequence
 
-1. Reconcile the 45 candidates against the 228 approved requirements and the existing v1.5.0 change-control register.
-2. Publish the resulting additive v1.6.0 draft with owner decisions and a complete traceability matrix.
-3. Link each approved v1.6.0 requirement to the six capability families, API, UI, PostgreSQL/data, events/audit, security and tests.
-4. Build complete customer journeys in dependency order: identity and tenant/application context → workspace → Help Center/Growth Hub → ticket submission/history → admin support operations → settings → scheduler/agents/notifications/pricing.
-5. Update this register on every requirement change; no new feature begins without a versioned requirement and acceptance criteria.
+1. Keep all 45 rows in the controlled v1.6.0 draft; obtain owner approval before promoting the additive scope or its proposed priorities.
+2. For each feature as it is implemented, link its immutable source ID to UI, API, PostgreSQL/data, events/audit, security and executable acceptance evidence.
+3. Build complete customer journeys in dependency order: identity and tenant/application context → workspace → Help Center/Growth Hub → ticket submission/history → admin support operations → settings → scheduler/agents/notifications/pricing.
+4. Update this register and the v1.6.0 draft on every requirement change; do not silently alter the 228 baseline.
 
 ## 7. Acceptance boundary
 
-This PR preserves the exact source wireframe and source-register export in GitHub and documents the version conflict and reconciliation rule. It does **not** claim that the 45 candidate requirements are approved, mapped, implemented, tested or released. The 228 approved requirements remain unchanged. Business UAT remains unauthorized until all entry gates are evidenced and owner-approved.
+The source wireframe and source-register export remain preserved in GitHub. The technical crosswalk classifies all 45 candidates as additive v1.6.0 draft items, with zero exact full-coverage matches and zero changes to the 228 approved requirements. This is a classification result, not owner approval, implementation evidence or release acceptance. The 228 approved requirements remain unchanged.
