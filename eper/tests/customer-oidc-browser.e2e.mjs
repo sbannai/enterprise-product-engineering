@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../dist/apps/api/server.js";
 
-test("browser OIDC login grants protected settings, logout revokes access", async () => {
+test("browser OIDC login grants the customer workspace and support journey, logout revokes access", async () => {
   const proxyKeys = ["HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","http_proxy","https_proxy","all_proxy","NO_PROXY","no_proxy"];
   const proxyPrevious = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]));
   for (const key of proxyKeys) delete process.env[key];
@@ -72,11 +72,18 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     browser=await chromium.launch({headless:true});
     const context=await browser.newContext({ignoreHTTPSErrors:true});
     const page=await context.newPage();
+    const customerResponses=[];
+    const pageErrors=[];
+    page.on("response",response=>{const url=new URL(response.url());if(url.pathname.startsWith("/customer/"))customerResponses.push(url.pathname+" "+response.status());});
+    page.on("pageerror",error=>pageErrors.push(error.message));
     await page.goto(origin+"/customer-portal-preview");
     await page.getByRole("link",{name:"Sign in with your organization"}).click();
     await page.getByRole("link",{name:"Continue sign in"}).click();
     await page.waitForURL("**/customer-portal-preview");
-    await page.getByText("Your organization session is active.").waitFor();
+    await page.waitForFunction(()=>{const text=document.getElementById("connectResult")?.textContent||"";return text!=="Checking your customer session…";});
+    const connectionMessage=await page.locator("#connectResult").textContent();
+    assert.equal(connectionMessage,"Your organization session is active.",
+      "browser workspace bootstrap failed; customer responses="+JSON.stringify(customerResponses)+" page errors="+JSON.stringify(pageErrors));
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
     await page.getByLabel("Title").fill("Browser-authenticated support request");
     await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
