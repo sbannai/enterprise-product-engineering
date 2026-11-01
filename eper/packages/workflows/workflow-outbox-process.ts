@@ -65,7 +65,7 @@ export class WorkflowOutboxProcess {
   async run(signal: AbortSignal): Promise<void> {
     while (!signal.aborted) {
       const total: WorkflowOutboxRunResult & { contextsVisited: number } = {
-        claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, contextsVisited: 0,
+        claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0, contextsVisited: 0,
       };
       try {
         const listed = await this.contexts.listActiveContexts(signal);
