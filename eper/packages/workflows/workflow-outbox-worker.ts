@@ -54,6 +54,7 @@ export class WorkflowOutboxWorker {
   async runOnce(context: WorkflowOutboxContext, limit = 20): Promise<WorkflowOutboxRunResult> {
     const events = await this.store.claim(context, {
       workerId: this.options.workerId, limit, leaseSeconds: this.leaseSeconds,
+      maxAttempts: this.maxAttempts,
     });
     const result: WorkflowOutboxRunResult = {
       claimed: events.length, delivered: 0, retried: 0, deadLettered: 0,
