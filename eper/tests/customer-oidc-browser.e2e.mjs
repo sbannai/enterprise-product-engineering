@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
+import https from "node:https";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 test("browser OIDC login grants protected settings, logout revokes access", async () => {
@@ -18,7 +23,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({"tenant-01":{"app-01":{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
   });
   const state="s".repeat(43), sessionToken="t".repeat(43);
-  let origin="https://eper.test", backendOrigin="", active=false, server, browser;
+  let origin="", backendOrigin="", active=false, server, tlsServer, browser, certDir;
   const store={
     async createLoginTransaction(){},
     async consumeLoginTransaction(){return {nonceHash:"n",pkceVerifierCiphertext:"p",issuer:"https://idp.example.test",redirectUri:origin+"/customer/auth/oidc/callback"};},
@@ -28,52 +33,44 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     async revokeSession(token){assert.equal(token,sessionToken);active=false;return true;},
   };
   try {
-    const client={async beginLogin(){return {authorizationUrl:"https://idp.example.test/authorize?state="+state,state};},async completeLogin(){return {issuer:"https://idp.example.test",subject:"subject-01"};}};
+    const client={async beginLogin(){return {authorizationUrl:origin+"/mock-idp?state="+state,state};},async completeLogin(){return {issuer:"https://idp.example.test",subject:"subject-01"};}};
     const serverOptions={customerOidcClient:client,customerIdentitySessionStore:store,
       tenantApplicationAssignmentStore:{async listActive(){return ["app-01"];}},
       actorApplicationAssignmentStore:{async isAssigned(){return true;}},
-      customerOidcPublicOrigin:origin,customerCsrfSecret:"c".repeat(48)};
+      customerOidcPublicOrigin:"https://localhost",customerCsrfSecret:"c".repeat(48)};
     server=createAppServer(serverOptions);
     await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"0.0.0.0",resolve);});
     const address=server.address();
     assert.ok(address && typeof address !== "string");
     backendOrigin="http://127.0.0.1:"+address.port;
-    const base=origin;
-    browser=await chromium.launch({headless:true,args:["--no-proxy-server","--proxy-server=direct://","--proxy-bypass-list=*"]});
+    certDir=mkdtempSync(join(tmpdir(),"eper-oidc-cert-"));
+    const keyPath=join(certDir,"key.pem"), certPath=join(certDir,"cert.pem");
+    execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-keyout",keyPath,"-out",certPath,"-days","1","-subj","/CN=localhost","-addext","subjectAltName=DNS:localhost"]);
+    tlsServer=https.createServer({key:readFileSync(keyPath),cert:readFileSync(certPath)},async(req,res)=>{
+      if(req.url==="/mock-idp"){res.writeHead(200,{"content-type":"text/html"});res.end('<a href="'+origin+'/customer/auth/oidc/callback?code=browser-code&state='+state+'">Continue sign in</a>');return;}
+      const chunks=[];for await(const chunk of req)chunks.push(chunk);
+      try{
+        const upstream=await fetch(backendOrigin+req.url,{method:req.method,headers:req.headers,body:["GET","HEAD"].includes(req.method)?undefined:Buffer.concat(chunks),redirect:"manual"});
+        const headers=Object.fromEntries(upstream.headers.entries());
+        const cookies=upstream.headers.getSetCookie?.();if(cookies?.length)headers["set-cookie"]=cookies;
+        res.writeHead(upstream.status,headers);res.end(Buffer.from(await upstream.arrayBuffer()));
+      }catch{res.writeHead(502);res.end();}
+    });
+    await new Promise((resolve,reject)=>{tlsServer.once("error",reject);tlsServer.listen(0,"127.0.0.1",resolve);});
+    origin="https://localhost:"+tlsServer.address().port;
+    serverOptions.customerOidcPublicOrigin=origin;
+    browser=await chromium.launch({headless:true});
     const context=await browser.newContext({ignoreHTTPSErrors:true});
     const page=await context.newPage();
-    await context.route("**/*", async route => {
-      const request = route.request();
-      const requestUrl = new URL(request.url());
-      if (requestUrl.hostname === "idp.example.test") {
-        await route.fulfill({status:200,contentType:"text/html",
-          body:`<a href="${base}/customer/auth/oidc/callback?code=browser-code&state=${state}">Continue sign in</a>`});
-        return;
-      }
-      if (requestUrl.origin !== base) { await route.continue(); return; }
-      // Chromium owns navigation, cookie storage, redirects, fetch and user input.
-      // Node bridges only the local HTTP transport for runners where Chromium cannot
-      // resolve loopback, while requests still reach the real EPER server.
-      const upstream = await fetch(backendOrigin + requestUrl.pathname + requestUrl.search, {
-        method: request.method(),
-        headers: request.headers(),
-        body: ["GET", "HEAD"].includes(request.method()) ? undefined : request.postDataBuffer(),
-        redirect: "manual",
-      });
-      const headers = Object.fromEntries(upstream.headers.entries());
-      const setCookies = upstream.headers.getSetCookie?.();
-      if (setCookies?.length) headers["set-cookie"] = setCookies.join(", ");
-      await route.fulfill({status:upstream.status,headers,body:Buffer.from(await upstream.arrayBuffer())});
-    });
-    await page.goto(base+"/customer/auth/oidc/start?returnTo="+encodeURIComponent("/customer/settings?applicationId=app-01"));
+    await page.goto(origin+"/customer/auth/oidc/start?returnTo="+encodeURIComponent("/customer/settings?applicationId=app-01"));
     await page.getByRole("link",{name:"Continue sign in"}).click();
     await page.waitForURL("**/customer/settings?applicationId=app-01");
-    const allowed=await page.goto(base+"/customer/settings?applicationId=app-01");
+    const allowed=await page.goto(origin+"/customer/settings?applicationId=app-01");
     assert.equal(allowed.status(),200);
     assert.deepEqual(await allowed.json(),{applicationId:"app-01",settings:{displayName:"Customer workspace",locale:"en-US",currency:"USD"}});
     const logout=await page.evaluate(async()=>{
       const csrf=document.cookie.split("; ").find(v=>v.startsWith("__Host-eper_csrf="))?.split("=")[1]??"";
-      return (await fetch("/customer/auth/logout",{method:"POST",headers:{"x-csrf-token":csrf}})).status;
+      return (await fetch("${origin}/customer/auth/logout",{method:"POST",headers:{"x-csrf-token":csrf}})).status;
     });
     assert.equal(logout,204);
     const denied=await page.goto(base+"/customer/settings?applicationId=app-01");
@@ -81,6 +78,8 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     assert.equal((await denied.json()).error,"UNAUTHENTICATED");
   } finally {
     if(browser) await browser.close();
+    if(tlsServer) await new Promise(resolve=>tlsServer.close(resolve));
+    if(certDir) rmSync(certDir,{recursive:true,force:true});
     if(server) await new Promise(resolve=>server.close(resolve));
     for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
     for(const [key,value] of Object.entries(proxyPrevious)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
