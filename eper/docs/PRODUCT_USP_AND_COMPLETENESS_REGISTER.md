@@ -1,8 +1,8 @@
 # EPER Product USP & Completeness Register
 
 **Status:** Proposed product-control baseline  
-**Date:** 2026-10-31  
-**Repository baseline:** `main` at `8b181f9dda2e8ff01d2e39d7e7e62e6accb2da96`  
+**Date:** 2026-11-01  
+**Repository baseline:** `main` at `880674ac86c1c33581280b94732a792b3fb9b90f`  
 **Scope rule:** This register supplements the approved 228 requirements across Chapters 463–500. It does not replace, renumber, weaken, or silently reinterpret any approved requirement.
 
 ## 1. Product positioning
@@ -202,4 +202,7 @@ For each USP ID, maintain:
 5. Define AI BI as a governed read-only semantic query experience before adding predictive or agentic actions.
 6. Keep changes consolidated, tested, and traceable; merge only after required reviews and exact-head CI are green.
 
-**Current disposition (main `8b181f9`):** product direction and completeness criteria are documented. USP-001 workflow execution is IMPLEMENTED / CI-VALIDATED at the technical-slice level; runtime operations remain PARTIAL. Other USP dispositions remain conservative pending capability-specific evidence. No Business Acceptance or Business UAT authorization is implied.
+**Current disposition (main `880674a`):** product direction and completeness criteria are documented. USP-001 workflow execution is IMPLEMENTED / CI-VALIDATED at the technical-slice level; runtime operations remain PARTIAL. Other USP dispositions remain conservative pending capability-specific evidence. No Business Acceptance or Business UAT authorization is implied.
+
+
+**Baseline refresh (2026-11-01):** The current `main` baseline is `880674ac86c1c33581280b94732a792b3fb9b90f`. Its 13 exact-commit check-runs completed successfully, including the integrated gate, PostgreSQL/payment/receipt contracts, six-capability HTTP exercise, container runtime smoke, and the 228-requirement / 38-chapter pilot matrix. This confirms the recorded technical CI baseline only; it does not upgrade any capability to production-operational or business-accepted status.
