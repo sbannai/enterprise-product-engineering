@@ -775,6 +775,7 @@ test("customer settings require durable browser session and PostgreSQL assignmen
     const url = "http://127.0.0.1:" + address.port + "/customer/settings?applicationId=";
     const bearerOnly = await fetch(url + "app-a", { headers: { authorization: "Bearer " + bearer } });
     assert.equal(bearerOnly.status, 401, "PostgreSQL mode must ignore bearer identity maps");
+    assert.deepEqual(calls, [], "a bearer-only request has no browser session token to resolve");
     const allowed = await fetch(url + "app-a", { headers: { cookie: "__Host-eper_session=" + sessionToken } });
     assert.equal(allowed.status, 200);
     assert.deepEqual(await allowed.json(), { applicationId: "app-a", settings: { displayName: "Admissions", currency: "INR" } });
@@ -782,7 +783,6 @@ test("customer settings require durable browser session and PostgreSQL assignmen
     assert.equal(actorDenied.status, 403);
     assert.deepEqual(await actorDenied.json(), { error: "actor_not_assigned_to_application" });
     assert.deepEqual(calls, [
-      { kind: "session", token: sessionToken },
       { kind: "session", token: sessionToken },
       { kind: "tenant", tenantId: "tenant-a" },
       { kind: "actor", tenantId: "tenant-a", actorId: "actor-a", applicationId: "app-a" },
