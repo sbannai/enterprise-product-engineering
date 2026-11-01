@@ -180,6 +180,49 @@ function resolveCustomerAccessIdentity(request: IncomingMessage): TrustedCustome
   return null;
 }
 
+type CustomerWorkspaceIdentityStores = {
+  customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore | null;
+  tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore | null;
+  actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore | null;
+};
+
+/**
+ * Resolve the customer workspace from the durable browser session in PostgreSQL mode.
+ * OIDC claims never supply roles or application access: the browser receives only the
+ * least-privilege customer-user role, and active application access is intersected from
+ * the durable tenant and actor assignment stores on every request. The legacy bearer map
+ * remains available only in compatibility mode.
+ */
+async function resolveCustomerWorkspaceIdentity(
+  request: IncomingMessage,
+  stores: CustomerWorkspaceIdentityStores,
+): Promise<TrustedCustomerAccessIdentity | null> {
+  if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres") {
+    return resolveCustomerAccessIdentity(request);
+  }
+  const sessionToken = parseCookieHeader(request.headers.cookie).get(CUSTOMER_SESSION_COOKIE);
+  if (!sessionToken || !stores.customerIdentitySessionStore ||
+      !stores.tenantApplicationAssignmentStore || !stores.actorApplicationAssignmentStore) return null;
+  try {
+    const session = await stores.customerIdentitySessionStore.resolveSession(sessionToken);
+    if (!session || !session.tenantId || !session.actorId || !session.issuer || !session.subject) return null;
+    const [tenantApplications, actorApplications] = await Promise.all([
+      stores.tenantApplicationAssignmentStore.listActive(session.tenantId),
+      stores.actorApplicationAssignmentStore.listActive(session.tenantId, session.actorId),
+    ]);
+    const tenantApplicationSet = new Set(tenantApplications);
+    return {
+      tenantId: session.tenantId,
+      actorId: session.actorId,
+      roleKey: "customer-user",
+      applicationIds: actorApplications.filter((applicationId) => tenantApplicationSet.has(applicationId)),
+    };
+  } catch {
+    // Session or assignment-store failures deny access; never fall back to bearer mapping.
+    return null;
+  }
+}
+
 /** Agent job access additionally requires an explicit server-side application assignment. */
 function resolveAgentJobIdentity(request: IncomingMessage): TrustedAgentJobIdentity | null {
   const base = resolveCustomerAccessIdentity(request);
@@ -1242,7 +1285,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     // Customer session introspection: identity is derived only from the server-side
     // credential map. This is an API boundary, not a substitute for a browser login UI.
     if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) {
         sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required.");
         return;
@@ -1252,6 +1295,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         tenantId: identity.tenantId,
         actorId: identity.actorId,
         roleKey: identity.roleKey,
+        authentication: process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres"
+          ? "postgres-browser-session" : "server-bearer-map",
       });
       return;
     }
@@ -1499,7 +1544,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
       if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
       let modulesConfig: unknown;
       let assignmentsConfig: unknown;
@@ -1589,7 +1634,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     if (assetDownloadMatch) {
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
       if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
       const [applicationId, assetId] = [assetDownloadMatch[1], assetDownloadMatch[2]];
       const requestId = resolveApiRequestId(request);
@@ -1651,7 +1696,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Tenant-scoped customer workspace module discovery; malformed configuration fails closed.
     if (requestUrl.pathname === "/customer/workspace/modules" && request.method === "GET") {
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
       let tenantModules: unknown;
       try { tenantModules = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
@@ -1671,7 +1716,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     // Customer-facing read-only content is configured per tenant; no admin settings or secrets are exposed.
     const customerContentRoute = /^\/customer\/(help-center|growth-hub)\/content$/.exec(requestUrl.pathname);
     if (customerContentRoute && request.method === "GET") {
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
       const moduleKey = customerContentRoute[1] === "help-center" ? "help-center" : "growth-hub";
       let tenantModules: unknown;
@@ -2732,13 +2777,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
-    // Authenticated customer portal context. Identity comes only from server-side bearer mapping.
+    // Authenticated customer portal context. Identity is resolved from the durable browser session in PostgreSQL mode, or the compatibility bearer map otherwise.
     if (request.method === "GET" && requestUrl.pathname === "/customer/portal/context") {
       if (process.env.EPER_CUSTOMER_PORTAL_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" });
         return;
       }
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) {
         sendJson(request, response, 401, { error: "unauthorized" });
         return;
