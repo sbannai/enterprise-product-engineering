@@ -85,6 +85,14 @@ export async function replayWorkflowOutboxDeadLetter(
     );
     if (!authorization.rows[0]) throw new Error("WORKFLOW_OUTBOX_REPLAY_PERMISSION_DENIED");
 
+    // Serialize requests using the same tenant/application idempotency key.
+    // A concurrent caller then observes the committed prior replay before it
+    // can lock a different delivery row and hit the unique constraint.
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+      [context.tenantId + ":" + context.applicationId + ":" + input.idempotencyKey],
+    );
+
     const prior = await client.query<{
       replay_id: string; event_id: string; prior_attempts: number | string;
     }>(
