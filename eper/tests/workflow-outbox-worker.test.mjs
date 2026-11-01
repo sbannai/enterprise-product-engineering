@@ -182,9 +182,17 @@ test("outbox worker waits for sibling claims to settle before surfacing bookkeep
       siblingFinished = true;
     },
   }, { workerId: "worker-01", leaseSeconds: 10 });
-  await assert.rejects(
-    () => worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 2),
-    /database acknowledgement unavailable/,
+  let failure;
+  try {
+    await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 2);
+  } catch (error) {
+    failure = error;
+  }
+  assert.match(failure?.message ?? "", /WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED/);
+  assert.equal(
+    failure.errors.some(error => error.message === "database acknowledgement unavailable"),
+    true,
+    "the original bookkeeping failure must remain available",
   );
   assert.equal(siblingFinished, true, "runOnce must not reject while another claimed dispatch is still active");
 });
