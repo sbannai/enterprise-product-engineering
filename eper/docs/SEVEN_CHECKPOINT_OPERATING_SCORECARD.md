@@ -213,3 +213,33 @@ The preceding 13:55 snapshot recorded PR #318 while it was still open. A subsequ
 - **Next action:** Complete exact-head validation of #320, then continue the customer browser-session integration across the remaining workspace routes without bypassing durable tenant/application assignments.
 
 The 228 approved requirements, 38 chapters, PostgreSQL local/CI scope, no-charge cloud boundary and human-approval boundary remain unchanged.
+
+
+## Further live evidence update — 2026-11-01
+
+**Current main remains:** `91a8e3bdbe579fd1d3b123305bb422f4efc44bac`.
+
+### PR #320 — customer settings browser-session successor
+
+- The first exact head `f164e81e2d1566219718b2a2eab79a61bd7d6876` exposed one failing assertion in the new HTTP test: it expected the session store to be called even when a bearer-only request supplied no browser cookie. The route correctly returned 401 without attempting session resolution. This was a test expectation defect, not an authorization bypass.
+- The owning branch was corrected to assert that no session lookup occurs when the cookie is absent, then to verify session, tenant assignment and actor assignment on the cookie-authenticated path.
+- **Current head:** `994d6dec9077ed83d99e87182dc3d796e65b00d3`; merge candidate `311e4048b3db9b0cfde820fdac58852955c90862`.
+- **Evidence:** Controlled QA [41289375438](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375438) passed 1,112 of 1,129 tests with zero failures; the new settings-session test passed. EPER CI [41289375519](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375519), integrated validation [41289375493](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375493), PostgreSQL integration [41289375517](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375517), release build [41289375495](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375495), six-family HTTP smoke [41289375476](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375476), chapter matrix [41289375427](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375427), payment contract [41289375451](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375451), container smoke [41289375936](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375936), G9 [41289375409](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375409) and technical simulation [41289375466](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289375466) all completed successfully.
+- **Disposition:** PR #320 remains open and unmerged. Customer settings GET is now protected by durable browser session plus tenant/actor assignments in PostgreSQL mode. This does not add OIDC login initiation/callback/logout or session issuance.
+
+### PR #321 — complete migration repeatability in fresh-clone verification
+
+- **Gap found:** `npm run dev:verify` applied all seven migration groups but previously repeated only workflows, ticketing, capabilities and identity. Payment, audit and campaign-scheduler migration groups were not explicitly re-run by the one-command fresh-clone verification.
+- **Correction:** The owning branch now uses one shared seven-group migration list for both initial application and repeatability checks. A regression test ensures the same seven groups are applied and repeated.
+- **Current head:** `c48ebd65f038951651f529bdfb17eb983524e4af`; merge candidate `91c0942963780e47987a5d040d378635d3534d86`.
+- **Evidence:** Fresh-clone run [41289449907](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449907) completed successfully on a clean runner. Its log confirms application and repeatability for payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; 1,148 tests passed with zero failures; and `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS` with 59 source/restored base tables and 7 migration-ledger tables. EPER CI [41289449915](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449915) passed the new migration-coverage regression test; controlled QA [41289449931](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449931) passed 1,112 of 1,129 tests with zero failures. The chapter matrix [41289449891](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449891), G9 [41289449916](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449916), six-family smoke [41289449896](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449896), container smoke [41289449964](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449964), release build [41289449889](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449889) and technical simulation [41289449917](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449917) also completed successfully.
+- **Remaining validation:** Same-commit integrated validation run [41289449924](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449924) was still in progress at this snapshot; no pass is claimed for that lane until its completed result is observed.
+- **Disposition:** PR #321 remains open and unmerged. The fresh-clone migration-repeatability requirement is now evidenced on its exact PR merge candidate, subject to the remaining integrated gate.
+
+### Current open PR register
+
+- [#319 — this seven-checkpoint scorecard evidence update](https://github.com/sbannai/enterprise-product-engineering/pull/319), head `8ae2b41b434bb797946f21de787ce8653ca053a6` at the time of this update.
+- [#320 — secure customer settings with browser sessions](https://github.com/sbannai/enterprise-product-engineering/pull/320), head `994d6dec9077ed83d99e87182dc3d796e65b00d3`.
+- [#321 — verify repeatability of all PostgreSQL migration groups](https://github.com/sbannai/enterprise-product-engineering/pull/321), head `c48ebd65f038951651f529bdfb17eb983524e4af`.
+
+No PR was merged by this evidence update. The 228 approved requirements, 38 chapters, no-charge cloud boundary and human-approval boundary remain unchanged.
