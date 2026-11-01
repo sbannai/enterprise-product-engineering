@@ -4,23 +4,35 @@ set -euo pipefail
 : "${DATABASE_URL:?DATABASE_URL must identify a disposable local/test source database}"
 : "${RESTORE_DATABASE_URL:?RESTORE_DATABASE_URL must identify a separate disposable restore database}"
 
-node --input-type=module <<'NODE'
-const source = new URL(process.env.DATABASE_URL);
-const target = new URL(process.env.RESTORE_DATABASE_URL);
-const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-const sourceName = decodeURIComponent(source.pathname.replace(/^\//, ""));
-const targetName = decodeURIComponent(target.pathname.replace(/^\//, ""));
-if (!loopback.has(source.hostname) || !loopback.has(target.hostname)) {
-  throw new Error("EPER_BACKUP_RESTORE_REFUSES_NON_LOOPBACK_DATABASE");
+url_host() {
+  local remainder="${1#*://}"
+  local authority="${remainder%%/*}"
+  local host_port="${authority##*@}"
+  if [[ "$host_port" =~ ^\[([0-9a-fA-F:]+)\](:[0-9]+)?$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  else
+    printf '%s' "${host_port%%:*}"
+  fi
 }
-if (!/(test|ci|sandbox)/i.test(sourceName) || !/(restore|test|sandbox)/i.test(targetName)) {
-  throw new Error("EPER_BACKUP_RESTORE_REQUIRES_TEST_DATABASE_NAMES");
-}
-if (!/^[A-Za-z0-9_]+$/.test(targetName) || sourceName === targetName) {
-  throw new Error("EPER_BACKUP_RESTORE_TARGET_DATABASE_INVALID");
-}
-NODE
 
+url_database() {
+  local remainder="${1#*://}"
+  local path="${remainder#*/}"
+  path="${path%%\?*}"
+  path="${path%%#*}"
+  printf '%s' "$path"
+}
+
+source_host="$(url_host "$DATABASE_URL")"
+target_host="$(url_host "$RESTORE_DATABASE_URL")"
+source_name="$(url_database "$DATABASE_URL")"
+target_name="$(url_database "$RESTORE_DATABASE_URL")"
+
+case "$source_host" in localhost|127.0.0.1|::1) ;; *) echo "EPER_BACKUP_RESTORE_REFUSES_NON_LOOPBACK_SOURCE" >&2; exit 1 ;; esac
+case "$target_host" in localhost|127.0.0.1|::1) ;; *) echo "EPER_BACKUP_RESTORE_REFUSES_NON_LOOPBACK_TARGET" >&2; exit 1 ;; esac
+[[ "$source_name" =~ (test|ci|sandbox) ]] || { echo "EPER_BACKUP_RESTORE_SOURCE_MUST_BE_DISPOSABLE" >&2; exit 1; }
+[[ "$target_name" =~ (restore|test|sandbox) ]] || { echo "EPER_BACKUP_RESTORE_TARGET_MUST_BE_DISPOSABLE" >&2; exit 1; }
+[[ "$target_name" =~ ^[A-Za-z0-9_]+$ && "$source_name" != "$target_name" ]] || { echo "EPER_BACKUP_RESTORE_TARGET_DATABASE_INVALID" >&2; exit 1; }
 for tool in pg_dump pg_restore psql; do
   command -v "$tool" >/dev/null 2>&1 || { echo "EPER_BACKUP_RESTORE_TOOL_MISSING:$tool" >&2; exit 1; }
 done
@@ -45,7 +57,7 @@ pg_dump --format=custom --no-owner --no-acl --file="$backup_file" "$DATABASE_URL
 test -s "$backup_file"
 pg_restore --list "$backup_file" >/dev/null
 
-restore_db_name="$(node -e 'const u = new URL(process.env.RESTORE_DATABASE_URL); console.log(decodeURIComponent(u.pathname.replace(/^\//, "")));')"
+restore_db_name="$target_name"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$restore_db_name\""
 pg_restore --exit-on-error --no-owner --no-acl --dbname="$RESTORE_DATABASE_URL" "$backup_file"
 

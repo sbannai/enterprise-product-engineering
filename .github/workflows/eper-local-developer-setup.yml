@@ -56,7 +56,5 @@ jobs:
         run: npm ci
       - name: Run the same one-command developer verification documented for a fresh clone
         run: npm run dev:verify
-      - name: Install PostgreSQL client utilities
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Prove PostgreSQL backup and restore against an isolated target
-        run: bash scripts/postgres-backup-restore-smoke.sh
+      - name: Prove PostgreSQL backup and restore with server-matched PostgreSQL 16 utilities
+        run: docker run --rm --network host -e DATABASE_URL -e RESTORE_DATABASE_URL -v "$PWD:/workspace" -w /workspace postgres:16 bash scripts/postgres-backup-restore-smoke.sh
