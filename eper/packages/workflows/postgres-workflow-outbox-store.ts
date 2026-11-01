@@ -22,6 +22,11 @@ export interface WorkflowOutboxEvent {
   attempts: number;
 }
 
+export interface WorkflowOutboxClaimedEvents extends Array<WorkflowOutboxEvent> {
+  /** Rows moved to dead-letter state by this claim pass before new claims were selected. */
+  deadLettered: number;
+}
+
 export interface WorkflowOutboxClaimOptions {
   workerId: string;
   limit?: number;
@@ -79,7 +84,7 @@ async function setRls(client: AuditSqlClient, context: WorkflowOutboxContext): P
 export class PostgresWorkflowOutboxStore {
   constructor(private readonly pool: AuditSqlPool) {}
 
-  async claim(context: WorkflowOutboxContext, options: WorkflowOutboxClaimOptions): Promise<WorkflowOutboxEvent[]> {
+  async claim(context: WorkflowOutboxContext, options: WorkflowOutboxClaimOptions): Promise<WorkflowOutboxClaimedEvents> {
     await setRlsValidation(context);
     validateId(options.workerId, "workerId");
     const limit = options.limit ?? 20;
@@ -100,7 +105,7 @@ export class PostgresWorkflowOutboxStore {
       await setRls(client, context);
       // Crashes before markFailed must still consume the finite attempt budget.
       // Also handle pending rows if the configured budget is lowered.
-      await client.query(
+      const swept = await client.query<{ event_id: string }>(
         `UPDATE eper_workflow_outbox_delivery
             SET delivery_status = 'dead_letter', locked_at = NULL, locked_by = NULL,
                 last_error = COALESCE(last_error, CASE WHEN delivery_status = 'processing'
@@ -113,7 +118,8 @@ export class PostgresWorkflowOutboxStore {
               delivery_status = 'pending'
               OR (delivery_status = 'processing'
                   AND locked_at <= NOW() - ($3::int * INTERVAL '1 second'))
-            )`,
+            )
+          RETURNING event_id`,
         [context.tenantId, context.applicationId, leaseSeconds, maxAttempts],
       );
       const result = await client.query<EventRow>(
@@ -145,7 +151,7 @@ export class PostgresWorkflowOutboxStore {
         [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId, maxAttempts],
       );
       await client.query("COMMIT");
-      return result.rows.map(mapEvent);
+      return Object.assign(result.rows.map(mapEvent), { deadLettered: swept.rows.length });
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
