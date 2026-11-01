@@ -76,3 +76,24 @@ test("outbox process rejects unsafe polling and context limits", () => {
   assert.throws(() => new WorkflowOutboxProcess(worker, contexts, { idlePollMs: 1 }), /WORKFLOW_OUTBOX_PROCESS_OPTIONS_INVALID/);
   assert.throws(() => new WorkflowOutboxProcess(worker, contexts, { maxContextsPerPass: 20_000 }), /WORKFLOW_OUTBOX_PROCESS_OPTIONS_INVALID/);
 });
+
+
+test("outbox process forwards shutdown signal to an in-flight worker pass", async () => {
+  const controller = new AbortController();
+  let receivedSignal;
+  const worker = {
+    async runOnce(_context, _limit, signal) {
+      receivedSignal = signal;
+      controller.abort();
+      return { claimed: 0, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 };
+    },
+  };
+  const contexts = {
+    async listActiveContexts() {
+      return [{ tenantId: "tenant-a", applicationId: "app-a" }];
+    },
+  };
+  const process = new WorkflowOutboxProcess(worker, contexts, { idlePollMs: 50 });
+  await process.run(controller.signal);
+  assert.equal(receivedSignal, controller.signal);
+});
