@@ -70,7 +70,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     assert.deepEqual(await allowed.json(),{applicationId:"app-01",settings:{displayName:"Customer workspace",locale:"en-US",currency:"USD"}});
     const logout=await page.evaluate(async()=>{
       const csrf=document.cookie.split("; ").find(v=>v.startsWith("__Host-eper_csrf="))?.split("=")[1]??"";
-      return (await fetch("${origin}/customer/auth/logout",{method:"POST",headers:{"x-csrf-token":csrf}})).status;
+      return (await fetch("/customer/auth/logout",{method:"POST",headers:{"x-csrf-token":csrf}})).status;
     });
     assert.equal(logout,204);
     const denied=await page.goto(base+"/customer/settings?applicationId=app-01");
