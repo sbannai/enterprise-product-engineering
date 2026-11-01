@@ -14,3 +14,10 @@ export {
   type TenantApplicationAssignment,
   type ChangeTenantApplicationAssignmentInput,
 } from "./postgres-tenant-application-assignment-store.js";
+
+export {
+  PostgresCustomerIdentitySessionStore,
+  type CustomerOidcSubjectBinding,
+  type CustomerBrowserSession,
+  type CreateCustomerBrowserSessionInput,
+} from "./postgres-customer-identity-session-store.js";
