@@ -28,7 +28,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
 const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled;
+const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
 const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
@@ -115,6 +116,11 @@ if (workflowExecutionEnabled && (!paymentPool || auditMode !== "postgres" ||
     actorAssignmentMode !== "postgres" || adminConfigMode !== "postgres")) {
   throw new Error("WORKFLOW_EXECUTION_REQUIRES_POSTGRES_AUDIT_AND_DURABLE_ADMIN_ASSIGNMENTS");
 }
+if (workflowOutboxAdminEnabled && (!paymentPool || auditMode !== "postgres" ||
+    actorAssignmentMode !== "postgres" || adminConfigMode !== "postgres" ||
+    process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true")) {
+  throw new Error("WORKFLOW_OUTBOX_ADMIN_REQUIRES_POSTGRES_AUDIT_AND_DURABLE_ADMIN_ASSIGNMENTS");
+}
 const actorApplicationAssignmentStore = actorAssignmentMode === "postgres" && paymentPool
   ? new PostgresActorApplicationAssignmentStore(paymentPool)
   : undefined;
@@ -125,10 +131,11 @@ const tenantApplicationAssignmentStore = actorAssignmentMode === "postgres" && p
 if (tenantApplicationAssignmentStore) await tenantApplicationAssignmentStore.assertReady();
 tenantApplicationAssignmentStoreForEntitlements = tenantApplicationAssignmentStore;
 
-const workflowRoleDefinitionStore = workflowExecutionEnabled && paymentPool
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled;
+const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
-const workflowActorRoleAssignmentStore = workflowExecutionEnabled && paymentPool
+const workflowActorRoleAssignmentStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowActorRoleAssignmentStore(paymentPool)
   : undefined;
 const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
@@ -202,7 +209,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 }
 
 const server = createAppServer({
-  capabilityPool: postgresCapabilityMode ? paymentPool as unknown as Pool : undefined,
+  capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
   agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
