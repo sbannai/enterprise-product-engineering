@@ -1282,8 +1282,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
-    // Customer session introspection: identity is derived only from the server-side
-    // credential map. This is an API boundary, not a substitute for a browser login UI.
+    // Customer session introspection resolves the durable browser session in PostgreSQL mode.
+    // The bearer map remains a compatibility path for non-PostgreSQL preview/API clients.
     if (requestUrl.pathname === "/customer/session" && request.method === "GET") {
       const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) {
