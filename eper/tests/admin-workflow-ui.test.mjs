@@ -36,6 +36,8 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(html, /Workflow designer/);
     assert.match(html, /Roles &amp; access|Roles & access/);
     assert.match(html, /Generated activities/);
+    assert.match(html, /requiredPermission==='workflow:act'.*allowedPerms\.includes\('workflow:admin'\)/);
+    assert.match(html, /allowedPerms\.includes\(requiredPermission\)/, "preview must honor explicit permissions");
     assert.match(html, /eper-toast-region/);
     assert.match(html, /window\.EPERToast/);
     const scripts = html.split("<script>").slice(1).map((chunk) => chunk.split("</script>")[0]);
