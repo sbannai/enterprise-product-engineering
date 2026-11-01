@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   appendAuditEventInTransaction,
+  type AuditEnvironment,
   type AuditSqlClient,
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
@@ -10,6 +11,7 @@ export interface WorkflowOutboxReplayContext {
   applicationId: string;
   actorId: string;
   correlationId: string;
+  environment: AuditEnvironment;
 }
 export interface WorkflowOutboxReplayResult {
   replayId: string;
@@ -47,6 +49,9 @@ export async function replayWorkflowOutboxDeadLetter(
   validateId(context.applicationId, "applicationId");
   validateId(context.actorId, "actorId");
   validateId(context.correlationId, "correlationId");
+  if (!["production", "uat", "sandbox"].includes(context.environment)) {
+    throw new Error("WORKFLOW_OUTBOX_REPLAY_ENVIRONMENT_INVALID");
+  }
   validateUuid(input.eventId);
   validateId(input.workerId, "workerId");
   if (typeof input.reason !== "string" || !input.reason.trim() || input.reason.length > 2000) {
@@ -109,7 +114,29 @@ export async function replayWorkflowOutboxDeadLetter(
         FOR UPDATE`,
       [context.tenantId, context.applicationId, input.eventId],
     );
-    if (!delivery.rows[0]) throw new Error("WORKFLOW_OUTBOX_REPLAY_NOT_DEAD_LETTERED");
+    if (!delivery.rows[0]) {
+      // A concurrent retry with the same idempotency key may have completed while
+      // this transaction waited for the delivery row lock. Re-read after the wait.
+      const concurrentPrior = await client.query<{
+        replay_id: string; event_id: string; prior_attempts: number | string;
+      }>(
+        `SELECT replay_id, event_id, prior_attempts
+           FROM eper_workflow_outbox_replay_audit
+          WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3`,
+        [context.tenantId, context.applicationId, input.idempotencyKey],
+      );
+      if (concurrentPrior.rows[0]) {
+        if (concurrentPrior.rows[0].event_id !== input.eventId) {
+          throw new Error("WORKFLOW_OUTBOX_REPLAY_IDEMPOTENCY_CONFLICT");
+        }
+        await client.query("COMMIT");
+        return {
+          replayId: concurrentPrior.rows[0].replay_id, eventId: concurrentPrior.rows[0].event_id,
+          priorAttempts: Number(concurrentPrior.rows[0].prior_attempts), alreadyApplied: true,
+        };
+      }
+      throw new Error("WORKFLOW_OUTBOX_REPLAY_NOT_DEAD_LETTERED");
+    }
     const priorAttempts = Number(delivery.rows[0].attempts);
     const priorLastError = delivery.rows[0].last_error;
     const replayId = randomUUID();
@@ -124,7 +151,7 @@ export async function replayWorkflowOutboxDeadLetter(
     );
 
     await appendAuditEventInTransaction(client, {
-      tenantId: context.tenantId, applicationId: context.applicationId, environment: "sandbox",
+      tenantId: context.tenantId, applicationId: context.applicationId, environment: context.environment,
       actorType: "human", actorId: context.actorId, effectiveRoles: ["workflow:admin"],
       action: "workflow.outbox.dead_letter.replayed", outcome: "success",
       reasonCode: "OPERATOR_REQUESTED_REPLAY", resourceType: "workflow_outbox_event",
