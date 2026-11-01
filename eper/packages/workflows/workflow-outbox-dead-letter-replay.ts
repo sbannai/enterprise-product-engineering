@@ -160,13 +160,13 @@ export async function replayWorkflowOutboxDeadLetter(
 
     await appendAuditEventInTransaction(client, {
       tenantId: context.tenantId, applicationId: context.applicationId, environment: context.environment,
-      actorType: "human", actorId: context.actorId, effectiveRoles: ["workflow:admin"],
+      actorType: "human", actorId: context.actorId, effectiveRoles: [authorization.rows[0].role_id],
       action: "workflow.outbox.dead_letter.replayed", outcome: "success",
       reasonCode: "OPERATOR_REQUESTED_REPLAY", resourceType: "workflow_outbox_event",
       resourceId: input.eventId, operationId: replayId, correlationId: context.correlationId,
       source: "api", operationName: "workflow-outbox-dead-letter-replay",
       idempotencyKey: input.idempotencyKey,
-      payload: { replayId, eventId: input.eventId, workerId: input.workerId, priorAttempts, reason: input.reason.trim() },
+      payload: { replayId, eventId: input.eventId, workerId: input.workerId, priorAttempts, grantedPermission: "workflow:admin", reason: input.reason.trim() },
     });
 
     const updated = await client.query<{ event_id: string }>(
