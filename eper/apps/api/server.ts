@@ -598,7 +598,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         response.writeHead(204, { "set-cookie": serializeClearedCustomerCookies(), "cache-control": "no-store" }); response.end(); return;
       }
       if (!verifyCustomerBrowserCsrf({ method: request.method, origin: request.headers.origin, expectedOrigin: options.customerOidcPublicOrigin,
-        cookieHeader: request.headers.cookie, csrfHeader: request.headers["x-csrf-token"], sessionToken, secret: options.customerCsrfSecret })) {
+        cookieHeader: request.headers.cookie, csrfHeader: typeof request.headers["x-csrf-token"] === "string" ? request.headers["x-csrf-token"] : undefined, sessionToken, secret: options.customerCsrfSecret })) {
         sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED", "The logout request could not be validated."); return;
       }
       try {
