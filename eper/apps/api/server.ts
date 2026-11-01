@@ -2509,10 +2509,30 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 404, { error: "not_found" });
         return;
       }
-      const identity = resolveCustomerAccessIdentity(request);
-      if (!identity) {
-        sendJson(request, response, 401, { error: "unauthorized" });
-        return;
+      let identity: TrustedCustomerAccessIdentity | null;
+      if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres") {
+        if (!options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+            !options.actorApplicationAssignmentStore) {
+          sendApiError(request, response, 503, "CUSTOMER_BROWSER_IDENTITY_UNAVAILABLE",
+            "Durable customer browser identity and assignment stores are required.");
+          return;
+        }
+        const sessionToken = parseCookieHeader(request.headers.cookie).get("__Host-eper_session");
+        const session = sessionToken
+          ? await options.customerIdentitySessionStore.resolveSession(sessionToken)
+          : null;
+        if (!session) {
+          sendApiError(request, response, 401, "UNAUTHENTICATED",
+            "A valid customer browser session is required.");
+          return;
+        }
+        identity = { tenantId: session.tenantId, actorId: session.actorId, roleKey: "customer-user" };
+      } else {
+        identity = resolveCustomerAccessIdentity(request);
+        if (!identity) {
+          sendJson(request, response, 401, { error: "unauthorized" });
+          return;
+        }
       }
       let assignments: unknown;
       try { assignments = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
