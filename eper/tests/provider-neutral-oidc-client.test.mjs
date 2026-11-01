@@ -55,7 +55,7 @@ test("authorization request uses state, nonce and S256 PKCE with encrypted verif
   assert.equal(url.searchParams.get("state"),started.state);
   assert.equal(store.transaction.stateHash,createHash("sha256").update(started.state).digest("hex"));
   assert.ok(store.transaction.pkceVerifierCiphertext.startsWith("v1."));
-  assert.ok(!store.transaction.pkceVerifierCiphertext.includes("."));
+  assert.equal(store.transaction.pkceVerifierCiphertext.split(".").length,4);
 });
 
 test("callback exchanges code and validates issuer, audience, signature and nonce",async()=>{
