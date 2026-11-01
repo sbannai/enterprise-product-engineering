@@ -46,7 +46,7 @@ Never copy this destructive command to a shared or production environment.
 
 ## 3. Automated CI restore drill
 
-The `EPER Fresh-Clone Developer Setup` workflow runs the restore smoke after migrations and live PostgreSQL tests, using an ephemeral PostgreSQL 16 service. The source database is `eper_test`; the restore target is `eper_restore_test`. Both are destroyed with the CI job.
+The `EPER Fresh-Clone Developer Setup` workflow runs the restore smoke after migrations and live PostgreSQL tests, using an ephemeral PostgreSQL 16 service and a matching `postgres:16` client container. The source database is `eper_test`; the restore target is `eper_restore_test`. Both are destroyed with the CI job.
 
 A passing run proves that the tested commit can create and restore a logical backup of that ephemeral schema/data set. It does not prove off-host durability, encryption at rest, point-in-time recovery, disaster recovery, or production RPO/RTO.
 
