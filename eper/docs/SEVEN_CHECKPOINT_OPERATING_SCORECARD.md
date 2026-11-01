@@ -654,3 +654,68 @@ The live open-PR query returns PR #323 and PR #326 only. Both remain drafts, mer
 - The current-main exact-head push workflows remain successful. The separate fresh-clone run above is on PR #328's exact head, not on the main SHA itself; its implementation files are unchanged from main.
 
 **Owner / authority:** user remains the product and design authority. This record does not change the approved requirements baseline or grant production/acceptance authority.
+
+
+## 2026-11-02 — live evidence refresh: customer browser-session support journey
+
+**Current main, resolved dynamically:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`.  
+**Change since the previous scorecard record:** opened PR #329 to replace the customer workspace's pasted bearer credential with provider-neutral OIDC browser-session access and to exercise the customer ticket journey in Chromium. The approved 228 requirements and 38 chapters were not changed.
+
+### Current main and merged foundations
+
+- Main remains `a554990cb7f4969bb218aad7a2e9944aec62fa05`; its applicable exact-SHA push workflows previously completed successfully (EPER CI, integrated validation, QA, browser OIDC, 228/38 matrix, six-family HTTP, container, G9 and workflow configuration).
+- PR #306 merge `6e8dd438e5091b1802d65e4f29951389fe077859` and PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e` are verified ancestors of current main. Neither is open work.
+- Current open PRs are #323, #326, #328 and #329. All are draft, mergeable and based on current main with zero commits behind:
+  - #323 head `515c03397895db6d22f037ff85d961d3a5a55493` (9 ahead, 2 files).
+  - #326 head `7446ed23b3545f3cb74b9a4239532bdf340ce3e9` (5 ahead, 5 files).
+  - #328 head `cadfacfe117d1cb10175d947d44ac6a97f0d2b36` (3 ahead, 2 files).
+  - #329 head `aecdf7e1af49a866cc2f48444f3daf627006b09c` (12 ahead, 5 files).
+- No submitted reviews or unresolved inline review threads were present when checked. Do not merge drafts without independent review.
+
+### PR #329 — customer workspace OIDC browser-session integration
+
+- Exact head `aecdf7e1af49a866cc2f48444f3daf627006b09c`, base main `a554990cb7f4969bb218aad7a2e9944aec62fa05`.
+- The customer workspace preview now starts with an organization OIDC sign-in link instead of a pasted bearer credential. Browser API calls use same-origin durable session cookies; unsafe calls include the CSRF token.
+- In PostgreSQL identity mode, workspace session/module/content/asset/portal APIs resolve the durable session and intersect active tenant-application and actor-application assignments on each request. The browser receives only the fixed least-privilege `customer-user` role. OIDC claims do not grant roles and the workspace resolver does not fall back to bearer mapping in PostgreSQL mode.
+- Customer ticket create/history/reply and settings retain their application-scoped browser-session checks. The Chromium E2E signs in through a synthetic local IdP, bootstraps the workspace, submits a ticket, reads history, sends a customer reply, reads protected settings, signs out and verifies revoked-session denial.
+- The E2E exposed a previously latent syntax error in the workspace preview's settings aggregation path; the missing parenthesis was corrected on the owning branch, and the exact-head browser run now passes.
+- Exact-head Actions for `aecdf7e1af49a866cc2f48444f3daf627006b09c`:
+  - [Fresh-clone developer setup — 41351773014](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773014): clean lockfile install; `npm run dev:verify`; 1,170 passed / 0 failed / 0 skipped. All seven migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing, identity) applied and repeated. Disposable PostgreSQL 16 backup/restore passed: 59 source/restored base tables and seven migration-ledger tables.
+  - [EPER CI — 41351772960](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772960) passed.
+  - [Controlled QA — 41351773007](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773007): 1,151 tests; 1,134 passed / 0 failed / 17 skipped.
+  - [Integrated validation — 41351772987](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772987): 1,158 tests; 1,156 passed / 0 failed / 2 skipped; same-commit gate passed.
+  - [Chromium customer OIDC/support journey — 41351773043](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773043): 1/1 passed.
+  - [228/38 matrix — 41351773005](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773005), [six-family HTTP — 41351773004](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773004), [G9 — 41351773011](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773011), [container smoke — 41351772963](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772963), [release build — 41351772969](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772969), [PostgreSQL payment-store integration — 41351772979](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772979) and [payment gateway contracts — 41351772926](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772926) passed.
+- This is browser integration evidence with a synthetic IdP and in-memory test stores, not production-provider onboarding or production session-store certification. Support-admin authentication remains a separate bearer-based boundary; role/delegation mapping and admin browser E2E remain open.
+
+### Other open delivery slices
+
+**PR #323 — developer setup, requirements crosswalk and scorecard**
+- Exact previous head `515c03397895db6d22f037ff85d961d3a5a55493`; its exact-head fresh-clone run 41344392599 passed `npm run dev:verify` (1,170 passed / 0 failed / 0 skipped), all seven migration groups and repeatability, and disposable restore (59 tables / seven ledgers). EPER CI, QA, integrated validation, 228/38 matrix, G9, six-family HTTP, container and release workflows passed.
+- This scorecard append changes PR #323's head. The previous green runs are not validation for the new head; exact-head Actions must rerun before review/merge.
+
+**PR #326 — dedicated campaign worker**
+- Exact head `7446ed23b3545f3cb74b9a4239532bdf340ce3e9`; exact-head fresh-clone run 41327722225 passed (1,175 passed / 0 failed / 0 skipped), seven migration groups applied/repeated and disposable restore (59 tables / seven ledgers).
+- PostgreSQL scheduler integration run 41327722301 passed dispatch-fence race and event-idempotency checks; QA run 41327722105 passed with five worker startup guard tests.
+- The separate worker process is fail-closed and disabled by default. A reviewed deployment adapter, restricted worker DB identity/context, independent supervisor, metrics/alerts and live restart/recovery proof remain outstanding. Do not enable provider dispatch.
+
+**PR #328 — filtered support ticket export**
+- Exact head `cadfacfe117d1cb10175d947d44ac6a97f0d2b36`; exact-head fresh-clone run 41344237279 passed (1,171 passed / 0 failed / 0 skipped), seven migration groups applied/repeated and disposable restore (59 tables / seven ledgers).
+- QA run 41344237200 passed (1,135 passed / 0 failed / 17 skipped). Its job log confirms `support admin queue exports every page matching the active filters` passed.
+- The export reuses the authorized admin endpoint and active status/type/severity/application/search filters. PR remains draft.
+
+### Seven-checkpoint status
+
+| Checkpoint | Status | Delivered capability / evidence | Blocker / next action |
+|---|---|---|---|
+| 1. v34-to-228 requirements reconciliation | AMBER | Approved 228 requirements / 38 chapters preserved. All 45 v34 candidates and acceptance criteria remain additive v1.6.0 draft candidates; exact-head 228/38 matrix 41351773005 passed. | Owner disposition of the 45 candidates; do not change the approved baseline. |
+| 2. Fresh-clone developer setup | GREEN for validated PR heads | PR #329 run 41351773014: documented `npm run dev:verify`, 1,170 passed, all seven migration groups applied/repeated, disposable restore passed (59 tables / seven ledgers). PR #326/#328 also passed exact-head fresh-clone runs. | Repeat the handover independently with a second engineer; no reliance on chat or a single workstation. |
+| 3. PostgreSQL migrations, integration and recovery | GREEN for local/CI integration; AMBER for operational recovery | All seven migration groups including identity apply and repeat; live PostgreSQL integration, tenant/actor assignment, RLS/audit/rollback and disposable backup/restore pass on exact PR heads. | Production backup destination, encryption/key custody, retention, RPO/RTO and independent recovery rehearsal are not established. |
+| 4. Provider-neutral identity and tenant/application access | AMBER | OIDC browser routes, durable session cookies, CSRF, logout/revocation and per-request tenant/application plus actor/application assignment intersection; PR #329 Chromium support journey 41351773043 passed. | Production IdP onboarding, durable role/delegation model, token rotation and support-admin browser authentication. |
+| 5. Customer workspace and support journey | AMBER | PR #329 covers browser sign-in, workspace bootstrap, ticket submission/history/customer reply, protected settings and logout. Existing support APIs cover tenant scoping, admin triage/assignment/severity, internal-note separation; PR #328 adds all-pages filtered export. | Support-admin browser E2E/authentication; owner-defined SLA targets, business calendar, pause and escalation rules; attachments/notifications lifecycle. |
+| 6. Scheduler and workflow operations | AMBER | PR #326 adds a separate disabled-by-default worker process. Durable claims, lease/heartbeat/fencing, idempotency, bounded retry/dead-letter and dispatch authorization have PostgreSQL/test evidence. | Reviewed adapter, restricted worker DB identity, downstream idempotency contract, independent supervision, metrics/alerts and restart/recovery proof. |
+| 7. Release controls and engineering continuity | AMBER | Fresh-clone setup and disposable restore runbooks/evidence exist; exact-head release/container/G9 lanes pass. | Main remains `protected=false`, repository rulesets are empty; production recovery and independent second-engineer release/rollback are unproven. Charter remains proposed pending owner review. |
+
+**Owner decisions required:** disposition the 45 additive candidates; approve the support-admin role/delegation model; define service-level targets and calendar/escalation rules; approve repository protection/required checks and continuity ownership.
+
+**Safety:** No PR was merged by this refresh. No real provider action or chargeable cloud resource was triggered. No approved requirement or chapter was modified.
