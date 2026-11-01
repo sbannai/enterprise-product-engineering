@@ -99,7 +99,7 @@ export class WorkflowOutboxWorker {
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     const requestShutdown = () => {
       shutdownRequested = true;
-      if (heartbeat) if (heartbeat) clearInterval(heartbeat);
+      if (heartbeat) clearInterval(heartbeat);
       controller.abort(shutdownSignal?.reason ?? new Error("WORKFLOW_OUTBOX_SHUTDOWN"));
     };
     if (shutdownSignal) {
