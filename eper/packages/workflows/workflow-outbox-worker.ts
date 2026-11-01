@@ -73,7 +73,8 @@ export class WorkflowOutboxWorker {
       maxAttempts: this.maxAttempts,
     });
     const result: WorkflowOutboxRunResult = {
-      claimed: events.length, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0,
+      claimed: events.length, delivered: 0, retried: 0, deadLettered: events.deadLettered ?? 0,
+      leaseLost: 0, interrupted: 0,
     };
     // Start every claim immediately, but do not let one bookkeeping failure detach sibling work.
     const settled = await Promise.allSettled(
