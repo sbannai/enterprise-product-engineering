@@ -15,10 +15,10 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
   });
   const state="s".repeat(43), sessionToken="t".repeat(43);
   const probe=createProbeServer();
-  await new Promise((resolve,reject)=>{probe.once("error",reject);probe.listen(0,"localhost",resolve);});
+  await new Promise((resolve,reject)=>{probe.once("error",reject);probe.listen(0,"127.0.0.1",resolve);});
   const port=probe.address().port;
   await new Promise(resolve=>probe.close(resolve));
-  const origin="http://localhost:"+port;
+  const origin="http://127.0.0.1:"+port;
   let active=false, server, browser;
   const store={
     async createLoginTransaction(){},
@@ -34,8 +34,8 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
       tenantApplicationAssignmentStore:{async listActive(){return ["app-01"];}},
       actorApplicationAssignmentStore:{async isAssigned(){return true;}},
       customerOidcPublicOrigin:origin,customerCsrfSecret:"c".repeat(48)});
-    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(port,"localhost",resolve);});
-    const base="http://localhost:"+server.address().port;
+    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",resolve);});
+    const base="http://127.0.0.1:"+server.address().port;
     browser=await chromium.launch({headless:true});
     const page=await browser.newPage();
     await page.route("https://idp.example.test/**",route=>route.fulfill({status:200,contentType:"text/html",
