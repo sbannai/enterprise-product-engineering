@@ -782,6 +782,9 @@ test("customer settings require durable browser session and PostgreSQL assignmen
     const actorDenied = await fetch(url + "app-b", { headers: { cookie: "__Host-eper_session=" + sessionToken } });
     assert.equal(actorDenied.status, 403);
     assert.deepEqual(await actorDenied.json(), { error: "actor_not_assigned_to_application" });
+    const tenantDenied = await fetch(url + "app-c", { headers: { cookie: "__Host-eper_session=" + sessionToken } });
+    assert.equal(tenantDenied.status, 403);
+    assert.deepEqual(await tenantDenied.json(), { error: "application_not_assigned_to_tenant" });
     assert.deepEqual(calls, [
       { kind: "session", token: sessionToken },
       { kind: "tenant", tenantId: "tenant-a" },
@@ -789,6 +792,8 @@ test("customer settings require durable browser session and PostgreSQL assignmen
       { kind: "session", token: sessionToken },
       { kind: "tenant", tenantId: "tenant-a" },
       { kind: "actor", tenantId: "tenant-a", actorId: "actor-a", applicationId: "app-b" },
+      { kind: "session", token: sessionToken },
+      { kind: "tenant", tenantId: "tenant-a" },
     ]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
