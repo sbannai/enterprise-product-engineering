@@ -34,7 +34,8 @@ test("identity store readiness requires all durable identity tables",async()=>{
   assert.ok(calls.some(c=>/to_regclass/.test(c.sql)));
   assert.equal(calls.at(-1).sql,"COMMIT");
 });
-\ntest("OIDC login transaction is stored by state hash and consumed exactly once",async()=>{
+
+test("OIDC login transaction is stored by state hash and consumed exactly once",async()=>{
   const {calls,pool}=fakePool(); const store=new PostgresCustomerIdentitySessionStore(pool);
   const state="random-state-value"; const stateHash=createHash("sha256").update(state).digest("hex");
   await store.createLoginTransaction({stateHash,nonceHash:"b".repeat(64),pkceVerifierCiphertext:"v1.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",issuer:base.issuer,redirectUri:"https://eper.example/customer/auth/callback",expiresAt:new Date(Date.now()+5*60_000)});
