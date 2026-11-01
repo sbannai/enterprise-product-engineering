@@ -8,6 +8,8 @@ function fakePool({ binding = true, session = true, subject = true } = {}) {
   const client={
     async query(sql,values=[]) {
       calls.push({sql,values});
+      if (/UPDATE eper_customer_oidc_login_transactions/.test(sql)) return {rows:[{nonce_hash:"b".repeat(64),pkce_verifier_ciphertext:"v1.encrypted-value",issuer:"https://id.example",redirect_uri:"https://eper.example/customer/auth/callback"}],rowCount:1};
+      if (/INSERT INTO eper_customer_oidc_login_transactions/.test(sql)) return {rows:[],rowCount:1};
       if (/INSERT INTO eper_customer_oidc_subject_bindings/.test(sql)) return {rows:[{issuer:values[0],subject:values[1],tenant_id:values[2],actor_id:values[3],binding_status:"active",version:1}],rowCount:1};
       if (/SELECT issuer, subject, tenant_id, actor_id, binding_status, version FROM eper_customer_oidc_subject_bindings/.test(sql)) return {rows:subject?[{issuer:values[0],subject:values[1],tenant_id:"tenant-a",actor_id:"actor-a",binding_status:"active",version:1}]:[],rowCount:subject?1:0};
       if (/SELECT 1 FROM eper_customer_oidc_subject_bindings/.test(sql)) return {rows:[],rowCount:binding?1:0};
@@ -23,6 +25,24 @@ function fakePool({ binding = true, session = true, subject = true } = {}) {
   return {calls,pool:{async connect(){return client;}}};
 }
 const base={issuer:"https://id.example",subject:"subject-a",tenantId:"tenant-a",actorId:"actor-a",correlationId:"identity-test-001"};
+
+
+test("OIDC login transaction is stored by state hash and consumed exactly once",async()=>{
+  const {calls,pool}=fakePool(); const store=new PostgresCustomerIdentitySessionStore(pool);
+  const state="random-state-value"; const stateHash=createHash("sha256").update(state).digest("hex");
+  await store.createLoginTransaction({stateHash,nonceHash:"b".repeat(64),pkceVerifierCiphertext:"v1.encrypted-value",issuer:base.issuer,redirectUri:"https://eper.example/customer/auth/callback",expiresAt:new Date(Date.now()+5*60_000)});
+  const insert=calls.find(c=>/INSERT INTO eper_customer_oidc_login_transactions/.test(c.sql));
+  assert.equal(insert.values[0],stateHash); assert.notEqual(insert.values[0],state);
+  const consumed=await store.consumeLoginTransaction(state);
+  assert.equal(consumed.nonceHash,"b".repeat(64)); assert.equal(consumed.issuer,base.issuer);
+  assert.equal(calls.filter(c=>/UPDATE eper_customer_oidc_login_transactions/.test(c.sql)).length,1);
+});
+
+test("OIDC login transaction rejects malformed hashes and excessive lifetime",async()=>{
+  const {pool}=fakePool(); const store=new PostgresCustomerIdentitySessionStore(pool);
+  await assert.rejects(()=>store.createLoginTransaction({stateHash:"bad",nonceHash:"b".repeat(64),pkceVerifierCiphertext:"v1.encrypted-value",issuer:base.issuer,redirectUri:"https://eper.example/callback",expiresAt:new Date(Date.now()+60_000)}),{message:"EPER_OIDC_TRANSACTION_HASH_INVALID"});
+  await assert.rejects(()=>store.createLoginTransaction({stateHash:"a".repeat(64),nonceHash:"b".repeat(64),pkceVerifierCiphertext:"v1.encrypted-value",issuer:base.issuer,redirectUri:"https://eper.example/callback",expiresAt:new Date(Date.now()+20*60_000)}),{message:"EPER_OIDC_TRANSACTION_EXPIRY_INVALID"});
+});
 
 test("subject binding is explicit, tenant/actor-bound and audited in the same transaction",async()=>{
   const {calls,pool}=fakePool(); const store=new PostgresCustomerIdentitySessionStore(pool);
