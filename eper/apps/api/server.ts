@@ -28,6 +28,7 @@ import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmen
 import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import { resolveCustomerBrowserIdentity } from "../../packages/identity/customer-browser-session-authorization.js";
+import { parseCookieHeader, verifyCustomerBrowserCsrf } from "../../packages/identity/customer-browser-security.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
@@ -2142,10 +2143,63 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 503, { error: "ticketing_unavailable" });
         return;
       }
-      const identity = resolveCustomerAccessIdentity(request);
-      if (!identity) {
-        sendJson(request, response, 401, { error: "unauthorized" });
+      let applicationId: string;
+      try { applicationId = decodeURIComponent(ticketPathMatch[1]); }
+      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
+      if (!applicationId.trim() || applicationId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" });
         return;
+      }
+      let identity: TrustedCustomerAccessIdentity | null;
+      if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres") {
+        if (!options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+            !options.actorApplicationAssignmentStore) {
+          sendApiError(request, response, 503, "CUSTOMER_BROWSER_IDENTITY_UNAVAILABLE",
+            "Durable customer browser identity is not configured.");
+          return;
+        }
+        const browserIdentity = await resolveCustomerBrowserIdentity({
+          cookieHeader: request.headers.cookie, applicationId,
+          sessionStore: options.customerIdentitySessionStore,
+          tenantAssignments: options.tenantApplicationAssignmentStore,
+          actorAssignments: options.actorApplicationAssignmentStore,
+        });
+        if (!browserIdentity) {
+          sendApiError(request, response, 401, "UNAUTHENTICATED",
+            "A valid browser session with active tenant and actor application assignments is required.");
+          return;
+        }
+        if (request.method === "POST") {
+          const cookies = parseCookieHeader(request.headers.cookie);
+          const sessionToken = cookies.get("__Host-eper_session") ?? "";
+          const csrfHeader = request.headers["x-csrf-token"];
+          const csrfValid = verifyCustomerBrowserCsrf({
+            method: request.method,
+            origin: request.headers.origin,
+            expectedOrigin: process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+            cookieHeader: request.headers.cookie,
+            csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
+            sessionToken,
+            secret: process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+          });
+          if (!csrfValid) {
+            sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",
+              "A valid same-origin CSRF token is required for this browser request.");
+            return;
+          }
+        }
+        identity = {
+          tenantId: browserIdentity.tenantId,
+          actorId: browserIdentity.actorId,
+          roleKey: "customer-user",
+          applicationIds: [browserIdentity.applicationId],
+        };
+      } else {
+        identity = resolveCustomerAccessIdentity(request);
+        if (!identity) {
+          sendJson(request, response, 401, { error: "unauthorized" });
+          return;
+        }
       }
       // Global ticketing enablement is insufficient: the tenant must have the
       // customer-facing Tickets & Feedback module enabled as well.
@@ -2157,13 +2211,6 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         : undefined;
       if (!Array.isArray(tenantModules) || !tenantModules.includes("tickets-feedback")) {
         sendJson(request, response, 403, { error: "customer_ticketing_not_enabled" });
-        return;
-      }
-      let applicationId: string;
-      try { applicationId = decodeURIComponent(ticketPathMatch[1]); }
-      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
-      if (!applicationId.trim() || applicationId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(applicationId)) {
-        sendJson(request, response, 400, { error: "invalid_application_id" });
         return;
       }
       let tenantAssignments: unknown;

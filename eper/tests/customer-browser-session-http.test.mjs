@@ -6,6 +6,8 @@ const keys = [
   "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
   "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
   "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+  "EPER_TICKETING_API_ENABLED",
+  "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
 ];
 const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 const token = "s".repeat(43);
@@ -56,6 +58,52 @@ test("application session context requires durable browser session and both acti
     assert.equal(body.applicationId, "application-01");
     assert.equal(body.authentication, "postgres-browser-session");
     assert.equal(body.authorization, "durable-tenant-and-actor-assignments");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+test("customer ticket reads use durable browser identity in PostgreSQL mode", async () => {
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
+  process.env.EPER_TICKETING_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({
+    "tenant-01": ["tickets-feedback"],
+  });
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    ["b".repeat(48)]: { tenantId: "wrong-tenant", actorId: "wrong-actor", roleKey: "super-admin" },
+  });
+  let listScope;
+  const server = createAppServer({
+    customerIdentitySessionStore: { async resolveSession(value) { assert.equal(value, token); return session; } },
+    tenantApplicationAssignmentStore: { async listActive(tenantId) {
+      assert.equal(tenantId, "tenant-01"); return ["application-01"];
+    } },
+    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+      assert.deepEqual([tenantId, actorId, applicationId], ["tenant-01", "actor-01", "application-01"]);
+      return true;
+    } },
+    ticketStore: { async list(scope, filters) { listScope = { scope, filters }; return []; } },
+  });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications/application-01/tickets";
+    const bearerOnly = await fetch(url, { headers: { authorization: "Bearer " + "b".repeat(48) } });
+    assert.equal(bearerOnly.status, 401, "PostgreSQL browser mode must ignore bearer identity maps");
+    const allowed = await fetch(url, { headers: { cookie: "__Host-eper_session=" + token } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(listScope.scope, { tenantId: "tenant-01" });
+    assert.equal(listScope.filters.applicationId, "application-01");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const [key, value] of Object.entries(previous)) {
