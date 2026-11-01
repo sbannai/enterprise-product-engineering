@@ -2,6 +2,8 @@
 
 **Status:** implementation contract for the PostgreSQL-backed outbox worker. Runtime code and tests do not by themselves establish that a production host, provider credentials, dashboards, or alerting have been configured.
 
+**Baseline separation:** current `main` (`880674ac86c1c33581280b94732a792b3fb9b90f`) has bounded claims, time-limited leases, retry/dead-letter handling when `markFailed` runs, and the continuous process component. It does **not** yet renew leases during dispatch or perform a claim-time max-attempt sweep after a worker crash. Those runtime changes are proposed in PR #300 (which includes the lease-renewal work from #297). Treat the lease-renewal, crash-sweep, lease-loss/interruption and related metrics below as target behavior until #300 is merged and validated; this PR adds the audited replay service, not those worker changes.
+
 ## Runtime shape
 
 The worker is a continuously running process, not a cron-triggered job. Each pass discovers authorized tenant/application scopes, claims a bounded batch from each scope, and dispatches events. When no work is claimed, it waits for the configured idle poll interval before discovering scopes again.
@@ -13,8 +15,8 @@ The host composes the runtime with a restricted platform-worker PostgreSQL pool 
 - Delivery is **at least once**. A dispatcher must use the immutable `eventId` as its idempotency key.
 - Claims are protected by tenant/application scope and a time-limited worker lease.
 - Each claimed event starts processing immediately; a serial in-memory queue is avoided.
-- The worker renews each live lease during long dispatches. Renewal never resurrects an expired lease. If renewal fails, the dispatcher receives an aborted signal and the old worker does not acknowledge or mutate the event.
-- Expired processing rows that exceed the configured attempt budget are moved to dead-letter state by the store's claim-time sweep.
+- **Target behavior proposed in PR #300:** renew each live lease during long dispatches; never resurrect an expired lease; abort the dispatcher and fence acknowledgement when renewal fails. This is not present on current main.
+- **Target behavior proposed in PR #300:** move expired processing rows that exceed the configured attempt budget to dead-letter state through a claim-time sweep. Current main enforces the budget in `markFailed`, so a crash before that call can bypass it.
 - Retry delay is exponential and capped by the configured maximum.
 
 ## Graceful shutdown
@@ -25,7 +27,7 @@ A shutdown-interrupted dispatch is not marked delivered or failed. The provider 
 
 ## Observability contract
 
-Per-pass counters include `claimed`, `delivered`, `retried`, `deadLettered`, `leaseLost`, `interrupted`, and `contextsVisited`. Errors are surfaced through `onError`. The deployment host must connect these callbacks to its metrics/logging system and alert on sustained retry growth, lease loss, dead-letter accumulation, interrupted work, and context-discovery failures.
+The current-main pass counters include `claimed`, `delivered`, `retried`, `deadLettered`, and `contextsVisited`. PR #300 proposes adding `leaseLost` and `interrupted` and propagating claim-time sweep counts into `deadLettered`; those additional counters are not current-main behavior. Errors are surfaced through `onError`. The deployment host must connect the counters and errors to its metrics/logging system and alert on sustained retry growth, lease loss, dead-letter accumulation, interrupted work, and context-discovery failures.
 
 ## Audited dead-letter replay
 
