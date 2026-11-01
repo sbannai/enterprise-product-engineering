@@ -13,7 +13,8 @@
     "migrate:audit": "node scripts/migrate-audit.mjs",
     "migrate:ticketing": "node scripts/migrate-ticketing.mjs",
     "migrate:campaign-scheduler": "node scripts/migrate-campaign-scheduler.mjs",
-    "migrate:workflows": "node scripts/migrate-workflows.mjs"
+    "migrate:workflows": "node scripts/migrate-workflows.mjs",
+    "dev:verify": "node scripts/dev-verify.mjs"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
