@@ -75,6 +75,7 @@ for (const migration of [
 run("Repeatability check: workflow migrations", ["run", "migrate:workflows"]);
 run("Repeatability check: ticketing migrations", ["run", "migrate:ticketing"]);
 run("Repeatability check: capability migrations", ["run", "migrate:capabilities"]);
+run("Repeatability check: identity migrations", ["run", "migrate:identity"]);
 
 const testEnv = {
   ...env,
