@@ -85,7 +85,11 @@ export class WorkflowOutboxWorker {
       shutdownRequested = true;
       controller.abort(shutdownSignal?.reason ?? new Error("WORKFLOW_OUTBOX_SHUTDOWN"));
     };
-    if (shutdownSignal) shutdownSignal.addEventListener("abort", requestShutdown, { once: true });
+    if (shutdownSignal) {
+      shutdownSignal.addEventListener("abort", requestShutdown, { once: true });
+      // Close the race between the initial aborted read and listener registration.
+      if (shutdownSignal.aborted) requestShutdown();
+    }
     let renewalInFlight: Promise<void> | null = null;
     const heartbeatMs = Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3));
     const heartbeat = setInterval(() => {
