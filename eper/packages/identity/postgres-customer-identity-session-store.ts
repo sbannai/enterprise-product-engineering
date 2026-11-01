@@ -82,6 +82,45 @@ export class PostgresCustomerIdentitySessionStore {
     finally { client.release(); }
   }
 
+
+  async createLoginTransaction(input: { stateHash: string; nonceHash: string; pkceVerifierCiphertext: string; issuer: string; redirectUri: string; expiresAt: Date }): Promise<void> {
+    if (!/^[a-f0-9]{64}$/.test(input.stateHash) || !/^[a-f0-9]{64}$/.test(input.nonceHash)) throw new Error("EPER_OIDC_TRANSACTION_HASH_INVALID");
+    validId(input.pkceVerifierCiphertext, "pkceVerifierCiphertext", 8192);
+    validId(input.issuer, "issuer", 2048); validId(input.redirectUri, "redirectUri", 2048);
+    if (!(input.expiresAt instanceof Date) || input.expiresAt <= new Date() || input.expiresAt.getTime() > Date.now() + 10 * 60_000) {
+      throw new Error("EPER_OIDC_TRANSACTION_EXPIRY_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.identity_service', 'true', true)");
+      await client.query(
+        "INSERT INTO eper_customer_oidc_login_transactions (state_hash,nonce_hash,pkce_verifier_ciphertext,issuer,redirect_uri,expires_at) VALUES ($1,$2,$3,$4,$5,$6)",
+        [input.stateHash,input.nonceHash,input.pkceVerifierCiphertext,input.issuer,input.redirectUri,input.expiresAt],
+      );
+      await client.query("COMMIT");
+    } catch (error) { try { await client.query("ROLLBACK"); } catch {} throw error; }
+    finally { client.release(); }
+  }
+
+  async consumeLoginTransaction(state: string): Promise<{ nonceHash: string; pkceVerifierCiphertext: string; issuer: string; redirectUri: string } | null> {
+    validId(state, "state", 256);
+    const stateHash = hash(state);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.identity_service', 'true', true)");
+      const result = await client.query<Record<string, unknown>>(
+        "UPDATE eper_customer_oidc_login_transactions SET consumed_at=NOW() WHERE state_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() RETURNING nonce_hash,pkce_verifier_ciphertext,issuer,redirect_uri",
+        [stateHash],
+      );
+      await client.query("COMMIT");
+      const row=result.rows[0];
+      return row ? { nonceHash:String(row.nonce_hash).trim(),pkceVerifierCiphertext:String(row.pkce_verifier_ciphertext),issuer:String(row.issuer),redirectUri:String(row.redirect_uri) } : null;
+    } catch (error) { try { await client.query("ROLLBACK"); } catch {} throw error; }
+    finally { client.release(); }
+  }
+
   async revokeSubject(input: { issuer: string; subject: string; revokedBy: string; correlationId: string }): Promise<boolean> {
     validId(input.issuer, "issuer", 2048); validId(input.subject, "subject", 512);
     validId(input.revokedBy, "revokedBy"); validId(input.correlationId, "correlationId");
