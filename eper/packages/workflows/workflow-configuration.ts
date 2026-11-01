@@ -7,6 +7,11 @@ export type WorkflowPermission =
   | "access:manage";
 
 export type WorkflowFieldType = "text" | "textarea" | "number" | "date" | "select" | "checkbox";
+export function workflowPermissionGranted(granted: readonly WorkflowPermission[], permission: WorkflowPermission): boolean {
+  return granted.includes(permission) ||
+    ((permission === "workflow:view" || permission === "workflow:act") && granted.includes("workflow:admin"));
+}
+
 export interface WorkflowField {
   id: string;
   label?: string;
@@ -161,8 +166,7 @@ export class WorkflowConfigurationService {
 
   checkAccess(principalId: string, permission: WorkflowPermission, workflowId?: string): AccessDecision {
     const matchingRoles = this.roles.filter((role) => role.members.includes(principalId));
-    const granted = matchingRoles.some((role) => role.permissions.includes(permission) ||
-      ((permission === "workflow:view" || permission === "workflow:act") && role.permissions.includes("workflow:admin")));
+    const granted = matchingRoles.some((role) => workflowPermissionGranted(role.permissions, permission));
     const workflow = workflowId === undefined ? undefined : this.workflows.find((item) => item.id === workflowId);
     const workflowMissing = workflowId !== undefined && !workflow;
     const inactiveWorkflow = Boolean(workflow && workflow.status !== "ACTIVE");
