@@ -28,7 +28,6 @@ import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmen
 import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import { resolveCustomerBrowserIdentity } from "../../packages/identity/customer-browser-session-authorization.js";
-import { parseCookieHeader } from "../../packages/identity/customer-browser-security.js";
 import { parseCookieHeader, verifyCustomerBrowserCsrf } from "../../packages/identity/customer-browser-security.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
