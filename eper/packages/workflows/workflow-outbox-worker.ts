@@ -66,58 +66,65 @@ export class WorkflowOutboxWorker {
     const result: WorkflowOutboxRunResult = {
       claimed: events.length, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0,
     };
-    for (const event of events) {
-      const controller = new AbortController();
-      let leaseLost = false;
-      let renewalInFlight: Promise<void> | null = null;
-      const heartbeatMs = Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3));
-      const heartbeat = setInterval(() => {
-        if (renewalInFlight || leaseLost) return;
-        renewalInFlight = (async () => {
-          try {
-            const renewed = await this.store.renewLease(
-              context, event.eventId, this.options.workerId, this.leaseSeconds,
-            );
-            if (!renewed) {
-              leaseLost = true;
-              controller.abort(new WorkflowOutboxLeaseLostError());
-            }
-          } catch (error) {
-            leaseLost = true;
-            controller.abort(error);
-          }
-        })().finally(() => { renewalInFlight = null; });
-      }, heartbeatMs);
-
-      try {
-        await this.dispatcher.dispatch(event, controller.signal);
-        if (renewalInFlight) await renewalInFlight;
-        if (leaseLost) throw new WorkflowOutboxLeaseLostError();
-        await this.store.markDelivered(context, event.eventId, this.options.workerId);
-        result.delivered += 1;
-      } catch (error) {
-        if (renewalInFlight) await renewalInFlight;
-        if (leaseLost || error instanceof WorkflowOutboxLeaseLostError) {
-          // Ownership is gone: do not acknowledge or mutate a lease now owned by another worker.
-          result.leaseLost += 1;
-          continue;
-        }
-        const message = error instanceof Error ? error.message : "WORKFLOW_OUTBOX_DISPATCH_FAILED";
-        const delay = Math.min(
-          this.baseRetryDelaySeconds * (2 ** Math.max(0, event.attempts - 1)),
-          this.maxRetryDelaySeconds,
-        );
-        const failure = await this.store.markFailed(context, event.eventId, {
-          workerId: this.options.workerId, maxAttempts: this.maxAttempts,
-          retryDelaySeconds: delay, error: message,
-        });
-        if (failure.status === "dead_letter") result.deadLettered += 1;
-        else result.retried += 1;
-      } finally {
-        clearInterval(heartbeat);
-        if (renewalInFlight) await renewalInFlight;
-      }
-    }
+    // All claims begin processing immediately; serial dispatch would let later leases expire in a local queue.
+    await Promise.all(events.map(event => this.processClaim(context, event, result)));
     return result;
+  }
+
+  private async processClaim(
+    context: WorkflowOutboxContext,
+    event: WorkflowOutboxEvent,
+    result: WorkflowOutboxRunResult,
+  ): Promise<void> {
+    const controller = new AbortController();
+    let leaseLost = false;
+    let renewalInFlight: Promise<void> | null = null;
+    const heartbeatMs = Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3));
+    const heartbeat = setInterval(() => {
+      if (renewalInFlight || leaseLost) return;
+      renewalInFlight = (async () => {
+        try {
+          const renewed = await this.store.renewLease(
+            context, event.eventId, this.options.workerId, this.leaseSeconds,
+          );
+          if (!renewed) {
+            leaseLost = true;
+            controller.abort(new WorkflowOutboxLeaseLostError());
+          }
+        } catch (error) {
+          leaseLost = true;
+          controller.abort(error);
+        }
+      })().finally(() => { renewalInFlight = null; });
+    }, heartbeatMs);
+
+    try {
+      await this.dispatcher.dispatch(event, controller.signal);
+      if (renewalInFlight) await renewalInFlight;
+      if (leaseLost) throw new WorkflowOutboxLeaseLostError();
+      await this.store.markDelivered(context, event.eventId, this.options.workerId);
+      result.delivered += 1;
+    } catch (error) {
+      if (renewalInFlight) await renewalInFlight;
+      if (leaseLost || error instanceof WorkflowOutboxLeaseLostError) {
+        // Ownership is gone: do not acknowledge or mutate a lease now owned by another worker.
+        result.leaseLost += 1;
+        return;
+      }
+      const message = error instanceof Error ? error.message : "WORKFLOW_OUTBOX_DISPATCH_FAILED";
+      const delay = Math.min(
+        this.baseRetryDelaySeconds * (2 ** Math.max(0, event.attempts - 1)),
+        this.maxRetryDelaySeconds,
+      );
+      const failure = await this.store.markFailed(context, event.eventId, {
+        workerId: this.options.workerId, maxAttempts: this.maxAttempts,
+        retryDelaySeconds: delay, error: message,
+      });
+      if (failure.status === "dead_letter") result.deadLettered += 1;
+      else result.retried += 1;
+    } finally {
+      clearInterval(heartbeat);
+      if (renewalInFlight) await renewalInFlight;
+    }
   }
 }
