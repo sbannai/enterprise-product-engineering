@@ -78,9 +78,11 @@ test("callback rejects unsafe session lifetime configuration", async () => {
 });
 
 test("replayed or expired one-time OIDC transaction cannot reach subject resolution", async () => {
-  const f = fixture({
-    completeLogin: async () => { f.calls.push("completeLogin"); throw new Error("EPER_OIDC_STATE_INVALID_OR_REPLAYED"); },
-  });
+  const f = fixture();
+  f.client.completeLogin = async () => {
+    f.calls.push("completeLogin");
+    throw new Error("EPER_OIDC_STATE_INVALID_OR_REPLAYED");
+  };
   await assert.rejects(() => completeCustomerOidcBrowserLogin({
     client: f.client, store: f.store, cookieHeader, code: "auth-code",
     state, correlationId: "request-1",
