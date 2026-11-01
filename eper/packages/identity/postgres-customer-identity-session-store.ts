@@ -29,12 +29,15 @@ export class PostgresCustomerIdentitySessionStore {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       await client.query("SELECT set_config('eper.identity_service', 'true', true)");
       const result = await client.query<{ bindings: string | null; sessions: string | null; events: string | null }>(
         "SELECT to_regclass('public.eper_customer_oidc_subject_bindings')::text AS bindings, to_regclass('public.eper_customer_browser_sessions')::text AS sessions, to_regclass('public.eper_customer_identity_events')::text AS events",
       );
       if (!result.rows[0]?.bindings || !result.rows[0]?.sessions || !result.rows[0]?.events) throw new Error("EPER_CUSTOMER_IDENTITY_SCHEMA_NOT_APPLIED");
-    } finally { client.release(); }
+      await client.query("COMMIT");
+    } catch (error) { try { await client.query("ROLLBACK"); } catch {} throw error; }
+    finally { client.release(); }
   }
 
   async bindSubject(input: { issuer: string; subject: string; tenantId: string; actorId: string; provisionedBy: string; correlationId: string }): Promise<CustomerOidcSubjectBinding> {
@@ -65,15 +68,18 @@ export class PostgresCustomerIdentitySessionStore {
     validId(issuer, "issuer", 2048); validId(subject, "subject", 512);
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
       await client.query("SELECT set_config('eper.identity_service', 'true', true)");
       const result = await client.query<Record<string, unknown>>(
         "SELECT issuer, subject, tenant_id, actor_id, binding_status, version FROM eper_customer_oidc_subject_bindings WHERE issuer=$1 AND subject=$2",
         [issuer, subject],
       );
       const row = result.rows[0];
+      await client.query("COMMIT");
       if (!row || row.binding_status !== "active") return null;
       return { issuer: String(row.issuer), subject: String(row.subject), tenantId: String(row.tenant_id), actorId: String(row.actor_id), status: "active", version: Number(row.version) };
-    } finally { client.release(); }
+    } catch (error) { try { await client.query("ROLLBACK"); } catch {} throw error; }
+    finally { client.release(); }
   }
 
   async revokeSubject(input: { issuer: string; subject: string; revokedBy: string; correlationId: string }): Promise<boolean> {
