@@ -25,6 +25,7 @@ const env = {
   EPER_AUDIT_DATABASE_URL: databaseUrl,
   EPER_WORKFLOW_DATABASE_URL: databaseUrl,
   EPER_TICKETING_DATABASE_URL: databaseUrl,
+  EPER_IDENTITY_DATABASE_URL: databaseUrl,
   EPER_CAMPAIGN_SCHEDULER_DATABASE_URL: databaseUrl,
   EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: databaseUrl,
 };
@@ -68,11 +69,13 @@ for (const migration of [
   "migrate:campaign-scheduler",
   "migrate:capabilities",
   "migrate:ticketing",
+  "migrate:identity",
 ]) run(`PostgreSQL migration: ${migration}`, ["run", migration]);
 
 run("Repeatability check: workflow migrations", ["run", "migrate:workflows"]);
 run("Repeatability check: ticketing migrations", ["run", "migrate:ticketing"]);
 run("Repeatability check: capability migrations", ["run", "migrate:capabilities"]);
+run("Repeatability check: identity migrations", ["run", "migrate:identity"]);
 
 const testEnv = {
   ...env,
