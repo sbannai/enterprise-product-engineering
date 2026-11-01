@@ -27,6 +27,7 @@ import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin
 import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
 import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
+import { resolveCustomerBrowserIdentity } from "../../packages/identity/customer-browser-session-authorization.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
 import { aiIntegrationsAdminHtml, isAiIntegrationsAdminRequest } from "./ai-integrations-admin-ui.js";
 import type { TrustedInvoiceAmountSource } from "../../packages/payments/invoice-amount-authority.js";
@@ -1136,6 +1137,40 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 503, { error: "tenant_application_assignment_operation_failed" });
         }
       }
+      return;
+    }
+
+    // Browser-session context is application-scoped and uses durable authorization only.
+    // This read-only endpoint deliberately does not fall back to bearer credential mappings.
+    const browserSessionContext = /^\\/customer\\/applications\\/([A-Za-z0-9][A-Za-z0-9._-]{1,99})\\/session$/.exec(requestUrl.pathname);
+    if (browserSessionContext && request.method === "GET") {
+      if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
+          !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+          !options.actorApplicationAssignmentStore) {
+        sendApiError(request, response, 503, "CUSTOMER_BROWSER_IDENTITY_UNAVAILABLE",
+          "Durable customer browser identity is not configured.");
+        return;
+      }
+      const identity = await resolveCustomerBrowserIdentity({
+        cookieHeader: request.headers.cookie,
+        applicationId: browserSessionContext[1],
+        sessionStore: options.customerIdentitySessionStore,
+        tenantAssignments: options.tenantApplicationAssignmentStore,
+        actorAssignments: options.actorApplicationAssignmentStore,
+      });
+      if (!identity) {
+        sendApiError(request, response, 401, "UNAUTHENTICATED",
+          "A valid browser session with active tenant and actor application assignments is required.");
+        return;
+      }
+      sendApiSuccess(request, response, 200, {
+        authenticated: true,
+        tenantId: identity.tenantId,
+        actorId: identity.actorId,
+        applicationId: identity.applicationId,
+        authentication: "postgres-browser-session",
+        authorization: "durable-tenant-and-actor-assignments",
+      });
       return;
     }
 
