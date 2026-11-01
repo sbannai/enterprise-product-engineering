@@ -2,7 +2,7 @@
 
 **Requirement:** EPER-ACT-APPROVAL-001  
 **Requirements register:** EPER-PRD-ADD v1.5.0  
-**Status:** Owner-directed control recorded; technical design for implementation review  
+**Status:** Owner-directed control recorded; disabled-by-default orchestration slice implemented and CI-validated; production host integration and provider execution remain pending  
 **Baseline:** Additive only. Preserve the approved 228 requirements / 38 chapters.  
 **Safety:** No provider adapter, CRM write executor, external dispatch, cloud resource, or Business UAT is enabled by this design.
 
