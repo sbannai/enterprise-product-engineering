@@ -35,6 +35,7 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 10);
   assert.deepEqual(result, { claimed: 3, delivered: 1, retried: 1, deadLettered: 1 });
   assert.equal(dispatched.length, 3);
+  assert.equal(calls.find(call => call.method === "claim").options.maxAttempts, 2);
   assert.equal(calls.filter(call => call.method === "delivered").length, 1);
   const failures = calls.filter(call => call.method === "failed");
   assert.equal(failures.length, 2);
