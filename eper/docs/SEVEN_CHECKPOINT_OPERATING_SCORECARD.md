@@ -719,3 +719,92 @@ The live open-PR query returns PR #323 and PR #326 only. Both remain drafts, mer
 **Owner decisions required:** disposition the 45 additive candidates; approve the support-admin role/delegation model; define service-level targets and calendar/escalation rules; approve repository protection/required checks and continuity ownership.
 
 **Safety:** No PR was merged by this refresh. No real provider action or chargeable cloud resource was triggered. No approved requirement or chapter was modified.
+
+
+## 2026-11-02 05:11 IST — live exact-head and operational-boundary refresh
+
+**Current integrated main, resolved dynamically:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`.  
+**Change since the preceding record:** no main movement. Rechecked the complete current open-PR set, exact candidate heads, associated Actions, selected job logs, the two merged foundations, and repository governance. The approved 228 requirements / 38 chapters remain unchanged.
+
+### Integrated main and merged foundations
+
+- Ten applicable push-triggered Actions runs for the exact main SHA completed successfully: EPER CI [41327033352](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033352), same-commit integrated validation [41327033337](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033337), controlled QA [41327033377](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033377), customer OIDC browser [41327033298](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033298), 228/38 matrix [41327033302](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033302), six-family HTTP [41327033272](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033272), container [41327033358](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033358), G9 [41327033313](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033313), workflow configuration [41327033325](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033325), and technical simulation [41327033274](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327033274).
+- PR #306 is merged as `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 is merged as `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Commit comparisons confirm both merge commits are ancestors of current main. They are not open work.
+
+### Current open PRs and exact-head evidence
+
+The live open-PR search returns #323, #326, #328 and #329. Each is draft, mergeable, targets main at the current SHA, and is zero commits behind. No submitted reviews or unresolved inline review threads were returned.
+
+| PR | Exact head at this recheck | Ahead / behind | Relevant exact-head Actions |
+|---|---|---:|---|
+| [#323](https://github.com/sbannai/enterprise-product-engineering/pull/323) | `a134871615015c2c622bdea4e4699e1e5b2b1a16` | 10 / 0 | Fresh clone [41352025000](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41352025000); EPER CI [41352024988](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41352024988); QA [41352024973](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41352024973); integrated [41352025099](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41352025099); 228/38 matrix [41352025012](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41352025012). |
+| [#326](https://github.com/sbannai/enterprise-product-engineering/pull/326) | `7446ed23b3545f3cb74b9a4239532bdf340ce3e9` | 5 / 0 | Fresh clone [41327722225](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722225); EPER CI [41327722184](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722184); worker QA [41327722105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722105); PostgreSQL scheduler integration [41327722301](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722301); integrated [41327722204](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722204). |
+| [#328](https://github.com/sbannai/enterprise-product-engineering/pull/328) | `cadfacfe117d1cb10175d947d44ac6a97f0d2b36` | 3 / 0 | Fresh clone [41344237279](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41344237279); EPER CI [41344237196](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41344237196); QA [41344237200](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41344237200); OIDC browser [41344237221](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41344237221); integrated [41344237243](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41344237243). |
+| [#329](https://github.com/sbannai/enterprise-product-engineering/pull/329) | `aecdf7e1af49a866cc2f48444f3daf627006b09c` | 12 / 0 | Fresh clone [41351773014](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773014); EPER CI [41351772960](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772960); QA [41351773007](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773007); Chromium customer support journey [41351773043](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773043); integrated [41351772987](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351772987). |
+
+The run metadata for each selected fresh-clone workflow confirms its PR head SHA and current main base SHA. Associated workflow runs for all four current heads completed successfully. Integrated-validation matrix subjobs are skipped by PR workflow design on these candidates; each has a separate successful 228/38 matrix run. No stale green run was used.
+
+### Checkpoint 1 — Product USP and positioning
+
+- **Status:** AMBER.
+- **Delivered capability:** The approved 228 requirements / 38 chapters remain unchanged. The v34-to-228 crosswalk preserves all 45 source candidates and acceptance criteria. Its current technical classification is zero exact full-coverage matches, 45 partial-support links through shared controls, and 45 additive v1.6.0 draft candidates; four overlap the existing human-approval control.
+- **Evidence:** PR #323 exact-head matrix [41352025012](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41352025012): 228 requirements, 38 chapters, 38 chapter suites passed, 259 checks passed, zero failed chapters; nine chapters have HTTP pilot apps in scope and 29 do not.
+- **Blocker:** Technical classification is not owner approval of additive scope.
+- **Next action:** Record owner disposition for each candidate in a versioned requirements-register change; do not edit the approved 228/38 baseline.
+
+### Checkpoint 2 — CI and persistence foundations
+
+- **Status:** GREEN for local/CI bootstrap and integration; operational recovery remains AMBER.
+- **Delivered capability:** Each current PR head passed clean-clone `npm run dev:verify`. The seven migration groups—payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity—were applied and repeated. Fresh-clone test results: #323 1,170 passed / 0 failed / 0 skipped; #326 1,175 / 0 / 0; #328 1,171 / 0 / 0; #329 1,170 / 0 / 0. Each restore smoke logged `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`, 59 source/restored base tables and seven migration-ledger tables.
+- **Evidence:** Exact-head fresh-clone runs in the PR table above. #326 PostgreSQL scheduler integration [41327722301](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722301) passed two real-PostgreSQL dispatch-fence/idempotency subtests.
+- **Blocker:** A disposable local/CI restore is not production disaster-recovery certification. Production backup destination, encryption/key custody, retention, recovery objectives and an independent restore rehearsal are not evidenced.
+- **Next action:** Document owner-approved recovery objectives and arrange an independently witnessed non-chargeable recovery rehearsal.
+
+### Checkpoint 3 — Architecture and execution boundaries
+
+- **Status:** AMBER.
+- **Delivered capability:** Mainline identity includes provider-neutral OIDC protocol validation and browser transaction routes, state/nonce/PKCE binding, secure host-only session cookie, CSRF verification, sign-out/revocation and per-request intersection of active tenant/application plus actor/application assignments. The customer browser receives only the fixed `customer-user` role; OIDC claims do not grant application roles.
+- **Evidence:** PR #329 exact-head Chromium run [41351773043](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41351773043), 1/1 passed. The test covers synthetic IdP sign-in, workspace bootstrap, ticket creation/history/reply, protected settings, sign-out and revoked-session denial.
+- **Boundary:** The browser test uses a synthetic local IdP and in-memory session/ticket stores. It does not certify production-provider onboarding or production session-store operation. Support-admin still uses a bearer credential; its role/delegation mapping is not integrated with browser sessions.
+- **Next action:** Close the owner-approved support-admin role/delegation model and add negative tests before changing the admin authentication boundary.
+
+### Checkpoint 4 — Workflow execution design and schema
+
+- **Status:** AMBER.
+- **Delivered capability:** Campaign execution code has a continuous worker loop with durable claims, due-schedule materialization, lease ownership, an atomic dispatch fence, live policy re-check, idempotency-key propagation, bounded retry/dead-letter handling and graceful shutdown. The loop currently uses a one-second idle delay between empty claims. The workflow outbox process separately loops through authorized tenant/application contexts, renews leases, fences stale workers, retries with capped exponential backoff, dead-letters exhausted claims and reports per-pass counters.
+- **Evidence:** PR #326 worker startup QA [41327722105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722105): five fail-closed startup guards passed. PostgreSQL dispatch-race integration [41327722301](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41327722301): pause-vs-dispatch fence and event idempotency passed. Mainline outbox worker/process tests cover lease renewal/loss, retry/dead-letter, context isolation and shutdown.
+- **Blocker:** PR #326 has no reviewed deployment adapter or restricted worker-specific database role. Neither worker has independently demonstrated deployment supervision, restart/recovery, connected metrics/alerts, load behavior or production dispatcher idempotency. The campaign worker must remain disabled by default.
+- **Next action:** Implement a restricted worker identity and reviewed no-live-provider adapter contract, then test process supervision and PostgreSQL restart/recovery without external dispatch.
+
+### Checkpoint 5 — Integrated validation
+
+- **Status:** GREEN for the exact technical lanes inspected.
+- **Delivered capability:** Ten exact-main-SHA push workflows and all associated workflows for the four current PR heads completed successfully. The fresh-clone, typecheck/build, controlled QA, integrated gate, 228/38 matrix, browser, PostgreSQL, six-family HTTP, container, G9 and release-build lanes are represented in the evidence above.
+- **Blocker:** Automated chapter and browser tests cover only their declared scope. Green CI is not production readiness or owner acceptance.
+- **Next action:** Expand real-PostgreSQL customer-to-admin support E2E and operational failure/recovery coverage while preserving independent review.
+
+### Checkpoint 6 — PR consolidation and governance
+
+- **Status:** AMBER.
+- **Delivered capability:** The live open-PR set is reconciled to #323/#326/#328/#329. All are draft, mergeable, zero behind current main; review submissions and unresolved review threads are empty. PR #306 and #310 are verified merged ancestors.
+- **Evidence:** GitHub PR metadata and exact-head Actions above. Main branch metadata reports `protected=false`, required-check enforcement off, and the repository rulesets collection is empty.
+- **Blocker:** Main is not protected. Direct branch-protection detail read is unavailable to the connected integration; the branch metadata and empty rulesets collection are the available evidence. No independent reviewer has submitted a review.
+- **Next action:** Obtain owner approval for required checks/branch protection and independent review; do not merge draft PRs merely to reduce the queue.
+
+### Checkpoint 7 — Workflow publisher/runtime implementation
+
+- **Status:** AMBER.
+- **Delivered capability:** The workflow outbox is implemented as a continuously running process, not a cron-triggered invocation. Its runtime contract requires a restricted platform-worker pool and an explicit dispatcher; delivery is at-least-once with event-ID idempotency, lease renewal/fencing, retry/dead-letter handling and counters for claimed/delivered/retried/dead-lettered/lease-lost/interrupted/context visits. The host adapter maps SIGINT/SIGTERM to graceful cancellation.
+- **Evidence:** Mainline workflow outbox worker/process/host tests and PR #326 startup/dispatch-fence tests described above.
+- **Blocker:** Deployment host must still provide restart supervision, termination grace period, metrics/log export and alerts; a reviewed dispatcher and restricted worker credentials are absent; no real restart/recovery drill or load evidence exists.
+- **Next action:** Complete the host-owned supervision/observability contract and run a no-provider failure/restart rehearsal.
+
+### Repository governance and safety
+
+- Main remains unprotected; required status checks are not enforced and no repository rulesets are configured.
+- The Engineering Continuity & Independence Charter remains **proposed** pending owner review. A second engineer has not demonstrated the full clean-clone/build/test/change/PR/release/rollback path independently.
+- No PR was merged by this update. No chargeable cloud resource was provisioned and no real external/provider action was triggered. No acceptance authorization is made.
+
+### Scorecard self-update validation boundary
+
+This dated append is being made on PR #323's existing documentation branch. Its pre-append head `a134871615015c2c622bdea4e4699e1e5b2b1a16` and the passing runs listed above validate the pre-append candidate only. The new documentation commit changes PR #323's head; those green runs must not be treated as validation of the new head. Re-run and inspect Actions against the resulting exact head before review or merge.
