@@ -47,7 +47,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     const keyPath=join(certDir,"key.pem"), certPath=join(certDir,"cert.pem");
     execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-keyout",keyPath,"-out",certPath,"-days","1","-subj","/CN=localhost","-addext","subjectAltName=DNS:localhost"]);
     tlsServer=https.createServer({key:readFileSync(keyPath),cert:readFileSync(certPath)},async(req,res)=>{
-      if(req.url==="/mock-idp"){res.writeHead(200,{"content-type":"text/html"});res.end('<a href="'+origin+'/customer/auth/oidc/callback?code=browser-code&state='+state+'">Continue sign in</a>');return;}
+      if(req.url?.startsWith("/mock-idp?")){res.writeHead(200,{"content-type":"text/html"});res.end('<a href="'+origin+'/customer/auth/oidc/callback?code=browser-code&state='+state+'">Continue sign in</a>');return;}
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
       try{
         const upstream=await fetch(backendOrigin+req.url,{method:req.method,headers:req.headers,body:["GET","HEAD"].includes(req.method)?undefined:Buffer.concat(chunks),redirect:"manual"});
