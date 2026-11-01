@@ -16,7 +16,7 @@ export interface CustomerOidcCallbackClient {
 export interface CompleteCustomerOidcBrowserLoginInput {
   client: CustomerOidcCallbackClient;
   store: Pick<PostgresCustomerIdentitySessionStore,
-    "consumeLoginTransaction" | "resolveSubject" | "createSession">;
+    "createLoginTransaction" | "consumeLoginTransaction" | "resolveSubject" | "createSession">;
   cookieHeader: string | undefined;
   code: string;
   state: string;
