@@ -87,7 +87,7 @@ CREATE TRIGGER eper_customer_identity_events_no_update
   BEFORE UPDATE OR DELETE ON eper_customer_identity_events
   FOR EACH ROW EXECUTE FUNCTION eper_customer_identity_events_append_only();
 
-DO $$
+DO $eper$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
@@ -104,7 +104,7 @@ BEGIN
     );
   END LOOP;
 END;
-$;
+$eper$;
 
 ALTER TABLE eper_customer_oidc_login_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE eper_customer_oidc_login_transactions FORCE ROW LEVEL SECURITY;
