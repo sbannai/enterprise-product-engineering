@@ -16,6 +16,7 @@ import { PostgresCampaignSchedulerStore } from "../../packages/campaign-schedule
 import { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
+import { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -146,6 +147,47 @@ const customerIdentitySessionStore = customerIdentityPersistenceMode === "postgr
   : undefined;
 if (customerIdentitySessionStore) await customerIdentitySessionStore.assertReady();
 
+const customerOidcEnabled = process.env.EPER_CUSTOMER_OIDC_ENABLED === "true";
+let customerOidcClient: ProviderNeutralOidcClient | undefined;
+let customerOidcPublicOrigin: string | undefined;
+let customerCsrfSecret: string | undefined;
+if (customerOidcEnabled) {
+  if (customerIdentityPersistenceMode !== "postgres" || !customerIdentitySessionStore ||
+      actorAssignmentMode !== "postgres" || !tenantApplicationAssignmentStore || auditMode !== "postgres") {
+    throw new Error("CUSTOMER_OIDC_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
+  }
+  const issuer = process.env.EPER_CUSTOMER_OIDC_ISSUER?.trim();
+  const clientId = process.env.EPER_CUSTOMER_OIDC_CLIENT_ID?.trim();
+  const redirectUri = process.env.EPER_CUSTOMER_OIDC_REDIRECT_URI?.trim();
+  const pkceEncryptionKey = process.env.EPER_CUSTOMER_OIDC_PKCE_ENCRYPTION_KEY;
+  customerOidcPublicOrigin = process.env.EPER_CUSTOMER_OIDC_PUBLIC_ORIGIN?.trim();
+  customerCsrfSecret = process.env.EPER_CUSTOMER_CSRF_SECRET;
+  if (!issuer || !clientId || !redirectUri || !pkceEncryptionKey || pkceEncryptionKey.length < 32 ||
+      !customerOidcPublicOrigin || !customerCsrfSecret || customerCsrfSecret.length < 32) {
+    throw new Error("CUSTOMER_OIDC_CONFIGURATION_INCOMPLETE");
+  }
+  let publicOrigin: URL;
+  try { publicOrigin = new URL(customerOidcPublicOrigin); } catch { throw new Error("CUSTOMER_OIDC_PUBLIC_ORIGIN_INVALID"); }
+  const localHttp = publicOrigin.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(publicOrigin.hostname);
+  if ((publicOrigin.protocol !== "https:" && !localHttp) || publicOrigin.origin !== customerOidcPublicOrigin ||
+      publicOrigin.username || publicOrigin.password || publicOrigin.hash) {
+    throw new Error("CUSTOMER_OIDC_PUBLIC_ORIGIN_INVALID");
+  }
+  let callbackUrl: URL;
+  try { callbackUrl = new URL(redirectUri); } catch { throw new Error("CUSTOMER_OIDC_REDIRECT_URI_INVALID"); }
+  if (callbackUrl.origin !== publicOrigin.origin || callbackUrl.pathname !== "/customer/auth/oidc/callback" ||
+      callbackUrl.search || callbackUrl.hash || callbackUrl.username || callbackUrl.password) {
+    throw new Error("CUSTOMER_OIDC_REDIRECT_URI_INVALID");
+  }
+  if (process.env.NODE_ENV === "production" && !customerOidcPublicOrigin.startsWith("https://")) {
+    throw new Error("PRODUCTION_CUSTOMER_OIDC_REQUIRES_HTTPS_PUBLIC_ORIGIN");
+  }
+  customerOidcClient = new ProviderNeutralOidcClient({
+    issuer, clientId, redirectUri, pkceEncryptionKey,
+    clientSecret: process.env.EPER_CUSTOMER_OIDC_CLIENT_SECRET || undefined,
+  });
+}
+
 const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
@@ -226,7 +268,8 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
-  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
+  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore,
+  customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore,

@@ -27,6 +27,10 @@ import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin
 import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
 import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
+import type { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
+import { completeCustomerOidcBrowserLogin } from "../../packages/identity/customer-oidc-callback.js";
+import { normalizeCustomerReturnPath, readCustomerOidcReturnPath, serializeCustomerOidcReturnCookie, serializeClearedCustomerOidcReturnCookie, serializeCustomerOidcStateCookie, serializeClearedCustomerOidcStateCookie } from "../../packages/identity/customer-oidc-browser-flow.js";
+import { CUSTOMER_SESSION_COOKIE, createCustomerCsrfToken, serializeCustomerSessionCookie, serializeCustomerCsrfCookie, serializeClearedCustomerCookies } from "../../packages/identity/customer-browser-security.js";
 import { resolveCustomerBrowserIdentity } from "../../packages/identity/customer-browser-session-authorization.js";
 import { parseCookieHeader, verifyCustomerBrowserCsrf } from "../../packages/identity/customer-browser-security.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
@@ -452,7 +456,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -549,6 +553,66 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    const oidcStore = options.customerIdentitySessionStore;
+    const oidcEnabled = process.env.EPER_CUSTOMER_OIDC_ENABLED === "true";
+    if (requestUrl.pathname === "/customer/auth/oidc/start" && request.method === "GET") {
+      if (!oidcEnabled || !options.customerOidcClient || !oidcStore || !options.customerOidcPublicOrigin) {
+        sendApiError(request, response, 503, "CUSTOMER_OIDC_UNAVAILABLE", "Customer login is not configured."); return;
+      }
+      try {
+        const login = await options.customerOidcClient.beginLogin(oidcStore);
+        const returnCookie = serializeCustomerOidcReturnCookie(requestUrl.searchParams.get("returnTo") ?? undefined, options.customerOidcPublicOrigin);
+        response.writeHead(302, { location: login.authorizationUrl, "cache-control": "no-store",
+          "set-cookie": [serializeCustomerOidcStateCookie(login.state), returnCookie] });
+        response.end(); return;
+      } catch {
+        sendApiError(request, response, 503, "CUSTOMER_OIDC_START_FAILED", "Customer login could not be started."); return;
+      }
+    }
+    if (requestUrl.pathname === "/customer/auth/oidc/callback" && request.method === "GET") {
+      if (!oidcEnabled || !options.customerOidcClient || !oidcStore || !options.customerOidcPublicOrigin || !options.customerCsrfSecret) {
+        sendApiError(request, response, 503, "CUSTOMER_OIDC_UNAVAILABLE", "Customer login is not configured."); return;
+      }
+      const code = requestUrl.searchParams.get("code") ?? "";
+      const state = requestUrl.searchParams.get("state") ?? "";
+      try {
+        const login = await completeCustomerOidcBrowserLogin({ client: options.customerOidcClient, store: oidcStore,
+          cookieHeader: request.headers.cookie, code, state, correlationId: resolveApiRequestId(request) });
+        const csrf = createCustomerCsrfToken(login.sessionToken, options.customerCsrfSecret);
+        const returnPath = readCustomerOidcReturnPath(request.headers.cookie, options.customerOidcPublicOrigin);
+        response.writeHead(302, { location: normalizeCustomerReturnPath(returnPath, options.customerOidcPublicOrigin), "cache-control": "no-store",
+          "set-cookie": [serializeCustomerSessionCookie(login.sessionToken, 8 * 60 * 60), serializeCustomerCsrfCookie(csrf, 8 * 60 * 60),
+            serializeClearedCustomerOidcStateCookie(), serializeClearedCustomerOidcReturnCookie()] });
+        response.end(); return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const safeCode = /^EPER_[A-Z0-9_]{3,100}$/.test(message) ? message : "CUSTOMER_OIDC_CALLBACK_FAILED";
+        response.writeHead(302, { location: "/?authentication_error=" + encodeURIComponent(safeCode), "cache-control": "no-store",
+          "set-cookie": [serializeClearedCustomerOidcStateCookie(), serializeClearedCustomerOidcReturnCookie()] });
+        response.end(); return;
+      }
+    }
+    if (requestUrl.pathname === "/customer/auth/logout" && request.method === "POST") {
+      if (!oidcEnabled || !oidcStore || !options.customerOidcPublicOrigin || !options.customerCsrfSecret) {
+        sendApiError(request, response, 503, "CUSTOMER_OIDC_UNAVAILABLE", "Customer login is not configured."); return;
+      }
+      const cookies = parseCookieHeader(request.headers.cookie);
+      const sessionToken = cookies.get(CUSTOMER_SESSION_COOKIE);
+      if (!sessionToken) {
+        response.writeHead(204, { "set-cookie": serializeClearedCustomerCookies(), "cache-control": "no-store" }); response.end(); return;
+      }
+      if (!verifyCustomerBrowserCsrf({ method: request.method, origin: request.headers.origin, expectedOrigin: options.customerOidcPublicOrigin,
+        cookieHeader: request.headers.cookie, csrfHeader: typeof request.headers["x-csrf-token"] === "string" ? request.headers["x-csrf-token"] : undefined, sessionToken, secret: options.customerCsrfSecret })) {
+        sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED", "The logout request could not be validated."); return;
+      }
+      try {
+        await oidcStore.revokeSession(sessionToken, "user_logout", resolveApiRequestId(request));
+        response.writeHead(204, { "set-cookie": serializeClearedCustomerCookies(), "cache-control": "no-store" }); response.end(); return;
+      } catch {
+        sendApiError(request, response, 503, "CUSTOMER_LOGOUT_FAILED", "The session could not be revoked."); return;
+      }
+    }
 
     const workflowRoleCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-roles$/.exec(requestUrl.pathname);
     const workflowRoleDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-roles\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(requestUrl.pathname);
@@ -2176,11 +2240,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const csrfValid = verifyCustomerBrowserCsrf({
             method: request.method,
             origin: request.headers.origin,
-            expectedOrigin: process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+            expectedOrigin: options.customerOidcPublicOrigin ?? process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
             cookieHeader: request.headers.cookie,
             csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
             sessionToken,
-            secret: process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+            secret: options.customerCsrfSecret ?? process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
           });
           if (!csrfValid) {
             sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",

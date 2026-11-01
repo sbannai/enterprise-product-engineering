@@ -27,3 +27,18 @@ export {
   type OidcLoginTransactionStore,
   type ProviderNeutralOidcConfig,
 } from "./provider-neutral-oidc-client.js";
+
+export {
+  CUSTOMER_OIDC_STATE_COOKIE,
+  CUSTOMER_OIDC_STATE_MAX_AGE_SECONDS,
+  normalizeCustomerReturnPath,
+  serializeClearedCustomerOidcStateCookie,
+  serializeCustomerOidcStateCookie,
+  verifyCustomerOidcBrowserState,
+} from "./customer-oidc-browser-flow.js";
+
+export {
+  completeCustomerOidcBrowserLogin,
+  type CompleteCustomerOidcBrowserLoginInput,
+  type CustomerOidcCallbackClient,
+} from "./customer-oidc-callback.js";
