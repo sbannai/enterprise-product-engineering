@@ -2231,7 +2231,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       // explicit application allow-list before reading, creating, or replying to tickets.
       if (!(options.actorApplicationAssignmentStore
         ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
-        : identity.applicationIds?.includes(applicationId) === true)) {
+        : process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" &&
+          identity.applicationIds?.includes(applicationId) === true)) {
         sendJson(request, response, 403, { error: "actor_not_assigned_to_application" });
         return;
       }
@@ -2570,10 +2571,30 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 404, { error: "not_found" });
         return;
       }
-      const identity = resolveCustomerAccessIdentity(request);
-      if (!identity) {
-        sendJson(request, response, 401, { error: "unauthorized" });
-        return;
+      let identity: TrustedCustomerAccessIdentity | null;
+      if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres") {
+        if (!options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+            !options.actorApplicationAssignmentStore) {
+          sendApiError(request, response, 503, "CUSTOMER_BROWSER_IDENTITY_UNAVAILABLE",
+            "Durable customer browser identity and assignment stores are required.");
+          return;
+        }
+        const sessionToken = parseCookieHeader(request.headers.cookie).get("__Host-eper_session");
+        const session = sessionToken
+          ? await options.customerIdentitySessionStore.resolveSession(sessionToken)
+          : null;
+        if (!session) {
+          sendApiError(request, response, 401, "UNAUTHENTICATED",
+            "A valid customer browser session is required.");
+          return;
+        }
+        identity = { tenantId: session.tenantId, actorId: session.actorId, roleKey: "customer-user" };
+      } else {
+        identity = resolveCustomerAccessIdentity(request);
+        if (!identity) {
+          sendJson(request, response, 401, { error: "unauthorized" });
+          return;
+        }
       }
       let modulesConfig: unknown;
       try { modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
@@ -2591,13 +2612,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         return;
       }
       let assignmentsConfig: unknown;
-      if (!options.tenantApplicationAssignmentStore) {
+      if (!options.tenantApplicationAssignmentStore && process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres") {
         try { assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
         catch { assignmentsConfig = null; }
       }
       const tenantAssignments = options.tenantApplicationAssignmentStore
         ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
-        : assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
+        : process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" &&
+          assignmentsConfig && typeof assignmentsConfig === "object" && !Array.isArray(assignmentsConfig)
           ? (assignmentsConfig as Record<string, unknown>)[identity.tenantId] : null;
       if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId)) {
         sendJson(request, response, 403, { error: "application_not_assigned_to_tenant" });
