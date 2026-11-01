@@ -82,3 +82,22 @@ test("logout requires same-origin CSRF proof, revokes the session and clears coo
     assert.deepEqual(calls, ["revokeSession"]);
   });
 });
+
+
+test("OIDC HTTP callback never redirects to an external returnTo destination", async () => {
+  await withServer(async (base) => {
+    const start = await fetch(base + "/customer/auth/oidc/start?returnTo=" + encodeURIComponent("https://evil.example.test/phishing"), { redirect: "manual" });
+    assert.equal(start.status, 302);
+    const startCookies = start.headers.getSetCookie();
+    const stateCookie = startCookies.find(value => value.startsWith("__Host-eper_oidc_state="));
+    const returnCookie = startCookies.find(value => value.startsWith("__Host-eper_oidc_return="));
+    assert.ok(stateCookie);
+    assert.ok(returnCookie);
+    const callback = await fetch(base + "/customer/auth/oidc/callback?code=auth-code&state=" + state, {
+      redirect: "manual",
+      headers: { cookie: stateCookie.split(";")[0] + "; " + returnCookie.split(";")[0] },
+    });
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.get("location"), "/");
+  });
+});
