@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
+import { createServer as createProbeServer } from "node:http";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 test("browser OIDC login grants protected settings, logout revokes access", async () => {
@@ -12,7 +13,12 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({"tenant-01":["settings"]}),
     EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({"tenant-01":{"app-01":{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
   });
-  const state="s".repeat(43), sessionToken="t".repeat(43), origin="http://localhost";
+  const state="s".repeat(43), sessionToken="t".repeat(43);
+  const probe=createProbeServer();
+  await new Promise((resolve,reject)=>{probe.once("error",reject);probe.listen(0,"localhost",resolve);});
+  const port=probe.address().port;
+  await new Promise(resolve=>probe.close(resolve));
+  const origin="http://localhost:"+port;
   let active=false, server, browser;
   const store={
     async createLoginTransaction(){},
@@ -28,7 +34,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
       tenantApplicationAssignmentStore:{async listActive(){return ["app-01"];}},
       actorApplicationAssignmentStore:{async isAssigned(){return true;}},
       customerOidcPublicOrigin:origin,customerCsrfSecret:"c".repeat(48)});
-    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"localhost",resolve);});
+    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(port,"localhost",resolve);});
     const base="http://localhost:"+server.address().port;
     browser=await chromium.launch({headless:true});
     const page=await browser.newPage();
