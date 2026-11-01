@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { parseCookieHeader } from "./customer-browser-security.js";
 
 export const CUSTOMER_OIDC_STATE_COOKIE = "__Host-eper_oidc_state";
+export const CUSTOMER_OIDC_RETURN_COOKIE = "__Host-eper_oidc_return";
 export const CUSTOMER_OIDC_STATE_MAX_AGE_SECONDS = 300;
 
 function safeEqual(left: string, right: string): boolean {
@@ -54,4 +55,33 @@ export function normalizeCustomerReturnPath(candidate: string | undefined, publi
   } catch {
     return fallback;
   }
+}
+
+
+/** Store only a same-origin relative destination in a short-lived host cookie. */
+export function serializeCustomerOidcReturnCookie(candidate: string | undefined, publicOrigin: string): string {
+  const returnPath = normalizeCustomerReturnPath(candidate, publicOrigin);
+  const encoded = Buffer.from(returnPath, "utf8").toString("base64url");
+  return CUSTOMER_OIDC_RETURN_COOKIE + "=" + encoded +
+    "; Path=/; Max-Age=" + CUSTOMER_OIDC_STATE_MAX_AGE_SECONDS +
+    "; HttpOnly; Secure; SameSite=Lax";
+}
+
+/** Decode and revalidate the browser-bound return destination; malformed or duplicate cookies fall back to /. */
+export function readCustomerOidcReturnPath(cookieHeader: string | undefined, publicOrigin: string): string {
+  const cookies = parseCookieHeader(cookieHeader);
+  const encoded = cookies.get(CUSTOMER_OIDC_RETURN_COOKIE);
+  if (typeof encoded !== "string" || !/^[A-Za-z0-9_-]{1,2800}$/.test(encoded)) return "/";
+  try {
+    const decoded = Buffer.from(encoded, "base64url").toString("utf8");
+    // Require canonical base64url so malformed encodings cannot be normalized ambiguously.
+    if (Buffer.from(decoded, "utf8").toString("base64url") !== encoded) return "/";
+    return normalizeCustomerReturnPath(decoded, publicOrigin);
+  } catch {
+    return "/";
+  }
+}
+
+export function serializeClearedCustomerOidcReturnCookie(): string {
+  return CUSTOMER_OIDC_RETURN_COOKIE + "=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax";
 }
