@@ -621,3 +621,36 @@ The live open-PR query returns PR #323 and PR #326 only. Both remain drafts, mer
 **Owner:** repository owner / accountable engineering and operations owners; candidate disposition and repository governance require owner decision.  
 **Next actions:** review the two current PRs; complete support-admin browser authentication and end-to-end support journey; then close worker identity/adapter/supervision/recovery and repository governance.  
 **Safety:** no PR merged, no provider dispatch triggered, and no chargeable cloud resources provisioned by this refresh.
+
+
+## 2026-11-02 01:22 IST — support export and exact-head refresh
+
+**Current integrated main:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`.  
+**Change since the previous record:** a focused support-console improvement was opened as PR #328; no approved requirement or chapter was changed.
+
+| Checkpoint | Status | Delivered capability / exact evidence | Blocker | Next action |
+|---|---|---|---|---|
+| 1. Product USP and positioning | AMBER | Approved 228 requirements / 38 chapters preserved. The v34 crosswalk and 45 additive candidates remain draft pending owner disposition. The exact-head 228-row / 38-chapter matrix passed on PR #328 head `cadfacfe117d1cb10175d947d44ac6a97f0d2b36` (run 41344237211). | Owner disposition of the additive candidates. | Record an explicit disposition without altering the approved baseline. |
+| 2. CI and persistence foundations | GREEN for local/CI scope | PR #328 fresh-clone run 41344237279 passed: `npm run dev:verify`, 1,171 passed / 0 failed / 0 skipped; all seven migration groups, including identity, applied and repeated; disposable PostgreSQL 16 backup/restore passed with 59 source/restored base tables and seven migration-ledger tables. | Production recovery objectives and off-host backup/key custody are not established by this disposable drill. | Complete an independently witnessed recovery rehearsal and record recovery objectives. |
+| 3. Architecture and execution boundaries | AMBER | Provider-neutral OIDC browser routes, secure session cookies, CSRF and per-request tenant/application assignment checks remain validated on main. The exact-main Chromium run 41327033298 proves login, protected settings, logout and revoked-session denial using a synthetic local IdP. | Support-admin browser authentication and durable role/delegation integration remain outstanding. | Define and test the authoritative support-admin role/delegation mapping before changing the admin authentication path. |
+| 4. Workflow execution design and schema | AMBER | Durable execution/outbox, lease renewal/fencing, idempotency, retry/dead-letter and PostgreSQL dispatch-race tests remain CI-validated. PR #326 adds a disabled-by-default campaign worker process. | Reviewed adapter, restricted worker identity, independent supervision, metrics/alerts and restart/recovery proof. | Keep the worker disabled; implement the reviewed least-privilege runtime and recovery path. |
+| 5. Integrated validation | GREEN for current technical lanes | PR #328 head `cadfacfe117d1cb10175d947d44ac6a97f0d2b36`: 11 applicable exact-head Actions workflows completed successfully, including EPER CI 41344237196, fresh clone 41344237279, QA 41344237200, integrated validation 41344237243, matrix 41344237211, six-family HTTP 41344237254, container 41344237249, OIDC browser 41344237221, G9 41344237226 and release build 41344237209. The new all-pages export regression test passed in fresh-clone and QA logs. | Full customer workspace/support browser journey is not covered by the current OIDC E2E. | Add browser E2E for ticket submission, history, replies and admin triage after admin auth is resolved. |
+| 6. PR consolidation and governance | AMBER | Current open PRs are #323, #326 and #328. PR #323 and #326 exact-head workflows remain green; PR #328 is draft and its exact-head workflows are green. No submitted reviews or unresolved review threads were present when checked. | Main reports `protected=false`; repository rulesets are empty; independent review and historical branch reconciliation remain. | Obtain owner approval for required checks/branch protection and complete independent PR review. |
+| 7. Workflow publisher/runtime implementation | AMBER | Campaign worker process is separately invokable, fail-closed and disabled by default. | No reviewed deployment adapter, restricted worker DB role, independent supervisor, metrics/alerts or live restart/recovery evidence. | Do not enable dispatch until the operating controls are proven. |
+
+### Support journey increment — PR #328
+
+- Exact head: `cadfacfe117d1cb10175d947d44ac6a97f0d2b36`; base main at `a554990cb7f4969bb218aad7a2e9944aec62fa05`; 3 commits ahead / 0 behind.
+- Adds an all-pages CSV export action that reuses the existing authorized support queue endpoint and current status/type/severity/application/search filters; the existing current-page export remains.
+- Fresh-clone run 41344237279: new regression `support admin queue exports every page matching the active filters` passed; 1,171 passed / 0 failed / 0 skipped; backup/restore passed.
+- Controlled QA run 41344237200: 1,135 passed / 0 failed / 17 skipped; the new export regression passed.
+- PR remains draft; no merge was performed.
+- Still open: support-admin bearer credential rather than browser-session login; no SLA target/timer/escalation contract is defined. Do not invent SLA thresholds.
+
+### Merged foundation verification
+
+- PR #306 merge `6e8dd438e5091b1802d65e4f29951389fe077859` is an ancestor of current main (14 commits ahead, 0 behind).
+- PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e` is an ancestor of current main (13 commits ahead, 0 behind).
+- The current-main exact-head push workflows remain successful. The separate fresh-clone run above is on PR #328's exact head, not on the main SHA itself; its implementation files are unchanged from main.
+
+**Owner / authority:** user remains the product and design authority. This record does not change the approved requirements baseline or grant production/acceptance authority.
