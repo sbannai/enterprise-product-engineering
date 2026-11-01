@@ -186,7 +186,7 @@ Migration `002_workflow_publication_events.sql` adds an append-only publication 
 | Workflow instance audit history | Start and transition audit events persisted atomically with state, transition and idempotency records; real PostgreSQL integration passed | CI-VALIDATED |
 | Restart/concurrency/idempotency behavior | PostgreSQL integration test covers concurrent duplicate starts, concurrent duplicate submits, competing approvals with the same expected version, cross-application and cross-tenant denial, service recreation and original-response replay; advisory locks, instance row locks and RLS isolation are exercised | INTEGRATION-TESTED; LOAD TEST PENDING |
 | End-to-end workflow execution API | Admin role/publish routes and customer start/transition routes implemented behind an explicit opt-in flag; API tests verify trusted identity, body allowlists and tenant/application scoping | CI-VALIDATED; DISABLED BY DEFAULT |
-| Transactional outbox and continuous worker component | Immutable transactional event outbox, bounded lease/retry/dead-letter worker and `WorkflowOutboxProcess` with authorised-scope discovery, bounded drain, cancellation and failure isolation | CI-VALIDATED; HOST OPERATIONS PENDING |
+| Transactional outbox and continuous worker component | Immutable transactional event outbox and continuous worker with bounded claims, normal-failure retry/dead-letter handling, authorised-scope discovery, bounded drain, cancellation and failure isolation. Current main does not renew in-flight leases or enforce the attempt budget when a process crashes before `markFailed`; PR #300 proposes those hardening changes. Tenant-scoped dead-letter inspection and audited replay remain backend-only work in PRs #298/#299, with no operator route/UI | CI-VALIDATED; HOST OPERATIONS PENDING |
 
 ## 12. Publisher increment (CI-validated)
 
@@ -255,6 +255,8 @@ The workflow outbox now has both a bounded delivery pass (`WorkflowOutboxWorker.
 - A scope-level database or dispatch failure is reported and isolated; other scopes in the same pass continue. Observability callback failures cannot terminate delivery.
 - The process accepts an `AbortSignal` for graceful shutdown and passes it to the context source. Per-event delivery remains at-least-once; external dispatchers must deduplicate by immutable `eventId`.
 - Tests cover continuous drain behavior, duplicate context discovery, per-scope failure isolation, graceful cancellation and option bounds.
+
+**Current-main reliability limits (`880674ac`):** the worker has no heartbeat to renew a claim during a long dispatch, so another worker can reclaim the event after lease expiry while the original dispatch may still be running. The `maxAttempts` dead-letter decision occurs in `markFailed`; a crash before that call can bypass the budget because main's claim path has no exhaustion sweep. PR #300 proposes lease renewal, lease-loss fencing, claim-time exhaustion handling and metric propagation; these are not current-main capabilities. PRs #298 and #299 propose tenant-scoped dead-letter inspection and audited replay services, but neither currently supplies an operator-facing API/UI.
 
 The exact PR head `ec5080af429e3847d270d1428b6a48d63d3c1b1b` passed all 12 associated GitHub Actions workflows, including TypeScript typecheck/build, the full test suite, live PostgreSQL workflow execution and same-commit integrated validation.
 
