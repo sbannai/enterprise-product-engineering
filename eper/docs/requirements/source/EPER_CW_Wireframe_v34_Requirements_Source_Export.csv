@@ -1,0 +1,10 @@
+index,EPER Requirements Register — Wireframe v34,Unnamed: 1
+0,Version,1.5.0 (draft for baseline approval)
+1,Source,EPER Customer & Admin Workspace Wireframe v34 · 2026-10-27
+2,Requirements captured,45
+3,Requirement ID range,EPER-CW-001 to EPER-CW-045
+4,Existing baseline protection,228 requirements / 38 chapters remain unchanged; mapping is a required next control step.
+5,Coverage,"Customer workspace, Help Center, Growth Hub, content assets, campaigns, approvals, scheduler, agents, CRM, notifications, ticketing, admin queue, P1 governance, settings, pricing, audit, tenant isolation and responsive UX."
+6,Important status caveat,"The uploaded HTML is a demo/prototype. Requirements are captured; implementation, persistence, API integration, tests, merge and release are unverified."
+7,Versioning caveat,v1.5.0 is proposed as the next additive version after the v1.4.0 register. Check for ID collisions and map to the existing baseline before merging.
+8,Workbook tabs,Requirements Register; Lifecycle & Rules; Scope & Baseline; Read Me.
