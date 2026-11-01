@@ -30,7 +30,7 @@ import type { PostgresCustomerIdentitySessionStore } from "../../packages/identi
 import type { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
 import { completeCustomerOidcBrowserLogin } from "../../packages/identity/customer-oidc-callback.js";
 import { normalizeCustomerReturnPath, serializeCustomerOidcStateCookie, serializeClearedCustomerOidcStateCookie } from "../../packages/identity/customer-oidc-browser-flow.js";
-import { CUSTOMER_SESSION_COOKIE, createCustomerCsrfToken, serializeCustomerSessionCookie, serializeCustomerCsrfCookie, serializeClearedCustomerCookies, verifyCustomerBrowserCsrf } from "../../packages/identity/customer-browser-security.js";
+import { CUSTOMER_SESSION_COOKIE, createCustomerCsrfToken, serializeCustomerSessionCookie, serializeCustomerCsrfCookie, serializeClearedCustomerCookies } from "../../packages/identity/customer-browser-security.js";
 import { resolveCustomerBrowserIdentity } from "../../packages/identity/customer-browser-session-authorization.js";
 import { parseCookieHeader, verifyCustomerBrowserCsrf } from "../../packages/identity/customer-browser-security.js";
 import { handlePaymentRoute, paymentTenantIdentityConfigured } from "./payments.js";
