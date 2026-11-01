@@ -329,3 +329,62 @@ This update supersedes the prior current-head snapshot where PR #320 was describ
 - PR #321 merge SHA `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17` is an ancestor of current main.
 - PR #320 exact head `5e712320ca4b3ab3ea89495becbedfc366bdf949` had 11/11 applicable PR-head workflows pass (controlled QA: 1,113 passed, zero failed). It merged as current main `a9d3eb677220b540350166c4a5d7fa8576e5ad50`; no separate merge-SHA Actions or combined-status contexts were returned.
 - No chargeable cloud resources were provisioned and no real provider/external dispatch was triggered.
+
+
+## Live evidence update — 2026-11-01 20:22 IST (current-main and browser OIDC validation)
+
+**Current integrated main:** `098a47459b9be486aa6bd67f4e8c093cdbc38b99` (resolved from the repository's latest commit and confirmed in exact-main Actions artifacts).  
+**Current open PRs:** #323 and #324 only.  
+**Approved baseline:** 228 requirements across 38 chapters; unchanged.
+
+### Mainline evidence on the exact current SHA
+
+- EPER CI [41293757248](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757248) — completed successfully. Typecheck/build, workflow and tenant/actor assignment PostgreSQL integration, campaign-scheduler migration, capability and ticketing migration/repeatability, and live capability RLS/audit/rollback conformance passed.
+- 228-requirement / 38-chapter matrix [41293757308](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757308) — 259 automated tests passed, zero failed; all 28 HTTP checks passed; no failed chapters. The artifact explicitly labels this as an automated pilot matrix, not acceptance evidence.
+- Six-family HTTP smoke [41293757309](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757309), container smoke [41293757276](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757276), G9 reconciliation [41293757262](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757262) and controlled technical simulation [41293757225](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757225) completed successfully.
+- Controlled QA [41293757246](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757246), job [124810201471](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757246/job/124810201471) — 1,113 passed, 1 failed, 17 skipped. Exact failure: `ERR_MODULE_NOT_FOUND` for `dist/packages/identity/customer-oidc-callback.js`, imported by `eper/tests/customer-oidc-callback.test.mjs`.
+- Payment/PostgreSQL/receipt validation [41293757271](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757271), job [124810202068](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757271/job/124810202068) — 1,135 passed, 1 failed, 2 skipped; the same missing callback module is the single test failure. Typecheck/build and migration steps passed.
+- The same-commit integrated gate [job 124810449961](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293757271/job/124810449961) failed because the payment/PostgreSQL lane failed.
+- The failing main jobs' artifacts identify branch `main` and head SHA `098a47459b9be486aa6bd67f4e8c093cdbc38b99`. The build is not the root cause: the callback test is present on main, but its imported implementation source is not. The implementation source is present on the existing PR #324 branch. Do not rerun the deterministic main failure before that implementation is integrated.
+
+### PR #323 — fresh-clone guide and scorecard
+
+- Exact head before this append: `df1d950af8f1679faca297055d64c0ed60635937`; branch `docs/eper-seven-checkpoint-post-320`; open, draft, mergeable, 3 commits ahead / 2 behind main by ancestry.
+- Its 10 exact-head workflows completed successfully. Fresh-clone run [41293394616](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41293394616) recorded 1,149 passed, zero failed, zero skipped; all seven migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing, identity) were applied and then repeated; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; disposable PostgreSQL 16 backup/restore passed with 59 source/restored base tables and 7 migration-ledger tables.
+- The current-main `dev-verify.mjs` source contains all seven groups and repeats all seven, but the current-main `eper/DEVELOPER_SETUP.md` still describes only six groups and a narrower repeatability sequence. This branch corrects the guide.
+- The scorecard previously ended at main `a9d3eb677220b540350166c4a5d7fa8576e5ad50` and described an older PR #324 head as lacking browser login routes. That description is superseded by the current PR #324 implementation below. This append preserves the earlier record as history.
+- This documentation append creates a new PR #323 head. All green runs above belong to the previous exact head and are stale for the new head until the new workflows complete.
+
+### PR #324 — current browser-bound OIDC/session integration
+
+- Current exact head: `6303393ec70e1a3977a209acb2132435ca9e1462`; branch `feat/322-oidc-browser-transaction-guards`; open, draft, mergeable, 19 commits ahead / 2 behind main by ancestry.
+- All 11 exact-head workflow runs completed successfully; no queued, in-progress, failed or cancelled current-head runs were returned.
+- Controlled QA [41301483984](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483984) — 1,129 passed, zero failed, 17 skipped. The bad-signature regression (test 715), browser-state mismatch (test 384), replay rejection (test 389), configured ticket-mutation CSRF regression (test 364) and logout CSRF/revocation tests passed.
+- PostgreSQL integration [41301483985](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483985) — live PostgreSQL payment-store and campaign scheduler integration passed, including pause-versus-dispatch fencing and bounded event-ID/idempotency cases.
+- EPER CI [41301483909](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483909), payment gateway contracts [41301483960](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483960), 228/38 matrix [41301483928](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483928), G9 [41301483961](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483961), six-family HTTP smoke [41301483966](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483966), container smoke [41301483938](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483938), release build [41301483939](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483939), technical simulation [41301483958](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483958) and same-commit integrated validation [41301483969](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41301483969) also completed successfully. The matrix job embedded inside integrated validation was skipped; the separate matrix workflow above passed.
+- Delivered on this branch: provider-neutral OIDC client wiring; customer login-start, callback and logout routes; browser-bound one-time state cookie; active pre-provisioned issuer/subject binding; durable opaque browser session; secure session and CSRF cookies; logout revocation; selected customer ticket/application/session/settings routes protected by durable tenant/application assignments.
+- Remaining: browser E2E from login through protected workspace to logout/denied access; durable role/delegation resolution; token rotation; support-admin browser authentication. OIDC claims do not auto-provision tenant/actor/role/application assignments. Do not describe this as production login until the remaining browser and authorization integration is tested.
+
+### Seven-checkpoint status at this evidence point
+
+1. **Product USP and positioning — AMBER.** The v34 crosswalk preserves 45 wireframe candidates, does not invent exact 228 REQ-ID mappings, and carries all 45 as additive v1.6.0 DRAFT. Owner disposition is pending; the approved 228/38 baseline is unchanged.
+2. **CI and persistence foundations — AMBER.** Main CI build/migration/live-PostgreSQL conformance passes. The fresh-clone run with all seven migration groups and disposable restore passed on the prior PR #323 head, not current main. The developer guide correction is in this documentation PR; production backup/recovery certification remains open.
+3. **Architecture and execution boundaries — AMBER.** Durable identity/session foundation is merged; browser OIDC routes and cookie/CSRF protections are on PR #324. Browser E2E, roles/delegation and token rotation remain.
+4. **Workflow execution design and schema — AMBER.** Durable workflow state, transactional outbox, leases/fencing, idempotency, retries, dead-letter and audited replay have CI evidence. Independent worker host, restricted worker identity, approved dispatcher, supervision and recovery remain.
+5. **Integrated validation — RED on current main; GREEN for the stated PR #324 head.** Main controlled QA and payment/PostgreSQL lanes fail on the missing callback implementation source. PR #324's 11 exact-head workflows pass; do not substitute those PR-head results for main acceptance.
+6. **PR consolidation and governance — AMBER.** The only open PRs are #323 and #324. Both are drafts and are mergeable; both are 2 commits behind main by ancestry. This scorecard append changes #323's head, so its prior checks must be rerun. Repository protection/ruleset enforcement is not established by this evidence.
+7. **Workflow publisher/runtime — AMBER.** Worker lease/fencing, retries, dead-letter and shutdown behavior have test evidence. Independent worker process supervision, restricted execution context, approved dispatcher, operational metrics/alerts, load and restart/recovery evidence remain.
+
+### Merged foundations and merge evidence boundary
+
+- PR #306 merged as `6e8dd438e5091b1802d65e4f29951389fe077859`; its PR head `a0020a46a026f727e01b24927e6cc2245945b7eb` had 13/13 exact-head workflows successful, including fresh-clone run [41283462371](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41283462371). The merge SHA is an ancestor of current main.
+- PR #310 merged as `88b9708d748c19dc80a1a2d7ad4960914451db7e`; its PR head `f4da0bd6e51ead368387ce0bfdce7a3f8af91dd1` had 12/12 exact-head workflows successful, including fresh-clone run [41284365448](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41284365448). The merge SHA is an ancestor of current main. Its historical merge-SHA QA/integrated failure/cancellation remains recorded in the prior report; current main and PR #324 pass the bad-signature regression.
+- PR #321 merged as `f7efa6045b2fa8cca8f14d7120f1c8f1a6226e17`; its PR head `c48ebd65f038951651f529bdfb17eb983524e4af` had 10/10 exact-head workflows successful, including fresh-clone run [41289449907](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41289449907). The merge SHA is an ancestor of current main.
+- The current commit-workflow endpoint returns PR-triggered runs only; it returned no PR-triggered run contexts for the three merge SHAs. The descendant main runs above are separately identified and are not presented as merge-SHA checks.
+
+### Product baseline and operating controls
+
+- Preserve all 228 approved requirements and 38 chapters. No baseline edits were made.
+- The 45 v34 candidates remain additive v1.6.0 DRAFT; do not promote them without owner disposition.
+- No external/provider dispatch or chargeable cloud provisioning was performed.
+- No merge was performed by this reporting update.
