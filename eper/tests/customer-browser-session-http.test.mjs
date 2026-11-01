@@ -46,7 +46,10 @@ test("application session context requires durable browser session and both acti
     assert.equal(denied.status, 401);
     const allowed = await fetch(url, { headers: { cookie: "__Host-eper_session=" + token } });
     assert.equal(allowed.status, 200);
-    const body = await allowed.json();
+    const envelope = await allowed.json();
+    assert.equal(envelope.success, true);
+    assert.equal(typeof envelope.meta?.requestId, "string");
+    const body = envelope.data;
     assert.equal(body.authenticated, true);
     assert.equal(body.tenantId, "tenant-01");
     assert.equal(body.actorId, "actor-01");
