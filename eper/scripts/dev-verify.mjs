@@ -62,7 +62,7 @@ function run(label, args, extraEnv = env) {
 
 run("Typecheck", ["run", "typecheck"]);
 run("Build", ["run", "build"]);
-for (const migration of [
+const migrations = [
   "migrate:payments",
   "migrate:audit",
   "migrate:workflows",
@@ -70,12 +70,13 @@ for (const migration of [
   "migrate:capabilities",
   "migrate:ticketing",
   "migrate:identity",
-]) run(`PostgreSQL migration: ${migration}`, ["run", migration]);
-
-run("Repeatability check: workflow migrations", ["run", "migrate:workflows"]);
-run("Repeatability check: ticketing migrations", ["run", "migrate:ticketing"]);
-run("Repeatability check: capability migrations", ["run", "migrate:capabilities"]);
-run("Repeatability check: identity migrations", ["run", "migrate:identity"]);
+];
+for (const migration of migrations) {
+  run(`PostgreSQL migration: ${migration}`, ["run", migration]);
+}
+for (const migration of migrations) {
+  run(`Repeatability check: ${migration}`, ["run", migration]);
+}
 
 const testEnv = {
   ...env,
