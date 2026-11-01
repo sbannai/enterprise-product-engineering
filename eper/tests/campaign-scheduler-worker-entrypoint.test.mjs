@@ -13,7 +13,6 @@ function runWorker(overrides = {}) {
     EPER_CAMPAIGN_SCHEDULER_WORKER_ENABLED: "true",
     EPER_AUDIT_PERSISTENCE: "postgres",
     EPER_CAMPAIGN_SCHEDULER_WORKER_ID: "worker-entrypoint-test",
-    EPER_WORKER_ADAPTER_PLACEHOLDER: "unused",
     EPER_CAMPAIGN_WORKER_ADAPTER_MODULE: "./dist/packages/campaign-scheduler/adapters/test-adapter.js",
     EPER_AUDIT_ENVIRONMENT: "sandbox",
     EPER_PAYMENT_DATABASE_URL: "",
@@ -55,6 +54,10 @@ test("campaign worker requires durable PostgreSQL audit before startup", () => {
 
 test("campaign worker requires an explicit worker identity", () => {
   assertRefused({ EPER_CAMPAIGN_SCHEDULER_WORKER_ID: "  " }, "EPER_CAMPAIGN_SCHEDULER_WORKER_ID_REQUIRED");
+});
+
+test("campaign worker requires a deployment-owned adapter module", () => {
+  assertRefused({ EPER_CAMPAIGN_WORKER_ADAPTER_MODULE: "" }, "EPER_CAMPAIGN_WORKER_ADAPTER_MODULE_REQUIRED");
 });
 
 test("campaign worker rejects adapter paths that escape the deployment-owned adapter directory", () => {
