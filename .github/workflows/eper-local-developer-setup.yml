@@ -39,6 +39,7 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgres://eper:eper_local_ci_password@127.0.0.1:5432/eper_test
+      RESTORE_DATABASE_URL: postgres://eper:eper_local_ci_password@127.0.0.1:5432/eper_restore_test
     defaults:
       run:
         working-directory: eper
@@ -55,3 +56,7 @@ jobs:
         run: npm ci
       - name: Run the same one-command developer verification documented for a fresh clone
         run: npm run dev:verify
+      - name: Install PostgreSQL client utilities
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Prove PostgreSQL backup and restore against an isolated target
+        run: bash scripts/postgres-backup-restore-smoke.sh
