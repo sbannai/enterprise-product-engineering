@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http";
 
 /** Operator console for tenant-scoped outbox inspection and audited replay. */
-export const workflowOutboxAdminUiHtml = String.raw\`<!doctype html>
+export const workflowOutboxAdminUiHtml = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EPER · Delivery Operations</title>
 <style>
@@ -33,7 +33,7 @@ async function load(){const app=byId("application").value.trim();if(!app||!byId(
 function render(){const root=byId("events");if(!state.events.length){root.innerHTML='<div class="empty">No dead-letter events in this application.</div>';return}root.innerHTML=state.events.map(({event,lastError,updatedAt})=>'<article class="event"><div class="top"><strong>'+safe(event.eventType)+' · '+safe(event.eventId)+'</strong><span class="pill">DEAD LETTER</span></div><div class="meta"><span>Attempts: '+safe(event.attempts)+'</span><span>Instance: '+safe(event.instanceId)+'</span><span>Updated: '+safe(updatedAt)+'</span></div><div class="error">'+safe(lastError||"No error detail recorded")+'</div><div class="replay"><div class="field"><label for="reason-'+safe(event.eventId)+'">Operator reason</label><textarea id="reason-'+safe(event.eventId)+'" rows="2" maxlength="2000" placeholder="Explain why this event is safe to retry"></textarea></div><button data-replay="'+safe(event.eventId)+'">Audited replay</button></div></article>').join("");root.querySelectorAll("[data-replay]").forEach(button=>button.addEventListener("click",()=>replay(button.dataset.replay)))}
 async function replay(eventId){const app=byId("application").value.trim();const reason=byId("reason-"+eventId).value.trim();if(!reason){status("An operator reason is required.",true);return}const idempotencyKey="operator-"+crypto.randomUUID();status("Submitting audited replay…");try{const r=await fetch(apiBase()+"/admin/applications/"+encodeURIComponent(app)+"/workflow-outbox/dead-letters/"+encodeURIComponent(eventId)+"/replay",{method:"POST",headers:headers(),body:JSON.stringify({reason,idempotencyKey})});const j=await r.json();if(!r.ok)throw new Error(j.error?.message||j.error||"Replay was not accepted");status(j.data.replay.alreadyApplied?"This replay request was already applied.":"Replay accepted and queued for the worker.");await load()}catch(e){status(e.message,true)}}
 byId("load").addEventListener("click",load);byId("refresh").addEventListener("click",load);
-</script></body></html>\`;
+</script></body></html>`;
 
 export function isWorkflowOutboxAdminUiRequest(request: IncomingMessage): boolean {
   return request.method === "GET" && new URL(request.url ?? "/", "http://localhost").pathname === "/admin/workflow-outbox-ui";
