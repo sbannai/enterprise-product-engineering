@@ -100,11 +100,14 @@ export class WorkflowOutboxWorker {
 
     try {
       await this.dispatcher.dispatch(event, controller.signal);
+      // Stop scheduling renewals before acknowledging; an interval tick must not race markDelivered.
+      clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       if (leaseLost) throw new WorkflowOutboxLeaseLostError();
       await this.store.markDelivered(context, event.eventId, this.options.workerId);
       result.delivered += 1;
     } catch (error) {
+      clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       if (leaseLost || error instanceof WorkflowOutboxLeaseLostError) {
         // Ownership is gone: do not acknowledge or mutate a lease now owned by another worker.
