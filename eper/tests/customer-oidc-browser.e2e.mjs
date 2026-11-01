@@ -73,7 +73,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
       return (await fetch("/customer/auth/logout",{method:"POST",headers:{"x-csrf-token":csrf}})).status;
     });
     assert.equal(logout,204);
-    const denied=await page.goto(base+"/customer/settings?applicationId=app-01");
+    const denied=await page.goto(origin+"/customer/settings?applicationId=app-01");
     assert.equal(denied.status(),401);
     assert.equal((await denied.json()).error,"UNAUTHENTICATED");
   } finally {
