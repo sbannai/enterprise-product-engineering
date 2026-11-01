@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { createServer as createProbeServer } from "node:http";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 test("browser OIDC login grants protected settings, logout revokes access", async () => {
@@ -19,12 +18,7 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({"tenant-01":{"app-01":{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
   });
   const state="s".repeat(43), sessionToken="t".repeat(43);
-  const probe=createProbeServer();
-  await new Promise((resolve,reject)=>{probe.once("error",reject);probe.listen(0,"127.0.0.1",resolve);});
-  const port=probe.address().port;
-  await new Promise(resolve=>probe.close(resolve));
-  const origin="http://127.0.0.1:"+port;
-  let active=false, server, browser;
+  let origin="", active=false, server, browser;
   const store={
     async createLoginTransaction(){},
     async consumeLoginTransaction(){return {nonceHash:"n",pkceVerifierCiphertext:"p",issuer:"https://idp.example.test",redirectUri:origin+"/customer/auth/oidc/callback"};},
@@ -35,13 +29,18 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
   };
   try {
     const client={async beginLogin(){return {authorizationUrl:"https://idp.example.test/authorize?state="+state,state};},async completeLogin(){return {issuer:"https://idp.example.test",subject:"subject-01"};}};
-    server=createAppServer({customerOidcClient:client,customerIdentitySessionStore:store,
+    const serverOptions={customerOidcClient:client,customerIdentitySessionStore:store,
       tenantApplicationAssignmentStore:{async listActive(){return ["app-01"];}},
       actorApplicationAssignmentStore:{async isAssigned(){return true;}},
-      customerOidcPublicOrigin:origin,customerCsrfSecret:"c".repeat(48)});
-    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",resolve);});
-    const base="http://127.0.0.1:"+server.address().port;
-    browser=await chromium.launch({headless:true,args:["--no-proxy-server","--proxy-server=direct://","--proxy-bypass-list=<-loopback>;127.0.0.1;localhost"]});
+      customerOidcPublicOrigin:origin,customerCsrfSecret:"c".repeat(48)};
+    server=createAppServer(serverOptions);
+    await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"0.0.0.0",resolve);});
+    const address=server.address();
+    assert.ok(address && typeof address !== "string");
+    origin="http://127.0.0.1:"+address.port;
+    serverOptions.customerOidcPublicOrigin=origin;
+    const base=origin;
+    browser=await chromium.launch({headless:true,args:["--no-proxy-server","--proxy-server=direct://","--proxy-bypass-list=*"]});
     const page=await browser.newPage();
     await page.route("https://idp.example.test/**",route=>route.fulfill({status:200,contentType:"text/html",
       body:`<a href="${base}/customer/auth/oidc/callback?code=browser-code&state=${state}">Continue sign in</a>`}));
