@@ -105,3 +105,42 @@ test("workflow outbox replay requires reason and idempotency and submits no prov
     assert.equal(calls.replay[0].input.idempotencyKey, "dead-letter-replay-key-0001");
   });
 });
+
+
+test("workflow outbox operator console is opt-in and served with restrictive browser headers", async () => {
+  const previous = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED;
+  process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED = "true";
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/admin/workflow-outbox-ui");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-security-policy"), /default-src 'none'/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const html = await response.text();
+    assert.match(html, /Delivery Operations/);
+    assert.match(html, /Audited replay/);
+    assert.match(html, /crypto\.randomUUID\(\)/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previous === undefined) delete process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED;
+    else process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED = previous;
+  }
+});
+
+test("workflow outbox operator console remains hidden unless explicitly enabled", async () => {
+  const previous = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED;
+  delete process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED;
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/admin/workflow-outbox-ui");
+    assert.equal(response.status, 404);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previous === undefined) delete process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED;
+    else process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED = previous;
+  }
+});
