@@ -159,7 +159,7 @@ test("customer session endpoint rejects missing and unknown credentials", async 
   }
 });
 
-test("customer session endpoint returns only server-mapped identity", async () => {
+test("customer session endpoint returns server-mapped identity and its authentication source", async () => {
   const previous = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
   const credential = "customer-test-credential-that-is-long-enough-123456";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
@@ -178,7 +178,7 @@ test("customer session endpoint returns only server-mapped identity", async () =
     });
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).data, {
-      authenticated: true, tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer"
+      authenticated: true, tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer", authentication: "server-bearer-map"
     });
     assert.equal(response.headers.get("cache-control"), "no-store");
   } finally {
