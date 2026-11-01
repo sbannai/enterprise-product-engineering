@@ -48,3 +48,22 @@ test("runtime requires a host lifecycle AbortSignal", async () => {
     /WORKFLOW_OUTBOX_RUNTIME_ABORT_SIGNAL_REQUIRED/,
   );
 });
+
+
+test("runtime applies one context cap to discovery and processing", () => {
+  const pool = { async connect() { throw new Error("database must not be touched during composition"); } };
+  const dispatcher = { async dispatch() {} };
+  assert.throws(
+    () => createWorkflowOutboxRuntime({
+      pool, dispatcher, workerId: "worker-01", maxContexts: 10,
+      process: { maxContextsPerPass: 20 },
+    }),
+    /WORKFLOW_OUTBOX_CONTEXT_LIMIT_MISMATCH/,
+  );
+  assert.doesNotThrow(() => createWorkflowOutboxRuntime({
+    pool, dispatcher, workerId: "worker-01", maxContexts: 25,
+  }));
+  assert.doesNotThrow(() => createWorkflowOutboxRuntime({
+    pool, dispatcher, workerId: "worker-01", process: { maxContextsPerPass: 30 },
+  }));
+});

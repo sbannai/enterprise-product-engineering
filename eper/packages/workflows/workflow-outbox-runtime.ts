@@ -19,6 +19,7 @@ export interface WorkflowOutboxRuntimeOptions {
   workerId: string;
   worker?: Omit<Partial<WorkflowOutboxWorkerOptions>, "workerId">;
   process?: WorkflowOutboxProcessOptions;
+  /** Shared cap for database context discovery and per-pass processing. */
   maxContexts?: number;
 }
 
@@ -36,12 +37,20 @@ export function createWorkflowOutboxRuntime(options: WorkflowOutboxRuntimeOption
     throw new Error("WORKFLOW_OUTBOX_RUNTIME_DISPATCHER_REQUIRED");
   }
   const store = new PostgresWorkflowOutboxStore(options.pool);
-  const contexts = new PostgresWorkflowOutboxContextSource(options.pool, options.maxContexts ?? 1_000);
+  const processLimit = options.process?.maxContextsPerPass;
+  if (options.maxContexts !== undefined && processLimit !== undefined && options.maxContexts !== processLimit) {
+    throw new Error("WORKFLOW_OUTBOX_CONTEXT_LIMIT_MISMATCH");
+  }
+  const maxContexts = options.maxContexts ?? processLimit ?? 1_000;
+  const contexts = new PostgresWorkflowOutboxContextSource(options.pool, maxContexts);
   const worker = new WorkflowOutboxWorker(store, options.dispatcher, {
     ...options.worker,
     workerId: options.workerId,
   });
-  return new WorkflowOutboxProcess(worker, contexts, options.process);
+  return new WorkflowOutboxProcess(worker, contexts, {
+    ...options.process,
+    maxContextsPerPass: maxContexts,
+  });
 }
 
 /** Entry point for a host-managed long-running worker process. */
