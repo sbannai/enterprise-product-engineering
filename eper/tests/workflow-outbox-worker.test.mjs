@@ -72,7 +72,7 @@ test("outbox worker renews a lease while a slow dispatch is running", async () =
   const worker = new WorkflowOutboxWorker(store, {
     async dispatch(_event, signal) {
       await new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, 1_150);
+        const timer = setTimeout(resolve, 3_800);
         signal?.addEventListener("abort", () => {
           clearTimeout(timer);
           reject(signal.reason);
@@ -122,7 +122,7 @@ test("outbox worker starts heartbeats for every claimed event without a serial l
   const worker = new WorkflowOutboxWorker(store, {
     async dispatch(_event, signal) {
       await new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, 1_150);
+        const timer = setTimeout(resolve, 3_800);
         signal?.addEventListener("abort", () => {
           clearTimeout(timer);
           reject(signal.reason);
