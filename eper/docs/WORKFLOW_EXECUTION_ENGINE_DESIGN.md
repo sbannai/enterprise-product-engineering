@@ -258,7 +258,7 @@ The workflow outbox now has both a bounded delivery pass (`WorkflowOutboxWorker.
 
 The exact PR head `ec5080af429e3847d270d1428b6a48d63d3c1b1b` passed all 12 associated GitHub Actions workflows, including TypeScript typecheck/build, the full test suite, live PostgreSQL workflow execution and same-commit integrated validation.
 
-**Remaining boundary:** this process is a reusable worker component, not yet an independently deployed worker service. A trusted context provider, production dispatcher, host lifecycle/supervision, delivery dashboards/alerts and deployment-specific operational configuration must be supplied before production activation. The workflow feature remains disabled by default and Business UAT remains unauthorized pending all existing entry-gate evidence.
+**Remaining boundary:** this process is a reusable worker component, not yet an independently deployed worker service. The PostgreSQL context-source adapter exists but the production host must wire it to a restricted platform-worker pool; the host must also supply an approved dispatcher and external process supervision/restart policy. The SIGINT/SIGTERM host adapter provides graceful shutdown but does not replace supervision. Delivery dashboards/alerts, load/recovery evidence and deployment-specific operational configuration remain pending. The workflow feature remains disabled by default and Business UAT remains unauthorized pending all existing entry-gate evidence.
 
 
 ## 16. Current main verification record (2026-11-01)
