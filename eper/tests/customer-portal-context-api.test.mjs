@@ -688,3 +688,51 @@ test("customer settings use durable tenant ownership and actor membership withou
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+test("customer application list requires durable browser session and PostgreSQL assignments in postgres mode", async () => {
+  const keys = ["EPER_CUSTOMER_PORTAL_API_ENABLED", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const bearer = "customer-app-list-bearer-map-must-not-work-00001";
+  const sessionToken = "opaque-browser-session-token-for-application-list";
+  process.env.EPER_CUSTOMER_PORTAL_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [bearer]: { tenantId: "attacker-tenant", actorId: "attacker-actor", roleKey: "super-admin", applicationIds: ["attacker-app"] },
+  });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  const calls = [];
+  const server = createAppServer({
+    customerIdentitySessionStore: { async resolveSession(token) {
+      calls.push({ kind: "session", token });
+      return token === sessionToken ? { tenantId: "tenant-a", actorId: "actor-a" } : null;
+    } },
+    tenantApplicationAssignmentStore: { async listActive(tenantId) {
+      calls.push({ kind: "tenant", tenantId }); return ["app-a", "app-b"];
+    } },
+    actorApplicationAssignmentStore: { async listActive(tenantId, actorId) {
+      calls.push({ kind: "actor", tenantId, actorId }); return ["app-b", "app-not-owned"];
+    } },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications";
+    const bearerOnly = await fetch(url, { headers: { authorization: "Bearer " + bearer } });
+    assert.equal(bearerOnly.status, 401, "PostgreSQL mode must ignore bearer identity maps");
+    const allowed = await fetch(url, { headers: { cookie: "__Host-eper_session=" + sessionToken } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), { applications: [{ applicationId: "app-b" }] });
+    assert.deepEqual(calls, [
+      { kind: "session", token: sessionToken },
+      { kind: "tenant", tenantId: "tenant-a" },
+      { kind: "actor", tenantId: "tenant-a", actorId: "actor-a" },
+    ]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
