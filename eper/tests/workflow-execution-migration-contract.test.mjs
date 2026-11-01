@@ -111,3 +111,13 @@ test("workflow outbox is append-only, tenant-scoped and has a separate delivery 
   assert.match(sql, /current_setting\('eper\.application_id', true\)/);
   assert.match(sql, /delivery_status IN \('pending','processing','delivered','dead_letter'\)/);
 });
+
+
+test("outbox claim bounds crash-recovered leases by the configured attempt budget", async () => {
+  const source = await readFile(new URL("../packages/workflows/postgres-workflow-outbox-store.ts", import.meta.url), "utf8");
+  assert.match(source, /UPDATE eper_workflow_outbox_delivery[\\s\\S]*delivery_status = 'dead_letter'[\\s\\S]*WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS/);
+  assert.match(source, /AND attempts >= \\$4::int/);
+  assert.match(source, /delivery_status = 'pending' AND available_at <= NOW\(\) AND attempts < \\$6::int/);
+  assert.match(source, /delivery_status = 'processing'[\\s\\S]*attempts < \\$6::int/);
+  assert.match(source, /maxAttempts: this.maxAttempts/);
+});
