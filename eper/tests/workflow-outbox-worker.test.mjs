@@ -17,6 +17,7 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   const calls = [];
   const store = {
     async claim(context, options) { calls.push({ method: "claim", context, options }); return events; },
+    async renewLease(context, eventId, workerId, leaseSeconds) { calls.push({ method: "renew", eventId, workerId, leaseSeconds }); return true; },
     async markDelivered(context, eventId, workerId) { calls.push({ method: "delivered", eventId, workerId }); },
     async markFailed(context, eventId, options) {
       calls.push({ method: "failed", eventId, options });
@@ -33,7 +34,7 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   }, { workerId: "worker-01", maxAttempts: 2, baseRetryDelaySeconds: 3, maxRetryDelaySeconds: 30 });
 
   const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 10);
-  assert.deepEqual(result, { claimed: 3, delivered: 1, retried: 1, deadLettered: 1 });
+  assert.deepEqual(result, { claimed: 3, delivered: 1, retried: 1, deadLettered: 1, leaseLost: 0 });
   assert.equal(dispatched.length, 3);
   assert.equal(calls.filter(call => call.method === "delivered").length, 1);
   const failures = calls.filter(call => call.method === "failed");
@@ -53,4 +54,57 @@ test("outbox worker rejects unsafe retry and lease settings", () => {
     () => new WorkflowOutboxWorker(store, { async dispatch() {} }, { workerId: "worker-01", leaseSeconds: 5 }),
     /WORKFLOW_OUTBOX_WORKER_OPTIONS_INVALID/,
   );
+});
+
+
+test("outbox worker renews a lease while a slow dispatch is running", async () => {
+  const calls = [];
+  const event = events[0];
+  const store = {
+    async claim() { return [event]; },
+    async renewLease(context, eventId, workerId, leaseSeconds) {
+      calls.push({ eventId, workerId, leaseSeconds });
+      return true;
+    },
+    async markDelivered() { calls.push("delivered"); },
+    async markFailed() { throw new Error("unexpected failure"); },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch(_event, signal) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 1_150);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        }, { once: true });
+      });
+    },
+  }, { workerId: "worker-01", leaseSeconds: 10 });
+  const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1);
+  assert.equal(calls.length >= 1, true, "long dispatch must renew its lease");
+  assert.deepEqual(calls[0], {
+    eventId: event.eventId, workerId: "worker-01", leaseSeconds: 10,
+  });
+  assert.deepEqual(result, { claimed: 1, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0 });
+});
+
+test("outbox worker aborts dispatch and avoids acknowledging after lease ownership is lost", async () => {
+  const event = events[0];
+  const calls = [];
+  const store = {
+    async claim() { return [event]; },
+    async renewLease() { return false; },
+    async markDelivered() { calls.push("delivered"); },
+    async markFailed() { calls.push("failed"); throw new Error("must not mutate another worker's lease"); },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch(_event, signal) {
+      await new Promise((resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    },
+  }, { workerId: "worker-01", leaseSeconds: 10 });
+  const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(result, { claimed: 1, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 1 });
 });
