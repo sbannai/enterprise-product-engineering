@@ -92,7 +92,6 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'eper_customer_oidc_subject_bindings',
-    'eper_customer_oidc_login_transactions',
     'eper_customer_browser_sessions',
     'eper_customer_identity_events'
   ] LOOP
@@ -104,6 +103,13 @@ BEGIN
       t
     );
   END LOOP;
-END $$;
+END $;
+
+ALTER TABLE eper_customer_oidc_login_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE eper_customer_oidc_login_transactions FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS eper_identity_service_only ON eper_customer_oidc_login_transactions;
+CREATE POLICY eper_identity_service_only ON eper_customer_oidc_login_transactions
+  USING (current_setting('eper.identity_service', true) = 'true')
+  WITH CHECK (current_setting('eper.identity_service', true) = 'true');
 
 COMMIT;
