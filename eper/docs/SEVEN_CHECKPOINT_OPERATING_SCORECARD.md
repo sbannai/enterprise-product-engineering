@@ -2,7 +2,7 @@
 
 **Purpose:** Durable, evidence-led operating model for the seven-checkpoint engineering brief.  
 **Baseline at creation:** `main` (resolved when branch created on 2026-11-01)  
-**Last reviewed:** 2026-11-01 16:44 UTC  
+**Last reviewed:** 2026-11-01 16:47 UTC  
 **Approved product baseline:** 228 requirements across 38 chapters.  
 **Authority:** This scorecard operationalizes reporting; it does not change requirements or authorize UAT/production.
 
@@ -80,14 +80,14 @@ Track publisher, runtime worker, durable claim/lease lifecycle, lease renewal, f
 
 **Evidence:** Runtime code and tests, worker deployment manifests/configuration, lease/fencing tests, dead-letter audit records, metrics/alerts and failure-injection evidence.  
 **Current focus:** Mainline worker-loop behavior has coverage for idempotency-key propagation, bounded retry, lease-loss ambiguity, policy denial, authorization outage and shutdown around the dispatch fence. Draft PR #326 adds a separate worker entrypoint, PostgreSQL readiness, fail-closed configuration, adapter interface and five process-level startup guard tests. Exact-head CI, provider adapter contract, real-PostgreSQL restart/recovery, independent host supervision, dashboards/alerts and deployment configuration remain outstanding.  
-**Next action:** Obtain exact-head CI for #326, then add real-PostgreSQL recovery and deployment-owned adapter authorization/idempotency contract tests before considering merge.
+**Next action:** Add real-PostgreSQL worker restart/recovery and deployment-owned adapter authorization/idempotency contract tests, then rerun exact-head CI before considering merge.
 
 ## Baseline snapshot (2026-11-01)
 
 **Dated evidence refresh — 2026-11-01 16:44 UTC**
 
 - PR #324 merged: browser-bound OIDC transaction guards and identity/session foundation. Previously recorded exact-head validation: 14/14 workflows passed, including fresh-clone/PostgreSQL verification (1,170 passed / 0 failed), seven migration groups applied and repeated, disposable backup/restore, and browser OIDC E2E. Do not interpret this as a fresh post-merge main run.
-- PR #326 opened from current `main` as a clean replacement for the historically stacked PR #325. Current head: `7446ed23b3545f3cb74b9a4239532bdf340ce3e9`; 5 commits ahead / 0 behind; five changed files. It includes a separate worker entrypoint, adapter contract, worker start script, operating guide and five process-level startup guard tests. It is draft and no exact-head CI checks are reported yet.
+- PR #326 opened from current `main` as a clean replacement for the historically stacked PR #325. Current head: `7446ed23b3545f3cb74b9a4239532bdf340ce3e9`; 5 commits ahead / 0 behind; five changed files. It includes a separate worker entrypoint, adapter contract, worker start script, operating guide and five process-level startup guard tests. It remains draft. Exact-head CI has now completed successfully: 12/12 workflow runs passed, including fresh-clone developer setup with PostgreSQL backup/restore, full EPER CI, payment/PostgreSQL/receipt contracts, six-family HTTP smoke, container smoke, controlled QA, technical simulation, release build and G9 reconciliation. The integrated workflow's pilot-matrix subjob was skipped because the standalone 228/38 pilot matrix workflow passed independently.
 - PR #325 remains open and historically diverged; #326 is its clean-mainline successor. Do not merge both.
 - PR #323 remains stale relative to the post-#324 mainline and needs reconciliation; its v34 crosswalk findings remain: 228 approved baseline requirements / 38 chapters preserved; 45 v34 candidates preserved; 0 exact full coverage; 45 partially supported by shared controls; 45 additive v1.6.0 draft candidates pending owner approval; four overlap the human-approval control.
 - Current open PR inventory observed: #323, #325 and #326. #326 has no reviews or inline review threads at this refresh.
