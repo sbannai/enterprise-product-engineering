@@ -108,3 +108,30 @@ test("outbox worker aborts dispatch and avoids acknowledging after lease ownersh
   assert.deepEqual(calls, []);
   assert.deepEqual(result, { claimed: 1, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 1 });
 });
+
+
+test("outbox worker starts heartbeats for every claimed event without a serial local queue", async () => {
+  const renewals = [];
+  const batch = events.slice(0, 2);
+  const store = {
+    async claim() { return batch; },
+    async renewLease(_context, eventId) { renewals.push(eventId); return true; },
+    async markDelivered() {},
+    async markFailed() { throw new Error("unexpected failure"); },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch(_event, signal) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 1_150);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        }, { once: true });
+      });
+    },
+  }, { workerId: "worker-01", leaseSeconds: 10 });
+  const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 2);
+  assert.equal(renewals.includes(batch[0].eventId), true);
+  assert.equal(renewals.includes(batch[1].eventId), true, "later claimed events must not wait behind serial dispatch");
+  assert.deepEqual(result, { claimed: 2, delivered: 2, retried: 0, deadLettered: 0, leaseLost: 0 });
+});
