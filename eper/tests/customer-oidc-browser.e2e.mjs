@@ -42,13 +42,18 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     const base=origin;
     browser=await chromium.launch({headless:true,args:["--no-proxy-server","--proxy-server=direct://","--proxy-bypass-list=*"]});
     const page=await browser.newPage();
-    await page.route("https://idp.example.test/**",route=>route.fulfill({status:200,contentType:"text/html",
-      body:`<a href="${base}/customer/auth/oidc/callback?code=browser-code&state=${state}">Continue sign in</a>`}));
-    // Keep Chromium responsible for navigation, cookie storage, redirects, fetch and
-    // user interaction. Bridge loopback HTTP through Node because hosted runners can
-    // expose loopback to Node while Chromium's network namespace cannot resolve it.
-    await page.route(base + "/**", async route => {
+    await page.route("**/*", async route => {
       const request = route.request();
+      const requestUrl = new URL(request.url());
+      if (requestUrl.hostname === "idp.example.test") {
+        await route.fulfill({status:200,contentType:"text/html",
+          body:`<a href="${base}/customer/auth/oidc/callback?code=browser-code&state=${state}">Continue sign in</a>`});
+        return;
+      }
+      if (requestUrl.origin !== base) { await route.continue(); return; }
+      // Chromium owns navigation, cookie storage, redirects, fetch and user input.
+      // Node bridges only the local HTTP transport for runners where Chromium cannot
+      // resolve loopback, while requests still reach the real EPER server.
       const upstream = await fetch(request.url(), {
         method: request.method(),
         headers: request.headers(),
@@ -56,13 +61,9 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
         redirect: "manual",
       });
       const headers = Object.fromEntries(upstream.headers.entries());
-      const setCookies = upstream.headers.getSetCookie?.() ?? [];
-      if (setCookies.length) headers["set-cookie"] = setCookies.join(", ");
-      await route.fulfill({
-        status: upstream.status,
-        headers,
-        body: Buffer.from(await upstream.arrayBuffer()),
-      });
+      const setCookies = upstream.headers.getSetCookie?.();
+      if (setCookies?.length) headers["set-cookie"] = setCookies.join(", ");
+      await route.fulfill({status:upstream.status,headers,body:Buffer.from(await upstream.arrayBuffer())});
     });
     await page.goto(base+"/customer/auth/oidc/start?returnTo="+encodeURIComponent("/customer/settings?applicationId=app-01"));
     await page.getByRole("link",{name:"Continue sign in"}).click();
