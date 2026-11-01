@@ -128,6 +128,39 @@ export class PostgresWorkflowOutboxStore {
     } finally { client.release(); }
   }
 
+  /** Extends only a still-live lease owned by this worker; never resurrects an expired claim. */
+  async renewLease(
+    context: WorkflowOutboxContext,
+    eventId: string,
+    workerId: string,
+    leaseSeconds: number,
+  ): Promise<boolean> {
+    validateUuid(eventId);
+    validateId(workerId, "workerId");
+    if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds < 10 || leaseSeconds > 3600) {
+      throw new Error("WORKFLOW_OUTBOX_LEASE_SECONDS_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setRls(client, context);
+      const result = await client.query<{ event_id: string }>(
+        `UPDATE eper_workflow_outbox_delivery
+            SET locked_at = NOW(), updated_at = NOW()
+          WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
+            AND delivery_status = 'processing' AND locked_by = $4
+            AND locked_at > NOW() - ($5::int * INTERVAL '1 second')
+          RETURNING event_id`,
+        [context.tenantId, context.applicationId, eventId, workerId, leaseSeconds],
+      );
+      await client.query("COMMIT");
+      return Boolean(result.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async markDelivered(context: WorkflowOutboxContext, eventId: string, workerId: string): Promise<void> {
     validateUuid(eventId);
     validateId(workerId, "workerId");
