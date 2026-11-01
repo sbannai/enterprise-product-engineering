@@ -32,11 +32,11 @@ if (process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
 
 const workerId = required("EPER_CAMPAIGN_SCHEDULER_WORKER_ID");
 const adapterPath = resolveAdapterPath(required("EPER_CAMPAIGN_WORKER_ADAPTER_MODULE"));
-const pool = createPostgresPaymentPool();
 const auditEnvironment = process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox";
 if (!["production", "uat", "sandbox"].includes(auditEnvironment)) {
   throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
 }
+const pool = createPostgresPaymentPool();
 const store = new PostgresCampaignSchedulerStore(
   pool,
   auditEnvironment as "production" | "uat" | "sandbox",
