@@ -97,3 +97,32 @@ test("outbox process forwards shutdown signal to an in-flight worker pass", asyn
   await process.run(controller.signal);
   assert.equal(receivedSignal, controller.signal);
 });
+
+
+test("outbox process includes partial worker counters when a claim fails", async () => {
+  const controller = new AbortController();
+  const passes = [];
+  const errors = [];
+  const worker = {
+    async runOnce() {
+      const error = new Error("WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED");
+      error.result = { claimed: 2, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 };
+      throw error;
+    },
+  };
+  const contexts = {
+    async listActiveContexts() {
+      return [{ tenantId: "tenant-a", applicationId: "app-a" }];
+    },
+  };
+  const process = new WorkflowOutboxProcess(worker, contexts, {
+    idlePollMs: 50,
+    onError(error) { errors.push(error.message); },
+    onPass(result) { passes.push(result); controller.abort(); },
+  });
+  await process.run(controller.signal);
+  assert.deepEqual(errors, ["WORKFLOW_OUTBOX_CLAIM_PROCESSING_FAILED"]);
+  assert.deepEqual(passes, [{
+    claimed: 2, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0, contextsVisited: 1,
+  }]);
+});
