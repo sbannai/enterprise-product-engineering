@@ -110,7 +110,7 @@ export class PostgresCustomerLifecycleStore {
   async list(): Promise<Array<CustomerLifecycleRecord & {
     tariffKey: string | null; tariffVersion: number | null; billingBasis: string | null;
     tariffAssignmentStatus: string | null; tariffEffective: boolean;
-    tariffAccessState: "customer_inactive" | "tariff_missing" | "tariff_inactive" | "tariff_not_started" | "tariff_expired" | "over_allowance" | "within_allowance";
+    tariffAccessState: "customer_inactive" | "tariff_missing" | "tariff_inactive" | "tariff_not_started" | "tariff_expired" | "tariff_invalid" | "over_allowance" | "within_allowance";
     usageEvaluatedAt: string;
     activeApplicationIds: string[];
     maxApplications: number | null; activeApplicationCount: number;
@@ -155,7 +155,7 @@ export class PostgresCustomerLifecycleStore {
           row.tariff_assignment_status !== "active" ? "tariff_inactive" :
           startsAt !== null && now < startsAt ? "tariff_not_started" :
           endsAt !== null && now >= endsAt ? "tariff_expired" :
-          maxApplications == null ? "tariff_inactive" :
+          maxApplications == null ? "tariff_invalid" :
           activeApplicationCount > maxApplications ? "over_allowance" : "within_allowance";
         return { ...mapRow(row), tariffKey: row.tariff_key,
           tariffVersion: row.tariff_version == null ? null : Number(row.tariff_version),
