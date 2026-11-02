@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chooseNextWorkflowActivity } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
+import { chooseNextWorkflowActivity, resolveWorkflowNextActivity } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
 import {
   WorkflowConfigurationError,
   WorkflowConfigurationService,
@@ -99,6 +99,13 @@ test("workflow transition service uses the pinned definition rules instead of cl
   const activity = definition.activities[0];
   assert.equal(chooseNextWorkflowActivity(definition, activity, { purchase: { amount: 12000 } }), "finance");
   assert.equal(chooseNextWorkflowActivity(definition, activity, { purchase: { amount: 3000 } }), "manager");
+  const trace = resolveWorkflowNextActivity(definition, activity, { purchase: { amount: 12000 } }).ruleDecision;
+  assert.equal(trace.matchedRuleId, "high-value");
+  assert.deepEqual(trace.evaluated, [
+    { ruleId: "high-value", matched: true },
+    { ruleId: "mid-value", matched: false },
+    { ruleId: "default", matched: false },
+  ]);
   assert.throws(
     () => chooseNextWorkflowActivity(definition, activity, { purchase: { amount: 12000 } }, "standard"),
     /WORKFLOW_EXECUTION_RULE_TARGET_MISMATCH/,
