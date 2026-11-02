@@ -6,7 +6,7 @@ import {
 } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
 
 const stamp = "2026-11-02T15:00:00.000Z";
-function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "meeting.create"] } = {}) {
+function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "meeting.create"], bindingApps = ["app-a"] } = {}) {
   const calls = [];
   let currentStatus = status;
   let currentVersion = version;
@@ -35,7 +35,7 @@ function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "m
       if (sql.includes("SELECT c.provider_key, c.connection_status, d.capabilities")) {
         return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, capabilities: supported }], rowCount: 1 };
       }
-      if (sql.includes("SELECT version, connection_status FROM eper_provider_connections")) {
+      if (sql.includes("SELECT application_id FROM eper_provider_connection_applications")) {\n        return { rows: bindingApps.map((application_id) => ({ application_id })), rowCount: bindingApps.length };\n      }\n      if (sql.includes("SELECT version, connection_status FROM eper_provider_connections")) {
         return { rows: [{ version: currentVersion, connection_status: currentStatus }], rowCount: 1 };
       }
       if (sql.includes("SELECT version FROM eper_provider_connections")) {
@@ -88,7 +88,7 @@ test("application binding rejects a capability not declared by the provider", as
 test("secret rotation preserves connection identity and forces revalidation", async () => {
   const { repository, calls } = fixture();
   const rotated = await repository.rotateSecretReference({
-    ...audit, connectionId: "connection-a", secretReference: "vault://new-version",
+    ...audit, applicationId: "app-a", connectionId: "connection-a", secretReference: "vault://new-version",
     expectedVersion: 1,
   });
   assert.equal(rotated.connectionId, "00000000-0000-4000-8000-000000000001");
@@ -110,7 +110,7 @@ test("stale rotation is rejected before changing the connection", async () => {
 test("revocation disables all application bindings in the same audited transaction", async () => {
   const { repository, calls } = fixture();
   const revoked = await repository.revoke({
-    ...audit, connectionId: "connection-a", expectedVersion: 1,
+    ...audit, applicationId: "app-a", connectionId: "connection-a", expectedVersion: 1,
   });
   assert.equal(revoked.status, "REVOKED");
   assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_provider_connection_applications")));
@@ -156,4 +156,22 @@ test("application listing rejects invalid scope before database access", async (
   const { repository, calls } = fixture();
   await assert.rejects(() => repository.listForApplication("tenant-a", " "), /PROVIDER_APPLICATION_ID_INVALID/);
   assert.equal(calls.length, 0);
+});
+
+
+test("rotation refuses to affect a connection shared by multiple applications", async () => {
+  const { repository, calls } = fixture({ bindingApps: ["app-a", "app-b"] });
+  await assert.rejects(() => repository.rotateSecretReference({
+    ...audit, applicationId: "app-a", connectionId: "connection-a",
+    secretReference: "synthetic://rotated", expectedVersion: 1,
+  }), /PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED/);
+  assert.ok(!calls.some((call) => call.sql.includes("SET secret_reference")));
+});
+
+test("revocation refuses to affect a connection shared by multiple applications", async () => {
+  const { repository, calls } = fixture({ bindingApps: ["app-a", "app-b"] });
+  await assert.rejects(() => repository.revoke({
+    ...audit, applicationId: "app-a", connectionId: "connection-a", expectedVersion: 1,
+  }), /PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED/);
+  assert.ok(!calls.some((call) => call.sql.includes("SET connection_status = 'REVOKED'")));
 });
