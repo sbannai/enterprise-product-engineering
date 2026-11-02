@@ -107,3 +107,49 @@ export async function authorizeProviderConnectionRequest(
 function validId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(value);
 }
+
+
+/** Adapter from the provider permission vocabulary to durable application role grants. */
+export interface ProviderRolePermissionReader {
+  hasPermission(
+    tenantId: string,
+    applicationId: string,
+    actorId: string,
+    roleId: string,
+    permission: string,
+  ): Promise<boolean>;
+}
+
+const PROVIDER_ACTION_PERMISSION: Record<ProviderConnectionAction, string> = {
+  "provider.connection.create": "provider.connection.create",
+  "provider.connection.read": "provider.connection.read",
+  "provider.connection.bind": "provider.connection.bind",
+  "provider.connection.validate": "provider.connection.validate",
+  "provider.connection.rotate": "provider.connection.rotate",
+  "provider.connection.revoke": "provider.connection.revoke",
+};
+
+/**
+ * Application-scoped role authorizer. Tenant-wide create is intentionally denied:
+ * the current role-assignment model has no tenant-level administrator grants.
+ */
+export class PostgresProviderRoleAuthorizer implements ProviderRoleAuthorizer {
+  constructor(private readonly assignments: ProviderRolePermissionReader) {}
+
+  async authorize(input: {
+    tenantId: string;
+    actorId: string;
+    roleKey: string;
+    action: ProviderConnectionAction;
+    applicationId: string | null;
+  }): Promise<boolean> {
+    if (!input.applicationId) return false;
+    return this.assignments.hasPermission(
+      input.tenantId,
+      input.applicationId,
+      input.actorId,
+      input.roleKey,
+      PROVIDER_ACTION_PERMISSION[input.action],
+    );
+  }
+}
