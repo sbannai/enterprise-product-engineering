@@ -245,9 +245,16 @@ export class PostgresWorkflowRoleDelegationStore {
            AND ra.role_id=$4 AND ra.assignment_status='active' FOR SHARE OF ra, rd`,
         [input.tenantId, input.applicationId, input.grantorActorId, input.grantorRoleId],
       );
-      const permissions = grantor.rows[0] ? (typeof grantor.rows[0].permissions === "string"
-        ? JSON.parse(grantor.rows[0].permissions) as string[] : grantor.rows[0].permissions) : [];
-      if (!permissions.includes("access:manage")) throw new Error("WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED");
+      let permissions: string[] = [];
+      if (grantor.rows[0]) {
+        const rawPermissions = grantor.rows[0].permissions;
+        permissions = typeof rawPermissions === "string"
+          ? JSON.parse(rawPermissions) as string[]
+          : rawPermissions;
+      }
+      if (!permissions.includes("access:manage")) {
+        throw new Error("WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED");
+      }
       const current = await client.query<{ version: number | string }>(
         `SELECT version FROM eper_workflow_actor_role_assignment
           WHERE tenant_id=$1 AND application_id=$2 AND actor_id=$3 AND role_id=$4
@@ -262,10 +269,13 @@ export class PostgresWorkflowRoleDelegationStore {
           WHERE tenant_id=$1 AND application_id=$2 AND role_id=$3 AND role_status='active' FOR SHARE`,
         [input.tenantId, input.applicationId, input.targetRoleId],
       );
-      const targetPermissions = targetRole.rows[0]
-        ? (typeof targetRole.rows[0].permissions === "string"
-          ? JSON.parse(targetRole.rows[0].permissions) as string[] : targetRole.rows[0].permissions)
-        : [];
+      let targetPermissions: string[] = [];
+      if (targetRole.rows[0]) {
+        const rawTargetPermissions = targetRole.rows[0].permissions;
+        targetPermissions = typeof rawTargetPermissions === "string"
+          ? JSON.parse(rawTargetPermissions) as string[]
+          : rawTargetPermissions;
+      }
       if (targetPermissions.includes("access:manage")) {
         const adminCount = await client.query<{ admin_count: number | string }>(
           `SELECT COUNT(DISTINCT ra.actor_id)::int AS admin_count
