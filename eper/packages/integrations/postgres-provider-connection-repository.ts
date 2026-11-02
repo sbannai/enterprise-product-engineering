@@ -80,7 +80,7 @@ function safeJson(value: Record<string, unknown> | string | null | undefined): R
   return typeof value === "string" ? JSON.parse(value) as Record<string, unknown> : value;
 }
 
-function toConnection(row: ConnectionRow): ProviderConnection {
+function iso(value: Date | string): string {\n  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();\n}\n\nfunction toConnection(row: ConnectionRow): ProviderConnection {
   return {
     tenantId: row.tenant_id,
     connectionId: row.connection_id,
