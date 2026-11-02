@@ -19,6 +19,7 @@ import { replayWorkflowOutboxDeadLetter, type WorkflowOutboxReplayContext } from
 import { AdminConfigurationConflictError, PostgresAdminConfigurationStore, type AdminConfigurationResource } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { PostgresCommercialTariffAdminStore, CommercialTariffAdminError } from "../../packages/pricing/postgres-commercial-tariff-admin-store.js";
+import { PostgresCustomerLifecycleStore, CustomerLifecycleStoreError, CustomerLifecycleVersionConflictError } from "../../packages/identity/postgres-customer-lifecycle-store.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
@@ -458,7 +459,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -1941,6 +1942,68 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const status = /CONFLICT|IMMUTABLE|APPROVAL/.test(message) ? 409 : /INVALID|REQUIRED/.test(message) ? 400 : 503;
         const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").slice(0, 64) || "COMMERCIAL_TARIFF_OPERATION_FAILED";
         sendApiError(request, response, status, code, "The tariff catalogue operation could not be completed."); return;
+      }
+    }
+
+    // Product Admin customer lifecycle controls are durable and audit-backed only.
+    if (requestUrl.pathname === "/admin/customers" ||
+        /^\\/admin\\/customers\\/[^/]+(?:\\/status)?$/.test(requestUrl.pathname)) {
+      if (process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveAdminConfigIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" }); return; }
+      if (!["product_admin", "platform_admin"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "PRODUCT_ADMIN_ROLE_REQUIRED" }); return;
+      }
+      const store = options.customerLifecycleStore;
+      if (!store) { sendJson(request, response, 503, { error: "CUSTOMER_LIFECYCLE_STORE_UNAVAILABLE" }); return; }
+      const match = /^\\/admin\\/customers\\/([^/]+)(?:\\/status)?$/.exec(requestUrl.pathname);
+      try {
+        if (requestUrl.pathname === "/admin/customers" && request.method === "GET") {
+          sendApiSuccess(request, response, 200, { customers: await store.list(), persistence: "postgres" }); return;
+        }
+        if (match && request.method === "GET" && !requestUrl.pathname.endsWith("/status")) {
+          const customer = await store.get(decodeURIComponent(match[1]));
+          if (!customer) { sendApiError(request, response, 404, "CUSTOMER_ACCOUNT_NOT_FOUND", "The customer account was not found."); return; }
+          sendApiSuccess(request, response, 200, { customer }); return;
+        }
+        if (match && request.method === "PATCH" && requestUrl.pathname.endsWith("/status")) {
+          const body = await readJson(request);
+          const allowed = ["status", "reason", "effectiveAt", "expectedVersion"];
+          if (Object.keys(body).some(key => !allowed.includes(key)) ||
+              typeof body.status !== "string" || typeof body.reason !== "string" ||
+              typeof body.effectiveAt !== "string" || !Number.isSafeInteger(body.expectedVersion)) {
+            sendApiError(request, response, 400, "INVALID_CUSTOMER_LIFECYCLE_BODY", "Status, reason, effectiveAt and expectedVersion are required."); return;
+          }
+          const customer = await store.changeStatus({
+            tenantId: decodeURIComponent(match[1]),
+            status: body.status as "active" | "inactive" | "suspended" | "disabled",
+            reason: body.reason,
+            effectiveAt: body.effectiveAt,
+            expectedVersion: Number(body.expectedVersion),
+            changedBy: identity.actorId,
+            environment: options.adminConfigEnvironment ?? "sandbox",
+            correlationId: resolveApiRequestId(request),
+            serviceVersion: options.serviceVersion,
+          });
+          sendApiSuccess(request, response, 200, { customer }); return;
+        }
+        sendMethodNotAllowed(request, response, requestUrl.pathname === "/admin/customers" ? "GET" : "GET, PATCH");
+        return;
+      } catch (error) {
+        if (error instanceof CustomerLifecycleVersionConflictError) {
+          sendApiError(request, response, 409, error.message, "The customer account changed; reload it before retrying."); return;
+        }
+        if (error instanceof CustomerLifecycleStoreError) {
+          const status = error.code === "CUSTOMER_ACCOUNT_NOT_FOUND" ? 404 :
+            /VERSION_CONFLICT/.test(error.code) ? 409 : /INVALID|REQUIRED/.test(error.code) ? 400 : 409;
+          sendApiError(request, response, status, error.code, "The customer lifecycle operation could not be completed."); return;
+        }
+        sendApiError(request, response, 503, "CUSTOMER_LIFECYCLE_OPERATION_FAILED", "The customer lifecycle operation could not be completed."); return;
       }
     }
 
