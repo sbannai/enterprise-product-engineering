@@ -26,6 +26,7 @@ export interface AccessDecision {
   allowed: boolean;
   reason:
     | "allowed"
+    | "customer_inactive"
     | "module_disabled"
     | "entitlement_missing"
     | "entitlement_inactive"

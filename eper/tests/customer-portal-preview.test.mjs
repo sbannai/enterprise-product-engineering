@@ -30,7 +30,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
-    for (const label of ["Help Center", "Growth Hub", "My Applications", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
+    for (const label of ["Help Center", "Growth Hub", "My Applications", "Plan &amp; Billing", "Switch tariff plan", "Accept and switch plan", "customerTariffAccepted", "/customer/commercial-tariff", "Single-Application", "Multi-Application", "Select which active applications to revoke", "customerTariffRevoke", "CUSTOMER_ACCEPTED_TARIFF_DOWNGRADE_SELECTION", "These changes and the tariff switch are committed together, or none are applied.", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.match(html, /customer navigation/i);
@@ -83,6 +83,11 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /loadAllClientAssets\(\)\.then\(initialItems=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
     assert.match(html, /api\("\/customer\/assets\?all=true"\)/, "all client assets are fetched with one API request");
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
+    assert.ok(html.includes("Current accepted plan"), "customer can review the accepted tariff snapshot");
+    assert.ok(html.includes("acceptanceReference"), "tariff switching requires a contract or acceptance reference");
+    assert.ok(html.includes("revokeApplications"), "downgrade selection is submitted with the tariff acceptance");
+    assert.ok(html.includes("applicationAssignments"), "customer tariff view receives tenant-scoped active assignments");
+    assert.ok(html.includes("expectedVersion"), "tariff switching uses optimistic concurrency");
   assert.ok(html.includes("clearAssetSearch"), "client asset search can be cleared without another API request");
   assert.ok(html.includes("clearAssetFilters"), "client asset filters can be reset together");
   assert.ok(html.includes('search.value="";filter.value="all";applicationFilter.value="all";sortOrder.value="name";search.focus();drawAssets();'), "resetting filters restores default search, type, application, and sort locally");
