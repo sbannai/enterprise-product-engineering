@@ -59,6 +59,8 @@ test("module access queries tenant entitlement and role permission using bound p
   assert.equal((await service.checkModule(context, "billing")).allowed, true);
   const query = calls.find((call) => call.sql.includes("eper_customer_module_entitlement"));
   assert.deepEqual(query.values, ["billing", "tenant-a", "customer-admin", "module.use"]);
+  assert.match(query.sql, /eper_customer_tariff_assignment/);
+  assert.match(query.sql, /eper_tenant_application_assignment/);
 });
 
 test("module access blocks existing application when customer is inactive", async () => {
@@ -146,6 +148,24 @@ test("service readiness requires every entitlement schema table", async () => {
   }).assertReady());
 });
 
+
+
+test("module access denies suspended, not-yet-effective and expired customer tariffs", async () => {
+  for (const row of [
+    { tariff_assignment_status: "suspended" },
+    { tariff_starts_at: "2026-10-27T00:00:00Z" },
+    { tariff_ends_at: "2026-10-26T02:59:59Z" },
+  ]) {
+    const { pool } = makePool({
+      customer_status: "active", module_status: "active", entitlement_status: "active",
+      starts_at: null, ends_at: null, grace_until: null, permission_allowed: true, ...row,
+    });
+    const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+    const decision = await service.checkModule(context, "billing");
+    assert.equal(decision.allowed, false);
+    assert.ok(["tariff_inactive", "tariff_not_started", "tariff_expired"].includes(decision.reason));
+  }
+});
 
 test("module access denies every application when active assignments exceed the single-app tariff", async () => {
   const { pool } = makePool({
