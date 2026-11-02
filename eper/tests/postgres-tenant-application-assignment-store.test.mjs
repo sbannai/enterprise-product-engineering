@@ -149,5 +149,8 @@ test("tenant application activation enforces the accepted application count", as
 test("tenant application activation serializes on tenant-wide commercial lock", async () => {
   const { calls, pool } = fakeWritePool();
   await new PostgresTenantApplicationAssignmentStore(pool).assign(changeInput);
-  assert.ok(calls.some(call => call.sql.includes("eper-tenant-commercial:tenant-a")));
+  assert.ok(calls.some(call =>
+    call.sql.includes("pg_advisory_xact_lock") &&
+    call.values.includes("eper-tenant-commercial:tenant-a"),
+  ));
 });
