@@ -14,8 +14,16 @@ function makePool(row) {
         module_entitlement: "eper_customer_module_entitlement",
         module_permission: "eper_customer_module_permission",
         addon_entitlement: "eper_application_addon_entitlement",
+        customer_tariff_assignment: "eper_customer_tariff_assignment",
       }], rowCount: 1 };
-      return { rows: [row], rowCount: 1 };
+      return { rows: [{
+        tariff_assignment_status: "active",
+        tariff_max_applications: 1,
+        active_application_count: 1,
+        tariff_starts_at: "2026-10-01T00:00:00Z",
+        tariff_ends_at: null,
+        ...row,
+      }], rowCount: 1 };
     },
     release() { calls.push({ sql: "RELEASE", values: [] }); },
   };
@@ -176,14 +184,27 @@ test("application add-on access also blocks when the effective tariff allowance 
   });
 });
 
-test("tariff allowance does not block before its start or after its end", async () => {
+test("tariff access fails closed before start and after expiry", async () => {
+  const base = {
+    customer_status: "active", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+    tariff_assignment_status: "active", tariff_max_applications: 1, active_application_count: 2,
+  };
+  const future = makePool({ ...base, tariff_starts_at: "2026-10-27T00:00:00Z", tariff_ends_at: null });
+  const futureService = new PostgresModuleEntitlementService(future.pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await futureService.checkModule(context, "billing"), { allowed: false, reason: "tariff_not_started" });
+
+  const expired = makePool({ ...base, tariff_starts_at: "2026-10-01T00:00:00Z", tariff_ends_at: "2026-10-25T00:00:00Z" });
+  const expiredService = new PostgresModuleEntitlementService(expired.pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await expiredService.checkModule(context, "billing"), { allowed: false, reason: "tariff_expired" });
+});
+
+test("module access fails closed when the customer tariff assignment is missing", async () => {
   const { pool } = makePool({
     customer_status: "active", module_status: "active", entitlement_status: "active",
     starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
-    tariff_assignment_status: "active", tariff_max_applications: 1,
-    active_application_count: 2, tariff_starts_at: "2026-10-27T00:00:00Z",
-    tariff_ends_at: "2026-10-25T00:00:00Z",
+    tariff_assignment_status: null, tariff_max_applications: null, active_application_count: 0,
   });
   const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
-  assert.deepEqual(await service.checkModule(context, "billing"), { allowed: true, reason: "allowed" });
+  assert.deepEqual(await service.checkModule(context, "billing"), { allowed: false, reason: "tariff_inactive" });
 });
