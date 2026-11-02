@@ -71,6 +71,25 @@ export class PostgresTenantApplicationAssignmentStore {
   }
   async assign(input: ChangeTenantApplicationAssignmentInput): Promise<TenantApplicationAssignment> { return this.change(input, "active"); }
   async revoke(input: ChangeTenantApplicationAssignmentInput): Promise<TenantApplicationAssignment> { return this.change(input, "revoked"); }
+  async getCustomerTariffAssignment(tenantId: string): Promise<Record<string, unknown> | null> {
+    this.validateId(tenantId, "tenantId");
+    const result = await this.pool.query<Record<string, unknown>>(
+      `SELECT tenant_id, tariff_key, tariff_version, billing_basis, max_applications,
+              accepted_amount, accepted_currency, billing_interval, assignment_status,
+              starts_at, ends_at, version, accepted_by, accepted_at, acceptance_reference
+         FROM eper_customer_tariff_assignment WHERE tenant_id=$1`, [tenantId]);
+    const row=result.rows[0];
+    if(!row) return null;
+    return {tenantId:row.tenant_id,tariffKey:row.tariff_key,tariffVersion:Number(row.tariff_version),
+      billingBasis:row.billing_basis,maxApplications:Number(row.max_applications),
+      acceptedAmount:String(row.accepted_amount),acceptedCurrency:String(row.accepted_currency).trim(),
+      billingInterval:row.billing_interval,assignmentStatus:row.assignment_status,
+      startsAt:new Date(row.starts_at as string|Date).toISOString(),
+      endsAt:row.ends_at?new Date(row.ends_at as string|Date).toISOString():null,
+      version:Number(row.version),acceptedBy:row.accepted_by,
+      acceptedAt:row.accepted_at?new Date(row.accepted_at as string|Date).toISOString():null,
+      acceptanceReference:row.acceptance_reference??null};
+  }
   async switchCustomerTariff(input: {
     tenantId: string; tariffKey: string; tariffVersion: number; changedBy: string;
     expectedVersion: number; acceptanceReference: string; environment: AuditEnvironment;
