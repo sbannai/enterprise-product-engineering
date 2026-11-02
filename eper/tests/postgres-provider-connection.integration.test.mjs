@@ -257,11 +257,25 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
           "DELETE FROM eper_provider_validation_events WHERE tenant_id=$1 AND connection_id=$2",
           [tenantA, connectionId],
         ).catch(() => undefined);
+        await withScope(scopedPool, tenantA, appA, async (client) => {
+          await client.query(
+            "DELETE FROM eper_provider_webhook_receipts WHERE tenant_id=$1 AND application_id=$2",
+            [tenantA, appA],
+          );
+          await client.query(
+            "DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2",
+            [tenantA, appA],
+          );
+          await client.query(
+            "DELETE FROM eper_application_provider_policies WHERE tenant_id=$1 AND application_id=$2",
+            [tenantA, appA],
+          );
+        }).catch(() => undefined);
         await withScope(scopedPool, tenantA, null, async (client) => {
-          await client.query("DELETE FROM eper_provider_webhook_receipts WHERE tenant_id=$1", [tenantA]);
-          await client.query("DELETE FROM eper_provider_operations WHERE tenant_id=$1", [tenantA]);
-          await client.query("DELETE FROM eper_application_provider_policies WHERE tenant_id=$1", [tenantA]);
-          await client.query("DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1", [tenantA]);
+          await client.query(
+            "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2",
+            [tenantA, appA],
+          );
           await client.query("DELETE FROM eper_provider_connections WHERE tenant_id=$1", [tenantA]);
         }).catch(() => undefined);
       }
