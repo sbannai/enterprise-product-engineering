@@ -79,9 +79,9 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
     const listed = await fetch(`${base}/admin/customers`, { headers });
     assert.equal(listed.status, 200);
     const listedBody = await listed.json();
-    const listedCustomers = listedBody.customers ?? listedBody.data?.customers;
-    assert.ok(Array.isArray(listedCustomers), "customer list response must expose customers");
-    assert.deepEqual(listedCustomers.map((item) => item.tenantId), ["lifecycle-tenant"]);
+    assert.equal(listedBody.success, true);
+    assert.ok(listedBody.meta?.requestId);
+    assert.deepEqual(listedBody.data.customers.map((item) => item.tenantId), ["lifecycle-tenant"]);
 
     const changed = await fetch(`${base}/admin/customers/lifecycle-tenant/status`, {
       method: "PATCH",
@@ -95,7 +95,8 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
     });
     assert.equal(changed.status, 200);
     const changedBody = await changed.json();
-    assert.equal((changedBody.customer ?? changedBody.data?.customer).status, "inactive");
+    assert.equal(changedBody.success, true);
+    assert.equal(changedBody.data.customer.status, "inactive");
     assert.equal(current.version, 2);
     assert.equal(changes.length, 1);
     assert.equal(changes[0].changedBy, "product-admin-1");
