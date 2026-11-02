@@ -295,6 +295,14 @@ The API should expose business-oriented operations (discover compatible blocks, 
 10. Publishing revision N creates an immutable snapshot; a later revision N+1 does not alter executions pinned to N.
 11. Cross-tenant and cross-application reads, writes, connections, validation and publication fail closed at API and PostgreSQL boundaries.
 12. Fresh-clone setup, migrations, real PostgreSQL integration tests and browser application-switch tests cover the same delivered vertical slice.
+13. Product Admin can activate, suspend and deprecate a provider definition without editing customer-owned connection or application policy records.
+14. A Customer Admin can create a sandbox connection, test it, receive only masked metadata on reads, and rotate/revoke it without exposing credentials.
+15. A tenant connection is unusable by an application until an explicit application binding grants the requested capability; another application in the same tenant remains denied.
+16. Provider connection resolution rejects inactive/revoked connections, unsupported capability versions, missing entitlements and cross-scope references before dispatch.
+17. Rotation preserves the connection ID and does not require workflow republishing; revocation blocks new dispatches without silently switching providers.
+18. Duplicate or replayed provider callbacks do not duplicate delivery/meeting state transitions; invalid signatures and unknown operation references are rejected or quarantined.
+19. Provider operation idempotency, retry exhaustion, callback reconciliation, audit redaction and needs-attention outcomes are covered by PostgreSQL integration tests.
+20. Provider usage and commercial limits are enforced server-side and cannot be bypassed by editing workflow configuration.
 
 ## 11. Delivery sequence
 
@@ -304,9 +312,11 @@ The API should expose business-oriented operations (discover compatible blocks, 
 
 **Slice C — durable lifecycle:** application-scoped draft persistence, revision conflicts, immutable publication and execution pinning, aligned with #351.
 
-**Slice D — first four blocks end to end:** Activity, Rule, Integration and Reporting with PostgreSQL and browser evidence.
+**Slice D — provider configuration foundation:** provider catalogue descriptors and lifecycle; tenant-owned connections; application bindings and policies; secret-reference boundary; masked APIs; sandbox connection tests; audit and PostgreSQL isolation tests. Start with one notification provider and one conferencing provider adapter to prove the vertical slice.
 
-**Slice E — governed extensibility:** template upgrade diffs, capability deprecation migration, bounded loops and additional capability families.
+**Slice E — first four blocks end to end:** Activity, Rule, Integration and Reporting with PostgreSQL and browser evidence. Activity actions consume the same configured connections and operation/outbox path; do not create provider-specific shortcuts inside workflow code.
+
+**Slice F — governed extensibility:** template upgrade diffs, capability deprecation migration, bounded loops and additional provider/capability families.
 
 Do not claim the fabric is delivered because the canvas renders. A complete slice requires the same behavior across UI, API, PostgreSQL, authorization, audit and runtime.
 
