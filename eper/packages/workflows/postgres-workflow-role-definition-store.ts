@@ -103,7 +103,7 @@ export class PostgresWorkflowRoleDefinitionStore {
       `);
       const row = result.rows[0];
       if (!row?.role_table || !row.row_security || !row.force_row_security ||
-          !row.policy_present || !row.delegable_column_present) {
+          !row.policy_present || !row.delegable_column_present || !row.scope_type_column_present) {
         throw new Error("EPER_WORKFLOW_ROLE_DEFINITION_SCHEMA_NOT_READY");
       }
     } catch (error) {
