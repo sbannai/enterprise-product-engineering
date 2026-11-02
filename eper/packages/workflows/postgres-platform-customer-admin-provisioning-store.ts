@@ -98,6 +98,41 @@ function mapResult(row: AssignmentRow, operation: "provision" | "recover", repla
 export class PostgresPlatformCustomerAdminProvisioningStore {
   constructor(private readonly pool: AuditSqlPool) {}
 
+  async assertReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        ledger_table: string | null;
+        assignment_table: string | null;
+        role_table: string | null;
+        actor_membership_table: string | null;
+        row_security: boolean;
+        force_row_security: boolean;
+      }>(`
+        SELECT
+          to_regclass('public.eper_platform_admin_operation_idempotency')::text AS ledger_table,
+          to_regclass('public.eper_workflow_actor_role_assignment')::text AS assignment_table,
+          to_regclass('public.eper_workflow_role_definition')::text AS role_table,
+          to_regclass('public.eper_actor_application_assignment')::text AS actor_membership_table,
+          COALESCE(c.relrowsecurity, false) AS row_security,
+          COALESCE(c.relforcerowsecurity, false) AS force_row_security
+        FROM (SELECT 1) seed
+        LEFT JOIN pg_class c
+          ON c.oid = to_regclass('public.eper_platform_admin_operation_idempotency')
+      `);
+      const state = result.rows[0];
+      if (!state?.ledger_table || !state.assignment_table || !state.role_table ||
+          !state.actor_membership_table || !state.row_security || !state.force_row_security) {
+        throw new Error("EPER_PLATFORM_CUSTOMER_ADMIN_SCHEMA_NOT_READY");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_PLATFORM_CUSTOMER_ADMIN_SCHEMA_NOT_READY") throw error;
+      throw new Error("EPER_PLATFORM_CUSTOMER_ADMIN_READINESS_FAILED", { cause: error });
+    } finally {
+      client.release();
+    }
+  }
+
   async mutate(input: PlatformCustomerAdminMutationInput): Promise<PlatformCustomerAdminMutationResult> {
     const permission = requiredPermission(input.operation);
     if (!input.principal.permissions.includes(permission)) {
