@@ -95,6 +95,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("revokeApplications"), "downgrade selection is submitted with the tariff acceptance");
     assert.ok(html.includes("applicationAssignments"), "customer tariff view receives tenant-scoped active assignments");
     assert.ok(html.includes("expectedVersion"), "tariff switching uses optimistic concurrency");
+    assert.match(html, /const updateDowngrade=\(\)=>\{document\.querySelectorAll\("\.customerTariffRevoke"\)\.forEach\(input=>\{input\.checked=false;\}\);/, "changing tariff options must clear previously selected application revocations to prevent unintended removals");
+    assert.match(html, /Changing the tariff clears prior selections/, "customer must be told that changing tariff options resets downgrade selections");
   assert.ok(html.includes("clearAssetSearch"), "client asset search can be cleared without another API request");
   assert.ok(html.includes("clearAssetFilters"), "client asset filters can be reset together");
   assert.ok(html.includes('search.value="";filter.value="all";applicationFilter.value="all";sortOrder.value="name";search.focus();drawAssets();'), "resetting filters restores default search, type, application, and sort locally");
