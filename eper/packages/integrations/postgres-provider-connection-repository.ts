@@ -24,6 +24,12 @@ export interface ProviderConnection {
 }
 
 /** Secret references deliberately never appear in this read model. */
+export interface ApplicationProviderConnection extends ProviderConnection {
+  applicationId: string;
+  bindingStatus: "ACTIVE" | "SUSPENDED" | "REVOKED";
+  allowedCapabilities: string[];
+}
+
 export interface CreateProviderConnectionInput {
   tenantId: string;
   actorId: string;
@@ -183,6 +189,49 @@ export class PostgresProviderConnectionRepository {
       );
       await client.query("COMMIT");
       return result.rows[0] ? toConnection(result.rows[0]) : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Lists only connections explicitly bound to the requested application.
+   * Both tenant and application RLS contexts are established in this transaction.
+   * The result intentionally contains no secret reference or credential material.
+   */
+  async listForApplication(tenantId: string, applicationId: string): Promise<ApplicationProviderConnection[]> {
+    this.validateIdentity(tenantId, "TENANT");
+    this.validateIdentity(applicationId, "APPLICATION_ID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setTenantContext(client, tenantId);
+      await this.setApplicationContext(client, applicationId);
+      const result = await client.query<ConnectionRow & {
+        binding_status: ApplicationProviderConnection["bindingStatus"];
+        allowed_capabilities: string[] | string;
+      }>(
+        `SELECT c.tenant_id, c.connection_id, c.provider_key, c.display_name, c.auth_mode,
+          c.connection_status, c.environment, c.safe_metadata, c.version, c.created_at, c.updated_at,
+          b.binding_status, b.allowed_capabilities
+         FROM eper_provider_connections c
+         JOIN eper_provider_connection_applications b
+           ON b.tenant_id = c.tenant_id AND b.connection_id = c.connection_id
+         WHERE b.tenant_id = $1 AND b.application_id = $2
+         ORDER BY c.display_name, c.connection_id`,
+        [tenantId, applicationId],
+      );
+      await client.query("COMMIT");
+      return result.rows.map((row) => ({
+        ...toConnection(row),
+        applicationId,
+        bindingStatus: row.binding_status,
+        allowedCapabilities: typeof row.allowed_capabilities === "string"
+          ? JSON.parse(row.allowed_capabilities) as string[] : row.allowed_capabilities,
+      }));
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
