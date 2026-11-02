@@ -11,9 +11,9 @@ function fixture({ adapterResult = { ok: true }, secretError = null, adapterPres
     safeMetadata: { region: "ap-south" }, status: "PENDING_VALIDATION", version: 4,
   };
   const store = {
-    async getValidationSnapshot(tenantId, connectionId) {
-      calls.push({ op: "read", tenantId, connectionId });
-      return tenantId === snapshot.tenantId && connectionId === snapshot.connectionId ? snapshot : null;
+    async getValidationSnapshot(tenantId, applicationId, connectionId) {
+      calls.push({ op: "read", tenantId, applicationId, connectionId });
+      return tenantId === snapshot.tenantId && applicationId === "app-a" && connectionId === snapshot.connectionId ? snapshot : null;
     },
     async recordValidationOutcome(input) {
       calls.push({ op: "persist", input });
@@ -45,7 +45,7 @@ function fixture({ adapterResult = { ok: true }, secretError = null, adapterPres
   };
 }
 const request = {
-  tenantId: "tenant-a", connectionId: "connection-a", actorId: "admin-a",
+  tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a", actorId: "admin-a",
   correlationId: "corr-a", auditEnvironment: "sandbox",
 };
 
@@ -101,4 +101,12 @@ test("unknown or unsafe provider error strings are replaced with a stable generi
   const { service } = fixture({ adapterResult: { ok: false, errorCode: "token=secret" } });
   const result = await service.validate(request);
   assert.equal(result.errorCode, "PROVIDER_VALIDATION_FAILED");
+});
+
+
+test("validation cannot read a tenant connection without a binding to the requested application", async () => {
+  const { service, calls } = fixture();
+  await assert.rejects(() => service.validate({ ...request, applicationId: "app-b" }), /PROVIDER_CONNECTION_NOT_FOUND/);
+  assert.equal(calls.some((call) => call.op === "secret"), false);
+  assert.equal(calls.some((call) => call.op === "validate"), false);
 });
