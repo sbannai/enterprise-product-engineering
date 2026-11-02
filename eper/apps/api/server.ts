@@ -56,6 +56,7 @@ import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-sch
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
+import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
 import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 
