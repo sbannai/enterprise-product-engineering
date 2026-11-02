@@ -75,6 +75,16 @@ export async function handleCustomerRoleDelegationRoute(
     sendApiError(request, response, 401, "UNAUTHENTICATED", "An active customer browser session and application assignment are required.");
     return true;
   }
+
+  // All read and write operations require current durable Customer Admin authority.
+  const activeRoleIds = await actorRoleAssignmentStore.listActiveRoleIds(identity.tenantId, applicationId, identity.actorId);
+  const roleDefinitions = await roleDefinitionStore.list(identity.tenantId, applicationId);
+  const grantorRole = roleDefinitions.find(role =>
+    role.status === "active" && activeRoleIds.includes(role.roleId) && role.permissions.includes("access:manage"));
+  if (!grantorRole) {
+    sendApiError(request, response, 403, "CUSTOMER_ADMIN_DELEGATION_FORBIDDEN", "An authorized Customer Admin role is required.");
+    return true;
+  }
     
   if (request.method === "GET") {
     const [assignments, roles] = await Promise.all([
