@@ -48,7 +48,7 @@ async function createRuntimePool(pool) {
 }
 
 async function withScope(scopedPool, tenantId, applicationId, callback) {
-  const client = await pool.connect();
+  const client = await scopedPool.connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
