@@ -135,7 +135,7 @@ test("revocation rejects stale versions and rolls back", async () => {
   const client = {
     async query(sql) {
       calls.push(sql);
-      if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) return { rows: [{ permissions: ["access:manage"] }] };
+      if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
       if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["workflow:view"] }] };
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 9 }] };
       return { rows: [] };
