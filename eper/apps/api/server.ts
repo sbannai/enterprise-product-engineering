@@ -18,6 +18,7 @@ import { PostgresWorkflowOutboxStore } from "../../packages/workflows/postgres-w
 import { replayWorkflowOutboxDeadLetter, type WorkflowOutboxReplayContext } from "../../packages/workflows/workflow-outbox-dead-letter-replay.js";
 import { AdminConfigurationConflictError, PostgresAdminConfigurationStore, type AdminConfigurationResource } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
+import { PostgresCommercialTariffAdminStore, CommercialTariffAdminError } from "../../packages/pricing/postgres-commercial-tariff-admin-store.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
@@ -214,6 +215,7 @@ export type CustomerAssetAuditWriter = (record: CustomerAssetAuditRecord) => Pro
 interface TrustedAdminConfigIdentity {
   tenantId: string;
   actorId: string;
+  roleKey?: string;
 }
 
 /** Maps individual bearer credentials to trusted tenant/actor identities configured server-side. */
@@ -232,7 +234,7 @@ function resolveAdminConfigIdentity(request: IncomingMessage): TrustedAdminConfi
     const record = identity as Record<string, unknown>;
     if (typeof record.tenantId !== "string" || !record.tenantId.trim() || record.tenantId.length > 128 ||
         typeof record.actorId !== "string" || !record.actorId.trim() || record.actorId.length > 128) return null;
-    return { tenantId: record.tenantId, actorId: record.actorId };
+    return { tenantId: record.tenantId, actorId: record.actorId, ...(typeof record.roleKey === "string" ? { roleKey: record.roleKey } : {}) };
   }
   return null;
 }
@@ -456,7 +458,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -1796,6 +1798,76 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       });
       response.end(adminPricingUiHtml);
       return;
+    }
+
+    // Platform Product Admin tariff catalogue: durable, versioned and audit-backed only.
+    if (requestUrl.pathname === "/admin/commercial-tariffs" ||
+        /^\/admin\/commercial-tariffs\/[^/]+\/\d+\/(?:approve|publish)$/.test(requestUrl.pathname)) {
+      if (process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveAdminConfigIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" }); return; }
+      if (!["product_admin", "platform_admin"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "PRODUCT_ADMIN_ROLE_REQUIRED" }); return;
+      }
+      const store = options.commercialTariffAdminStore;
+      if (!store) { sendJson(request, response, 503, { error: "COMMERCIAL_TARIFF_ADMIN_UNAVAILABLE" }); return; }
+      const context = {
+        tenantId: identity.tenantId, actorId: identity.actorId, correlationId: resolveApiRequestId(request),
+        environment: options.adminConfigEnvironment ?? "sandbox", serviceVersion: options.serviceVersion,
+      };
+      try {
+        if (requestUrl.pathname === "/admin/commercial-tariffs" && request.method === "GET") {
+          sendApiSuccess(request, response, 200, { tariffs: await store.list(context), persistence: "postgres" }); return;
+        }
+        if (requestUrl.pathname === "/admin/commercial-tariffs" && request.method === "POST") {
+          const body = await readJson(request);
+          const allowed = ["tariffKey", "billingBasis", "maxApplications", "amount", "currency", "billingInterval", "effectiveFrom", "effectiveTo", "changeReason", "approvalRequired"];
+          if (Object.keys(body).some((key) => !allowed.includes(key))) {
+            sendApiError(request, response, 400, "INVALID_TARIFF_BODY", "Only tariff catalogue fields are accepted."); return;
+          }
+          const created = await store.createDraft({
+            tariffKey: body.tariffKey as string, billingBasis: body.billingBasis as "single_application" | "multi_application",
+            maxApplications: body.maxApplications as number, amount: body.amount as string,
+            currency: body.currency as string, billingInterval: body.billingInterval as "monthly" | "annual" | "one_time",
+            effectiveFrom: body.effectiveFrom as string, effectiveTo: body.effectiveTo as string | null | undefined,
+            changeReason: body.changeReason as string, approvalRequired: body.approvalRequired as boolean,
+          }, context);
+          sendApiSuccess(request, response, 201, { tariff: created }); return;
+        }
+        const match = /^\/admin\/commercial-tariffs\/([^/]+)\/(\d+)\/(approve|publish)$/.exec(requestUrl.pathname);
+        if (match && request.method === "POST") {
+          const tariffKey = decodeURIComponent(match[1]);
+          const tariffVersion = Number(match[2]);
+          const body = await readJson(request);
+          if (match[3] === "approve") {
+            if (Object.keys(body).some((key) => key !== "approvalReference") || typeof body.approvalReference !== "string") {
+              sendApiError(request, response, 400, "TARIFF_APPROVAL_REFERENCE_REQUIRED", "An approval reference is required."); return;
+            }
+            const tariff = await store.approve({ tariffKey, tariffVersion, approvalReference: body.approvalReference }, context);
+            sendApiSuccess(request, response, 200, { tariff }); return;
+          }
+          if (Object.keys(body).length) {
+            sendApiError(request, response, 400, "PUBLISH_BODY_MUST_BE_EMPTY", "Publishing accepts no mutable tariff fields."); return;
+          }
+          const tariff = await store.publish({ tariffKey, tariffVersion }, context);
+          sendApiSuccess(request, response, 200, { tariff }); return;
+        }
+        sendMethodNotAllowed(request, response, requestUrl.pathname === "/admin/commercial-tariffs" ? "GET, POST" : "POST");
+        return;
+      } catch (error) {
+        if (error instanceof CommercialTariffAdminError) {
+          sendApiError(request, response, error.status, error.code, "The tariff catalogue operation could not be completed."); return;
+        }
+        const message = error instanceof Error ? error.message : "";
+        const status = /CONFLICT|IMMUTABLE|APPROVAL/.test(message) ? 409 : /INVALID|REQUIRED/.test(message) ? 400 : 503;
+        const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").slice(0, 64) || "COMMERCIAL_TARIFF_OPERATION_FAILED";
+        sendApiError(request, response, status, code, "The tariff catalogue operation could not be completed."); return;
+      }
     }
 
     const adminConfigPath = requestUrl.pathname;
