@@ -110,3 +110,32 @@ Initial repository inspection confirms:
 ## 6. Owner decision required
 
 The technical classification is complete. Before promoting v1.6.0 from draft, the owner must confirm that these 45 additive feature statements and their proposed Must/Should priorities represent the intended product scope. This is the only approval boundary; it does not block preserving the source or continuing work on already-approved 228 requirements.
+
+## 7. Owner-directed commercial additions — separate from the 45 v34 source rows
+
+The v1.6.0 register now carries ten owner-directed commercial additions, EPER-CW-046 through EPER-CW-055. They are **not** additional rows from the original v34 wireframe export. Keep the original 45 source rows, source CSV, source statements and their dispositions unchanged. This section links the separate commercial additions to the same shared baseline controls without inventing exact REQ-463xx…REQ-500xx matches.
+
+| Candidate ID | Commercial capability | Supporting baseline controls | Shared capability families | Disposition |
+|---|---|---|---|---|
+| EPER-CW-046 | Customer lifecycle status, effective date, reason, actor and audited history | SRS-002, SRS-003, SRS-017; XX01/XX02/XX03/XX04/XX05 | Authoritative records, authorization, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-047 | Versioned customer tariff assignment for single-/multi-application billing, limits, price, currency and interval | SRS-002, SRS-005, SRS-006, SRS-007, SRS-017; XX01/XX02/XX03/XX04 | Records, authorization, validation, audit | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-048 | Server-side metering and reconciliation of active applications and billable scope | SRS-017, SRS-018, SRS-019; XX01/XX04/XX06 | Records, audit, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-049 | Fail-closed enforcement of customer tariff and application/add-on entitlement boundaries across synchronous and asynchronous entry points | SRS-002, SRS-003, SRS-009, SRS-010, SRS-011, SRS-017; XX02/XX03/XX04/XX05 | Authorization, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-050 | Product Admin commercial compliance, deviation monitoring and controlled exception/remediation | SRS-002, SRS-017, SRS-018, SRS-019; XX02/XX04/XX06 | Authorization, audit, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-051 | Customer-facing single-/multi-application tariff mobility with explicit consent and price/entitlement validation | SRS-002, SRS-003, SRS-005, SRS-006, SRS-007, SRS-017; XX01/XX02/XX03/XX04 | Records, authorization, validation, audit | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-052 | Safe downgrade with explicit selection of applications to retain/deactivate; preserve application data | SRS-002, SRS-003, SRS-017; XX02/XX03/XX04/XX05 | Authorization, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-053 | Product Admin tariff catalogue price creation, versioning, activation, scheduling and retirement | SRS-005, SRS-006, SRS-007, SRS-017; XX01/XX03/XX04 | Records, validation, audit | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-054 | Price integrity across tariff switching, quotation, invoice, payment and receipt snapshots | SRS-005, SRS-006, SRS-007, SRS-017; XX01/XX03/XX04/XX05 | Records, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-055 | Customer Admin explicitly selects application assignments to revoke during a tariff downgrade; commit revocations, tariff acceptance/history and audit atomically | SRS-002, SRS-003, SRS-017; XX01/XX02/XX03/XX04/XX05 | Records, authorization, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+
+### Commercial crosswalk interpretation
+
+1. The original v34 reconciliation remains exactly 45 source rows: 0 exact full-coverage matches, 45 partial-support links to shared controls, and 45 additive v1.6.0 draft candidates. The four existing approval overlaps remain linked to EPER-ACT-APPROVAL-001.
+2. EPER-CW-046–055 are ten additional owner-directed commercial requirements in the v1.6.0 draft register. They do not change the original v34 source export, the approved 228 requirement IDs, or the 38 chapters.
+3. The supporting SRS/XX references identify reusable cross-cutting controls only. They are not exact chapter requirement mappings and do not establish feature completion.
+4. No commercial addition is marked fully covered by the 228 baseline. No unsupported exact REQ-463xx…REQ-500xx locator is asserted.
+5. The v1.6.0 addendum remains a draft pending the owner's formal disposition of its additive scope and priority. Owner-directed scope recording is not a change to the approved 228/38 baseline.
+
+### Implementation evidence boundary
+
+The commercial requirements are traceable here, but their implementation status must be assessed independently across UI, API, PostgreSQL, audit, authorization and executable tests. In particular, customer lifecycle enforcement is not equivalent to a complete Admin lifecycle-management UI; tariff catalogue publication is not equivalent to metering/deviation monitoring; and tariff acceptance is not complete price-integrity integration through quote, invoice, payment and receipt. Do not infer implementation or operational readiness from this crosswalk.
