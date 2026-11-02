@@ -79,6 +79,12 @@ export async function handlePlatformCustomerAdminProvisioningRoute(
     respond(request, response, 401, { error: "unauthorized" });
     return true;
   }
+  const requiredPermission = route[3] === "customer-admins"
+    ? "customer_admin:provision" : "customer_admin:recover";
+  if (!principal.permissions.includes(requiredPermission)) {
+    respond(request, response, 403, { error: "platform_customer_admin_permission_denied" });
+    return true;
+  }
 
   try {
     const body = await readBody(request);
