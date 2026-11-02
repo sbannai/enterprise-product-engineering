@@ -5,7 +5,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 
 const TOKEN = "eper-workflow-config-test-token-more-than-32-characters";
 
-test("workflow studio, role permissions, access checks and shared toast UI are integrated", async () => {
+test("Customer Admin workflow studio, application roles, draft publishing and shared toast UI are integrated", async () => {
   const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_API_TOKEN"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, { EPER_ADMIN_CONFIG_API_ENABLED: "true", EPER_ADMIN_CONFIG_API_TOKEN: TOKEN });
@@ -39,7 +39,11 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(html, /Visual workflow map/);
     assert.match(html, /Routing rule IDs/);
     assert.match(html, /data-k="routingRuleIds"/);
-    assert.match(html, /Roles &amp; access|Roles & access/);
+    assert.match(html, /Application roles/);
+    assert.match(html, /Application ID/);
+    assert.match(html, /workflow-definitions/);
+    assert.match(html, /publishWorkflow/);
+    assert.match(html, /roleIds\.includes\(role\.id\)/);
     assert.match(html, /Generated activities/);
     assert.match(html, /requiredPermission==='workflow:act'.*assignedRolePermissions\.includes\('workflow:admin'\)/);
     assert.match(html, /assignedRolePermissions\.includes\(requiredPermission\)/, "preview must honor permissions on the activity's assigned role");
