@@ -7,7 +7,10 @@ ALTER TABLE eper_commercial_tariff_plan
   ADD COLUMN IF NOT EXISTS approval_state TEXT NOT NULL DEFAULT 'not_required'
     CHECK (approval_state IN ('not_required', 'pending', 'approved', 'rejected')),
   ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS published_by TEXT;
+  ADD COLUMN IF NOT EXISTS published_by TEXT,
+  ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS approved_by TEXT,
+  ADD COLUMN IF NOT EXISTS approval_reference TEXT;
 
 -- Existing active catalogue rows predate the publication workflow; preserve them as published history.
 UPDATE eper_commercial_tariff_plan
