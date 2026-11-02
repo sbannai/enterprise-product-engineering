@@ -22,7 +22,7 @@ function fixture({ version = 4, status = "PENDING_VALIDATION", exists = true } =
       }
       if (sql.includes("UPDATE eper_provider_connections")) {
         const [tenant, connection, expected, nextStatus] = values;
-        if (tenant === "tenant-a" && connection === "connection-a" &&
+        if (exists && tenant === "tenant-a" && connection === "connection-a" &&
             currentVersion === expected &&
             ["PENDING_VALIDATION", "ACTIVE", "DEGRADED"].includes(currentStatus)) {
           currentVersion += 1; currentStatus = nextStatus;
