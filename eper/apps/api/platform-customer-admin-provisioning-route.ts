@@ -77,12 +77,12 @@ export async function handlePlatformCustomerAdminProvisioningRoute(
     if (process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED !== "true" || !dependencies.store || !dependencies.environment) {
       respond(request, response, 404, { error: "not_found" }); return true;
     }
+    const nonce = Buffer.from(randomUUID()).toString("base64");
     response.writeHead(200, {
       "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
       "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
       "x-content-type-options": "nosniff", "referrer-policy": "same-origin",
     });
-    const nonce = Buffer.from(randomUUID()).toString("base64");
     response.end(platformCustomerAdminProvisioningUiHtml.replaceAll("__CSP_NONCE__", nonce)); return true;
   }
 
