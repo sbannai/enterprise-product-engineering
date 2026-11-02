@@ -16,6 +16,9 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
     const actorId = "ia-actor-" + suffix.slice(0, 24);
     const applicationId = "ia-app-" + suffix.slice(0, 24);
     const rollbackApplicationId = "ia-fail-" + suffix.slice(0, 24);
+    const limitApplicationId = "ia-limit-" + suffix.slice(0, 24);
+    const overLimitApplicationId = "ia-over-" + suffix.slice(0, 24);
+    const tariffKey = "ia-tariff-" + suffix.slice(0, 24);
     const changedBy = "ci-assignment-test";
     const common = { tenantId, changedBy, environment: "sandbox", correlationId: "identity-assignment-" + suffix };
     const tenantStore = new PostgresTenantApplicationAssignmentStore(pool);
@@ -31,10 +34,30 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
           SELECT
             to_regclass('public.eper_tenant_application_assignment') IS NOT NULL AS tenant_table,
             to_regclass('public.eper_actor_application_assignment') IS NOT NULL AS actor_table,
+            to_regclass('public.eper_customer_account') IS NOT NULL AS customer_table,
+            to_regclass('public.eper_commercial_tariff_plan') IS NOT NULL AS tariff_plan_table,
+            to_regclass('public.eper_customer_tariff_assignment') IS NOT NULL AS tariff_assignment_table,
             EXISTS (SELECT 1 FROM pg_indexes WHERE indexname='eper_tenant_application_assignment_active_idx') AS tenant_active_index,
             EXISTS (SELECT 1 FROM pg_indexes WHERE indexname='eper_actor_application_assignment_active_idx') AS actor_active_index
         `);
-        assert.deepEqual(schema.rows[0], { tenant_table: true, actor_table: true, tenant_active_index: true, actor_active_index: true });
+        assert.deepEqual(schema.rows[0], {
+          tenant_table: true, actor_table: true, customer_table: true, tariff_plan_table: true,
+          tariff_assignment_table: true, tenant_active_index: true, actor_active_index: true,
+        });
+        await pool.query(`INSERT INTO eper_customer_account
+          (tenant_id, customer_status, status_reason, updated_by)
+          VALUES ($1, 'active', 'CI commercial control fixture', $2)`, [tenantId, changedBy]);
+        await pool.query(`INSERT INTO eper_commercial_tariff_plan
+          (tariff_key, tariff_version, billing_basis, max_applications, amount, currency,
+           billing_interval, effective_from, tariff_status, created_by)
+          VALUES ($1, 1, 'multi_application', 2, 100, 'INR', 'monthly',
+                  NOW() - INTERVAL '1 hour', 'active', $2)`, [tariffKey, changedBy]);
+        await pool.query(`INSERT INTO eper_customer_tariff_assignment
+          (tenant_id, tariff_key, tariff_version, billing_basis, max_applications,
+           accepted_amount, accepted_currency, billing_interval, assignment_status,
+           starts_at, updated_by)
+          VALUES ($1, $2, 1, 'multi_application', 2, 100, 'INR', 'monthly',
+                  'active', NOW() - INTERVAL '1 hour', $3)`, [tenantId, tariffKey, changedBy]);
       });
 
       await t.test("tenant ownership and actor membership jointly grant access", async () => {
@@ -59,6 +82,17 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
         assert.match(String(rejected?.reason?.message), /ACTOR_APPLICATION_ASSIGNMENT_VERSION_CONFLICT/);
         const history = await actorStore.listAssignments(tenantId, actorId);
         assert.equal(history.find(row => row.applicationId === applicationId)?.version, 2);
+      });
+
+      await t.test("multi-application tariff permits only the purchased application count", async () => {
+        const second = await tenantStore.assign({ ...common, applicationId: limitApplicationId, expectedVersion: 0 });
+        assert.equal(second.status, "active");
+        await assert.rejects(
+          tenantStore.assign({ ...common, applicationId: overLimitApplicationId, expectedVersion: 0 }),
+          { message: "CUSTOMER_APPLICATION_TARIFF_LIMIT_EXCEEDED" },
+        );
+        const revoked = await tenantStore.revoke({ ...common, applicationId: limitApplicationId, expectedVersion: 1 });
+        assert.equal(revoked.status, "revoked");
       });
 
       await t.test("tenant assignment concurrent updates serialize on the expected version", async () => {
@@ -129,6 +163,9 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
       if (functionName) await pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`).catch(() => {});
       await pool.query("DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_tariff_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_account WHERE tenant_id=$1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key=$1", [tariffKey]).catch(() => {});
       // Audit rows are append-only by design; unique CI tenant IDs isolate their evidence.
       await pool.end();
     }
