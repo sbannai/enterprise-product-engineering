@@ -66,6 +66,7 @@ test("create persists a secret reference but returns a masked connection view", 
   assert.equal("secretReference" in created, false);
   assert.ok(calls.some((call) => call.sql.includes("secret_reference")));
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
   assert.equal(calls.at(-1).sql, "RELEASE");
 });
 
@@ -89,6 +90,7 @@ test("secret rotation preserves connection identity and forces revalidation", as
   assert.equal(rotated.version, 2);
   assert.equal(rotated.status, "PENDING_VALIDATION");
   assert.ok(calls.some((call) => call.sql.includes("SET secret_reference")));
+  assert.ok(calls.some((call) => call.sql.includes("SET binding_status = 'SUSPENDED'")));
 });
 
 test("stale rotation is rejected before changing the connection", async () => {
@@ -115,4 +117,14 @@ test("invalid tenant identity is rejected before database access", async () => {
   const { repository, calls } = fixture();
   await assert.rejects(() => repository.get(" ", "connection-a"), /PROVIDER_TENANT_INVALID/);
   assert.equal(calls.length, 0);
+});
+
+test("application binding sets tenant and application RLS context before lookup", async () => {
+  const { repository, calls } = fixture({ status: "PENDING_VALIDATION" });
+  await assert.rejects(() => repository.bindApplication({
+    ...audit, applicationId: "app-a", connectionId: "connection-a",
+    allowedCapabilities: ["sms.send"],
+  }), /PROVIDER_CONNECTION_NOT_FOUND|PROVIDER_CONNECTION_NOT_ACTIVE|PROVIDER_CAPABILITY_NOT_SUPPORTED/);
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
 });
