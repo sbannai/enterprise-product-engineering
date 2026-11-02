@@ -58,7 +58,8 @@ test("reads a tenant-scoped internal validation snapshot with adapter and secret
   assert.equal(snapshot.adapterKey, "mail-adapter");
   assert.equal(snapshot.secretReference, "vault://tenant-a/mail/credential");
   assert.equal(snapshot.version, 4);
-  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'")));\n  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'")));
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
   assert.equal(calls.at(-1).sql, "RELEASE");
 });
 
@@ -69,7 +70,8 @@ test("successful validation atomically activates, versions, records history and 
   });
   assert.deepEqual(result, { status: "ACTIVE", version: 5 });
   assert.deepEqual(state(), { currentVersion: 5, currentStatus: "ACTIVE" });
-  assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_provider_connection_applications") && call.values[2] === "app-a"));\n  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_provider_validation_events")));
+  assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_provider_connection_applications") && call.values[2] === "app-a"));
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_provider_validation_events")));
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.ok(calls.some((call) => call.sql === "COMMIT"));
 });
