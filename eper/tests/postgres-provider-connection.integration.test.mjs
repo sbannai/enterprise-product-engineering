@@ -47,7 +47,7 @@ async function createRuntimePool(pool) {
   };
 }
 
-async function withScope(pool, tenantId, applicationId, callback) {
+async function withScope(scopedPool, tenantId, applicationId, callback) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -137,7 +137,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         connectionId, outcome: "SUCCEEDED", status: "ACTIVE", version: 2,
       });
       assert.equal(JSON.stringify(validated).includes("synthetic-only"), false);
-      const history = await withScope(pool, tenantA, null, async (client) => client.query(
+      const history = await withScope(scopedPool, tenantA, null, async (client) => client.query(
         "SELECT validation_outcome FROM eper_provider_validation_events WHERE tenant_id=$1 AND connection_id=$2",
         [tenantA, connectionId],
       ));
@@ -186,7 +186,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       ));
       assert.deepEqual(historyAfterRetry.rows.map(row => row.validation_outcome), ["SUCCEEDED", "FAILED", "SUCCEEDED"]);
 
-      await withScope(pool, tenantA, appA, async (client) => {
+      await withScope(scopedPool, tenantA, appA, async (client) => {
         await client.query(
           `INSERT INTO eper_application_provider_policies
             (tenant_id, application_id, connection_id, policy, updated_by)
@@ -210,7 +210,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         );
       });
 
-      const hiddenFromOtherApplication = await withScope(pool, tenantA, appB, async (client) => {
+      const hiddenFromOtherApplication = await withScope(scopedPool, tenantA, appB, async (client) => {
         const policies = await client.query(
           "SELECT connection_id FROM eper_application_provider_policies WHERE tenant_id=$1",
           [tenantA],
@@ -234,7 +234,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       });
       assert.equal(rotated.version, 5);
       assert.equal(rotated.status, "PENDING_VALIDATION");
-      const suspended = await withScope(pool, tenantA, null, async (client) => client.query(
+      const suspended = await withScope(scopedPool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
         [tenantA, connectionId],
       ));
@@ -246,7 +246,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       });
       assert.equal(revoked.version, 6);
       assert.equal(revoked.status, "REVOKED");
-      const binding = await withScope(pool, tenantA, null, async (client) => client.query(
+      const binding = await withScope(scopedPool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
         [tenantA, connectionId],
       ));
