@@ -9,13 +9,15 @@ function makePool(row) {
       calls.push({ sql, values });
       if (sql.includes("to_regclass")) return { rows: [{
         customer_account: "eper_customer_account",
+        customer_tariff_assignment: "eper_customer_tariff_assignment",
+        tenant_application_assignment: "eper_tenant_application_assignment",
         module_catalog: "eper_module_catalog",
         module_price: "eper_module_price",
         module_entitlement: "eper_customer_module_entitlement",
         module_permission: "eper_customer_module_permission",
         addon_entitlement: "eper_application_addon_entitlement",
       }], rowCount: 1 };
-      return { rows: [row], rowCount: 1 };
+      return { rows: [{ tariff_assignment_status: "active", tariff_starts_at: "2026-10-01T00:00:00Z", tariff_ends_at: null, max_applications: 3, active_application_count: 1, ...row }], rowCount: 1 };
     },
     release() { calls.push({ sql: "RELEASE", values: [] }); },
   };
@@ -50,6 +52,8 @@ test("module access queries tenant entitlement and role permission using bound p
   assert.equal((await service.checkModule(context, "billing")).allowed, true);
   const query = calls.find((call) => call.sql.includes("eper_customer_module_entitlement"));
   assert.deepEqual(query.values, ["billing", "tenant-a", "customer-admin", "module.use"]);
+  assert.match(query.sql, /eper_customer_tariff_assignment/);
+  assert.match(query.sql, /eper_tenant_application_assignment/);
 });
 
 test("module access blocks existing application when customer is inactive", async () => {
@@ -127,6 +131,60 @@ test("add-on access fails closed when no entitlement row exists", async () => {
   assert.deepEqual(await service.checkApplicationAddon(context, "ai"), {
     allowed: false,
     reason: "addon_not_selected",
+  });
+});
+
+
+test("module access denies when the customer tariff is inactive or not effective", async () => {
+  for (const row of [
+    { tariff_assignment_status: "suspended" },
+    { tariff_starts_at: "2026-10-27T00:00:00Z" },
+    { tariff_ends_at: "2026-10-26T02:59:59Z" },
+  ]) {
+    const { pool } = makePool({
+      customer_status: "active", module_status: "active", entitlement_status: "active",
+      starts_at: null, ends_at: null, grace_until: null, permission_allowed: true, ...row,
+    });
+    const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+    const decision = await service.checkModule(context, "billing");
+    assert.equal(decision.allowed, false);
+    assert.ok(["tariff_inactive", "tariff_not_started", "tariff_expired"].includes(decision.reason));
+  }
+});
+
+test("module access force-stops an over-allowance customer across existing applications", async () => {
+  const { pool } = makePool({
+    customer_status: "active", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+    max_applications: 1, active_application_count: 2,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkModule(context, "billing"), {
+    allowed: false, reason: "tariff_application_limit_exceeded",
+  });
+});
+
+test("module access denies when customer tariff assignment is missing", async () => {
+  const { pool } = makePool({
+    customer_status: "active", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+    tariff_assignment_status: null, max_applications: null,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkModule(context, "billing"), {
+    allowed: false, reason: "tariff_inactive",
+  });
+});
+
+test("add-on access is also blocked when the customer exceeds the tariff allowance", async () => {
+  const { pool } = makePool({
+    customer_status: "active", addon_status: "active", entitlement_status: "active",
+    effective_from: null, effective_to: null, permission_allowed: true,
+    max_applications: 1, active_application_count: 2,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkApplicationAddon(context, "marketing"), {
+    allowed: false, reason: "tariff_application_limit_exceeded",
   });
 });
 
