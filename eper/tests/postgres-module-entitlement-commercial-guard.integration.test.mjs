@@ -61,8 +61,8 @@ test("live PostgreSQL commercial access guard denies tariff overage, then restor
 
       const context = applicationId => ({ tenantId, applicationId, roleKey: "customer-admin",
         permissionKey: "module.use", now: new Date() });
-      assert.deepEqual(await service.checkModule(context(appA), moduleKey), { allowed: false, reason: "tariff_overage" });
-      assert.deepEqual(await service.checkModule(context(appB), moduleKey), { allowed: false, reason: "tariff_overage" });
+      assert.deepEqual(await service.checkModule(context(appA), moduleKey), { allowed: false, reason: "tariff_application_limit_exceeded" });
+      assert.deepEqual(await service.checkModule(context(appB), moduleKey), { allowed: false, reason: "tariff_application_limit_exceeded" });
 
       const revoked = await assignments.revoke({ ...common, applicationId: appB, expectedVersion: 1 });
       assert.equal(revoked.status, "revoked");
