@@ -1161,8 +1161,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 503, { error: "customer_tariff_catalogue_unavailable" }); return;
         }
         try {
-          const [assignment, records] = await Promise.all([
+          const [assignment, applicationAssignments, records] = await Promise.all([
             options.tenantApplicationAssignmentStore.getCustomerTariffAssignment(identity.tenantId),
+            options.tenantApplicationAssignmentStore.listAssignments(identity.tenantId),
             options.commercialTariffAdminStore.list({ tenantId: identity.tenantId, actorId: identity.actorId,
               correlationId: resolveApiRequestId(request), environment: options.adminConfigEnvironment ?? "sandbox",
               serviceVersion: options.serviceVersion }),
@@ -1172,7 +1173,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             Date.parse(record.effectiveFrom)<=now && (!record.effectiveTo || Date.parse(record.effectiveTo)>now))
             .map(({tariffKey,tariffVersion,billingBasis,maxApplications,amount,currency,billingInterval,effectiveFrom,effectiveTo})=>
               ({tariffKey,tariffVersion,billingBasis,maxApplications,amount,currency,billingInterval,effectiveFrom,effectiveTo}));
-          sendJson(request,response,200,{assignment,tariffs});
+          sendJson(request,response,200,{assignment,applicationAssignments:applicationAssignments.filter(item=>item.status==="active").map(({applicationId,status,version})=>({applicationId,status,version})),tariffs});
         } catch {
           sendJson(request,response,503,{error:"customer_tariff_catalogue_unavailable"});
         }
@@ -1190,13 +1191,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (body.accepted !== true || typeof body.acceptanceReference !== "string" ||
             typeof body.tariffKey !== "string" || !Number.isSafeInteger(body.tariffVersion) ||
             !Number.isSafeInteger(body.expectedVersion) ||
-            Object.keys(body).some(key => !["accepted", "acceptanceReference", "tariffKey", "tariffVersion", "expectedVersion"].includes(key))) {
+            (body.revokeApplications !== undefined && (!Array.isArray(body.revokeApplications) ||
+              body.revokeApplications.length > 500 || body.revokeApplications.some(item =>
+                !item || typeof item.applicationId !== "string" || !Number.isSafeInteger(item.expectedVersion)))) ||
+            Object.keys(body).some(key => !["accepted", "acceptanceReference", "tariffKey", "tariffVersion", "expectedVersion", "revokeApplications"].includes(key))) {
           sendJson(request, response, 400, { error: "CUSTOMER_TARIFF_ACCEPTANCE_REQUIRED" }); return;
         }
         const assignment = await options.tenantApplicationAssignmentStore.switchCustomerTariff({
           tenantId: identity.tenantId, changedBy: identity.actorId, tariffKey: body.tariffKey,
           tariffVersion: body.tariffVersion as number, expectedVersion: body.expectedVersion as number,
-          acceptanceReference: body.acceptanceReference, environment: options.adminConfigEnvironment ?? "sandbox",
+          acceptanceReference: body.acceptanceReference, revokeApplications: body.revokeApplications as Array<{applicationId:string;expectedVersion:number}> | undefined, environment: options.adminConfigEnvironment ?? "sandbox",
           correlationId: resolveApiRequestId(request), serviceVersion: options.serviceVersion,
         });
         sendJson(request, response, 200, { assignment });
