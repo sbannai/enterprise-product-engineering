@@ -111,7 +111,7 @@ export class PostgresCustomerLifecycleStore {
     tariffKey: string | null; tariffVersion: number | null; billingBasis: string | null;
     tariffAssignmentStatus: string | null; tariffEffective: boolean;
     maxApplications: number | null; activeApplicationCount: number;
-    allowanceStatus: "not_configured" | "inactive_tariff" | "within_allowance" | "over_allowance";
+    allowanceStatus: "not_configured" | "within_allowance" | "over_allowance";
   }>> {
     const client = await this.pool.connect();
     try {
@@ -135,7 +135,6 @@ export class PostgresCustomerLifecycleStore {
         const maxApplications = row.max_applications == null ? null : Number(row.max_applications);
         const tariffEffective = row.tariff_assignment_status === "active" && row.tariff_effective === true;
         const allowanceStatus = maxApplications == null ? "not_configured" :
-          !tariffEffective ? "inactive_tariff" :
           activeApplicationCount > maxApplications ? "over_allowance" : "within_allowance";
         return { ...mapRow(row), tariffKey: row.tariff_key,
           tariffVersion: row.tariff_version == null ? null : Number(row.tariff_version),
