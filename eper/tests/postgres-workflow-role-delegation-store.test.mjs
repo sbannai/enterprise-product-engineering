@@ -10,7 +10,7 @@ const input = {
 };
 
 function fixture({ tenantStatus = "active", grantorPermissions = ["access:manage", "workflow:view"],
-  targetPermissions = ["workflow:view"], targetActorStatus = "active", priorVersion = null } = {}) {
+  targetPermissions = ["workflow:view"], targetDelegable = true, targetActorStatus = "active", priorVersion = null } = {}) {
   const calls = [];
   const now = "2026-11-02T05:00:00.000Z";
   const client = {
@@ -18,7 +18,7 @@ function fixture({ tenantStatus = "active", grantorPermissions = ["access:manage
       calls.push({ sql, values });
       if (sql.includes("eper_tenant_application_assignment")) return { rows: [{ assignment_status: tenantStatus }] };
       if (sql.includes("FROM eper_workflow_actor_role_assignment ra")) return { rows: [{ permissions: grantorPermissions }] };
-      if (sql.includes("FROM eper_workflow_role_definition")) return { rows: [{ permissions: targetPermissions, delegable: true }] };
+      if (sql.includes("FROM eper_workflow_role_definition")) return { rows: [{ permissions: targetPermissions, delegable: targetDelegable }] };
       if (sql.includes("eper_actor_application_assignment")) return { rows: [{ assignment_status: targetActorStatus }] };
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) {
         return { rows: priorVersion === null ? [] : [{ version: priorVersion }] };
@@ -69,6 +69,16 @@ test("requires the grantor to hold access:manage", async () => {
   await assert.rejects(
     new PostgresWorkflowRoleDelegationStore(pool).grant(input),
     /WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED/,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")), false);
+});
+
+test("rejects a role unless its explicit catalogue delegable flag is true", async () => {
+  const { calls, pool } = fixture({ targetDelegable: false });
+  await assert.rejects(
+    new PostgresWorkflowRoleDelegationStore(pool).grant(input),
+    /WORKFLOW_ROLE_DELEGATION_TARGET_ROLE_NOT_DELEGABLE/,
   );
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")), false);
