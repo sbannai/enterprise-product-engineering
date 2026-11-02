@@ -116,6 +116,67 @@ Design and runtime rules:
 
 This gives customers a simple experience—“notify these people” or “schedule a review meeting”—while keeping provider-specific behavior behind reusable Integration capability contracts.
 
+### 4.2 Provider catalogue and connection configuration
+
+These actions depend on real provider services. EPER must therefore include a first-class **Provider Configuration** area; a workflow action is publishable only when it references a valid, enabled connection with the required capabilities.
+
+**Provider catalogue (Product Admin / platform governance)**
+
+Product Admin governs the supported provider catalogue and its lifecycle:
+- Register provider adapters and supported capabilities (send email, send SMS, WhatsApp message/template, in-app/push notification, create/update/cancel meeting).
+- Define provider-specific configuration fields, authentication method, supported regions, rate/size limits, webhook requirements and contract/adapter version.
+- Configure platform-managed credentials or secret references, global safety policies, approved environments and provider health/availability.
+- Enable, suspend or deprecate a provider/capability, with impact visibility for affected customer connections and workflows.
+- Define whether the provider is available through platform-managed service, customer-managed credentials, or both.
+
+Product Admin controls the catalogue and platform service, not customer recipient lists, application templates or meeting participants.
+
+**Customer connections and application settings (Customer Admin)**
+
+Customer Admin manages connections available to their tenant/application:
+- Select only providers/capabilities enabled in the catalogue and entitled for the tenant.
+- Choose an allowed connection mode: platform-managed service under the applicable commercial plan, or customer-managed credentials where supported.
+- Create/authorize the connection, select permitted sender identity/phone number/email domain/calendar account, and map it to one or more explicitly selected applications.
+- Configure application-specific sender defaults, templates, locale, timezone, consent/suppression rules, quiet hours, participant policies, reminders and delivery preferences.
+- Run a sandbox connection test, view masked connection health and last validation time, rotate/revoke credentials and inspect usage/failure history.
+- Keep tenant-wide reusable connections separate from application-specific policy. Sharing a connection across applications is explicit; templates, audiences, event subscriptions, audit and delivery history remain application-scoped.
+
+**Initial provider families**
+
+| Capability family | Example provider integrations | Required connection/configuration |
+|---|---|---|
+| Email | Approved email delivery service or customer SMTP relay | Verified sender/domain, authentication secret reference, reply-to, templates, suppression/unsubscribe and delivery webhooks |
+| SMS | Approved regional SMS gateway | Sender ID/number, account credentials, destination-country coverage, consent, rate/segment limits and delivery receipts |
+| WhatsApp | WhatsApp Business solution provider | Business/account authorization, approved message templates, sender identity, opt-in and template/category rules |
+| In-app / push | EPER Notification Center and Firebase Cloud Messaging | Application event subscriptions, Firebase project topology, credential reference, device registration and notification preferences |
+| Video conferencing | Google Meet and Zoom | OAuth/service authorization, calendar/meeting permissions, organizer identity, allowed meeting settings and participant scope |
+
+The catalogue is extensible; examples do not imply that every provider adapter is already implemented or enabled.
+
+**Connection lifecycle and security**
+
+- Connection states are NOT_CONFIGURED, PENDING_VALIDATION, ACTIVE, DEGRADED, SUSPENDED and REVOKED; transitions are audited.
+- Credentials are write-only secret references held in the approved secret store. They must never appear in workflow drafts, published snapshots, browser storage, API read responses, logs or audit payloads.
+- OAuth tokens require encrypted storage, least-privilege scopes, refresh/revocation handling and explicit reconnect behavior. API keys/passwords require rotation and revocation controls.
+- Test actions are sandbox-only by default. A successful connection test proves authentication/connectivity, not delivery to every recipient or production readiness.
+- Provider webhooks must be authenticated, replay-protected, tenant/application-correlated and idempotently processed.
+- A provider becoming unavailable or revoked blocks new publication when required by policy; already-running executions follow their pinned failure/compensation policy and must not silently switch provider or credentials.
+- Provider usage, quotas and tariff entitlements are checked server-side before dispatch. Exceeding an allowed limit blocks or queues according to explicit policy; it cannot be bypassed by changing workflow configuration.
+- External communications enforce consent, unsubscribe/suppression, applicable regional rules and data minimization. Meeting links, calendar details, phone numbers and email addresses are protected data.
+
+**Workflow binding**
+
+A workflow action stores only a stable provider-connection reference, capability identifier/version, business configuration and policy reference. At execution, the server resolves the connection within trusted tenant/application scope, checks current status and entitlement, then dispatches through the provider adapter. Published workflow versions pin the required capability contract and policy identity, not raw credentials. Connection rotation can therefore occur without editing every workflow, while revocation and compatibility changes remain visible and governed.
+
+**Configuration experience**
+
+- Product Admin → Integrations Catalogue: provider adapters, capabilities, platform credentials/secret references, availability, versions and global limits.
+- Customer Admin → Application Settings → Integrations: available connections, authorization, sender/calendar identity, test connection, health, rotation and revocation.
+- Customer Admin → Application Settings → Alerts & Notifications: event subscriptions, audiences, templates, consent and delivery history (aligned with the existing Tenant Notification Center specification).
+- Customer Admin → Workflow Designer → Activity → Add action: select an enabled connection and configure only the action-specific fields.
+
+Do not duplicate the existing Notification Center as a second notification store. Extend its provider-neutral configuration, delivery and audit contracts for email/SMS/WhatsApp adapters and bind workflow events to those same services.
+
 ## 5. Customer Admin authoring journey
 
 1. **Start with intent:** choose a business outcome or a template (e.g. “employee leave approval”).
