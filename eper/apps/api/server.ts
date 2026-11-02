@@ -58,7 +58,7 @@ import { createStorageDownloadAdapter } from "../../packages/assets/storage-down
 import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
 import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
-import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
+
 
 
 function acceptsVersionedJson(request: IncomingMessage): boolean {
@@ -2567,11 +2567,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             correlationId,
             auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
           });
-          sendJson(request, response, 200, result);
+          sendJson(request, response, 200, { ...result });
         } else if (isRotation || isRevocation) {
           const body = await readJson(request);
           const expectedVersion = body.expectedVersion;
-          if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+          if (typeof expectedVersion !== "number" || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
             sendJson(request, response, 400, { error: "PROVIDER_CONNECTION_EXPECTED_VERSION_INVALID" }); return;
           }
           if (isRotation) {
@@ -2584,14 +2584,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               actorId: identity.actorId, secretReference, expectedVersion,
               correlationId, auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
             });
-            sendJson(request, response, 200, rotated);
+            sendJson(request, response, 200, { ...rotated });
           } else {
             const revoked = await options.providerConnectionRepository.revoke({
               tenantId: identity.tenantId, applicationId, connectionId: connectionId!,
               actorId: identity.actorId, expectedVersion, correlationId,
               auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
             });
-            sendJson(request, response, 200, revoked);
+            sendJson(request, response, 200, { ...revoked });
           }
         } else if (isBinding) {
           const body = await readJson(request);
