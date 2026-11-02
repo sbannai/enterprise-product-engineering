@@ -153,7 +153,7 @@ test("cannot revoke a role outside the grantor's delegable permission boundary",
   const { calls, pool } = fixture({ targetPermissions: ["workflow:admin"] });
   await assert.rejects(
     new PostgresWorkflowRoleDelegationStore(pool).revoke({ ...input, expectedVersion: 3 }),
-    /WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN/,
+    /WORKFLOW_ROLE_DELEGATION_PEER_ADMIN_MODIFICATION_FORBIDDEN/,
   );
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.equal(calls.some(call => call.sql.includes("SET assignment_status='revoked'")), false);
@@ -203,7 +203,7 @@ test("an explicitly authorized Customer Admin may revoke a peer when another adm
     "customer-admin-last-admin", input.tenantId, input.applicationId,
   ])));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
-  assert.equal(calls.at(-2).sql, "COMMIT");
+  assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
 test("cannot revoke the final active Customer Admin assignment", async () => {
