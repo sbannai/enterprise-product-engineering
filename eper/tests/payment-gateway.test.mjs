@@ -324,7 +324,7 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
       async findTransaction({ tenantId, reference }) {
         if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
         return {
-          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          tenantId, reference, applicationId: "application-a", kind: "GENERAL", description: "Approved fee transaction",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
           lineItems: [], adjustments: [],
           sourceId: "test-fee-ledger", sourceVersion: "v1",
@@ -428,7 +428,7 @@ test("PostgreSQL-backed order route does not create a second gateway order after
       async findTransaction({ tenantId, reference }) {
         if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
         return {
-          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          tenantId, reference, applicationId: "application-a", kind: "GENERAL", description: "Approved fee transaction",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
           lineItems: [], adjustments: [],
           sourceId: "test-fee-ledger", sourceVersion: "v1",
@@ -538,7 +538,7 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
       async findTransaction({ tenantId, reference }) {
         if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
         return {
-          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          tenantId, reference, applicationId: "application-a", kind: "GENERAL", description: "Approved fee transaction",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
           lineItems: [], adjustments: [],
           sourceId: "test-fee-ledger", sourceVersion: "v1",
