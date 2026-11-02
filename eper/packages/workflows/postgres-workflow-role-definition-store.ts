@@ -152,9 +152,6 @@ export class PostgresWorkflowRoleDefinitionStore {
     if (input.status !== "active" && input.status !== "disabled") {
       throw new Error("WORKFLOW_ROLE_DEFINITION_STATUS_INVALID");
     }
-    if (typeof input.delegable !== "boolean") {
-      throw new Error("WORKFLOW_ROLE_DEFINITION_DELEGABLE_INVALID");
-    }
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
       throw new Error("WORKFLOW_ROLE_DEFINITION_EXPECTED_VERSION_INVALID");
     }
