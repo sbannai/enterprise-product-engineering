@@ -130,3 +130,28 @@ See the complete 45-row source export. The source IDs are immutable and must not
 9. **Testing:** Include role/permission, draft-versus-published visibility, scheduled activation, concurrent edit conflict, immutable history, customer-consent, quote expiry, grandfathered contract, tenant-isolation and invoice/receipt snapshot tests.
 
 **Admin workspace placement:** Plans & Tariffs → Plan Catalogue → Edit Price → Preview → Submit for Approval (when required) → Publish/Schedule. Provide version history and customer impact preview before publication.
+
+
+## 10. Owner-directed customer workflow design capability — 2026-11-02
+
+**Disposition:** Added from explicit Product Owner direction as additive v1.6.0 draft scope. These requirements do not alter or renumber the approved 228 requirements, the 38 chapters, or the original v34 source export.
+
+**Ownership boundary:** The Customer Admin is the workflow-design owner within the Customer Admin's own tenant and authorized application scope. Product Admin owns platform-level product configuration, shared capability governance and platform policy; Product Admin is not the routine designer or editor of an individual customer's business workflows.
+
+| Candidate ID | Priority | Requirement | Acceptance criteria |
+|---|---|---|---|
+| EPER-CW-056 | MUST / P0 | Customer Admin shall have a tenant- and application-scoped workflow Rule Engine that simplifies workflow activity design through configurable, versioned business rules. | Authorized Customer Admin can define and maintain rules for activity entry/exit conditions, conditional routing, approvals, actor/role assignment constraints, due dates, SLA timers, escalations, notifications and exception paths using validated configuration rather than custom code; rules can be composed with AND/OR conditions and supported operators against typed workflow/application data; rule sets are versioned, testable against sample cases, explainable through evaluation traces and attached to a workflow draft/version; rules execute server-side and consistently across UI, APIs and background execution; rules are deterministic and fail closed on invalid, missing or unauthorized inputs; rule evaluation is tenant/application isolated, permission-checked and audited; no arbitrary script, dynamic code or user-supplied SQL execution is permitted. |
+| EPER-CW-057 | MUST / P0 | Customer Admin shall be able to create and modify their tenant/application workflows using a visual Workflow Designer, including editing workflows previously created or published, subject to versioning and publication controls. | Authorized Customer Admin can visually add, edit, remove and reorder activities; define transitions, dependencies, decision branches, approvals, assigned roles/actors, due dates and exception paths; attach Rule Engine rules to activities and transitions; open an existing workflow definition in the designer and modify it as a new draft version without mutating a published version or changing running instances; validate completeness, unreachable activities, invalid transitions, missing role assignments and rule references; preview and simulate representative paths before publication; compare versions and review a change summary; publish only after required permissions and configured approvals; persist immutable versions/digests, author, timestamps, reason and audit events; existing workflow instances remain pinned to their original definition version unless an explicitly authorized migration is performed. |
+
+### Customer Admin workflow design experience
+
+1. **Design entry point:** Customer Admin → Application → Workflow Studio, with separate but integrated Rule Engine and Visual Designer workspaces.
+2. **Rule Engine first:** Customer Admin can define reusable conditions and actions once, test them with sample data, and attach them to one or more activities or transitions within the authorized application.
+3. **Visual Designer:** Customer Admin can build a workflow from activities, transitions, decision branches, approvals, roles, deadlines and exception routes; can also reopen and modify an existing workflow as a new draft.
+4. **Two-way consistency:** Rules attached or changed in either workspace are reflected in the same versioned workflow draft. The designer must show rule references and the Rule Engine must show where each rule is used.
+5. **Safe lifecycle:** Draft → Validate → Simulate → Review/Approve (where configured) → Publish. Published versions are immutable; changes create a successor version.
+6. **Execution integrity:** Runtime evaluates the pinned version's rules server-side, enforces tenant/application and actor authorization, and records decisions and transitions in durable PostgreSQL state with audit evidence.
+7. **Separation of duties:** Product Admin governs platform-wide capabilities and policy boundaries. Customer Admin manages the customer's workflow definitions and rules only within authorized tenant/application scope. Neither role bypasses workflow publication, authorization or audit controls.
+8. **Testing:** Include positive and negative rule evaluation, tenant-crossing denial, unauthorized designer access, invalid graph detection, rule-to-designer consistency, version immutability, running-instance pinning, concurrent draft edits, publication approval and restart/recovery tests.
+
+**Product distinction:** EPER should let each customer shape how their own work gets done—without needing Product Admin intervention or bespoke development for ordinary workflow changes.
