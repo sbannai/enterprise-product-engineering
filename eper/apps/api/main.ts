@@ -9,6 +9,7 @@ import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgr
 import { PostgresWorkflowRoleDefinitionStore } from "../../packages/workflows/postgres-workflow-role-definition-store.js";
 import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflows/postgres-workflow-actor-role-assignment-store.js";
 import { WorkflowDefinitionPublisher } from "../../packages/workflows/workflow-definition-publisher.js";
+import { PostgresWorkflowDefinitionDraftStore } from "../../packages/workflows/postgres-workflow-definition-draft-store.js";
 import { PostgresWorkflowExecutionService } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
@@ -220,11 +221,15 @@ const workflowActorRoleAssignmentStore = workflowAuthorizationStoresEnabled && p
 const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
   ? new WorkflowDefinitionPublisher(paymentPool)
   : undefined;
+const workflowDefinitionDraftStore = workflowExecutionEnabled && paymentPool
+  ? new PostgresWorkflowDefinitionDraftStore(paymentPool)
+  : undefined;
 const workflowExecutionService = workflowExecutionEnabled && paymentPool
   ? new PostgresWorkflowExecutionService(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
 if (workflowRoleDefinitionStore) await workflowRoleDefinitionStore.assertReady();
 if (workflowActorRoleAssignmentStore) await workflowActorRoleAssignmentStore.assertReady();
+if (workflowDefinitionDraftStore) await workflowDefinitionDraftStore.assertReady();
 if (workflowExecutionService) await workflowExecutionService.assertReady();
 
 const auditWriter = auditMode === "postgres" && paymentPool
@@ -295,7 +300,7 @@ const server = createAppServer({
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore,
-  workflowDefinitionPublisher, workflowExecutionService,
+  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService,
 });
 
 server.listen(port, host, () => {
