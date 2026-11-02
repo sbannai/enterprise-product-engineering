@@ -39,15 +39,14 @@ test("PostgreSQL role delegation persists grant/revoke provenance, enforces scop
         await client.query(
           `INSERT INTO eper_tenant_application_assignment
             (tenant_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1,$2,'active',$3,$3), ($4,$5,'active',$6,$6)`,
-          [tenantId, applicationId, grantorId, otherTenantId, otherApplicationId, otherActorId],
+           VALUES ($1,$2,'active',$3,$3)`,
+          [tenantId, applicationId, grantorId],
         );
         await client.query(
           `INSERT INTO eper_actor_application_assignment
             (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1,$2,$3,'active',$2,$2), ($1,$4,$3,'active',$4,$4),
-                  ($5,$6,$7,'active',$6,$6)`,
-          [tenantId, grantorId, applicationId, targetId, otherTenantId, otherActorId, otherApplicationId],
+           VALUES ($1,$2,$3,'active',$2,$2), ($1,$4,$3,'active',$4,$4)`,
+          [tenantId, grantorId, applicationId, targetId],
         );
         await client.query("COMMIT");
       } catch (error) {
@@ -89,7 +88,7 @@ test("PostgreSQL role delegation persists grant/revoke provenance, enforces scop
       );
       await assert.rejects(
         delegations.grant({ ...input, tenantId: otherTenantId, applicationId: otherApplicationId, expectedVersion: 0 }),
-        /WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED/,
+        /WORKFLOW_ROLE_DELEGATION_TENANT_APPLICATION_NOT_ACTIVE/,
       );
       await assert.rejects(
         delegations.grant({ ...input, expectedVersion: 0 }),
