@@ -256,4 +256,45 @@ export class PostgresCommercialTariffAdminStore {
       throw error;
     } finally { client.release(); }
   }
+  async retire(input: { tariffKey: string; tariffVersion: number; reason: string }, context: CommercialTariffAdminContext): Promise<CommercialTariffRecord> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(input.tariffKey) ||
+        !Number.isSafeInteger(input.tariffVersion) || input.tariffVersion < 1 ||
+        !input.reason.trim() || input.reason.length > 1000) {
+      throw new CommercialTariffAdminError("INVALID_TARIFF_RETIREMENT_INPUT", 400);
+    }
+    const client = await this.pool.connect() as unknown as SqlClient;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`eper-commercial-tariff:${input.tariffKey}`]);
+      const found = await client.query<Record<string, unknown>>(
+        "SELECT * FROM eper_commercial_tariff_plan WHERE tariff_key=$1 AND tariff_version=$2 FOR UPDATE",
+        [input.tariffKey, input.tariffVersion],
+      );
+      if (!found.rows[0]) throw new CommercialTariffAdminError("TARIFF_VERSION_NOT_FOUND", 404);
+      const current = mapRecord(found.rows[0]);
+      if (current.tariffStatus !== "active") throw new CommercialTariffAdminError("TARIFF_NOT_ACTIVE_FOR_RETIREMENT", 409);
+      const retired = await client.query<Record<string, unknown>>( `
+        UPDATE eper_commercial_tariff_plan
+           SET tariff_status='retired'
+         WHERE tariff_key=$1 AND tariff_version=$2 AND tariff_status='active'
+         RETURNING *
+      `, [input.tariffKey, input.tariffVersion]);
+      if (!retired.rows[0]) throw new CommercialTariffAdminError("TARIFF_RETIREMENT_CONFLICT", 409);
+      await appendAuditEventInTransaction(client as never, {
+        tenantId: context.tenantId, applicationId: "platform", environment: context.environment,
+        actorType: "human", actorId: context.actorId, action: "commercial.tariff.retired",
+        outcome: "success", reasonCode: "PRODUCT_ADMIN_TARIFF_RETIRED", resourceType: "commercial_tariff",
+        resourceId: input.tariffKey + ":" + input.tariffVersion, correlationId: context.correlationId,
+        source: "api", operationName: "commercial-tariff.retire", serviceVersion: context.serviceVersion,
+        payload: { tariffKey: input.tariffKey, tariffVersion: input.tariffVersion,
+          priorStatus: current.tariffStatus, reason: input.reason },
+      });
+      await client.query("COMMIT");
+      return mapRecord(retired.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
 }

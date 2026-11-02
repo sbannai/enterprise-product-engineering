@@ -1918,7 +1918,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Platform Product Admin tariff catalogue: durable, versioned and audit-backed only.
     if (requestUrl.pathname === "/admin/commercial-tariffs" ||
-        /^\/admin\/commercial-tariffs\/[^/]+\/\d+\/(?:approve|publish)$/.test(requestUrl.pathname)) {
+        /^\/admin\/commercial-tariffs\/[^/]+\/\d+\/(?:approve|publish|retire)$/.test(requestUrl.pathname)) {
       if (process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
@@ -1959,7 +1959,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           }, context);
           sendApiSuccess(request, response, 201, { tariff: created }); return;
         }
-        const match = /^\/admin\/commercial-tariffs\/([^/]+)\/(\d+)\/(approve|publish)$/.exec(requestUrl.pathname);
+        const match = /^\/admin\/commercial-tariffs\/([^/]+)\/(\d+)\/(approve|publish|retire)$/.exec(requestUrl.pathname);
         if (match && request.method === "POST") {
           const tariffKey = decodeURIComponent(match[1]);
           const tariffVersion = Number(match[2]);
@@ -1969,6 +1969,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               sendApiError(request, response, 400, "TARIFF_APPROVAL_REFERENCE_REQUIRED", "An approval reference is required."); return;
             }
             const tariff = await store.approve({ tariffKey, tariffVersion, approvalReference: body.approvalReference }, context);
+            sendApiSuccess(request, response, 200, { tariff }); return;
+          }
+          if (match[3] === "retire") {
+            if (Object.keys(body).some((key) => key !== "reason") || typeof body.reason !== "string") {
+              sendApiError(request, response, 400, "TARIFF_RETIREMENT_REASON_REQUIRED", "A retirement reason is required."); return;
+            }
+            const tariff = await store.retire({ tariffKey, tariffVersion, reason: body.reason }, context);
             sendApiSuccess(request, response, 200, { tariff }); return;
           }
           if (Object.keys(body).length) {

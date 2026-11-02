@@ -25,6 +25,7 @@ test("commercial tariff API is Product Admin-only and supports audited draft, ap
     async createDraft(input, context) { calls.push(["createDraft", input, context]); return { ...input, tariffVersion: 1, tariffStatus: "draft", approvalState: input.approvalRequired ? "pending" : "not_required" }; },
     async approve(input, context) { calls.push(["approve", input, context]); return { ...input, approvalState: "approved" }; },
     async publish(input, context) { calls.push(["publish", input, context]); return { ...input, tariffStatus: "active" }; },
+    async retire(input, context) { calls.push(["retire", input, context]); return { ...input, tariffStatus: "retired" }; },
   };
   const server = createAppServer({ commercialTariffAdminStore: store });
   try {
@@ -64,6 +65,18 @@ test("commercial tariff API is Product Admin-only and supports audited draft, ap
     });
     assert.equal(publish.status, 200);
     assert.equal(calls[3][0], "publish");
+
+    const retire = await fetch(base + "/admin/commercial-tariffs/single-app/1/retire", {
+      method: "POST", headers: admin, body: JSON.stringify({ reason: "Replaced by the new approved tariff version" }),
+    });
+    assert.equal(retire.status, 200);
+    assert.equal(calls[4][0], "retire");
+    assert.equal(calls[4][1].reason, "Replaced by the new approved tariff version");
+
+    const missingRetirementReason = await fetch(base + "/admin/commercial-tariffs/single-app/1/retire", {
+      method: "POST", headers: admin, body: "{}",
+    });
+    assert.equal(missingRetirementReason.status, 400);
 
     const malformed = await fetch(base + "/admin/commercial-tariffs", {
       method: "POST", headers: admin, body: JSON.stringify({ tariffKey: "bad", surprise: true }),
