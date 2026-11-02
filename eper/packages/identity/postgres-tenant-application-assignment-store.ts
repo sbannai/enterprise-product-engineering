@@ -37,13 +37,15 @@ export class PostgresTenantApplicationAssignmentStore {
         customer_table: string | null;
         tariff_plan_table: string | null;
         tariff_assignment_table: string | null;
+        tariff_history_table: string | null;
       }>(`SELECT
         to_regclass('public.eper_tenant_application_assignment')::text AS assignment_table,
         to_regclass('public.eper_customer_account')::text AS customer_table,
         to_regclass('public.eper_commercial_tariff_plan')::text AS tariff_plan_table,
-        to_regclass('public.eper_customer_tariff_assignment')::text AS tariff_assignment_table`);
+        to_regclass('public.eper_customer_tariff_assignment')::text AS tariff_assignment_table,
+        to_regclass('public.eper_customer_tariff_assignment_history')::text AS tariff_history_table`);
       const row = result.rows[0];
-      if (!row?.assignment_table || !row.customer_table || !row.tariff_plan_table || !row.tariff_assignment_table) {
+      if (!row?.assignment_table || !row.customer_table || !row.tariff_plan_table || !row.tariff_assignment_table || !row.tariff_history_table) {
         throw new Error("EPER_CUSTOMER_COMMERCIAL_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
