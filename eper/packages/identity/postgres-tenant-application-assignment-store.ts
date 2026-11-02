@@ -98,6 +98,7 @@ export class PostgresTenantApplicationAssignmentStore {
     tenantId: string; tariffKey: string; tariffVersion: number; changedBy: string;
     expectedVersion: number; acceptanceReference: string; environment: AuditEnvironment;
     correlationId: string; serviceVersion?: string;
+    revokeApplications?: Array<{ applicationId: string; expectedVersion: number }>;
   }): Promise<{ tenantId: string; tariffKey: string; tariffVersion: number; billingBasis: string;
     maxApplications: number; acceptedAmount: string; acceptedCurrency: string; billingInterval: string;
     version: number; startsAt: string; endsAt: string | null; acceptedBy: string;
@@ -137,6 +138,34 @@ export class PostgresTenantApplicationAssignmentStore {
       if (!tariff) throw new Error("CUSTOMER_TARIFF_VERSION_NOT_EFFECTIVE");
       if (tariff.approval_state === "pending" || tariff.approval_state === "rejected") {
         throw new Error("CUSTOMER_TARIFF_VERSION_NOT_APPROVED");
+      }
+      const revokeApplications=input.revokeApplications??[];
+      if(!Array.isArray(revokeApplications)||revokeApplications.length>500||
+        new Set(revokeApplications.map(item=>item.applicationId)).size!==revokeApplications.length)
+        throw new Error("CUSTOMER_TARIFF_APPLICATION_SELECTION_INVALID");
+      for(const selected of revokeApplications){
+        this.validateId(selected.applicationId,"applicationId");
+        if(!Number.isSafeInteger(selected.expectedVersion)||selected.expectedVersion<1)
+          throw new Error("CUSTOMER_TARIFF_APPLICATION_SELECTION_INVALID");
+        const prior=await client.query<{version:number|string;assignment_status:string}>(
+          "SELECT version,assignment_status FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id=$2 FOR UPDATE",
+          [input.tenantId,selected.applicationId]);
+        if(!prior.rows[0]||prior.rows[0].assignment_status!=="active")
+          throw new Error("CUSTOMER_TARIFF_APPLICATION_SELECTION_STALE");
+        if(Number(prior.rows[0].version)!==selected.expectedVersion)
+          throw new Error("CUSTOMER_TARIFF_APPLICATION_SELECTION_VERSION_CONFLICT");
+        const revoked=await client.query<Row>("UPDATE eper_tenant_application_assignment SET assignment_status='revoked',version=version+1,revoked_at=NOW(),revoked_by=$3,updated_at=NOW(),updated_by=$3 WHERE tenant_id=$1 AND application_id=$2 AND assignment_status='active' AND version=$4 RETURNING *",
+          [input.tenantId,selected.applicationId,input.changedBy,selected.expectedVersion]);
+        if(!revoked.rows[0])throw new Error("CUSTOMER_TARIFF_APPLICATION_SELECTION_STALE");
+        await appendAuditEventInTransaction(client as AuditSqlClient,{
+          tenantId:input.tenantId,applicationId:selected.applicationId,environment:input.environment,
+          actorType:"human",actorId:input.changedBy,action:"tenant.application_assignment.revoke",
+          outcome:"success",reasonCode:"CUSTOMER_ACCEPTED_TARIFF_DOWNGRADE_SELECTION",
+          resourceType:"tenant-application-assignment",resourceId:selected.applicationId,
+          correlationId:input.correlationId,source:"api",operationName:"POST /customer/commercial-tariff",
+          serviceVersion:input.serviceVersion,
+          payload:{assignmentVersion:Number(revoked.rows[0].version),reason:"customer_tariff_downgrade"},
+        });
       }
       const active = await client.query<{ count: number | string }>(
         "SELECT COUNT(*) AS count FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND assignment_status='active'",
