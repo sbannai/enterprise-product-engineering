@@ -82,105 +82,16 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
       firstAdminSessionHash = createHash("sha256").update(browserSession.sessionToken, "utf8").digest("hex");
       // Inject an audit failure and verify the enclosing mutation rolls back.
       const failureCorrelationId = "audit-failure-" + suffix;
-      const auditFailureTrigger = "eper_test_reject_platform_admin_audit_" + suffix;
-      const auditFailureFunction = "eper_test_reject_platform_admin_audit_fn_" + suffix;
+      const auditFailureTrigger = "eper_pfa_" + suffix.replaceAll("-", "");
+      const auditFailureFunction = "eper_pfafn_" + suffix.replaceAll("-", "");
       const triggerClient = await pool.connect();
       try {
-        await triggerClient.query(`CREATE FUNCTION public.${auditFailureFunction}() RETURNS trigger
-          LANGUAGE plpgsql AS $eper$
-          BEGIN
-            IF NEW.tenant_id = '${tenantId}' THEN
-              RAISE EXCEPTION 'injected platform audit failure';
-            END IF;
-            RETURN NEW;
-          END;
-          $eperimport test from "node:test";
-import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
-import { createPostgresPaymentPool } from "../dist/packages/payments/postgres-payment-runtime.js";
-import { PostgresWorkflowRoleDefinitionStore } from "../dist/packages/workflows/postgres-workflow-role-definition-store.js";
-import { PostgresWorkflowActorRoleAssignmentStore } from "../dist/packages/workflows/postgres-workflow-actor-role-assignment-store.js";
-import { PostgresPlatformCustomerAdminProvisioningStore } from "../dist/packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
-import { PostgresCustomerIdentitySessionStore } from "../dist/packages/identity/postgres-customer-identity-session-store.js";
-
-const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
-
-test("PostgreSQL platform admin provisions first Customer Admin and recovers only after lockout with idempotent audit-backed writes",
-  { skip: !databaseConfigured },
-  async () => {
-    const pool = createPostgresPaymentPool();
-    const suffix = randomUUID();
-    const tenantId = "platform-provision-tenant-" + suffix;
-    const applicationId = "platform-provision-app-" + suffix;
-    const platformActorId = "platform-operator-" + suffix;
-    const firstAdminId = "platform-first-admin-" + suffix;
-    const recoveredAdminId = "platform-recovered-admin-" + suffix;
-    const roleId = "customer-admin";
-    const correlationId = "platform-provision-correlation-" + suffix;
-    const environment = "sandbox";
-    const principal = {
-      platformActorId,
-      permissions: ["customer_admin:provision", "customer_admin:recover"],
-      credentialId: "platform-key-rotation-" + suffix,
-    };
-    const roleDefinitions = new PostgresWorkflowRoleDefinitionStore(pool);
-    const assignments = new PostgresWorkflowActorRoleAssignmentStore(pool);
-    const provisioning = new PostgresPlatformCustomerAdminProvisioningStore(pool);
-    const identitySessions = new PostgresCustomerIdentitySessionStore(pool);
-    let firstAdminSessionHash;
-
-    try {
-      await roleDefinitions.assertReady();
-      await assignments.assertReady();
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
-        await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
-        await client.query(
-          `INSERT INTO eper_tenant_application_assignment
-            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1,$2,'active',$3,$3)`,
-          [tenantId, applicationId, platformActorId],
-        );
-        await client.query(
-          `INSERT INTO eper_actor_application_assignment
-            (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1,$2,$3,'active',$2,$2), ($1,$4,$3,'active',$4,$4)`,
-          [tenantId, firstAdminId, applicationId, recoveredAdminId],
-        );
-        await client.query("COMMIT");
-      } catch (error) {
-        try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
-        throw error;
-      } finally { client.release(); }
-
-      await roleDefinitions.replace({
-        tenantId, applicationId, roleId, name: "Customer Admin",
-        permissions: ["access:manage", "role:assign", "workflow:view"],
-        delegable: false, status: "active", expectedVersion: 0,
-        changedBy: platformActorId, environment, correlationId,
-      });
-
-      await identitySessions.bindSubject({
-        issuer: "https://identity.example.test",
-        subject: "platform-subject-" + suffix,
-        tenantId, actorId: firstAdminId, provisionedBy: platformActorId, correlationId,
-      });
-      const browserSession = await identitySessions.createSession({
-        issuer: "https://identity.example.test",
-        subject: "platform-subject-" + suffix,
-        tenantId, actorId: firstAdminId,
-        idleExpiresAt: new Date(Date.now() + 15 * 60_000),
-        absoluteExpiresAt: new Date(Date.now() + 60 * 60_000),
-        correlationId,
-      });
-      firstAdminSessionHash = createHash("sha256").update(browserSession.sessionToken, "utf8").digest("hex");
-      // Inject an audit failure and verify the enclosing mutation rolls back.
-);
-        await triggerClient.query(`CREATE TRIGGER ${auditFailureTrigger}
-          BEFORE INSERT ON eper_audit_events
-          FOR EACH ROW EXECUTE FUNCTION public.${auditFailureFunction}()`);
+        const functionSql = "CREATE FUNCTION public." + auditFailureFunction +
+          "() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN IF NEW.tenant_id = ''" + tenantId +
+          "'' THEN RAISE EXCEPTION ''injected platform audit failure''; END IF; RETURN NEW; END;'";
+        await triggerClient.query(functionSql);
+        await triggerClient.query("CREATE TRIGGER " + auditFailureTrigger +
+          " BEFORE INSERT ON eper_audit_events FOR EACH ROW EXECUTE FUNCTION public." + auditFailureFunction + "()");
       } finally { triggerClient.release(); }
       await assert.rejects(provisioning.mutate({
         principal, operation: "provision", tenantId, applicationId,
@@ -201,8 +112,8 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
       finally { rollbackVerify.release(); }
       const cleanupTrigger = await pool.connect();
       try {
-        await cleanupTrigger.query(`DROP TRIGGER IF EXISTS ${auditFailureTrigger} ON eper_audit_events`);
-        await cleanupTrigger.query(`DROP FUNCTION IF EXISTS public.${auditFailureFunction}()`);
+        await cleanupTrigger.query("DROP TRIGGER IF EXISTS " + auditFailureTrigger + " ON eper_audit_events");
+        await cleanupTrigger.query("DROP FUNCTION IF EXISTS public." + auditFailureFunction + "()");
       } finally { cleanupTrigger.release(); }
       const first = await provisioning.mutate({
         principal, operation: "provision", tenantId, applicationId,
