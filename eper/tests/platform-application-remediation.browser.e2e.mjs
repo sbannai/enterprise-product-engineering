@@ -24,7 +24,6 @@ test("Product Admin browser confirms and completes one versioned application rem
   };
   let server;
   let browser;
-  let triggerAudit = false;
   try {
     process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED = "true";
     process.env.EPER_PLATFORM_ADMIN_IDENTITIES_JSON = JSON.stringify({
@@ -87,7 +86,6 @@ test("Product Admin browser confirms and completes one versioned application rem
     assert.equal(audit.rowCount, 1);
     assert.equal(audit.rows[0].actor_id, platformActorId);
     assert.equal(audit.rows[0].payload.reasonTicketReference, "INC-BROWSER-" + suffix + " — operator-confirmed application suspension");
-    triggerAudit = true;
   } finally {
     if (browser) await browser.close();
     if (server) await new Promise(resolve => server.close(resolve));
