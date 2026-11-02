@@ -99,7 +99,7 @@ export class PostgresCommercialTariffAdminStore {
       WHERE table_schema='public' AND table_name='eper_commercial_tariff_plan'
     `);
     const names = new Set(columns.rows.map((row) => row.column_name));
-    for (const required of ["change_reason", "approval_required", "approval_state", "published_at", "published_by"]) {
+    for (const required of ["change_reason", "approval_required", "approval_state", "published_at", "published_by", "approved_at", "approved_by", "approval_reference"]) {
       if (!names.has(required)) throw new Error("COMMERCIAL_TARIFF_SCHEMA_VERSION_UNSUPPORTED");
     }
   }
