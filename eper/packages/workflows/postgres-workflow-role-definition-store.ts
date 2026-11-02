@@ -19,6 +19,7 @@ export interface WorkflowRoleDefinition {
   description?: string;
   permissions: WorkflowRolePermission[];
   delegable: boolean;
+  scopeType: "application";
   status: "active" | "disabled";
   version: number;
   updatedAt: string;
@@ -50,6 +51,7 @@ type RoleRow = {
   permissions: WorkflowRolePermission[] | string;
   role_status: "active" | "disabled";
   delegable: boolean;
+  scope_type: "application";
   version: number | string;
   updated_at: string | Date;
   updated_by: string;
@@ -65,7 +67,7 @@ function mapRole(row: RoleRow): WorkflowRoleDefinition {
   return {
     tenantId: row.tenant_id, applicationId: row.application_id, roleId: row.role_id,
     name: row.name, description: row.description ?? undefined,
-    permissions, delegable: row.delegable, status: row.role_status, version: Number(row.version),
+    permissions, delegable: row.delegable, scopeType: row.scope_type, status: row.role_status, version: Number(row.version),
     updatedAt: new Date(row.updated_at).toISOString(), updatedBy: row.updated_by,
   };
 }
@@ -79,7 +81,7 @@ export class PostgresWorkflowRoleDefinitionStore {
     try {
       const result = await client.query<{
         role_table: string | null; row_security: boolean; force_row_security: boolean;
-        policy_present: boolean; delegable_column_present: boolean;
+        policy_present: boolean; delegable_column_present: boolean; scope_type_column_present: boolean;
       }>(`
         SELECT to_regclass('public.eper_workflow_role_definition')::text AS role_table,
                COALESCE(c.relrowsecurity, false) AS row_security,
@@ -91,7 +93,11 @@ export class PostgresWorkflowRoleDefinitionStore {
                EXISTS (SELECT 1 FROM information_schema.columns col
                         WHERE col.table_schema = 'public'
                           AND col.table_name = 'eper_workflow_role_definition'
-                          AND col.column_name = 'delegable') AS delegable_column_present
+                          AND col.column_name = 'delegable') AS delegable_column_present,
+               EXISTS (SELECT 1 FROM information_schema.columns col
+                        WHERE col.table_schema = 'public'
+                          AND col.table_name = 'eper_workflow_role_definition'
+                          AND col.column_name = 'scope_type') AS scope_type_column_present
           FROM (SELECT 1) seed
           LEFT JOIN pg_class c ON c.oid = to_regclass('public.eper_workflow_role_definition')
       `);
@@ -187,9 +193,9 @@ export class PostgresWorkflowRoleDefinitionStore {
       }
       const saved = await client.query<RoleRow>(
         `INSERT INTO eper_workflow_role_definition
-          (tenant_id, application_id, role_id, name, description, permissions, role_status, delegable,
+          (tenant_id, application_id, role_id, name, description, permissions, role_status, delegable, scope_type,
            version, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,1,$9,$9)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,'application',1,$9,$9)
          ON CONFLICT (tenant_id, application_id, role_id) DO UPDATE SET
            name = EXCLUDED.name, description = EXCLUDED.description,
            permissions = EXCLUDED.permissions, role_status = EXCLUDED.role_status,
