@@ -80,6 +80,38 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
         correlationId,
       });
       firstAdminSessionHash = createHash("sha256").update(browserSession.sessionToken, "utf8").digest("hex");
+      // Inject an audit failure and verify the enclosing mutation rolls back.
+      const failureCorrelationId = "audit-failure-" + suffix;
+      const triggerClient = await pool.connect();
+      try {
+        await triggerClient.query(
+          "CREATE OR REPLACE FUNCTION public.eper_test_reject_platform_admin_audit() RETURNS trigger LANGUAGE plpgsql AS $ BEGIN IF NEW.correlation_id = '" + failureCorrelationId + "' THEN RAISE EXCEPTION 'injected platform audit failure'; END IF; RETURN NEW; END; $; " +
+          "DROP TRIGGER IF EXISTS eper_test_reject_platform_admin_audit ON eper_audit_events; " +
+          "CREATE TRIGGER eper_test_reject_platform_admin_audit BEFORE INSERT ON eper_audit_events FOR EACH ROW EXECUTE FUNCTION public.eper_test_reject_platform_admin_audit()"
+        );
+      } finally { triggerClient.release(); }
+      await assert.rejects(provisioning.mutate({
+        principal, operation: "provision", tenantId, applicationId,
+        targetActorId: recoveredAdminId, idempotencyKey: "audit-failure-" + suffix,
+        correlationId: failureCorrelationId, environment,
+      }), /injected platform audit failure/);
+      const rollbackVerify = await pool.connect();
+      try {
+        await rollbackVerify.query("BEGIN");
+        await rollbackVerify.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await rollbackVerify.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+        const noAssignment = await rollbackVerify.query("SELECT 1 FROM eper_workflow_actor_role_assignment WHERE tenant_id=$1 AND application_id=$2 AND actor_id=$3 AND role_id=$4", [tenantId, applicationId, recoveredAdminId, roleId]);
+        const noLedger = await rollbackVerify.query("SELECT 1 FROM eper_platform_admin_operation_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3", [tenantId, applicationId, "audit-failure-" + suffix]);
+        assert.equal(noAssignment.rows.length, 0);
+        assert.equal(noLedger.rows.length, 0);
+        await rollbackVerify.query("COMMIT");
+      } catch (error) { try { await rollbackVerify.query("ROLLBACK"); } catch {} throw error; }
+      finally { rollbackVerify.release(); }
+      const cleanupTrigger = await pool.connect();
+      try {
+        await cleanupTrigger.query("DROP TRIGGER IF EXISTS eper_test_reject_platform_admin_audit ON eper_audit_events");
+        await cleanupTrigger.query("DROP FUNCTION IF EXISTS public.eper_test_reject_platform_admin_audit()");
+      } finally { cleanupTrigger.release(); }
       const first = await provisioning.mutate({
         principal, operation: "provision", tenantId, applicationId,
         targetActorId: firstAdminId, idempotencyKey: "first-" + suffix,
