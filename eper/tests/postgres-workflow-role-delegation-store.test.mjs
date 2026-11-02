@@ -141,3 +141,26 @@ test("revocation rejects stale versions and rolls back", async () => {
   assert.ok(calls.includes("ROLLBACK"));
   assert.equal(calls.some(sql => sql.includes("SET assignment_status='revoked'")), false);
 });
+
+
+test("cannot revoke the final active Customer Admin assignment", async () => {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
+        return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
+      }
+      if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
+      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["access:manage"] }] };
+      if (sql.includes("COUNT(DISTINCT ra.actor_id)")) return { rows: [{ admin_count: 1 }] };
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const store = new PostgresWorkflowRoleDelegationStore({ async connect() { return client; } });
+  await assert.rejects(store.revoke({ ...input, targetRoleId: "customer-admin", expectedVersion: 3 }),
+    /LAST_CUSTOMER_ADMIN_PROTECTED/);
+  assert.ok(calls.includes("ROLLBACK"));
+  assert.equal(calls.some(sql => sql.includes("SET assignment_status='revoked'")), false);
+});
