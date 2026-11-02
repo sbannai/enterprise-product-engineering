@@ -34,6 +34,27 @@ function setMapping(permissions = ["customer_admin:provision", "customer_admin:r
   });
 }
 
+test("platform Customer Admin console is served only when the platform API is enabled", async () => {
+  const previousEnabled = process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED;
+  process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED = "true";
+  try {
+    const res = response();
+    const handled = await handlePlatformCustomerAdminProvisioningRoute(
+      request({ method: "GET" }), res, "/platform/customer-admin-provisioning/ui",
+      { environment: "sandbox", store: { async mutate() { throw new Error("MUST_NOT_CALL_STORE"); } } },
+    );
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 200);
+    assert.match(res.headers["content-security-policy"], /default-src 'none'/);
+    assert.match(res.body, /Platform Admin/);
+    assert.match(res.body, /customer_admin:recover/);
+    assert.match(res.body, /idempotency-key/);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED;
+    else process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED = previousEnabled;
+  }
+});
+
 test("platform provisioning route denies missing or unknown platform credentials", async () => {
   setMapping();
   const res = response();
