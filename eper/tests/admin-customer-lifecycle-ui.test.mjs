@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
+import { CustomerLifecycleVersionConflictError } from "../dist/packages/identity/postgres-customer-lifecycle-store.js";
 
 const TOKEN = "eper-product-admin-lifecycle-test-token-32-chars-minimum";
 const initial = {
@@ -39,7 +40,7 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
     async get(tenantId) { return tenantId === current.tenantId ? { ...current } : null; },
     async changeStatus(input) {
       changes.push(input);
-      assert.equal(input.expectedVersion, current.version);
+      if (input.expectedVersion !== current.version) throw new CustomerLifecycleVersionConflictError(current.version);
       current = {
         ...current,
         status: input.status,
