@@ -488,8 +488,9 @@ export class PostgresPaymentStore {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
         [input.tenantId, input.invoiceReference]);
 
+      let commercialAcceptanceSnapshot: Record<string, unknown> | null = null;
       if (this.enforceCommercialEligibility) {
-        const eligibility = await client.query<{ eligible: boolean }>(
+        const eligibility = await client.query<{ eligible: boolean; commercial_snapshot: Record<string, unknown> }>(
           `SELECT (
              ca.customer_status = 'active' AND ca.effective_at <= NOW()
              AND cta.assignment_status = 'active' AND cta.starts_at <= NOW()
@@ -509,7 +510,25 @@ export class PostgresPaymentStore {
              AND tp.tariff_status = 'active' AND tp.approval_state IN ('approved', 'not_required')
              AND tp.effective_from <= NOW() AND (tp.effective_to IS NULL OR tp.effective_to > NOW())
              AND aa.application_id IS NOT NULL
-           ) AS eligible
+           ) AS eligible,
+           jsonb_build_object(
+             'tenantId', ca.tenant_id,
+             'applicationId', aa.application_id,
+             'tariffKey', cta.tariff_key,
+             'tariffVersion', cta.tariff_version,
+             'assignmentVersion', cta.version,
+             'billingBasis', cta.billing_basis,
+             'maxApplications', cta.max_applications,
+             'acceptedAmount', cta.accepted_amount,
+             'acceptedCurrency', cta.accepted_currency,
+             'billingInterval', cta.billing_interval,
+             'acceptedBy', cta.accepted_by,
+             'acceptedAt', cta.accepted_at,
+             'acceptanceReference', cta.acceptance_reference,
+             'publishedAt', tp.published_at,
+             'publishedBy', tp.published_by,
+             'approvalState', tp.approval_state
+           ) AS commercial_snapshot
            FROM eper_customer_account ca
            JOIN eper_customer_tariff_assignment cta ON cta.tenant_id = ca.tenant_id
            JOIN eper_commercial_tariff_plan tp ON tp.tariff_key = cta.tariff_key AND tp.tariff_version = cta.tariff_version
@@ -521,6 +540,7 @@ export class PostgresPaymentStore {
           await client.query("ROLLBACK");
           return { ok: false, reason: "commercial_ineligible" };
         }
+        commercialAcceptanceSnapshot = eligibility.rows[0].commercial_snapshot;
       }
 
       // Validate a key's prior binding before inspecting any active invoice order.
@@ -528,9 +548,10 @@ export class PostgresPaymentStore {
         invoice_reference: string; amount_minor: string | number; currency: string;
         invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
         transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT invoice_reference, amount_minor, currency, invoice_source_id, invoice_source_version,
-                invoice_approved_at, transaction_snapshot
+                invoice_approved_at, transaction_snapshot, commercial_acceptance_snapshot
            FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
         [input.tenantId, input.idempotencyKey],
       );
@@ -540,7 +561,8 @@ export class PostgresPaymentStore {
           bound.invoice_source_id !== input.invoiceSourceId ||
           bound.invoice_source_version !== input.invoiceSourceVersion ||
           new Date(bound.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString() ||
-          stableJson(bound.transaction_snapshot) !== stableJson(input.transactionSnapshot))) {
+          stableJson(bound.transaction_snapshot) !== stableJson(input.transactionSnapshot) ||
+          stableJson(bound.commercial_acceptance_snapshot) !== stableJson(commercialAcceptanceSnapshot))) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
@@ -549,12 +571,13 @@ export class PostgresPaymentStore {
         id: string | number; transaction_public_id: string; provider_order_id: string | null;
         idempotency_key: string; amount_minor: string | number; currency: string;
         invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
-        transaction_snapshot: TrustedTransactionSnapshot | null; status: StoredPaymentOrder["status"];
-        creation_lease_until: Date | string | null;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
+        status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, idempotency_key, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, transaction_snapshot,
-                status, creation_lease_until
+                commercial_acceptance_snapshot, status, creation_lease_until
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND invoice_reference = $2
             AND status IN ('creating', 'created', 'authorized', 'captured')
@@ -568,7 +591,8 @@ export class PostgresPaymentStore {
           active.invoice_source_id === input.invoiceSourceId &&
           active.invoice_source_version === input.invoiceSourceVersion &&
           new Date(active.invoice_approved_at).toISOString() === new Date(input.invoiceApprovedAt).toISOString() &&
-          stableJson(active.transaction_snapshot) === stableJson(input.transactionSnapshot);
+          stableJson(active.transaction_snapshot) === stableJson(input.transactionSnapshot) &&
+          stableJson(active.commercial_acceptance_snapshot) === stableJson(commercialAcceptanceSnapshot);
         if (!sameAuthority) {
           await client.query("ROLLBACK");
           return { ok: false, reason: active.idempotency_key === input.idempotencyKey
@@ -601,14 +625,16 @@ export class PostgresPaymentStore {
         `INSERT INTO eper_payment_orders
           (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
            amount_minor, currency, invoice_source_id, invoice_source_version,
-           invoice_approved_at, transaction_snapshot, status, creation_lease_until, creation_attempts)
-         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8, $9::jsonb,
+           invoice_approved_at, transaction_snapshot, commercial_acceptance_snapshot,
+           status, creation_lease_until, creation_attempts)
+         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb,
                  'creating', NOW() + INTERVAL '2 minutes', 1)
          ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
          RETURNING id, transaction_public_id`,
         [input.tenantId, input.invoiceReference, input.idempotencyKey, input.amountMinor,
           input.currency, input.invoiceSourceId, input.invoiceSourceVersion, input.invoiceApprovedAt,
-          JSON.stringify(input.transactionSnapshot)],
+          JSON.stringify(input.transactionSnapshot),
+          commercialAcceptanceSnapshot === null ? null : JSON.stringify(commercialAcceptanceSnapshot)],
       );
       if (inserted.rows[0]) {
         await client.query("COMMIT");
@@ -619,10 +645,11 @@ export class PostgresPaymentStore {
         amount_minor: string | number; currency: string; invoice_source_id: string;
         invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
         last_creation_error: string | null; transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until, last_creation_error,
-                transaction_snapshot
+                transaction_snapshot, commercial_acceptance_snapshot
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
           FOR UPDATE`,
@@ -634,7 +661,8 @@ export class PostgresPaymentStore {
           row.invoice_source_id !== input.invoiceSourceId ||
           row.invoice_source_version !== input.invoiceSourceVersion ||
           new Date(row.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString() ||
-          stableJson(row.transaction_snapshot) !== stableJson(input.transactionSnapshot)) {
+          stableJson(row.transaction_snapshot) !== stableJson(input.transactionSnapshot) ||
+          stableJson(row.commercial_acceptance_snapshot) !== stableJson(commercialAcceptanceSnapshot)) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
