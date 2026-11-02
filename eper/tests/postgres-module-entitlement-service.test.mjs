@@ -148,3 +148,42 @@ test("add-on access blocks existing application when customer is inactive", asyn
     allowed: false, reason: "customer_inactive",
   });
 });
+
+
+test("module access blocks active applications when the effective tariff allowance is exceeded", async () => {
+  const { pool } = makePool({
+    customer_status: "active", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+    tariff_assignment_status: "active", tariff_max_applications: 1,
+    active_application_count: 2, tariff_starts_at: "2026-10-01T00:00:00Z", tariff_ends_at: null,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkModule(context, "billing"), {
+    allowed: false, reason: "tariff_overage",
+  });
+});
+
+test("application add-on access also blocks when the effective tariff allowance is exceeded", async () => {
+  const { pool } = makePool({
+    customer_status: "active", addon_status: "active", entitlement_status: "active",
+    effective_from: null, effective_to: null, permission_allowed: true,
+    tariff_assignment_status: "active", tariff_max_applications: 1,
+    active_application_count: 2, tariff_starts_at: "2026-10-01T00:00:00Z", tariff_ends_at: null,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkApplicationAddon(context, "marketing"), {
+    allowed: false, reason: "tariff_overage",
+  });
+});
+
+test("tariff allowance does not block before its start or after its end", async () => {
+  const { pool } = makePool({
+    customer_status: "active", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+    tariff_assignment_status: "active", tariff_max_applications: 1,
+    active_application_count: 2, tariff_starts_at: "2026-10-27T00:00:00Z",
+    tariff_ends_at: "2026-10-25T00:00:00Z",
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkModule(context, "billing"), { allowed: true, reason: "allowed" });
+});
