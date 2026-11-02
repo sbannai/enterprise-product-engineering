@@ -817,3 +817,54 @@ This dated append is being made on PR #323's existing documentation branch. Its 
 A line in the 05:11 record described the matrix output as “259 checks passed.” Inspection of the exact-head job log for [run 41363682248](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41363682248) shows the distinct fields: `chapters=38`, `chapterSummary.pass=38`, `totalTests=259`, `passedTests=259`, `failedTests=0`, and `passedChecks=28`. The accurate statement is **38/38 chapter suites passed; 259 tests passed with zero failed; the separate `passedChecks` field is 28**. This correction does not change the approved 228-requirement / 38-chapter baseline or the matrix scope (nine chapters with HTTP pilot apps; 29 without).
 
 **Next action:** Keep future reports aligned to the raw artifact field names; do not conflate test cases and passed checks.
+
+
+## Dated engineering record — 2026-11-02 07:12 IST
+
+**Latest main resolved dynamically:** `90ce1fe731cb13a0fe4661a724c0dcdc2e3acff9`.
+
+The latest main commits after the scorecard branch base are additive documentation changes to the v1.6.0 requirements change-control register. They add customer lifecycle, single/multi-application tariff, tariff mobility, and price-integrity controls as EPER-CW-046 through EPER-CW-054. The approved 228 requirements and 38 chapters remain unchanged. These new items are additive; the existing v34 crosswalk has not yet been re-reconciled against this later additive scope.
+
+### Current PR evidence baseline
+
+| PR | Exact head | Base relationship to latest main | Current capability |
+|---|---|---|---|
+| #323 | `74a87ed209d5d0014a3139fb95693cf5699e31bf` | 12 ahead / 3 behind | v34 crosswalk, fresh-clone guidance, scorecard correction |
+| #326 | `2a62b6166537b2ff2bfddb24df639617d6f51d27` | 12 ahead / 3 behind | isolated campaign worker process and recovery/dispatch controls |
+| #328 | `cadfacfe117d1cb10175d947d44ac6a97f0d2b36` | 3 ahead / 3 behind | complete filtered support queue export |
+| #329 | `aecdf7e1af49a866cc2f48444f3daf627006b09c` | 12 ahead / 3 behind | customer OIDC browser session and ticket journey |
+| #330 | `61812f0f9b3aa3a55647d0f2cc755c00a8f6b318` | 31 ahead / 2 behind | customer lifecycle/tariff enforcement, Product Admin tariff catalogue API/UI, maker-checker and durable audit |
+
+All remain draft. No PR was merged in this record. PRs #323/#326/#328/#329 are based on the older `a554990cb7f4969bb218aad7a2e9944aec62fa05`; #330 is based on `6d6ad719f3e6992f3a9a19a64405df3c305a19c9`. Refresh each branch against current main and rerun its applicable exact-head checks before merge. Checks recorded on an earlier head are not evidence for a later head.
+
+### Seven checkpoint status
+
+| Checkpoint | Status | Evidence delivered | Remaining blocker / next action |
+|---|---|---|---|
+| 1. Product USP and positioning | AMBER | Approved 228/38 baseline preserved. Existing v34 crosswalk still records 45 partial-support links and 45 additive candidates; zero exact full-coverage matches. New EPER-CW-046–054 commercial controls are additive to the change register. | Reconcile the new additions into the v34 crosswalk without editing the approved baseline. Complete customer lifecycle and tariff administration, mobility, and price-integrity acceptance criteria. |
+| 2. CI and persistence foundations | GREEN for inspected local/CI lanes | PR #326 exact head `2a62b6166537b2ff2bfddb24df639617d6f51d27`: fresh-clone verification passed (1,178 tests, 0 failed, 0 skipped), seven migration groups applied/repeated, disposable backup/restore passed (59 base tables, seven migration ledgers). PR #330 exact head `61812f0f9b3aa3a55647d0f2cc755c00a8f6b318`: fresh-clone verification passed (1,179 tests, 0 failed, 0 skipped); migrations 009 and 010 applied; backup/restore passed (62 base tables, seven ledgers). | Complete independent restore rehearsal, retention, encryption/key custody, and measured recovery objectives. PR #330's same-head integrated gate was still running when this record was written. |
+| 3. Architecture and execution boundaries | AMBER | Merged PR #310 identity/session foundation is an ancestor of current main. PR #329 browser E2E covers synthetic OIDC sign-in, protected access, customer ticket create/history/reply, logout and revoked-session denial. PR #330 enforces customer status and purchased application-count limits at application activation and module/add-on entitlement checks. | Customer browser test still uses synthetic IdP and in-memory stores. Support-admin identity/delegation is not integrated. Customer active/inactive administration and customer-specific tariff assignment are not wired to the new runtime; the pricing UI explicitly labels the customer/application registry and access controls as not wired. |
+| 4. Workflow execution design and schema | AMBER | PR #326 provides a separate disabled-by-default campaign worker, durable claims, stale recovery, dispatch fence, idempotency, bounded retries/dead-letter and graceful shutdown. Exact head checks passed. | Reviewed adapter, restricted worker DB identity, supervisor, health/metrics/alerts and live restart/recovery proof remain. Do not enable dispatch. |
+| 5. Integrated validation | AMBER | Exact-head technical lanes for PRs #323/#326/#328/#329 passed on their recorded heads. PR #330 exact head `61812f0f9b3aa3a55647d0f2cc755c00a8f6b318` passed CI, live PostgreSQL payment/assignment tests, matrix, browser, release, container, six-family HTTP, QA and G9 lanes; the same-commit integrated gate was still in progress. | Refresh branches to latest main, complete PR #330 integrated gate, and add durable PostgreSQL coverage for all customer-to-admin support paths. Do not infer production readiness from synthetic/in-memory browser evidence. |
+| 6. PR consolidation and governance | AMBER | PR #306 merge SHA `6e8dd438e5091b1802d65e4f29951389fe077859` and PR #310 merge SHA `88b9708d748c19dc80a1a2d7ad4960914451db7e` are confirmed ancestors of current main. Five focused open PRs remain; no duplicate replacement PR was created for these workstreams. | Rebase/refresh the five open branches, obtain independent review, enable required branch controls, and close the remaining governance evidence gaps. |
+| 7. Workflow publisher/runtime implementation | AMBER | Existing workflow outbox and PR #326 worker support continuous polling, lease renewal/fencing, idempotency, retry/dead-letter and graceful termination. | Host supervision, operational metrics/alerts, restricted credentials, adapter contract and recovery rehearsal remain. |
+
+### Commercial controls delivered in PR #330
+
+The current exact PR #330 head adds:
+- Durable customer account status and customer tariff assignment schema.
+- Fail-closed application activation when the customer is inactive or the accepted application-count limit is exceeded.
+- Customer status and assignment checks in module/add-on entitlement resolution.
+- Versioned tariff plan drafts, Product Admin listing/creation, maker-checker approval and publication with transactional audit events.
+- Product Admin tariff catalogue editor in the existing pricing workspace.
+- Live PostgreSQL test coverage for concurrent application activation at the purchased limit, versioned tariff creation, maker-checker approval, publication and audit.
+
+The exact-head CI log for `61812f0f9b3aa3a55647d0f2cc755c00a8f6b318` records the live Product Admin tariff lifecycle subtest passing, and the fresh-clone run records migrations `009_customer_commercial_controls.sql` and `010_commercial_tariff_admin_lifecycle.sql` applied.
+
+This is a first delivery slice, not full commercial operations. Customer active/inactive mutation and customer-specific tariff assignment UI/API are not yet wired. Published-plan effective-date overlap/retirement policy, database-enforced immutability for accepted customer tariff snapshots, currency allowlist, and integration of the accepted price snapshot through quote/invoice/payment/receipt paths remain to be proven.
+
+### Continuity and release
+
+The fresh-clone and disposable backup/restore checks are automated on the exact PR #330 head above. The latest main documentation commit `90ce1fe731cb13a0fe4661a724c0dcdc2e3acff9` has no associated Actions runs. The repository's last observed branch metadata reported main unprotected and no repository rulesets; detailed branch-protection settings remain inaccessible through the connected integration. A second engineer has not independently demonstrated the complete clone/build/test/change/PR/release/rollback path.
+
+No chargeable cloud resources or real external/provider actions were used for this work.
