@@ -9,6 +9,54 @@ import { ProviderConnectionValidationService } from "../dist/packages/integratio
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
 
+async function createRuntimePool(pool) {
+  await pool.query(`DO $role$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_provider_test_runtime') THEN
+        EXECUTE 'CREATE ROLE eper_provider_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS';
+      END IF;
+    END
+  $roleimport test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import pg from "pg";
+import { PostgresProviderConnectionRepository } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
+import { PostgresProviderValidationStore } from "../dist/packages/integrations/postgres-provider-validation-store.js";
+import { ProviderConnectionValidationService } from "../dist/packages/integrations/provider-connection-validation-service.js";
+
+const { Pool } = pg;
+const connectionString = process.env.DATABASE_URL;
+
+);
+  await pool.query("GRANT USAGE ON SCHEMA public TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT ON eper_provider_definitions TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connections TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connection_applications TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_application_provider_policies TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_operations TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_webhook_receipts TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT ON eper_provider_validation_events TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT ON eper_audit_events TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE ON eper_audit_chain_head TO eper_provider_test_runtime");
+  return {
+    async connect() {
+      const client = await pool.connect();
+      try {
+        await client.query("SET ROLE eper_provider_test_runtime");
+      } catch (error) {
+        client.release();
+        throw error;
+      }
+      return {
+        query: client.query.bind(client),
+        release() {
+          void client.query("RESET ROLE").catch(() => undefined).finally(() => client.release());
+        },
+      };
+    },
+  };
+}
+
 async function withScope(pool, tenantId, applicationId, callback) {
   const client = await pool.connect();
   try {
@@ -31,6 +79,7 @@ async function withScope(pool, tenantId, applicationId, callback) {
 test("provider connections enforce tenant RLS, application-scoped records, rotation suspension and audited revocation",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 6 });
+    const scopedPool = await createRuntimePool(pool);
     const suffix = randomUUID().replaceAll("-", "").slice(0, 20);
     const tenantA = "provider-tenant-a-" + suffix;
     const tenantB = "provider-tenant-b-" + suffix;
@@ -38,7 +87,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
     const appB = "provider-app-b-" + suffix;
     const actorId = "provider-admin-" + suffix;
     const providerKey = "provider-" + suffix;
-    const repository = new PostgresProviderConnectionRepository(pool);
+    const repository = new PostgresProviderConnectionRepository(scopedPool);
     let connectionId;
     try {
       await pool.query(
@@ -61,13 +110,19 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal((await repository.get(tenantA, connectionId))?.connectionId, connectionId);
       assert.equal(await repository.get(tenantB, connectionId), null);
 
-      const unscoped = await pool.query(
-        "SELECT connection_id FROM eper_provider_connections WHERE connection_id=$1",
-        [connectionId],
-      );
+      const unscopedClient = await scopedPool.connect();
+      let unscoped;
+      try {
+        unscoped = await unscopedClient.query(
+          "SELECT connection_id FROM eper_provider_connections WHERE connection_id=$1",
+          [connectionId],
+        );
+      } finally {
+        unscopedClient.release();
+      }
       assert.equal(unscoped.rowCount, 0, "forced RLS denies reads without tenant context");
 
-      const validationStore = new PostgresProviderValidationStore(pool);
+      const validationStore = new PostgresProviderValidationStore(scopedPool);
       const validation = new ProviderConnectionValidationService(
         validationStore,
         { async resolve(reference) {
@@ -102,6 +157,44 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         allowedCapabilities: ["email.send"], correlationId: "bind-" + suffix,
         auditEnvironment: "sandbox",
       });
+
+      const failedValidation = new ProviderConnectionValidationService(
+        validationStore,
+        { async resolve() { return { token: "synthetic-only" }; } },
+        { get() {
+          return { async validateCredentials() { return { ok: false, errorCode: "AUTH_REJECTED" }; } };
+        } },
+      );
+      const degraded = await failedValidation.validate({
+        tenantId: tenantA, connectionId, actorId, correlationId: "validate-fail-" + suffix,
+        auditEnvironment: "sandbox",
+      });
+      assert.deepEqual(degraded, {
+        connectionId, outcome: "FAILED", status: "DEGRADED", version: 3,
+        errorCode: "AUTH_REJECTED",
+      });
+      const suspendedAfterFailure = await withScope(scopedPool, tenantA, null, async (client) => client.query(
+        "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
+        [tenantA, connectionId],
+      ));
+      assert.equal(suspendedAfterFailure.rows[0]?.binding_status, "SUSPENDED");
+
+      const revalidated = await validation.validate({
+        tenantId: tenantA, connectionId, actorId, correlationId: "validate-retry-" + suffix,
+        auditEnvironment: "sandbox",
+      });
+      assert.equal(revalidated.status, "ACTIVE");
+      assert.equal(revalidated.version, 4);
+      await repository.bindApplication({
+        tenantId: tenantA, applicationId: appA, connectionId, actorId,
+        allowedCapabilities: ["email.send"], correlationId: "rebind-" + suffix,
+        auditEnvironment: "sandbox",
+      });
+      const historyAfterRetry = await withScope(scopedPool, tenantA, null, async (client) => client.query(
+        "SELECT validation_outcome FROM eper_provider_validation_events WHERE tenant_id=$1 AND connection_id=$2 ORDER BY validated_at",
+        [tenantA, connectionId],
+      ));
+      assert.deepEqual(historyAfterRetry.rows.map(row => row.validation_outcome), ["SUCCEEDED", "FAILED", "SUCCEEDED"]);
 
       await withScope(pool, tenantA, appA, async (client) => {
         await client.query(
@@ -147,9 +240,9 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       const rotated = await repository.rotateSecretReference({
         tenantId: tenantA, connectionId, actorId,
         secretReference: "vault://tenant-a/provider/credential-v2",
-        expectedVersion: 2, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
+        expectedVersion: 4, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
       });
-      assert.equal(rotated.version, 3);
+      assert.equal(rotated.version, 5);
       assert.equal(rotated.status, "PENDING_VALIDATION");
       const suspended = await withScope(pool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
@@ -161,7 +254,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         tenantId: tenantA, connectionId, actorId, expectedVersion: 2,
         correlationId: "revoke-" + suffix, auditEnvironment: "sandbox",
       });
-      assert.equal(revoked.version, 4);
+      assert.equal(revoked.version, 6);
       assert.equal(revoked.status, "REVOKED");
       const binding = await withScope(pool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
@@ -170,7 +263,11 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(binding.rows[0]?.binding_status, "REVOKED");
     } finally {
       if (connectionId) {
-        await withScope(pool, tenantA, null, async (client) => {
+        await pool.query(
+          "DELETE FROM eper_provider_validation_events WHERE tenant_id=$1 AND connection_id=$2",
+          [tenantA, connectionId],
+        ).catch(() => undefined);
+        await withScope(scopedPool, tenantA, null, async (client) => {
           await client.query("DELETE FROM eper_provider_webhook_receipts WHERE tenant_id=$1", [tenantA]);
           await client.query("DELETE FROM eper_provider_operations WHERE tenant_id=$1", [tenantA]);
           await client.query("DELETE FROM eper_application_provider_policies WHERE tenant_id=$1", [tenantA]);
