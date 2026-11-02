@@ -251,6 +251,10 @@ const platformCustomerAdminProvisioningStore = platformCustomerAdminEnabled && p
   ? new PostgresPlatformCustomerAdminProvisioningStore(paymentPool)
   : undefined;
 if (platformCustomerAdminProvisioningStore) await platformCustomerAdminProvisioningStore.assertReady();
+const platformApplicationRemediationStore = platformApplicationRemediationEnabled && paymentPool
+  ? new PostgresPlatformApplicationRemediationStore(paymentPool)
+  : undefined;
+if (platformApplicationRemediationStore) await platformApplicationRemediationStore.assertReady();
 
 const auditWriter = auditMode === "postgres" && paymentPool
   ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord): Promise<void> => {
