@@ -27,6 +27,7 @@ import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-
 import { workflowOutboxAdminUiHtml, isWorkflowOutboxAdminUiRequest } from "./workflow-outbox-admin-ui.js";
 import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
 import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
+import { customerRoleManagementUiHtml, isCustomerRoleManagementUiRequest } from "./customer-role-management-ui.js";
 import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import type { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
@@ -1846,6 +1847,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       response.end(aiIntegrationsAdminHtml);
       return;
     }
+    if (isCustomerRoleManagementUiRequest(request)) {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(customerRoleManagementUiHtml);
+      return;
+    }
+
     if (isCustomerPortalPreviewRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
