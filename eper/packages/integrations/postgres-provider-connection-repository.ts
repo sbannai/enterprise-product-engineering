@@ -325,7 +325,14 @@ export class PostgresProviderConnectionRepository {
         [input.tenantId, input.connectionId],
       );
       if (!prior.rows[0]) throw new ProviderConnectionNotFoundError();
-      const bindings = await client.query<{ application_id: string }>(\n        "SELECT application_id FROM eper_provider_connection_applications WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",\n        [input.tenantId, input.connectionId],\n      );\n      if (bindings.rows.length !== 1 || bindings.rows[0].application_id !== input.applicationId) {\n        throw new Error("PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED");\n      }\n      const currentVersion = Number(prior.rows[0].version);
+      const bindings = await client.query<{ application_id: string }>(
+        "SELECT application_id FROM eper_provider_connection_applications WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",
+        [input.tenantId, input.connectionId],
+      );
+      if (bindings.rows.length !== 1 || bindings.rows[0].application_id !== input.applicationId) {
+        throw new Error("PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED");
+      }
+      const currentVersion = Number(prior.rows[0].version);
       if (currentVersion !== input.expectedVersion) throw new ProviderConnectionConflictError(currentVersion);
       if (prior.rows[0].connection_status === "REVOKED") throw new Error("PROVIDER_CONNECTION_REVOKED");
       const saved = await client.query<ConnectionRow>(
@@ -378,7 +385,14 @@ export class PostgresProviderConnectionRepository {
         [input.tenantId, input.connectionId],
       );
       if (!prior.rows[0]) throw new ProviderConnectionNotFoundError();
-      const bindings = await client.query<{ application_id: string }>(\n        "SELECT application_id FROM eper_provider_connection_applications WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",\n        [input.tenantId, input.connectionId],\n      );\n      if (bindings.rows.length !== 1 || bindings.rows[0].application_id !== input.applicationId) {\n        throw new Error("PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED");\n      }\n      const currentVersion = Number(prior.rows[0].version);
+      const bindings = await client.query<{ application_id: string }>(
+        "SELECT application_id FROM eper_provider_connection_applications WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",
+        [input.tenantId, input.connectionId],
+      );
+      if (bindings.rows.length !== 1 || bindings.rows[0].application_id !== input.applicationId) {
+        throw new Error("PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED");
+      }
+      const currentVersion = Number(prior.rows[0].version);
       if (currentVersion !== input.expectedVersion) throw new ProviderConnectionConflictError(currentVersion);
       const saved = await client.query<ConnectionRow>(
         `UPDATE eper_provider_connections SET connection_status = 'REVOKED',
