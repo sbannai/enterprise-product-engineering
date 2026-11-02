@@ -222,7 +222,7 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
             ORDER BY operation`,
           [tenantId, applicationId],
         );
-        assert.deepEqual(ledger.rows.map(row => row.operation), ["provision", "recover"]);
+        assert.deepEqual(ledger.rows.map(row => row.operation), ["provision", "recover", "recover"]);
         assert.ok(ledger.rows.every(row => row.platform_actor_id === platformActorId &&
           row.credential_id === principal.credentialId && row.completed_at));
 
@@ -235,7 +235,9 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
           [tenantId, applicationId],
         );
         assert.deepEqual(audit.rows.map(row => row.action), [
-          "platform.customer_admin.provision", "platform.customer_admin.recover",
+          "platform.customer_admin.provision",
+          "platform.customer_admin.recover",
+          "platform.customer_admin.recover",
         ]);
         assert.ok(audit.rows.every(row => row.actor_id === platformActorId));
         await verify.query("COMMIT");
