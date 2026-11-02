@@ -66,8 +66,13 @@ export async function runCampaignExecutionWorker(
     await Promise.all(executions.map(async (execution) => {
       if (options.signal?.aborted) return;
       let renewalInFlight = false;
+      // Once the dispatch fence is crossed and a provider call starts, keep
+      // renewing the lease until that call settles—even during graceful shutdown.
+      // Stopping the heartbeat mid-call could let the lease expire while the
+      // external outcome is still in flight.
+      let dispatchStarted = false;
       const renewalTimer = setInterval(() => {
-        if (renewalInFlight || options.signal?.aborted) return;
+        if (renewalInFlight || (options.signal?.aborted && !dispatchStarted)) return;
         renewalInFlight = true;
         void store.renewExecutionLease({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
@@ -148,6 +153,7 @@ export async function runCampaignExecutionWorker(
           });
           return;
         }
+        dispatchStarted = true;
         const dispatched = await dispatch(execution);
         const completed = await store.completeExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
