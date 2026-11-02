@@ -175,7 +175,7 @@ test("module access denies every application when active assignments exceed the 
   });
   const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
   assert.deepEqual(await service.checkModule(context, "billing"), {
-    allowed: false, reason: "tariff_application_limit_exceeded",
+    allowed: false, reason: "tariff_overage",
   });
 });
 
@@ -187,7 +187,7 @@ test("application add-on access is denied during tariff overage as well", async 
   });
   const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
   assert.deepEqual(await service.checkApplicationAddon(context, "marketing"), {
-    allowed: false, reason: "tariff_application_limit_exceeded",
+    allowed: false, reason: "tariff_overage",
   });
 });
 
