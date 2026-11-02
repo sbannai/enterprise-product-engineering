@@ -35,7 +35,10 @@ function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "m
       if (sql.includes("SELECT c.provider_key, c.connection_status, d.capabilities")) {
         return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, capabilities: supported }], rowCount: 1 };
       }
-      if (sql.includes("SELECT application_id FROM eper_provider_connection_applications")) {\n        return { rows: bindingApps.map((application_id) => ({ application_id })), rowCount: bindingApps.length };\n      }\n      if (sql.includes("SELECT version, connection_status FROM eper_provider_connections")) {
+      if (sql.includes("SELECT application_id FROM eper_provider_connection_applications")) {
+        return { rows: bindingApps.map((application_id) => ({ application_id })), rowCount: bindingApps.length };
+      }
+      if (sql.includes("SELECT version, connection_status FROM eper_provider_connections")) {
         return { rows: [{ version: currentVersion, connection_status: currentStatus }], rowCount: 1 };
       }
       if (sql.includes("SELECT version FROM eper_provider_connections")) {
