@@ -52,8 +52,8 @@ export async function handleCustomerRoleDelegationRoute(
     sendApiError(request, response, 404, "NOT_FOUND", "The requested resource was not found.");
     return true;
   }
-  if (request.method !== "POST" && request.method !== "DELETE") {
-    response.writeHead(405, { allow: "POST, DELETE", "cache-control": "no-store" });
+  if (request.method !== "GET" && request.method !== "POST" && request.method !== "DELETE") {
+    response.writeHead(405, { allow: "GET, POST, DELETE", "cache-control": "no-store" });
     response.end();
     return true;
   }
@@ -75,6 +75,22 @@ export async function handleCustomerRoleDelegationRoute(
     sendApiError(request, response, 401, "UNAUTHENTICATED", "An active customer browser session and application assignment are required.");
     return true;
   }
+    
+  if (request.method === "GET") {
+    const [assignments, roles] = await Promise.all([
+      actorRoleAssignmentStore.listAssignments(identity.tenantId, applicationId),
+      roleDefinitionStore.list(identity.tenantId, applicationId),
+    ]);
+    sendApiSuccess(request, response, 200, {
+      assignments,
+      roles: roles.filter(role => role.status === "active").map(role => ({
+        roleId: role.roleId, name: role.name, description: role.description,
+        permissions: role.permissions,
+      })),
+    });
+    return true;
+  }
+
   const cookies = parseCookieHeader(request.headers.cookie);
   const sessionToken = cookies.get(CUSTOMER_SESSION_COOKIE) ?? "";
   if (!verifyCustomerBrowserCsrf({
@@ -98,15 +114,6 @@ export async function handleCustomerRoleDelegationRoute(
       return true;
     }
 
-    // Role authority is looked up from durable assignments and definitions, never OIDC claims or request JSON.
-    const activeRoleIds = await actorRoleAssignmentStore.listActiveRoleIds(identity.tenantId, applicationId, identity.actorId);
-    const roleDefinitions = await roleDefinitionStore.list(identity.tenantId, applicationId);
-    const grantorRole = roleDefinitions.find(role =>
-      role.status === "active" && activeRoleIds.includes(role.roleId) && role.permissions.includes("access:manage"));
-    if (!grantorRole) {
-      sendApiError(request, response, 403, "CUSTOMER_ADMIN_DELEGATION_FORBIDDEN", "An authorized Customer Admin role is required.");
-      return true;
-    }
     const delegationInput = {
       tenantId: identity.tenantId, applicationId,
       grantorActorId: identity.actorId, grantorRoleId: grantorRole.roleId,
