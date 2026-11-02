@@ -241,7 +241,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(suspended.rows[0]?.binding_status, "SUSPENDED");
 
       const revoked = await repository.revoke({
-        tenantId: tenantA, connectionId, actorId, expectedVersion: 2,
+        tenantId: tenantA, connectionId, actorId, expectedVersion: 5,
         correlationId: "revoke-" + suffix, auditEnvironment: "sandbox",
       });
       assert.equal(revoked.version, 6);
