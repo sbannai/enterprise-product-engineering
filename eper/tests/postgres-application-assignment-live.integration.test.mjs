@@ -4,6 +4,7 @@ import pg from "pg";
 import { randomUUID } from "node:crypto";
 import { PostgresActorApplicationAssignmentStore } from "../dist/packages/identity/postgres-actor-application-assignment-store.js";
 import { PostgresTenantApplicationAssignmentStore } from "../dist/packages/identity/postgres-tenant-application-assignment-store.js";
+import { PostgresCommercialTariffAdminStore } from "../dist/packages/pricing/postgres-commercial-tariff-admin-store.js";
 
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
@@ -23,6 +24,8 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
     const common = { tenantId, changedBy, environment: "sandbox", correlationId: "identity-assignment-" + suffix };
     const tenantStore = new PostgresTenantApplicationAssignmentStore(pool);
     const actorStore = new PostgresActorApplicationAssignmentStore(pool);
+    const tariffAdminStore = new PostgresCommercialTariffAdminStore(pool);
+    const catalogueTariffKey = "ia-catalogue-" + suffix.slice(0, 24);
     let triggerName;
     let functionName;
 
@@ -58,6 +61,86 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
            starts_at, updated_by)
           VALUES ($1, $2, 1, 'multi_application', 2, 100, 'INR', 'monthly',
                   'active', NOW() - INTERVAL '1 hour', $3)`, [tenantId, tariffKey, changedBy]);
+      });
+
+      await t.test("Product Admin tariff lifecycle persists versioned drafts, maker-checker approval and audit", async () => {
+        await tariffAdminStore.assertReady();
+        const firstStart = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        const secondStart = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const maker = {
+          tenantId, actorId: changedBy, correlationId: "tariff-create-" + suffix,
+          environment: "sandbox", serviceVersion: "ci",
+        };
+        const firstDraft = await tariffAdminStore.createDraft({
+          tariffKey: catalogueTariffKey, billingBasis: "single_application", maxApplications: 1,
+          amount: "499.00", currency: "INR", billingInterval: "monthly",
+          effectiveFrom: firstStart, effectiveTo: secondStart,
+          changeReason: "CI verifies immutable tariff version and maker-checker approval",
+          approvalRequired: true,
+        }, maker);
+        assert.equal(firstDraft.tariffVersion, 1);
+        assert.equal(firstDraft.tariffStatus, "draft");
+        assert.equal(firstDraft.approvalState, "pending");
+
+        await assert.rejects(
+          tariffAdminStore.approve({
+            tariffKey: catalogueTariffKey, tariffVersion: 1, approvalReference: "SELF-APPROVAL",
+          }, maker),
+          { message: "TARIFF_MAKER_CANNOT_APPROVE_OWN_CHANGE" },
+        );
+
+        const approvalReference = "CI-APPROVAL-" + suffix;
+        const approver = {
+          ...maker, actorId: changedBy + "-approver", correlationId: "tariff-approve-" + suffix,
+        };
+        const approved = await tariffAdminStore.approve({
+          tariffKey: catalogueTariffKey, tariffVersion: 1, approvalReference,
+        }, approver);
+        assert.equal(approved.approvalState, "approved");
+        assert.equal(approved.approvedBy, approver.actorId);
+        assert.equal(approved.approvalReference, approvalReference);
+
+        const publisher = {
+          ...maker, actorId: changedBy + "-publisher", correlationId: "tariff-publish-" + suffix,
+        };
+        const published = await tariffAdminStore.publish({
+          tariffKey: catalogueTariffKey, tariffVersion: 1,
+        }, publisher);
+        assert.equal(published.tariffStatus, "active");
+        assert.equal(published.approvalReference, approvalReference);
+
+        const secondDraft = await tariffAdminStore.createDraft({
+          tariffKey: catalogueTariffKey, billingBasis: "single_application", maxApplications: 1,
+          amount: "599.00", currency: "INR", billingInterval: "monthly",
+          effectiveFrom: secondStart, effectiveTo: null,
+          changeReason: "CI verifies a new version does not overwrite published history",
+          approvalRequired: false,
+        }, maker);
+        assert.equal(secondDraft.tariffVersion, 2);
+        const secondPublished = await tariffAdminStore.publish({
+          tariffKey: catalogueTariffKey, tariffVersion: 2,
+        }, publisher);
+        assert.equal(secondPublished.tariffStatus, "active");
+
+        const versions = (await tariffAdminStore.list(maker))
+          .filter(row => row.tariffKey === catalogueTariffKey)
+          .sort((left, right) => left.tariffVersion - right.tariffVersion);
+        assert.deepEqual(versions.map(row => row.tariffVersion), [1, 2]);
+        assert.deepEqual(versions.map(row => Number(row.amount)), [499, 599]);
+        assert.equal(versions[0].approvalReference, approvalReference);
+
+        const audit = await pool.query(
+          `SELECT action FROM eper_audit_events
+           WHERE tenant_id=$1 AND resource_type='commercial_tariff'
+             AND resource_id = ANY($2::text[])`,
+          [tenantId, [catalogueTariffKey + ":1", catalogueTariffKey + ":2"]],
+        );
+        assert.deepEqual(
+          audit.rows.map(row => row.action).sort(),
+          ["commercial.tariff.approved", "commercial.tariff.draft_created",
+            "commercial.tariff.draft_created", "commercial.tariff.published",
+            "commercial.tariff.published"].sort(),
+        );
       });
 
       await t.test("tenant ownership and actor membership jointly grant access", async () => {
@@ -176,6 +259,7 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
       await pool.query("DELETE FROM eper_customer_tariff_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_customer_account WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key=$1", [tariffKey]).catch(() => {});
+      await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key=$1", [catalogueTariffKey]).catch(() => {});
       // Audit rows are append-only by design; unique CI tenant IDs isolate their evidence.
       await pool.end();
     }
