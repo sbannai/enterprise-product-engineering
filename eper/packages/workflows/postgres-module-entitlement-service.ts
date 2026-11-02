@@ -1,6 +1,7 @@
 import type { AuditSqlPool } from "../audit/audit-event-store.js";
 import {
   evaluateApplicationAddonAccess,
+  evaluateCustomerTariffAccess,
   evaluateModuleAccess,
   type AccessDecision,
   type AddonEntitlementStatus,
@@ -62,6 +63,7 @@ export class PostgresModuleEntitlementService {
         module_permission: string | null;
         addon_entitlement: string | null;
         customer_account: string | null;
+        customer_tariff_assignment: string | null;
       }>(`
         SELECT
           to_regclass('public.eper_module_catalog')::text AS module_catalog,
@@ -69,11 +71,13 @@ export class PostgresModuleEntitlementService {
           to_regclass('public.eper_customer_module_entitlement')::text AS module_entitlement,
           to_regclass('public.eper_customer_module_permission')::text AS module_permission,
           to_regclass('public.eper_application_addon_entitlement')::text AS addon_entitlement,
-          to_regclass('public.eper_customer_account')::text AS customer_account
+          to_regclass('public.eper_customer_account')::text AS customer_account,
+          to_regclass('public.eper_customer_tariff_assignment')::text AS customer_tariff_assignment
       `);
       const row = result.rows[0];
       if (!row || !row.module_catalog || !row.module_price || !row.module_entitlement ||
-          !row.module_permission || !row.addon_entitlement || !row.customer_account) {
+          !row.module_permission || !row.addon_entitlement || !row.customer_account ||
+          !row.customer_tariff_assignment) {
         throw new Error("EPER_MODULE_ENTITLEMENT_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
@@ -96,27 +100,32 @@ export class PostgresModuleEntitlementService {
     const client = await this.pool.connect();
     try {
       const tariff = await client.query<{
-        max_applications: number | string;
+        assignment_status: string | null;
+        max_applications: number | string | null;
         active_application_count: number | string;
+        starts_at: string | Date | null;
+        ends_at: string | Date | null;
       }>(
-        `SELECT t.max_applications,
+        `SELECT t.assignment_status, t.max_applications, t.starts_at, t.ends_at,
                 (SELECT COUNT(*)::int
                    FROM eper_tenant_application_assignment a
                   WHERE a.tenant_id = t.tenant_id
                     AND a.assignment_status = 'active') AS active_application_count
            FROM eper_customer_tariff_assignment t
           WHERE t.tenant_id = $1
-            AND t.assignment_status = 'active'
-            AND t.starts_at <= $2
-          ORDER BY t.starts_at DESC
           LIMIT 1`,
-        [context.tenantId, context.now ?? new Date()],
+        [context.tenantId],
       );
       const effectiveTariff = tariff.rows[0];
-      if (effectiveTariff &&
-          Number(effectiveTariff.active_application_count) > Number(effectiveTariff.max_applications)) {
-        return { allowed: false, reason: "tariff_overage" };
-      }
+      const commercial = evaluateCustomerTariffAccess({
+        assignmentStatus: effectiveTariff?.assignment_status ?? null,
+        maxApplications: effectiveTariff?.max_applications ?? null,
+        activeApplicationCount: effectiveTariff?.active_application_count ?? 0,
+        startsAt: effectiveTariff?.starts_at,
+        endsAt: effectiveTariff?.ends_at,
+        now: context.now,
+      });
+      if (!commercial.allowed) return commercial;
 
       const result = await client.query<ModuleAccessRow>(
         `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
@@ -161,27 +170,32 @@ export class PostgresModuleEntitlementService {
     const client = await this.pool.connect();
     try {
       const tariff = await client.query<{
-        max_applications: number | string;
+        assignment_status: string | null;
+        max_applications: number | string | null;
         active_application_count: number | string;
+        starts_at: string | Date | null;
+        ends_at: string | Date | null;
       }>(
-        `SELECT t.max_applications,
+        `SELECT t.assignment_status, t.max_applications, t.starts_at, t.ends_at,
                 (SELECT COUNT(*)::int
                    FROM eper_tenant_application_assignment a
                   WHERE a.tenant_id = t.tenant_id
                     AND a.assignment_status = 'active') AS active_application_count
            FROM eper_customer_tariff_assignment t
           WHERE t.tenant_id = $1
-            AND t.assignment_status = 'active'
-            AND t.starts_at <= $2
-          ORDER BY t.starts_at DESC
           LIMIT 1`,
-        [context.tenantId, context.now ?? new Date()],
+        [context.tenantId],
       );
       const effectiveTariff = tariff.rows[0];
-      if (effectiveTariff &&
-          Number(effectiveTariff.active_application_count) > Number(effectiveTariff.max_applications)) {
-        return { allowed: false, reason: "tariff_overage" };
-      }
+      const commercial = evaluateCustomerTariffAccess({
+        assignmentStatus: effectiveTariff?.assignment_status ?? null,
+        maxApplications: effectiveTariff?.max_applications ?? null,
+        activeApplicationCount: effectiveTariff?.active_application_count ?? 0,
+        startsAt: effectiveTariff?.starts_at,
+        endsAt: effectiveTariff?.ends_at,
+        now: context.now,
+      });
+      if (!commercial.allowed) return commercial;
 
       const result = await client.query<AddonAccessRow>(
         `SELECT ca.customer_status, c.status AS addon_status, e.entitlement_status, e.effective_from, e.effective_to,
