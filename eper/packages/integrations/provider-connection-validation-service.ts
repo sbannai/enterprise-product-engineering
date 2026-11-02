@@ -44,10 +44,11 @@ export interface ProviderSecretResolver {
 
 export interface ProviderValidationStore {
   /** Internal-only snapshot. secretReference must never be exposed by customer-facing APIs. */
-  getValidationSnapshot(tenantId: string, connectionId: string): Promise<ProviderValidationSnapshot | null>;
+  getValidationSnapshot(tenantId: string, applicationId: string, connectionId: string): Promise<ProviderValidationSnapshot | null>;
   /** Must atomically update status, record the validation outcome, and append a redacted audit event. */
   recordValidationOutcome(input: {
     tenantId: string;
+    applicationId: string;
     connectionId: string;
     expectedVersion: number;
     outcome: "SUCCEEDED" | "FAILED";
@@ -60,6 +61,7 @@ export interface ProviderValidationStore {
 
 export interface ValidateProviderConnectionInput {
   tenantId: string;
+  applicationId: string;
   connectionId: string;
   actorId: string;
   correlationId: string;
@@ -89,11 +91,12 @@ export class ProviderConnectionValidationService {
 
   async validate(input: ValidateProviderConnectionInput): Promise<ValidateProviderConnectionResult> {
     requireValue(input.tenantId, "TENANT");
+    requireValue(input.applicationId, "APPLICATION_ID");
     requireValue(input.connectionId, "CONNECTION_ID");
     requireValue(input.actorId, "ACTOR");
     requireValue(input.correlationId, "CORRELATION_ID");
 
-    const snapshot = await this.store.getValidationSnapshot(input.tenantId, input.connectionId);
+    const snapshot = await this.store.getValidationSnapshot(input.tenantId, input.applicationId, input.connectionId);
     if (!snapshot) throw new Error("PROVIDER_CONNECTION_NOT_FOUND");
     if (snapshot.tenantId !== input.tenantId || snapshot.connectionId !== input.connectionId) {
       throw new Error("PROVIDER_VALIDATION_SCOPE_MISMATCH");
@@ -139,6 +142,7 @@ export class ProviderConnectionValidationService {
 
     const saved = await this.store.recordValidationOutcome({
       tenantId: input.tenantId,
+      applicationId: input.applicationId,
       connectionId: input.connectionId,
       expectedVersion: snapshot.version,
       outcome,
