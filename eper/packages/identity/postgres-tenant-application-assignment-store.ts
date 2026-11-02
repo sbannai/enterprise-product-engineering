@@ -64,11 +64,44 @@ export class PostgresTenantApplicationAssignmentStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-tenant-application:" + input.tenantId + ":" + input.applicationId]);
+      // Serialize every activation for a tenant so concurrent requests cannot exceed its tariff.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-tenant-commercial:" + input.tenantId]);
       const prior = await client.query<{ version: number | string }>("SELECT version FROM eper_tenant_application_assignment WHERE tenant_id = $1 AND application_id = $2 FOR UPDATE", [input.tenantId, input.applicationId]);
       const currentVersion = prior.rows[0] ? Number(prior.rows[0].version) : 0;
       if (!prior.rows[0] && status === "revoked") throw new Error("TENANT_APPLICATION_ASSIGNMENT_NOT_FOUND");
       if (currentVersion !== input.expectedVersion) throw new TenantApplicationAssignmentVersionConflictError(currentVersion);
+      if (status === "active") {
+        const commercial = await client.query<{
+          customer_status: string;
+          assignment_status: string | null;
+          starts_at: string | Date | null;
+          ends_at: string | Date | null;
+          max_applications: number | string | null;
+          active_application_count: number | string;
+        }>(`
+          SELECT c.customer_status, t.assignment_status, t.starts_at, t.ends_at,
+                 t.max_applications,
+                 (SELECT COUNT(*) FROM eper_tenant_application_assignment a
+                   WHERE a.tenant_id = c.tenant_id
+                     AND a.assignment_status = 'active'
+                     AND a.application_id <> $2) AS active_application_count
+            FROM eper_customer_account c
+            LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id = c.tenant_id
+           WHERE c.tenant_id = $1
+           FOR UPDATE OF c
+        `, [input.tenantId, input.applicationId]);
+        const control = commercial.rows[0];
+        if (!control) throw new Error("CUSTOMER_COMMERCIAL_ACCOUNT_NOT_CONFIGURED");
+        if (control.customer_status !== "active") throw new Error("CUSTOMER_NOT_ACTIVE");
+        if (control.assignment_status !== "active" ||
+            (control.starts_at && new Date(control.starts_at).getTime() > Date.now()) ||
+            (control.ends_at && new Date(control.ends_at).getTime() <= Date.now())) {
+          throw new Error("CUSTOMER_TARIFF_NOT_ACTIVE");
+        }
+        if (Number(control.active_application_count) >= Number(control.max_applications)) {
+          throw new Error("CUSTOMER_APPLICATION_TARIFF_LIMIT_EXCEEDED");
+        }
+      }
       const saved = await client.query<Row>(`INSERT INTO eper_tenant_application_assignment
         (tenant_id, application_id, assignment_status, version, assigned_at, assigned_by, revoked_at, revoked_by, updated_at, updated_by)
         VALUES ($1,$2,$3,1,CASE WHEN $3='active' THEN NOW() ELSE NOW() END,$4,CASE WHEN $3='revoked' THEN NOW() ELSE NULL END,CASE WHEN $3='revoked' THEN $4 ELSE NULL END,NOW(),$4)
