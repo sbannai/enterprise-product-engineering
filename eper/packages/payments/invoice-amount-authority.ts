@@ -10,6 +10,8 @@ export type InvoicePayability = "DUE" | "PARTIALLY_PAID" | "PAID" | "VOID" | "CA
 
 export interface TrustedInvoiceAmount {
   tenantId: string;
+  /** Stable application identifier from the authoritative invoice owner. */
+  applicationId: string;
   reference: string;
   amountDuePaise: number;
   currency: string;
@@ -66,6 +68,7 @@ export async function resolveTrustedInvoiceAmount(
   if (!invoice) return { ok: false, error: "invoice_not_found" };
   if (invoice.tenantId !== tenantId) return { ok: false, error: "invoice_tenant_mismatch" };
   if (invoice.reference !== reference) return { ok: false, error: "invoice_reference_mismatch" };
+  if (!isText(invoice.applicationId)) return { ok: false, error: "invoice_provenance_missing" };
   if (!payableStatuses.has(invoice.status)) return { ok: false, error: "invoice_not_payable" };
   if (!Number.isSafeInteger(invoice.amountDuePaise) || invoice.amountDuePaise <= 0) {
     return { ok: false, error: "invoice_amount_invalid" };

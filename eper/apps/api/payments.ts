@@ -459,6 +459,9 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           : 503;
         json(req, res, status, { error: snapshot.error }); return true;
       }
+      if (snapshot.transaction.applicationId !== authority.invoice.applicationId) {
+        json(req, res, 409, { error: "invoice_transaction_application_mismatch" }); return true;
+      }
       if (snapshot.transaction.amountDueMinor !== amountPaise || snapshot.transaction.currency !== currency) {
         json(req, res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
       }

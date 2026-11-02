@@ -26,7 +26,7 @@ const adjustmentKinds = new Set(["DISCOUNT", "TAX", "SHIPPING", "FEE", "OTHER"])
 function isTrustedTransactionSnapshot(value: unknown): value is TrustedTransactionSnapshot {
   if (!isRecord(value)) return false;
   if (
-    !isNonEmptyText(value.tenantId) || !isNonEmptyText(value.reference) ||
+    !isNonEmptyText(value.tenantId) || !isNonEmptyText(value.reference) || !isNonEmptyText(value.applicationId) ||
     (typeof value.kind !== "string" || !transactionKinds.has(value.kind)) || !isNonEmptyText(value.description) ||
     !isSafeInteger(value.amountDueMinor) || value.amountDueMinor <= 0 ||
     value.currency !== "INR" || (typeof value.status !== "string" || !transactionStatuses.has(value.status)) ||
