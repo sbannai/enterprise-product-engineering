@@ -106,6 +106,8 @@ export class PostgresPlatformCustomerAdminProvisioningStore {
         assignment_table: string | null;
         role_table: string | null;
         actor_membership_table: string | null;
+        browser_sessions_table: string | null;
+        identity_events_table: string | null;
         row_security: boolean;
         force_row_security: boolean;
       }>(`
@@ -114,6 +116,8 @@ export class PostgresPlatformCustomerAdminProvisioningStore {
           to_regclass('public.eper_workflow_actor_role_assignment')::text AS assignment_table,
           to_regclass('public.eper_workflow_role_definition')::text AS role_table,
           to_regclass('public.eper_actor_application_assignment')::text AS actor_membership_table,
+          to_regclass('public.eper_customer_browser_sessions')::text AS browser_sessions_table,
+          to_regclass('public.eper_customer_identity_events')::text AS identity_events_table,
           COALESCE(c.relrowsecurity, false) AS row_security,
           COALESCE(c.relforcerowsecurity, false) AS force_row_security
         FROM (SELECT 1) seed
@@ -122,7 +126,8 @@ export class PostgresPlatformCustomerAdminProvisioningStore {
       `);
       const state = result.rows[0];
       if (!state?.ledger_table || !state.assignment_table || !state.role_table ||
-          !state.actor_membership_table || !state.row_security || !state.force_row_security) {
+          !state.actor_membership_table || !state.browser_sessions_table ||
+          !state.identity_events_table || !state.row_security || !state.force_row_security) {
         throw new Error("EPER_PLATFORM_CUSTOMER_ADMIN_SCHEMA_NOT_READY");
       }
     } catch (error) {
@@ -279,6 +284,25 @@ export class PostgresPlatformCustomerAdminProvisioningStore {
           result.version, JSON.stringify(result)],
       );
 
+      // Force existing customer browser sessions to re-authenticate so the
+      // next session resolves the newly changed role assignment from PostgreSQL.
+      await client.query("SELECT set_config('eper.identity_service', 'true', true)");
+      const invalidatedSessions = await client.query(
+        `UPDATE eper_customer_browser_sessions
+            SET revoked_at=NOW(), revoked_reason='platform_customer_admin_role_changed'
+          WHERE tenant_id=$1 AND actor_id=$2 AND revoked_at IS NULL`,
+        [input.tenantId, input.targetActorId],
+      );
+      if ((invalidatedSessions.rowCount ?? 0) > 0) {
+        await client.query(
+          `INSERT INTO eper_customer_identity_events
+            (tenant_id, actor_id, action, outcome, correlation_id, metadata)
+           VALUES ($1,$2,'session.revoked','success',$3,$4::jsonb)`,
+          [input.tenantId, input.targetActorId, input.correlationId,
+            JSON.stringify({ reason: "platform_customer_admin_role_changed",
+              revokedSessionCount: invalidatedSessions.rowCount })],
+        );
+      }
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId,
         applicationId: input.applicationId,
