@@ -126,10 +126,11 @@ test("invalid tenant identity is rejected before database access", async () => {
 
 test("application binding permits pending validation and records pending binding status", async () => {
   const { repository, calls } = fixture({ status: "PENDING_VALIDATION" });
-  await repository.bindApplication({
+  const bindingStatus = await repository.bindApplication({
     ...audit, applicationId: "app-a", connectionId: "connection-a",
     allowedCapabilities: ["email.send"],
   });
+  assert.equal(bindingStatus, "PENDING_VALIDATION");
   const insert = calls.find((call) => call.sql.includes("INSERT INTO eper_provider_connection_applications"));
   assert.equal(insert.values[6], "PENDING_VALIDATION");
   assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
