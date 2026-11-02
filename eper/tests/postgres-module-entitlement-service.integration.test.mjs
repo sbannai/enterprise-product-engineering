@@ -70,8 +70,9 @@ test("live PostgreSQL module and add-on access enforce accepted customer tariff 
       await pool.query(`
         INSERT INTO eper_customer_module_permission
           (tenant_id, module_key, role_key, permission_key, allowed, updated_by)
-        VALUES ($1, $2, 'customer-admin', 'module.use', TRUE, $3)
-      `, [tenantId, moduleKey, actorId]);
+        VALUES ($1, $2, 'customer-admin', 'module.use', TRUE, $3),
+               ($1, $4, 'customer-admin', 'module.use', TRUE, $3)
+      `, [tenantId, moduleKey, actorId, addonKey]);
       await pool.query(`
         INSERT INTO eper_module_price
           (price_id, module_key, price_version, pricing_model, amount, currency,
