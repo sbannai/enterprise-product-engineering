@@ -7,7 +7,7 @@ const TOKEN = "eper-customer-commercial-switch-test-token-with-32-chars";
 test("customer tariff switch requires explicit acceptance and trusted customer-admin identity", async () => {
   const keys = ["EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
     "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
-    "EPER_ADMIN_CONFIG_IDENTITIES_JSON"];
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_CUSTOMER_IDENTITY_PERSISTENCE: "postgres",
@@ -15,8 +15,8 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     EPER_ADMIN_CONFIG_API_ENABLED: "true",
     EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
     EPER_AUDIT_PERSISTENCE: "postgres",
-    EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({
-      [TOKEN]: { tenantId: "tenant-customer", actorId: "customer-owner", roleKey: "customer_admin" },
+    EPER_CUSTOMER_ACCESS_IDENTITIES_JSON: JSON.stringify({
+      [TOKEN]: { tenantId: "tenant-customer", actorId: "customer-owner", roleKey: "customer-admin" },
     }),
   });
   const calls = [];
