@@ -98,3 +98,46 @@ test("fails closed for inactive tenant/application or target actor and stale ver
   await assert.rejects(new PostgresWorkflowRoleDelegationStore(stale.pool).grant(input),
     /WORKFLOW_ROLE_DELEGATION_VERSION_CONFLICT:2/);
 });
+
+
+test("revokes an active role with optimistic concurrency and an atomic audit event", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
+        return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
+      }
+      if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
+      if (sql.includes("UPDATE eper_workflow_actor_role_assignment")) return { rows: [{ version: 4 }] };
+      if (sql.includes("INSERT INTO eper_audit_events")) return { rows: [{ last_event_hash: null }] };
+      return { rows: [] };
+    },
+    release() { calls.push({ sql: "RELEASE" }); },
+  };
+  const store = new PostgresWorkflowRoleDelegationStore({ async connect() { return client; } });
+  const result = await store.revoke({ ...input, expectedVersion: 3 });
+  assert.equal(result.status, "revoked");
+  assert.equal(result.version, 4);
+  assert.equal(result.revokedBy, input.grantorActorId);
+  assert.ok(calls.some(call => call.sql.includes("SET assignment_status='revoked'")));
+  assert.ok(calls.some(call => call.sql.includes("workflow.role_assignment.revoke")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("revocation rejects stale versions and rolls back", async () => {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) return { rows: [{ permissions: ["access:manage"] }] };
+      if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 9 }] };
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const store = new PostgresWorkflowRoleDelegationStore({ async connect() { return client; } });
+  await assert.rejects(store.revoke({ ...input, expectedVersion: 3 }), /VERSION_CONFLICT:9/);
+  assert.ok(calls.includes("ROLLBACK"));
+  assert.equal(calls.some(sql => sql.includes("SET assignment_status='revoked'")), false);
+});
