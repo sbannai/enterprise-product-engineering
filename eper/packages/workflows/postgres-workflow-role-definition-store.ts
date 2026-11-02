@@ -18,6 +18,7 @@ export interface WorkflowRoleDefinition {
   name: string;
   description?: string;
   permissions: WorkflowRolePermission[];
+  delegable: boolean;
   status: "active" | "disabled";
   version: number;
   updatedAt: string;
@@ -31,6 +32,7 @@ export interface ReplaceWorkflowRoleDefinitionInput {
   name: string;
   description?: string;
   permissions: WorkflowRolePermission[];
+  delegable: boolean;
   status: "active" | "disabled";
   expectedVersion: number;
   changedBy: string;
@@ -47,6 +49,7 @@ type RoleRow = {
   description: string | null;
   permissions: WorkflowRolePermission[] | string;
   role_status: "active" | "disabled";
+  delegable: boolean;
   version: number | string;
   updated_at: string | Date;
   updated_by: string;
@@ -62,7 +65,7 @@ function mapRole(row: RoleRow): WorkflowRoleDefinition {
   return {
     tenantId: row.tenant_id, applicationId: row.application_id, roleId: row.role_id,
     name: row.name, description: row.description ?? undefined,
-    permissions, status: row.role_status, version: Number(row.version),
+    permissions, delegable: row.delegable, status: row.role_status, version: Number(row.version),
     updatedAt: new Date(row.updated_at).toISOString(), updatedBy: row.updated_by,
   };
 }
@@ -175,17 +178,18 @@ export class PostgresWorkflowRoleDefinitionStore {
       }
       const saved = await client.query<RoleRow>(
         `INSERT INTO eper_workflow_role_definition
-          (tenant_id, application_id, role_id, name, description, permissions, role_status,
+          (tenant_id, application_id, role_id, name, description, permissions, role_status, delegable,
            version, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,1,$8,$8)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,1,$9,$9)
          ON CONFLICT (tenant_id, application_id, role_id) DO UPDATE SET
            name = EXCLUDED.name, description = EXCLUDED.description,
            permissions = EXCLUDED.permissions, role_status = EXCLUDED.role_status,
+           delegable = EXCLUDED.delegable,
            version = eper_workflow_role_definition.version + 1,
            updated_at = NOW(), updated_by = EXCLUDED.updated_by
          RETURNING *`,
         [input.tenantId, input.applicationId, input.roleId, input.name.trim(),
-          input.description ?? null, JSON.stringify(input.permissions), input.status, input.changedBy],
+          input.description ?? null, JSON.stringify(input.permissions), input.status, input.delegable, input.changedBy],
       );
       const row = saved.rows[0];
       if (!row) throw new Error("WORKFLOW_ROLE_DEFINITION_WRITE_RETURNED_NO_ROW");
