@@ -68,6 +68,7 @@ test("ticket listing searches title, description, business impact, ID, applicati
   assert.match(query.sql, /position\(lower\(\$2\) in lower\(id::text\)\) > 0/);
   assert.match(query.sql, /lower\(business_impact\)/);
   assert.match(query.sql, /lower\(coalesce\(assigned_to, ''\)\)/);
+  assert.match(query.sql, /LIMIT \$3 OFFSET \$4/);
   assert.deepEqual(query.values, ["tenant-a", "payment timeout", 10, 0]);
 });
 
@@ -80,6 +81,7 @@ test("ticket listing always scopes by trusted tenant and selected application", 
   assert.ok(query);
   assert.match(query.sql, /tenant_id = \$1/);
   assert.match(query.sql, /application_id = \$2/);
+  assert.match(query.sql, /LIMIT \$3 OFFSET \$4/);
   assert.deepEqual(query.values, ["tenant-a", "app-a", 20, 0]);
 });
 
@@ -100,6 +102,7 @@ test("cross-tenant ticket listing requires the explicit privileged scope marker"
   const query = calls.find((x) => /SELECT \* FROM eper_support_tickets/.test(x.sql));
   assert.ok(query);
   assert.doesNotMatch(query.sql, /WHERE tenant_id/);
+  assert.match(query.sql, /LIMIT \$1 OFFSET \$2/);
   assert.deepEqual(query.values, [10, 0]);
 });
 
@@ -109,6 +112,7 @@ test("ticket store accepts the bounded pagination lookahead row and binds it as 
   await store.list({ tenantId: "tenant-a" }, { limit: 101, offset: 200 });
   const query = calls.find((x) => /SELECT \* FROM eper_support_tickets/.test(x.sql));
   assert.ok(query);
+  assert.match(query.sql, /LIMIT \$2 OFFSET \$3/);
   assert.deepEqual(query.values, ["tenant-a", 101, 200]);
   await assert.rejects(
     () => store.list({ tenantId: "tenant-a" }, { limit: 102, offset: 200 }),
