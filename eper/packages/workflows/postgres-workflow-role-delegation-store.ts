@@ -266,9 +266,11 @@ export class PostgresWorkflowRoleDelegationStore {
       const targetPermissions = typeof rawTargetPermissions === "string"
         ? JSON.parse(rawTargetPermissions) as string[]
         : rawTargetPermissions;
-      if (targetPermissions.some(permission =>
-        (ELEVATED_PERMISSIONS as readonly string[]).includes(permission) ||
-        !permissions.includes(permission))) {
+      // Revocation only removes access; it cannot grant privilege. Permit an
+      // authorized Customer Admin to revoke an existing Customer Admin role,
+      // while still requiring every target permission to be within the actor's
+      // own permission set. The final-admin guard below protects availability.
+      if (targetPermissions.some(permission => !permissions.includes(permission))) {
         throw new Error("WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN");
       }
       const current = await client.query<{ version: number | string }>(
