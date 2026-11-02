@@ -33,6 +33,7 @@ export interface AccessDecision {
     | "not_started"
     | "expired"
     | "application_not_assigned"
+    | "tariff_overage"
     | "role_permission_denied"
     | "addon_not_selected"
     | "addon_not_active";
