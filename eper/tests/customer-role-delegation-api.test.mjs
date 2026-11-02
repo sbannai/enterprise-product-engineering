@@ -57,6 +57,8 @@ function dependencies(permissions = ["access:manage", "workflow:view"]) {
         status: "active", permissions },
       { roleId: "workflow-reader", name: "Workflow Reader", description: "Read-only workflow access",
         status: "active", delegable: true, permissions: ["workflow:view"] },
+      { roleId: "internal-reader", name: "Internal Reader", description: "Not approved for delegation",
+        status: "active", delegable: false, permissions: ["workflow:view"] },
     ]; } },
     delegationStore: {
       async grant(input) {
