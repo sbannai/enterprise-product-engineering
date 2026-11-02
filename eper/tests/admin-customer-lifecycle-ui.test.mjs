@@ -36,7 +36,7 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
   let current = { ...initial };
   const changes = [];
   const store = {
-    async list() { return [{ ...current, tariffKey: "multi-app", tariffVersion: 3, billingBasis: "multi_application", tariffAssignmentStatus: "active", tariffEffective: true, maxApplications: 2, activeApplicationCount: 3, allowanceStatus: "over_allowance", tariffAccessState: "over_allowance", usageEvaluatedAt: "2026-11-02T07:00:00.000Z" }]; },
+    async list() { return [{ ...current, tariffKey: "multi-app", tariffVersion: 3, billingBasis: "multi_application", tariffAssignmentStatus: "active", tariffEffective: true, maxApplications: 2, activeApplicationCount: 3, allowanceStatus: "over_allowance", tariffAccessState: "over_allowance", usageEvaluatedAt: "2026-11-02T07:00:00.000Z", activeApplicationIds: ["app-a", "app-b", "app-c"] }]; },
     async get(tenantId) { return tenantId === current.tenantId ? { ...current } : null; },
     async changeStatus(input) {
       changes.push(input);
@@ -88,6 +88,7 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
     assert.equal(listedBody.success, true);
     assert.ok(listedBody.meta?.requestId);
     assert.deepEqual(listedBody.data.customers.map((item) => item.tenantId), ["lifecycle-tenant"]);
+    assert.deepEqual(listedBody.data.customers[0].activeApplicationIds, ["app-a", "app-b", "app-c"]);
 
     const changed = await fetch(`${base}/admin/customers/lifecycle-tenant/status`, {
       method: "PATCH",
