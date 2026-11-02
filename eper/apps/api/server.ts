@@ -1000,7 +1000,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const published = await options.workflowDefinitionPublisher!.publish({
             tenantId: identity.tenantId, applicationId, principalId: identity.actorId,
             correlationId, environment, serviceVersion: options.serviceVersion,
-          }, definition);
+          }, definition, { expectedDraftVersion: draft.draftVersion });
           sendApiSuccess(request, response, 201, { published, draftVersion: draft.draftVersion }); return;
         }
         if (workflowPublishRoute) {
