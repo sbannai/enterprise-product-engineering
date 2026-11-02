@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
 
+const unusedWorkflowExecutionService = {
+  async start() { throw new Error("workflow execution is not exercised by draft API tests"); },
+  async transition() { throw new Error("workflow execution is not exercised by draft API tests"); },
+};
+
 test("Customer Admin draft API is application-scoped, version-checked and publishes immutable snapshots", async () => {
   const keys = [
     "EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_ADMIN_CONFIG_API_ENABLED",
@@ -61,6 +66,7 @@ test("Customer Admin draft API is application-scoped, version-checked and publis
     workflowActorRoleAssignmentStore: {},
     workflowDefinitionPublisher,
     workflowDefinitionDraftStore,
+    workflowExecutionService: unusedWorkflowExecutionService,
   });
 
   try {
@@ -125,7 +131,15 @@ test("Product Admin cannot use the Customer Admin workflow draft API", async () 
   process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "product-admin", roleKey: "product_admin" },
   });
-  const server = createAppServer();
+  const server = createAppServer({
+    // Keep the server's production dependency guard enabled while this test
+    // proves that Product Admin is denied before any workflow store is used.
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+    workflowRoleDefinitionStore: { async list() { return []; } },
+    workflowActorRoleAssignmentStore: {},
+    workflowDefinitionPublisher: { async publish() { throw new Error("must not publish"); } },
+    workflowExecutionService: unusedWorkflowExecutionService,
+  });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
