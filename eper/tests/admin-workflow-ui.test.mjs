@@ -143,7 +143,7 @@ test("durable workflow configuration is reserved for mapped Customer Admin ident
     const headers = { authorization: `Bearer ${token}` };
     const productAdmin = await fetch(`${base}/admin/config/workflows`, { headers });
     assert.equal(productAdmin.status, 403);
-    assert.equal((await productAdmin.json()).error, "CUSTOMER_ADMIN_ROLE_REQUIRED");
+    assert.equal((await productAdmin.json()).error.code, "CUSTOMER_ADMIN_ROLE_REQUIRED");
 
     process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
       [token]: { tenantId: "tenant-workflow-01", actorId: "actor-workflow-01", roleKey: "customer_admin" },
