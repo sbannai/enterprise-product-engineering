@@ -32,7 +32,8 @@ function fixture({ tenantStatus = "active", grantorPermissions = ["access:manage
           assigned_at: now, assigned_by: input.grantorActorId,
         }] };
       }
-      if (sql.includes("INSERT INTO eper_audit_events")) return { rows: [{ last_event_hash: null }] };
+      if (sql.includes("SELECT last_event_hash FROM eper_audit_chain_head")) return { rows: [{ last_event_hash: null }] };
+      if (sql.includes("INSERT INTO eper_audit_events")) return { rows: [], rowCount: 1 };
       return { rows: [] };
     },
     release() { calls.push({ sql: "RELEASE" }); },
