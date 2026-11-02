@@ -79,7 +79,9 @@ test("Customer Admin draft API is application-scoped, version-checked and publis
     const listUrl = base + "/admin/applications/app-a/workflow-definitions";
     const listed = await fetch(listUrl, { headers });
     assert.equal(listed.status, 200);
-    assert.deepEqual((await listed.json()).drafts, []);
+    const listedBody = await listed.json();
+    assert.equal(listedBody.success, true);
+    assert.deepEqual(listedBody.data.drafts, []);
 
     const definition = {
       id: "expense-approval", name: "Expense approval", status: "DRAFT", activities: [{
@@ -93,7 +95,8 @@ test("Customer Admin draft API is application-scoped, version-checked and publis
     });
     assert.equal(savedResponse.status, 200);
     const savedBody = await savedResponse.json();
-    assert.equal(savedBody.draft.draftVersion, 1);
+    assert.equal(savedBody.success, true);
+    assert.equal(savedBody.data.draft.draftVersion, 1);
     assert.equal(replaceCalls.length, 1);
     assert.equal(replaceCalls[0].changedBy, "admin-a");
     assert.equal(replaceCalls[0].applicationId, "app-a");
@@ -103,7 +106,8 @@ test("Customer Admin draft API is application-scoped, version-checked and publis
     });
     assert.equal(published.status, 201);
     const publishedBody = await published.json();
-    assert.equal(publishedBody.published.definitionVersion, 3);
+    assert.equal(publishedBody.success, true);
+    assert.equal(publishedBody.data.published.definitionVersion, 3);
     assert.equal(publishCalls[0].definition.status, "ACTIVE");
     assert.equal(publishCalls[0].definition.id, "expense-approval");
 
