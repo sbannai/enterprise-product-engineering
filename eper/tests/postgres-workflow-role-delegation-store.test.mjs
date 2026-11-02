@@ -18,7 +18,7 @@ function fixture({ tenantStatus = "active", grantorPermissions = ["access:manage
       calls.push({ sql, values });
       if (sql.includes("eper_tenant_application_assignment")) return { rows: [{ assignment_status: tenantStatus }] };
       if (sql.includes("FROM eper_workflow_actor_role_assignment ra")) return { rows: [{ permissions: grantorPermissions }] };
-      if (sql.includes("FROM eper_workflow_role_definition")) return { rows: [{ permissions: targetPermissions }] };
+      if (sql.includes("FROM eper_workflow_role_definition")) return { rows: [{ permissions: targetPermissions, delegable: true }] };
       if (sql.includes("eper_actor_application_assignment")) return { rows: [{ assignment_status: targetActorStatus }] };
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) {
         return { rows: priorVersion === null ? [] : [{ version: priorVersion }] };
@@ -110,7 +110,7 @@ test("revokes an active role with optimistic concurrency and an atomic audit eve
         return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
       }
       if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) {
-        return { rows: [{ permissions: ["workflow:view"] }] };
+        return { rows: [{ permissions: ["workflow:view"], delegable: true }] };
       }
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
       if (sql.includes("UPDATE eper_workflow_actor_role_assignment")) return { rows: [{ version: 4 }] };
@@ -181,10 +181,10 @@ test("an explicitly authorized Customer Admin may revoke a peer when another adm
       calls.push({ sql, values });
       if (sql.includes("pg_advisory_xact_lock")) locks.push(values);
       if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
-        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"] }] };
+        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"], delegable: true }] };
       }
       if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) {
-        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"] }] };
+        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"], delegable: true }] };
       }
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
       if (sql.includes("COUNT(DISTINCT ra.actor_id)")) return { rows: [{ admin_count: 2 }] };
