@@ -808,3 +808,12 @@ The run metadata for each selected fresh-clone workflow confirms its PR head SHA
 ### Scorecard self-update validation boundary
 
 This dated append is being made on PR #323's existing documentation branch. Its pre-append head `a134871615015c2c622bdea4e4699e1e5b2b1a16` and the passing runs listed above validate the pre-append candidate only. The new documentation commit changes PR #323's head; those green runs must not be treated as validation of the new head. Re-run and inspect Actions against the resulting exact head before review or merge.
+
+## 2026-11-02 05:31 IST — matrix metric wording correction
+
+**Current main SHA at review:** `a554990cb7f4969bb218aad7a2e9944aec62fa05`.  
+**Reviewed PR #323 head:** `c84b427fb8c45231891e3238253033f10965a3b1`.
+
+A line in the 05:11 record described the matrix output as “259 checks passed.” Inspection of the exact-head job log for [run 41363682248](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41363682248) shows the distinct fields: `chapters=38`, `chapterSummary.pass=38`, `totalTests=259`, `passedTests=259`, `failedTests=0`, and `passedChecks=28`. The accurate statement is **38/38 chapter suites passed; 259 tests passed with zero failed; the separate `passedChecks` field is 28**. This correction does not change the approved 228-requirement / 38-chapter baseline or the matrix scope (nine chapters with HTTP pilot apps; 29 without).
+
+**Next action:** Keep future reports aligned to the raw artifact field names; do not conflate test cases and passed checks.
