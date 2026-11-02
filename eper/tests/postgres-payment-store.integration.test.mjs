@@ -29,6 +29,7 @@ test("payment migrations are checksummed and safely re-runnable", { skip: !datab
         "005_immutable_receipt_records.sql",
         "006_immutable_receipt_transaction_snapshot.sql",
         "007_immutable_order_transaction_snapshot.sql",
+        "008_immutable_commercial_acceptance_snapshot.sql",
       ],
     );
     for (const row of result.rows) assert.match(row.sha256.trim(), /^[a-f0-9]{64}$/);
@@ -205,6 +206,67 @@ test("commercially gated checkout rejects inactive customers, missing app grants
     assert.equal(acceptance?.acceptedCurrency, "INR");
     assert.equal(acceptance?.acceptedBy, "customer-admin");
     assert.equal(acceptance?.acceptanceReference, "accepted-" + eligible.tenantId);
+
+    // Complete a local synthetic provider-order lifecycle and prove the exact
+    // accepted commercial snapshot is copied atomically to the immutable receipt.
+    const reservedOrder = await pool.query(
+      `SELECT id, idempotency_key, transaction_snapshot, commercial_acceptance_snapshot
+         FROM eper_payment_orders
+        WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1`,
+      [eligible.tenantId],
+    );
+    assert.equal(reservedOrder.rows.length, 1);
+    const order = reservedOrder.rows[0];
+    const providerOrderId = "order_commercial_" + randomUUID().replaceAll("-", "");
+    const completed = await store.completeOrderCreation(eligible.tenantId, order.idempotency_key, providerOrderId);
+    assert.equal(completed.ok, true);
+
+    const providerEventId = "evt_commercial_" + randomUUID().replaceAll("-", "");
+    const receiptNumber = "EPER-COMM-" + randomUUID().replaceAll("-", "").slice(0, 20);
+    const captured = await store.capturePayment({
+      providerEventId,
+      eventType: "payment.captured",
+      payloadSha256: createHash("sha256").update(providerEventId + providerOrderId).digest("hex"),
+      providerOrderId,
+      providerPaymentId: "pay_commercial_" + randomUUID().replaceAll("-", ""),
+      amountMinor: 10000,
+      currency: "INR",
+      tenantId: eligible.tenantId,
+      receiptNumber,
+      transactionSnapshot: order.transaction_snapshot,
+    });
+    assert.equal(captured.ok, true);
+
+    const persistedSnapshots = await pool.query(
+      `SELECT o.commercial_acceptance_snapshot AS order_snapshot,
+              r.commercial_acceptance_snapshot AS receipt_snapshot
+         FROM eper_payment_orders o
+         JOIN eper_payment_receipts r ON r.payment_order_id = o.id
+        WHERE o.tenant_id = $1 AND o.provider_order_id = $2`,
+      [eligible.tenantId, providerOrderId],
+    );
+    assert.equal(persistedSnapshots.rows.length, 1);
+    assert.deepEqual(persistedSnapshots.rows[0].order_snapshot, acceptance);
+    assert.deepEqual(persistedSnapshots.rows[0].receipt_snapshot, acceptance);
+
+    await assert.rejects(
+      pool.query(
+        `UPDATE eper_payment_orders SET commercial_acceptance_snapshot = '{}'::jsonb
+          WHERE tenant_id = $1 AND provider_order_id = $2`,
+        [eligible.tenantId, providerOrderId],
+      ),
+      /EPER_PAYMENT_ORDER_SNAPSHOT_IMMUTABLE/,
+    );
+    await assert.rejects(
+      pool.query(
+        `UPDATE eper_payment_receipts SET commercial_acceptance_snapshot = '{}'::jsonb
+          WHERE payment_order_id = (
+            SELECT id FROM eper_payment_orders WHERE tenant_id = $1 AND provider_order_id = $2
+          )`,
+        [eligible.tenantId, providerOrderId],
+      ),
+      /EPER_PAYMENT_RECEIPT_SNAPSHOT_IMMUTABLE/,
+    );
   } finally {
     await pool.end();
   }
