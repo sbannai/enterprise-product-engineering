@@ -69,7 +69,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "invoice_payment_conflict" | "invoice_already_paid" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
+  | { ok: false; reason: "idempotency_conflict" | "invoice_payment_conflict" | "invoice_already_paid" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" | "commercial_ineligible" };
 
 export interface StoredPaymentOrder {
   /** Internal database key; use transactionPublicId in external APIs. */
@@ -98,7 +98,7 @@ export interface StoredPaymentReceipt {
 }
 
 export class PostgresPaymentStore {
-  constructor(private readonly pool: SqlPool) {}
+  constructor(private readonly pool: SqlPool, private readonly enforceCommercialEligibility = false) {}
 
   /** Verifies required payment tables and immutable snapshot columns without mutating data. */
   async checkSchema(): Promise<boolean> {
@@ -480,9 +480,41 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      // Serialize reservation attempts for a tenant/invoice pair even when keys differ.
+      // Join the tenant-wide lock used by tariff switches and application grants/revocations.
+      // Acquire it before the invoice lock to keep eligibility atomic with reservation.
+      if (this.enforceCommercialEligibility) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-tenant-commercial:" + input.tenantId]);
+      }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
         [input.tenantId, input.invoiceReference]);
+
+      if (this.enforceCommercialEligibility) {
+        const eligibility = await client.query<{ eligible: boolean }>(
+          `SELECT (
+             ca.customer_status = 'active' AND ca.effective_at <= NOW()
+             AND cta.assignment_status = 'active' AND cta.starts_at <= NOW()
+             AND (cta.ends_at IS NULL OR cta.ends_at > NOW())
+             AND cta.accepted_by IS NOT NULL AND cta.accepted_at IS NOT NULL
+             AND NULLIF(BTRIM(cta.acceptance_reference), '') IS NOT NULL
+             AND cta.max_applications >= 1
+             AND cta.max_applications >= (SELECT COUNT(*) FROM eper_tenant_application_assignment aa
+                   WHERE aa.tenant_id = $1 AND aa.assignment_status = 'active')
+             AND tp.tariff_status = 'active' AND tp.approval_state IN ('approved', 'not_required')
+             AND tp.effective_from <= NOW() AND (tp.effective_to IS NULL OR tp.effective_to > NOW())
+             AND aa.application_id IS NOT NULL
+           ) AS eligible
+           FROM eper_customer_account ca
+           JOIN eper_customer_tariff_assignment cta ON cta.tenant_id = ca.tenant_id
+           JOIN eper_commercial_tariff_plan tp ON tp.tariff_key = cta.tariff_key AND tp.tariff_version = cta.tariff_version
+           LEFT JOIN eper_tenant_application_assignment aa ON aa.tenant_id = ca.tenant_id
+             AND aa.application_id = $2 AND aa.assignment_status = 'active'
+           WHERE ca.tenant_id = $1
+           FOR SHARE OF ca, cta, tp`, [input.tenantId, input.transactionSnapshot.applicationId]);
+        if (!eligibility.rows[0]?.eligible) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "commercial_ineligible" };
+        }
+      }
 
       // Validate a key's prior binding before inspecting any active invoice order.
       const keyBinding = await client.query<{
