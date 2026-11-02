@@ -20,6 +20,42 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
         VALUES ($1, 'active', 'integration setup', NOW(), 1, NOW(), $2)
       `, [tenantId, actorId]);
 
+      // Seed a published accepted tariff and three active app assignments against a two-app allowance.
+      const tariffKey = "usage-" + randomUUID().replaceAll("-", "").slice(0, 20);
+      await pool.query(`
+        INSERT INTO eper_commercial_tariff_plan
+          (tariff_key, tariff_version, billing_basis, max_applications, amount, currency,
+           billing_interval, effective_from, effective_to, tariff_status, created_by,
+           change_reason, approval_required, approval_state, published_at, published_by)
+        VALUES ($1, 1, 'multi_application', 2, 99.00, 'INR', 'monthly',
+                NOW() - INTERVAL '1 day', NULL, 'active', $2,
+                'usage monitor integration', FALSE, 'not_required', NOW(), $2)
+      `, [tariffKey, actorId]);
+      await pool.query(`
+        INSERT INTO eper_customer_tariff_assignment
+          (tenant_id, tariff_key, tariff_version, billing_basis, max_applications,
+           accepted_amount, accepted_currency, billing_interval, assignment_status,
+           starts_at, ends_at, version, updated_at, updated_by, accepted_by, accepted_at, acceptance_reference)
+        VALUES ($1, $2, 1, 'multi_application', 2, 99.00, 'INR', 'monthly',
+                'active', NOW() - INTERVAL '1 day', NULL, 1, NOW(), $3, $3, NOW(), $4)
+      `, [tenantId, tariffKey, actorId, "accept-" + randomUUID()]);
+      await pool.query(`
+        INSERT INTO eper_tenant_application_assignment
+          (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+        VALUES ($1, 'usage-app-1', 'active', $2, $2),
+               ($1, 'usage-app-2', 'active', $2, $2),
+               ($1, 'usage-app-3', 'active', $2, $2)
+      `, [tenantId, actorId]);
+      const usage = (await store.list()).find(row => row.tenantId === tenantId);
+      assert.equal(usage?.tariffKey, tariffKey);
+      assert.equal(usage?.tariffVersion, 1);
+      assert.equal(usage?.billingBasis, "multi_application");
+      assert.equal(usage?.tariffAssignmentStatus, "active");
+      assert.equal(usage?.tariffEffective, true);
+      assert.equal(usage?.maxApplications, 2);
+      assert.equal(usage?.activeApplicationCount, 3);
+      assert.equal(usage?.allowanceStatus, "over_allowance");
+
       const changed = await store.changeStatus({
         tenantId, status: "suspended", reason: "integration policy breach",
         effectiveAt: new Date().toISOString(), expectedVersion: 1, changedBy: actorId,
@@ -98,7 +134,11 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
         await pool.query("DELETE FROM eper_customer_account WHERE tenant_id = $1", [rollbackTenantId]).catch(() => undefined);
       }
     } finally {
+      await pool.query("DELETE FROM eper_tenant_application_assignment WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
+      await pool.query("DELETE FROM eper_customer_tariff_assignment_history WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
+      await pool.query("DELETE FROM eper_customer_tariff_assignment WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
       await pool.query("DELETE FROM eper_customer_account WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
+      await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key LIKE 'usage-%' AND created_by = $1", [actorId]).catch(() => undefined);
       await pool.end();
     }
   });
