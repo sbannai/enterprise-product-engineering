@@ -282,6 +282,54 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
         assert.equal(history.rows[1].acceptance_reference, "CI-DOWNGRADE-" + suffix);
         assert.equal(history.rows[2].acceptance_reference, "CI-UPGRADE-" + suffix);
       });
+      await t.test("customer tariff downgrade audit failure rolls back application revocation and tariff acceptance", async () => {
+        const rollbackDowngradeApplicationId = "app-downgrade-rollback-" + suffix;
+        await tenantStore.assign({ ...common, applicationId: rollbackDowngradeApplicationId, expectedVersion: 0 });
+        functionName = "eper_test_tariff_audit_fail_" + suffix;
+        triggerName = "eper_test_tariff_audit_trigger_" + suffix;
+        await pool.query(`
+          CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $inject$
+          BEGIN
+            IF NEW.application_id = '${rollbackDowngradeApplicationId}' THEN
+              RAISE EXCEPTION 'INJECTED_TARIFF_DOWNGRADE_AUDIT_FAILURE' USING ERRCODE = 'P0001';
+            END IF;
+            RETURN NEW;
+          END
+          $inject$
+        `);
+        await pool.query(`CREATE TRIGGER ${triggerName} BEFORE INSERT ON eper_audit_events FOR EACH ROW EXECUTE FUNCTION ${functionName}()`);
+        try {
+          await assert.rejects(
+            tenantStore.switchCustomerTariff({
+              ...customerContext, tariffKey: catalogueTariffKey, tariffVersion: 2,
+              expectedVersion: 3, acceptanceReference: "CI-DOWNGRADE-ROLLBACK-" + suffix,
+              revokeApplications: [{ applicationId: rollbackDowngradeApplicationId, expectedVersion: 1 }],
+            }),
+            /INJECTED_TARIFF_DOWNGRADE_AUDIT_FAILURE/,
+          );
+          assert.deepEqual(
+            (await tenantStore.listActive(tenantId)).sort(),
+            [applicationId, rollbackDowngradeApplicationId].sort(),
+            "failed audit must restore the explicitly selected application assignment",
+          );
+          const currentAfterFailure = await pool.query(
+            "SELECT tariff_key, tariff_version, version FROM eper_customer_tariff_assignment WHERE tenant_id=$1",
+            [tenantId],
+          );
+          assert.equal(Number(currentAfterFailure.rows[0].version), 3);
+          assert.equal(Number(currentAfterFailure.rows[0].tariff_version), 1);
+          const historyAfterFailure = await pool.query(
+            "SELECT assignment_version FROM eper_customer_tariff_assignment_history WHERE tenant_id=$1 ORDER BY assignment_version",
+            [tenantId],
+          );
+          assert.deepEqual(historyAfterFailure.rows.map(row => Number(row.assignment_version)), [1, 2, 3]);
+        } finally {
+          await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON eper_audit_events`);
+          await pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+          triggerName = undefined;
+          functionName = undefined;
+        }
+      });
     } finally {
       if (triggerName) await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON eper_audit_events`).catch(() => {});
       if (functionName) await pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`).catch(() => {});
