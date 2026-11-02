@@ -62,6 +62,29 @@ test("platform Customer Admin console is served only when the platform API is en
   }
 });
 
+test("platform Customer Admin console stays hidden when disabled and rejects non-GET methods", async () => {
+  const previousEnabled = process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED;
+  delete process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED;
+  try {
+    const disabled = response();
+    await handlePlatformCustomerAdminProvisioningRoute(
+      request({ method: "GET" }), disabled, "/platform/customer-admin-provisioning/ui",
+      { environment: "sandbox", store: { async mutate() { throw new Error("MUST_NOT_CALL_STORE"); } } },
+    );
+    assert.equal(disabled.statusCode, 404);
+    process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED = "true";
+    const wrongMethod = response();
+    await handlePlatformCustomerAdminProvisioningRoute(
+      request({ method: "POST" }), wrongMethod, "/platform/customer-admin-provisioning/ui",
+      { environment: "sandbox", store: { async mutate() { throw new Error("MUST_NOT_CALL_STORE"); } } },
+    );
+    assert.equal(wrongMethod.statusCode, 405);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED;
+    else process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED = previousEnabled;
+  }
+});
+
 test("platform provisioning route denies missing or unknown platform credentials", async () => {
   setMapping();
   const res = response();
