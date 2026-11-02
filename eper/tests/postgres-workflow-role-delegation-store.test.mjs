@@ -145,6 +145,17 @@ test("revocation rejects stale versions and rolls back", async () => {
 });
 
 
+test("cannot revoke a role outside the grantor's delegable permission boundary", async () => {
+  const { calls, pool } = fixture({ targetPermissions: ["workflow:admin"] });
+  await assert.rejects(
+    new PostgresWorkflowRoleDelegationStore(pool).revoke({ ...input, expectedVersion: 3 }),
+    /WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN/,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("SET assignment_status='revoked'")), false);
+});
+
+
 test("cannot revoke the final active Customer Admin assignment", async () => {
   const calls = [];
   const client = {
