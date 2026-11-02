@@ -1,5 +1,5 @@
 /** Customer Admin role management workspace. Mutations call the session-authenticated API. */
-export const customerRoleManagementUiHtml = String.raw\`<!doctype html>
+export const customerRoleManagementUiHtml = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EPER · Customer role management</title>
 <style>
@@ -76,7 +76,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{t
  $("load").addEventListener("click",async()=>{try{await load();}catch(e){status(e.message,"error");}});
  $("grant").addEventListener("click",async()=>{try{await grant();}catch(e){status(e.message,"error");}});
 })();
-</script></body></html>\`;
+</script></body></html>`;
 
 export function isCustomerRoleManagementUiRequest(request: { method?: string; url?: string }): boolean {
   return request.method === "GET" && new URL(request.url ?? "/", "http://localhost").pathname === "/customer/role-management/ui";
