@@ -4,6 +4,7 @@ import { resolveTrustedInvoiceAmount } from "../dist/packages/payments/invoice-a
 
 const invoice = {
   tenantId: "tenant-a",
+  applicationId: "application-a",
   reference: "INV-2026-001",
   amountDuePaise: 12500,
   currency: "INR",

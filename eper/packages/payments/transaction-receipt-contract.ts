@@ -27,6 +27,8 @@ export interface TrustedTransactionAdjustment {
 
 export interface TrustedTransactionSnapshot {
   tenantId: string;
+  /** Stable application identifier owning this transaction. */
+  applicationId: string;
   reference: string;
   kind: TransactionKind;
   description: string;
@@ -105,6 +107,7 @@ export async function resolveTrustedTransactionSnapshot(
   if (!transaction) return { ok: false, error: "transaction_not_found" };
   if (transaction.tenantId !== tenantId) return { ok: false, error: "transaction_tenant_mismatch" };
   if (transaction.reference !== reference) return { ok: false, error: "transaction_reference_mismatch" };
+  if (!isText(transaction.applicationId)) return { ok: false, error: "transaction_provenance_missing" };
   if (!payable.has(transaction.status)) return { ok: false, error: "transaction_not_payable" };
   if (!isMinor(transaction.amountDueMinor) || transaction.amountDueMinor <= 0) {
     return { ok: false, error: "transaction_amount_invalid" };

@@ -4,6 +4,7 @@ import { createAppServer } from "./server.js";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresPaymentStore } from "../../packages/payments/postgres-payment-store.js";
 import { PostgresCommercialTariffAdminStore } from "../../packages/pricing/postgres-commercial-tariff-admin-store.js";
+import { PostgresCustomerLifecycleStore } from "../../packages/identity/postgres-customer-lifecycle-store.js";
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresWorkflowRoleDefinitionStore } from "../../packages/workflows/postgres-workflow-role-definition-store.js";
 import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflows/postgres-workflow-actor-role-assignment-store.js";
@@ -33,13 +34,14 @@ const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "post
 const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
+const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
 const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerIdentityPersistenceMode === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || customerIdentityPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
-const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool) : undefined;
+const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres")) {
   throw new Error("COMMERCIAL_TARIFF_ADMIN_REQUIRES_POSTGRES_ADMIN_CONFIG_AND_DURABLE_AUDIT");
@@ -48,6 +50,15 @@ const commercialTariffAdminStore = commercialTariffAdminEnabled && paymentPool
   ? new PostgresCommercialTariffAdminStore(paymentPool)
   : undefined;
 if (commercialTariffAdminStore) await commercialTariffAdminStore.assertReady();
+
+if (customerLifecycleApiEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+    process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres")) {
+  throw new Error("CUSTOMER_LIFECYCLE_API_REQUIRES_POSTGRES_ADMIN_CONFIG_AND_DURABLE_AUDIT");
+}
+const customerLifecycleStore = customerLifecycleApiEnabled && paymentPool
+  ? new PostgresCustomerLifecycleStore(paymentPool)
+  : undefined;
+if (customerLifecycleStore) await customerLifecycleStore.assertReady();
 
 const adminConfigMode = process.env.EPER_ADMIN_CONFIG_PERSISTENCE ?? "memory";
 if (adminConfigMode !== "memory" && adminConfigMode !== "postgres") {
@@ -278,7 +289,7 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
 
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
-  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter,
+  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
   agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore,
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",

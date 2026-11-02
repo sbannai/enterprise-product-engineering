@@ -7,6 +7,7 @@ import {
 
 const validSnapshot = {
   tenantId: "tenant-a",
+  applicationId: "application-a",
   reference: "checkout-001",
   kind: "ECOMMERCE",
   description: "Approved checkout",

@@ -60,7 +60,7 @@ test("Razorpay payment routes fail closed on bad signatures and scope receipts b
     async findInvoice({ tenantId, reference }) {
       if (tenantId !== "tenant-a") return null;
       return {
-        tenantId, reference,
+        tenantId, reference, applicationId: "application-a",
         amountDuePaise: reference === "invoice-production" ? 5000 : 12500,
         currency: "INR", status: "DUE",
         sourceId: "test-fee-ledger", sourceVersion: "v1",
@@ -311,7 +311,7 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
   const invoiceAmountSource = {
     async findInvoice({ tenantId, reference }) {
       return tenantId === "tenant-a" && reference === "invoice-pg-001" ? {
-        tenantId, reference, amountDuePaise: 12500, currency: "INR", status: "DUE",
+        tenantId, reference, applicationId: "application-a", amountDuePaise: 12500, currency: "INR", status: "DUE",
         sourceId: "test-fee-ledger", sourceVersion: "v1",
         approvedAt: "2026-10-20T12:00:00.000Z",
       } : null;
@@ -324,7 +324,7 @@ test("PostgreSQL-backed order route reserves idempotency before calling Razorpay
       async findTransaction({ tenantId, reference }) {
         if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
         return {
-          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          tenantId, reference, applicationId: "application-a", kind: "GENERAL", description: "Approved fee transaction",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
           lineItems: [], adjustments: [],
           sourceId: "test-fee-ledger", sourceVersion: "v1",
@@ -415,7 +415,7 @@ test("PostgreSQL-backed order route does not create a second gateway order after
   const invoiceAmountSource = {
     async findInvoice({ tenantId, reference }) {
       return tenantId === "tenant-a" && reference === "invoice-timeout-001" ? {
-        tenantId, reference, amountDuePaise: 12500, currency: "INR", status: "DUE",
+        tenantId, reference, applicationId: "application-a", amountDuePaise: 12500, currency: "INR", status: "DUE",
         sourceId: "test-fee-ledger", sourceVersion: "v1",
         approvedAt: "2026-10-20T12:00:00.000Z",
       } : null;
@@ -428,7 +428,7 @@ test("PostgreSQL-backed order route does not create a second gateway order after
       async findTransaction({ tenantId, reference }) {
         if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
         return {
-          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          tenantId, reference, applicationId: "application-a", kind: "GENERAL", description: "Approved fee transaction",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
           lineItems: [], adjustments: [],
           sourceId: "test-fee-ledger", sourceVersion: "v1",
@@ -525,7 +525,7 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
   const invoiceAmountSource = {
     async findInvoice({ tenantId, reference }) {
       return tenantId === "tenant-a" && reference === "invoice-persist-failure-001" ? {
-        tenantId, reference, amountDuePaise: 12500, currency: "INR", status: "DUE",
+        tenantId, reference, applicationId: "application-a", amountDuePaise: 12500, currency: "INR", status: "DUE",
         sourceId: "test-fee-ledger", sourceVersion: "v1",
         approvedAt: "2026-10-20T12:00:00.000Z",
       } : null;
@@ -538,7 +538,7 @@ test("PostgreSQL-backed order route requires reconciliation when provider order 
       async findTransaction({ tenantId, reference }) {
         if (tenantId !== "tenant-a" || !reference.startsWith("invoice-")) return null;
         return {
-          tenantId, reference, kind: "GENERAL", description: "Approved fee transaction",
+          tenantId, reference, applicationId: "application-a", kind: "GENERAL", description: "Approved fee transaction",
           amountDueMinor: 12500, currency: "INR", status: "DUE",
           lineItems: [], adjustments: [],
           sourceId: "test-fee-ledger", sourceVersion: "v1",
@@ -737,7 +737,7 @@ test("PostgreSQL receipt download persists PDF once and serves identical bytes o
   const token = "receipt-stability-test-token".padEnd(40, "x");
   const receiptPublicId = "f6e51a2e-80de-45e6-ae93-f10a46f3b6e9";
   const transactionSnapshot = {
-    tenantId: "tenant-a", reference: "INV-41", kind: "GENERAL",
+    tenantId: "tenant-a", applicationId: "application-a", reference: "INV-41", kind: "GENERAL",
     description: "Receipt stability test", amountDueMinor: 12500, currency: "INR",
     status: "DUE", lineItems: [], adjustments: [], sourceId: "test-authority",
     sourceVersion: "v1", approvedAt: "2026-10-21T06:00:00.000Z",
@@ -850,6 +850,7 @@ test("receipt PDF paginates long checkout snapshots without dropping items or ad
     paidAt: "2026-10-21T10:01:00.000Z",
     transactionSnapshot: {
       tenantId: "tenant-a",
+      applicationId: "application-a",
       reference: "CART-LONG-001",
       kind: "ECOMMERCE",
       description: "Long multi-item checkout",

@@ -4,6 +4,7 @@ import { resolveTrustedTransactionSnapshot } from "../dist/packages/payments/tra
 
 const ecommerce = {
   tenantId: "tenant-a",
+  applicationId: "application-a",
   reference: "CART-2026-001",
   kind: "ECOMMERCE",
   description: "Online checkout",

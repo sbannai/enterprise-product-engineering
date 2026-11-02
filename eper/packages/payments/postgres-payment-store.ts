@@ -69,7 +69,7 @@ export interface CapturedPaymentInput {
 }
 export type PersistResult<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: "idempotency_conflict" | "invoice_payment_conflict" | "invoice_already_paid" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" };
+  | { ok: false; reason: "idempotency_conflict" | "invoice_payment_conflict" | "invoice_already_paid" | "order_creation_in_progress" | "order_creation_reconciliation_required" | "not_found" | "payment_mismatch" | "duplicate_event" | "event_conflict" | "receipt_document_conflict" | "commercial_ineligible" };
 
 export interface StoredPaymentOrder {
   /** Internal database key; use transactionPublicId in external APIs. */
@@ -98,7 +98,7 @@ export interface StoredPaymentReceipt {
 }
 
 export class PostgresPaymentStore {
-  constructor(private readonly pool: SqlPool) {}
+  constructor(private readonly pool: SqlPool, private readonly enforceCommercialEligibility = false) {}
 
   /** Verifies required payment tables and immutable snapshot columns without mutating data. */
   async checkSchema(): Promise<boolean> {
@@ -114,13 +114,16 @@ export class PostgresPaymentStore {
         `SELECT table_name, column_name FROM information_schema.columns
           WHERE table_schema = 'public'
             AND ((table_name = 'eper_payment_orders' AND column_name IN ('transaction_snapshot', 'transaction_public_id'))
-              OR (table_name = 'eper_payment_receipts' AND column_name IN ('transaction_snapshot', 'document_pdf')))`
+              OR (table_name = 'eper_payment_receipts' AND column_name IN ('transaction_snapshot', 'commercial_acceptance_snapshot', 'document_pdf'))
+              OR (table_name = 'eper_payment_orders' AND column_name = 'commercial_acceptance_snapshot'))`
       );
       const found = new Set(columns.rows.map((row) => row.table_name + "." + row.column_name));
       const requiredColumnsPresent = [
         "eper_payment_orders.transaction_snapshot",
         "eper_payment_orders.transaction_public_id",
+        "eper_payment_orders.commercial_acceptance_snapshot",
         "eper_payment_receipts.transaction_snapshot",
+        "eper_payment_receipts.commercial_acceptance_snapshot",
         "eper_payment_receipts.document_pdf",
       ].every((name) => found.has(name));
       if (!requiredColumnsPresent) return false;
@@ -153,12 +156,16 @@ export class PostgresPaymentStore {
            JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'public'
             AND ((c.relname = 'eper_payment_orders' AND con.conname = 'eper_payment_orders_transaction_snapshot_object_check')
-              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_transaction_snapshot_object_check'))`
+              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_transaction_snapshot_object_check')
+              OR (c.relname = 'eper_payment_orders' AND con.conname = 'eper_payment_orders_commercial_acceptance_object_check')
+              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_commercial_acceptance_object_check'))`
       );
       const foundConstraints = new Set(constraints.rows.map((row) => row.table_name + "." + row.constraint_name));
       return [
         "eper_payment_orders.eper_payment_orders_transaction_snapshot_object_check",
         "eper_payment_receipts.eper_payment_receipts_transaction_snapshot_object_check",
+        "eper_payment_orders.eper_payment_orders_commercial_acceptance_object_check",
+        "eper_payment_receipts.eper_payment_receipts_commercial_acceptance_object_check",
       ].every((name) => foundConstraints.has(name));
     } finally {
       client.release();
@@ -480,18 +487,78 @@ export class PostgresPaymentStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      // Serialize reservation attempts for a tenant/invoice pair even when keys differ.
+      // Join the tenant-wide lock used by tariff switches and application grants/revocations.
+      // Acquire it before the invoice lock to keep eligibility atomic with reservation.
+      if (this.enforceCommercialEligibility) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-tenant-commercial:" + input.tenantId]);
+      }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
         [input.tenantId, input.invoiceReference]);
+
+      let commercialAcceptanceSnapshot: Record<string, unknown> | null = null;
+      if (this.enforceCommercialEligibility) {
+        const eligibility = await client.query<{ eligible: boolean; commercial_snapshot: Record<string, unknown> }>(
+          `SELECT (
+             ca.customer_status = 'active' AND ca.effective_at <= NOW()
+             AND cta.assignment_status = 'active' AND cta.starts_at <= NOW()
+             AND (cta.ends_at IS NULL OR cta.ends_at > NOW())
+             AND cta.accepted_by IS NOT NULL AND cta.accepted_at IS NOT NULL
+             AND NULLIF(BTRIM(cta.acceptance_reference), '') IS NOT NULL
+             AND cta.max_applications >= 1
+             AND cta.max_applications >= (SELECT COUNT(*) FROM eper_tenant_application_assignment aa
+                   WHERE aa.tenant_id = $1 AND aa.assignment_status = 'active')
+             -- The customer accepted a specific commercial snapshot. Fail closed if the
+             -- published tariff version has since drifted from that accepted price/shape.
+             AND cta.billing_basis = tp.billing_basis
+             AND cta.max_applications = tp.max_applications
+             AND cta.accepted_amount = tp.amount
+             AND cta.accepted_currency = tp.currency
+             AND cta.billing_interval = tp.billing_interval
+             AND tp.tariff_status = 'active' AND tp.approval_state IN ('approved', 'not_required')
+             AND tp.effective_from <= NOW() AND (tp.effective_to IS NULL OR tp.effective_to > NOW())
+             AND aa.application_id IS NOT NULL
+           ) AS eligible,
+           jsonb_build_object(
+             'tenantId', ca.tenant_id,
+             'applicationId', aa.application_id,
+             'tariffKey', cta.tariff_key,
+             'tariffVersion', cta.tariff_version,
+             'assignmentVersion', cta.version,
+             'billingBasis', cta.billing_basis,
+             'maxApplications', cta.max_applications,
+             'acceptedAmount', cta.accepted_amount,
+             'acceptedCurrency', cta.accepted_currency,
+             'billingInterval', cta.billing_interval,
+             'acceptedBy', cta.accepted_by,
+             'acceptedAt', cta.accepted_at,
+             'acceptanceReference', cta.acceptance_reference,
+             'publishedAt', tp.published_at,
+             'publishedBy', tp.published_by,
+             'approvalState', tp.approval_state
+           ) AS commercial_snapshot
+           FROM eper_customer_account ca
+           JOIN eper_customer_tariff_assignment cta ON cta.tenant_id = ca.tenant_id
+           JOIN eper_commercial_tariff_plan tp ON tp.tariff_key = cta.tariff_key AND tp.tariff_version = cta.tariff_version
+           LEFT JOIN eper_tenant_application_assignment aa ON aa.tenant_id = ca.tenant_id
+             AND aa.application_id = $2 AND aa.assignment_status = 'active'
+           WHERE ca.tenant_id = $1
+           FOR SHARE OF ca, cta, tp`, [input.tenantId, input.transactionSnapshot.applicationId]);
+        if (!eligibility.rows[0]?.eligible) {
+          await client.query("ROLLBACK");
+          return { ok: false, reason: "commercial_ineligible" };
+        }
+        commercialAcceptanceSnapshot = eligibility.rows[0].commercial_snapshot;
+      }
 
       // Validate a key's prior binding before inspecting any active invoice order.
       const keyBinding = await client.query<{
         invoice_reference: string; amount_minor: string | number; currency: string;
         invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
         transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT invoice_reference, amount_minor, currency, invoice_source_id, invoice_source_version,
-                invoice_approved_at, transaction_snapshot
+                invoice_approved_at, transaction_snapshot, commercial_acceptance_snapshot
            FROM eper_payment_orders WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
         [input.tenantId, input.idempotencyKey],
       );
@@ -501,7 +568,8 @@ export class PostgresPaymentStore {
           bound.invoice_source_id !== input.invoiceSourceId ||
           bound.invoice_source_version !== input.invoiceSourceVersion ||
           new Date(bound.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString() ||
-          stableJson(bound.transaction_snapshot) !== stableJson(input.transactionSnapshot))) {
+          stableJson(bound.transaction_snapshot) !== stableJson(input.transactionSnapshot) ||
+          stableJson(bound.commercial_acceptance_snapshot) !== stableJson(commercialAcceptanceSnapshot))) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
@@ -510,12 +578,13 @@ export class PostgresPaymentStore {
         id: string | number; transaction_public_id: string; provider_order_id: string | null;
         idempotency_key: string; amount_minor: string | number; currency: string;
         invoice_source_id: string; invoice_source_version: string; invoice_approved_at: Date | string;
-        transaction_snapshot: TrustedTransactionSnapshot | null; status: StoredPaymentOrder["status"];
-        creation_lease_until: Date | string | null;
+        transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
+        status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, idempotency_key, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, transaction_snapshot,
-                status, creation_lease_until
+                commercial_acceptance_snapshot, status, creation_lease_until
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND invoice_reference = $2
             AND status IN ('creating', 'created', 'authorized', 'captured')
@@ -529,7 +598,8 @@ export class PostgresPaymentStore {
           active.invoice_source_id === input.invoiceSourceId &&
           active.invoice_source_version === input.invoiceSourceVersion &&
           new Date(active.invoice_approved_at).toISOString() === new Date(input.invoiceApprovedAt).toISOString() &&
-          stableJson(active.transaction_snapshot) === stableJson(input.transactionSnapshot);
+          stableJson(active.transaction_snapshot) === stableJson(input.transactionSnapshot) &&
+          stableJson(active.commercial_acceptance_snapshot) === stableJson(commercialAcceptanceSnapshot);
         if (!sameAuthority) {
           await client.query("ROLLBACK");
           return { ok: false, reason: active.idempotency_key === input.idempotencyKey
@@ -562,14 +632,16 @@ export class PostgresPaymentStore {
         `INSERT INTO eper_payment_orders
           (tenant_id, invoice_reference, idempotency_key, provider, provider_order_id,
            amount_minor, currency, invoice_source_id, invoice_source_version,
-           invoice_approved_at, transaction_snapshot, status, creation_lease_until, creation_attempts)
-         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8, $9::jsonb,
+           invoice_approved_at, transaction_snapshot, commercial_acceptance_snapshot,
+           status, creation_lease_until, creation_attempts)
+         VALUES ($1, $2, $3, 'razorpay', NULL, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb,
                  'creating', NOW() + INTERVAL '2 minutes', 1)
          ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
          RETURNING id, transaction_public_id`,
         [input.tenantId, input.invoiceReference, input.idempotencyKey, input.amountMinor,
           input.currency, input.invoiceSourceId, input.invoiceSourceVersion, input.invoiceApprovedAt,
-          JSON.stringify(input.transactionSnapshot)],
+          JSON.stringify(input.transactionSnapshot),
+          commercialAcceptanceSnapshot === null ? null : JSON.stringify(commercialAcceptanceSnapshot)],
       );
       if (inserted.rows[0]) {
         await client.query("COMMIT");
@@ -580,10 +652,11 @@ export class PostgresPaymentStore {
         amount_minor: string | number; currency: string; invoice_source_id: string;
         invoice_source_version: string; invoice_approved_at: Date | string; status: StoredPaymentOrder["status"]; creation_lease_until: Date | string | null;
         last_creation_error: string | null; transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT id, transaction_public_id, provider_order_id, invoice_reference, amount_minor, currency,
                 invoice_source_id, invoice_source_version, invoice_approved_at, status, creation_lease_until, last_creation_error,
-                transaction_snapshot
+                transaction_snapshot, commercial_acceptance_snapshot
            FROM eper_payment_orders
           WHERE tenant_id = $1 AND idempotency_key = $2
           FOR UPDATE`,
@@ -595,7 +668,8 @@ export class PostgresPaymentStore {
           row.invoice_source_id !== input.invoiceSourceId ||
           row.invoice_source_version !== input.invoiceSourceVersion ||
           new Date(row.invoice_approved_at).toISOString() !== new Date(input.invoiceApprovedAt).toISOString() ||
-          stableJson(row.transaction_snapshot) !== stableJson(input.transactionSnapshot)) {
+          stableJson(row.transaction_snapshot) !== stableJson(input.transactionSnapshot) ||
+          stableJson(row.commercial_acceptance_snapshot) !== stableJson(commercialAcceptanceSnapshot)) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "idempotency_conflict" };
       }
@@ -845,9 +919,10 @@ export class PostgresPaymentStore {
         id: string | number; tenant_id: string; invoice_reference: string;
         amount_minor: string | number; currency: string; status: string; provider_payment_id: string | null;
         transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT id, tenant_id, invoice_reference, amount_minor, currency, status, provider_payment_id,
-                transaction_snapshot
+                transaction_snapshot, commercial_acceptance_snapshot
            FROM eper_payment_orders WHERE provider_order_id = $1 FOR UPDATE`,
         [input.providerOrderId],
       );
@@ -905,9 +980,12 @@ export class PostgresPaymentStore {
       const receiptNumber = input.receiptNumber;
       // Receipt PDF generation happens in a later layer; the event hash is not a PDF hash.
       await client.query(
-        `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number, transaction_snapshot)
-         VALUES ($1, $2, $3, $4::jsonb)`,
-        [order.tenant_id, order.id, receiptNumber, input.transactionSnapshot ? JSON.stringify(input.transactionSnapshot) : null],
+        `INSERT INTO eper_payment_receipts
+          (tenant_id, payment_order_id, receipt_number, transaction_snapshot, commercial_acceptance_snapshot)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)`,
+        [order.tenant_id, order.id, receiptNumber,
+          input.transactionSnapshot ? JSON.stringify(input.transactionSnapshot) : null,
+          order.commercial_acceptance_snapshot ? JSON.stringify(order.commercial_acceptance_snapshot) : null],
       );
       const receiptPublicId = String((await client.query<{ receipt_public_id: string }>(
         `SELECT receipt_public_id FROM eper_payment_receipts WHERE payment_order_id = $1`,

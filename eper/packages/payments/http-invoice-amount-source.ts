@@ -106,6 +106,7 @@ export class HttpInvoiceAmountSource implements TrustedInvoiceAmountSource {
     if (
       typeof invoice.tenantId !== "string" || !invoice.tenantId.trim() ||
       typeof invoice.reference !== "string" || !invoice.reference.trim() ||
+      typeof invoice.applicationId !== "string" || !invoice.applicationId.trim() ||
       !Number.isSafeInteger(invoice.amountDuePaise) || (invoice.amountDuePaise as number) <= 0 ||
       typeof invoice.currency !== "string" || !invoice.currency.trim() ||
       typeof invoice.status !== "string" || !validStatuses.has(invoice.status) ||

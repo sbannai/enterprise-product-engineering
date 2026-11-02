@@ -116,7 +116,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
   assert.equal(input.tenantId, tenantId);
   assert.equal(input.receiptNumber, receiptNumber);
   assert.deepEqual(input.transactionSnapshot, {
-    tenantId, reference: "invoice-route-test", kind: "ECOMMERCE",
+    tenantId, reference: "invoice-route-test", applicationId: "application-route-test", kind: "ECOMMERCE",
     description: "Route test checkout", amountDueMinor: 12500, currency: "INR", status: "DUE",
     lineItems: Array.from({ length: 40 }, (_, index) => ({
       sourceLineId: "line-route-" + (index + 1),
@@ -184,7 +184,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
       async findInvoice({ tenantId: requestedTenant, reference }) {
         if (requestedTenant !== tenantId || reference !== "invoice-route-test") return null;
         return {
-          tenantId, reference, amountDuePaise: 12500, currency: "INR", status: "DUE",
+          tenantId, reference, applicationId: "application-route-test", amountDuePaise: 12500, currency: "INR", status: "DUE",
           sourceId: "approved-test-source", sourceVersion: "v1", approvedAt: "2026-10-20T12:00:00.000Z",
         };
       },
@@ -198,7 +198,7 @@ test("PostgreSQL route exposes stable transaction UUID and downloads persisted r
         transactionSourceCalls += 1;
         if (requestedTenant !== tenantId || reference !== "invoice-route-test") return null;
         return {
-          tenantId, reference, kind: "ECOMMERCE", description: "Route test checkout",
+          tenantId, reference, applicationId: "application-route-test", kind: "ECOMMERCE", description: "Route test checkout",
           amountDueMinor: 12500, currency: "INR", status: transactionSourceStatus,
           lineItems: Array.from({ length: 40 }, (_, index) => ({
             sourceLineId: "line-route-" + (index + 1),

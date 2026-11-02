@@ -7,6 +7,7 @@ import {
 
 const invoice = {
   tenantId: "tenant-a",
+  applicationId: "application-a",
   reference: "INV 2026/001",
   amountDuePaise: 12500,
   currency: "INR",
@@ -169,6 +170,7 @@ test("configured HTTP invoice authority drives PostgreSQL order amount end-to-en
       return {
         tenantId,
         reference,
+        applicationId: "application-a",
         kind: "GENERAL",
         description: "School fee payment",
         amountDueMinor: 12500,

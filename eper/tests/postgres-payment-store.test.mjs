@@ -389,7 +389,7 @@ test("PostgresPaymentStore persists immutable PDF bytes and digest for a valid n
   assert.ok(calls.some(({ sql }) => sql === "ROLLBACK"));
 });
 
-function schemaPool({ missingTrigger = null, missingConstraint = null, disabledTrigger = null } = {}) {
+function schemaPool({ missingTrigger = null, missingConstraint = null, disabledTrigger = null, missingColumn = null } = {}) {
   const calls = [];
   const client = {
     async query(sql) {
@@ -398,12 +398,16 @@ function schemaPool({ missingTrigger = null, missingConstraint = null, disabledT
         return { rows: [{ orders: "eper_payment_orders", events: "eper_payment_webhook_events", receipts: "eper_payment_receipts" }], rowCount: 1 };
       }
       if (sql.includes("information_schema.columns")) {
-        return { rows: [
+        const columns = [
           { table_name: "eper_payment_orders", column_name: "transaction_snapshot" },
           { table_name: "eper_payment_orders", column_name: "transaction_public_id" },
+          { table_name: "eper_payment_orders", column_name: "commercial_acceptance_snapshot" },
           { table_name: "eper_payment_receipts", column_name: "transaction_snapshot" },
+          { table_name: "eper_payment_receipts", column_name: "commercial_acceptance_snapshot" },
           { table_name: "eper_payment_receipts", column_name: "document_pdf" },
-        ], rowCount: 4 };
+        ];
+        const rows = columns.filter((row) => row.table_name + "." + row.column_name !== missingColumn);
+        return { rows, rowCount: rows.length };
       }
       if (sql.includes("FROM pg_trigger")) {
         return { rows: [
@@ -412,10 +416,14 @@ function schemaPool({ missingTrigger = null, missingConstraint = null, disabledT
         ], rowCount: missingTrigger ? 1 : 2 };
       }
       if (sql.includes("FROM pg_constraint")) {
-        return { rows: [
-          ...(missingConstraint === "eper_payment_orders_transaction_snapshot_object_check" ? [] : [{ table_name: "eper_payment_orders", constraint_name: "eper_payment_orders_transaction_snapshot_object_check" }]),
-          ...(missingConstraint === "eper_payment_receipts_transaction_snapshot_object_check" ? [] : [{ table_name: "eper_payment_receipts", constraint_name: "eper_payment_receipts_transaction_snapshot_object_check" }]),
-        ], rowCount: missingConstraint ? 1 : 2 };
+        const constraints = [
+          { table_name: "eper_payment_orders", constraint_name: "eper_payment_orders_transaction_snapshot_object_check" },
+          { table_name: "eper_payment_receipts", constraint_name: "eper_payment_receipts_transaction_snapshot_object_check" },
+          { table_name: "eper_payment_orders", constraint_name: "eper_payment_orders_commercial_acceptance_object_check" },
+          { table_name: "eper_payment_receipts", constraint_name: "eper_payment_receipts_commercial_acceptance_object_check" },
+        ];
+        const rows = constraints.filter((row) => row.constraint_name !== missingConstraint);
+        return { rows, rowCount: rows.length };
       }
       throw new Error("Unexpected schema readiness query");
     },
@@ -423,6 +431,17 @@ function schemaPool({ missingTrigger = null, missingConstraint = null, disabledT
   };
   return { pool: { async connect() { return client; } }, calls };
 }
+
+test("checkSchema fails closed when a commercial acceptance snapshot column is missing", async () => {
+  for (const missingColumn of [
+    "eper_payment_orders.commercial_acceptance_snapshot",
+    "eper_payment_receipts.commercial_acceptance_snapshot",
+  ]) {
+    const fake = schemaPool({ missingColumn });
+    assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);
+    assert.equal(fake.calls.some((sql) => sql.includes("FROM pg_trigger")), false);
+  }
+});
 
 test("checkSchema accepts the complete schema and database immutability protections", async () => {
   const fake = schemaPool();
@@ -452,10 +471,12 @@ test("checkSchema fails closed when a snapshot immutability trigger is disabled"
   }
 });
 
-test("checkSchema fails closed when either snapshot object constraint is missing", async () => {
+test("checkSchema fails closed when any transaction or commercial snapshot object constraint is missing", async () => {
   for (const missingConstraint of [
     "eper_payment_orders_transaction_snapshot_object_check",
     "eper_payment_receipts_transaction_snapshot_object_check",
+    "eper_payment_orders_commercial_acceptance_object_check",
+    "eper_payment_receipts_commercial_acceptance_object_check",
   ]) {
     const fake = schemaPool({ missingConstraint });
     assert.equal(await new PostgresPaymentStore(fake.pool).checkSchema(), false);

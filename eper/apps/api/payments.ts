@@ -459,6 +459,9 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           : 503;
         json(req, res, status, { error: snapshot.error }); return true;
       }
+      if (snapshot.transaction.applicationId !== authority.invoice.applicationId) {
+        json(req, res, 409, { error: "invoice_transaction_application_mismatch" }); return true;
+      }
       if (snapshot.transaction.amountDueMinor !== amountPaise || snapshot.transaction.currency !== currency) {
         json(req, res, 409, { error: "invoice_transaction_amount_currency_mismatch" }); return true;
       }
@@ -489,6 +492,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           : reservation.reason === "invoice_already_paid" ? 409
           : reservation.reason === "order_creation_in_progress" ? 409
           : reservation.reason === "order_creation_reconciliation_required" ? 503
+          : reservation.reason === "commercial_ineligible" ? 409
           : 500;
         json(req, res, status, { error: reservation.reason }); return true;
       }
