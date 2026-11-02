@@ -2557,6 +2557,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (isValidation) {
           const result = await options.providerValidationService!.validate({
             tenantId: identity.tenantId,
+            applicationId,
             connectionId: connectionId!,
             actorId: identity.actorId,
             correlationId,
