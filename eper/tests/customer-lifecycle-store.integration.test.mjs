@@ -12,6 +12,7 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
     const store = new PostgresCustomerLifecycleStore(pool);
     const tenantId = "lifecycle-" + randomUUID();
     const actorId = "integration-product-admin";
+    let tariffKey;
     try {
       await store.assertReady();
       await pool.query(`
@@ -21,7 +22,7 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
       `, [tenantId, actorId]);
 
       // Seed a published accepted tariff and three active app assignments against a two-app allowance.
-      const tariffKey = "usage-" + randomUUID().replaceAll("-", "").slice(0, 20);
+      tariffKey = "usage-" + randomUUID().replaceAll("-", "").slice(0, 20);
       await pool.query(`
         INSERT INTO eper_commercial_tariff_plan
           (tariff_key, tariff_version, billing_basis, max_applications, amount, currency,
@@ -138,7 +139,7 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
       await pool.query("DELETE FROM eper_customer_tariff_assignment_history WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
       await pool.query("DELETE FROM eper_customer_tariff_assignment WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
       await pool.query("DELETE FROM eper_customer_account WHERE tenant_id = $1", [tenantId]).catch(() => undefined);
-      await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key LIKE 'usage-%' AND created_by = $1", [actorId]).catch(() => undefined);
+      if (tariffKey) await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key = $1", [tariffKey]).catch(() => undefined);
       await pool.end();
     }
   });
