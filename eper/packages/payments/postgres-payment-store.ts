@@ -499,6 +499,13 @@ export class PostgresPaymentStore {
              AND cta.max_applications >= 1
              AND cta.max_applications >= (SELECT COUNT(*) FROM eper_tenant_application_assignment aa
                    WHERE aa.tenant_id = $1 AND aa.assignment_status = 'active')
+             -- The customer accepted a specific commercial snapshot. Fail closed if the
+             -- published tariff version has since drifted from that accepted price/shape.
+             AND cta.billing_basis = tp.billing_basis
+             AND cta.max_applications = tp.max_applications
+             AND cta.accepted_amount = tp.amount
+             AND cta.accepted_currency = tp.currency
+             AND cta.billing_interval = tp.billing_interval
              AND tp.tariff_status = 'active' AND tp.approval_state IN ('approved', 'not_required')
              AND tp.effective_from <= NOW() AND (tp.effective_to IS NULL OR tp.effective_to > NOW())
              AND aa.application_id IS NOT NULL
