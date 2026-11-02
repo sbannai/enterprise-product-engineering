@@ -35,7 +35,8 @@ export interface AccessDecision {
     | "application_not_assigned"
     | "role_permission_denied"
     | "addon_not_selected"
-    | "addon_not_active";
+    | "addon_not_active"
+    | "tariff_overage";
 }
 
 /**
