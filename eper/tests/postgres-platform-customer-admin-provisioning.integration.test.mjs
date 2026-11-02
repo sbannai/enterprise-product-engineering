@@ -85,7 +85,7 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
       const triggerClient = await pool.connect();
       try {
         await triggerClient.query(
-          "CREATE OR REPLACE FUNCTION public.eper_test_reject_platform_admin_audit() RETURNS trigger LANGUAGE plpgsql AS $ BEGIN IF NEW.correlation_id = '" + failureCorrelationId + "' THEN RAISE EXCEPTION 'injected platform audit failure'; END IF; RETURN NEW; END; $; " +
+          "CREATE OR REPLACE FUNCTION public.eper_test_reject_platform_admin_audit() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''injected platform audit failure''; END;' " +
           "DROP TRIGGER IF EXISTS eper_test_reject_platform_admin_audit ON eper_audit_events; " +
           "CREATE TRIGGER eper_test_reject_platform_admin_audit BEFORE INSERT ON eper_audit_events FOR EACH ROW EXECUTE FUNCTION public.eper_test_reject_platform_admin_audit()"
         );
