@@ -6,6 +6,7 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const migration = await readFile(resolve(root, "packages/audit/migrations/012_provider_configuration_foundation.sql"), "utf8");
+const pendingBindingMigration = await readFile(resolve(root, "packages/audit/migrations/014_provider_pending_validation_binding.sql"), "utf8");
 
 test("provider foundation separates platform catalogue, tenant connections and application bindings", () => {
   for (const table of [
@@ -51,4 +52,9 @@ test("provider tenant tables force RLS and application tables require both scope
   assert.match(migration, /tenant_id = current_setting\('eper\.tenant_id', true\)/);
   assert.match(migration, /application_id = current_setting\('eper\.application_id', true\)/);
   assert.match(migration, /tenant_id TEXT NOT NULL CHECK[^\n]*\n  application_id TEXT NOT NULL CHECK/);
+});
+
+
+test("provider connections can be application-bound while pending validation", () => {
+  assert.match(pendingBindingMigration, /binding_status IN \('PENDING_VALIDATION', 'ACTIVE', 'SUSPENDED', 'REVOKED'\)/);
 });
