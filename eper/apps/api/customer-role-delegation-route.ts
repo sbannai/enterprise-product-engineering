@@ -95,7 +95,7 @@ export async function handleCustomerRoleDelegationRoute(
       sendApiSuccess(request, response, 200, {
         assignments,
         roles: roles.filter(role =>
-          role.status === "active" &&
+          role.status === "active" && role.delegable === true &&
           !role.permissions.some(permission => ["workflow:admin", "role:assign", "access:manage"].includes(permission)) &&
           role.permissions.every(permission => grantorRole.permissions.includes(permission))
         ).map(role => ({
