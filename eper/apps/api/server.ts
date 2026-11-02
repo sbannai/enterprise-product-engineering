@@ -2474,7 +2474,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
     // Application-scoped provider connection read, bind and validation APIs.
-    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/(bind|validate))?$/.exec(requestUrl.pathname);
+    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/(bind|validate|rotate|revoke))?$/.exec(requestUrl.pathname);
     if (providerConnectionsPath) {
       if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
@@ -2483,11 +2483,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const operation = providerConnectionsPath[3];
       const isBinding = operation === "bind";
       const isValidation = operation === "validate";
-      if ((!operation && request.method !== "GET") || ((isBinding || isValidation) && request.method !== "POST")) {
+      const isRotation = operation === "rotate";
+      const isRevocation = operation === "revoke";
+      const isCredentialMutation = isRotation || isRevocation;
+      if ((!operation && request.method !== "GET") || ((isBinding || isValidation || isCredentialMutation) && request.method !== "POST")) {
         sendMethodNotAllowed(request, response, operation ? "POST" : "GET"); return;
       }
-      if (isValidation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
-          !options.providerValidationService)) {
+      if ((isValidation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
+          !options.providerValidationService)) || (isCredentialMutation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
+          process.env.EPER_PROVIDER_VALIDATION_MODE !== "synthetic" || process.env.NODE_ENV === "production"))) {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
       if (!options.providerConnectionRepository || !options.customerIdentitySessionStore ||
@@ -2520,7 +2524,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           "A valid browser session with active tenant and actor application assignments is required.");
         return;
       }
-      if (isBinding || isValidation) {
+      if (isBinding || isValidation || isCredentialMutation) {
         const cookies = parseCookieHeader(request.headers.cookie);
         const sessionToken = cookies.get("__Host-eper_session") ?? "";
         const csrfHeader = request.headers["x-csrf-token"];
@@ -2543,7 +2547,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       try {
         await authorizeProviderConnectionRequest({
           actor: { tenantId: identity.tenantId, actorId: identity.actorId },
-          action: isBinding ? "provider.connection.bind" : isValidation ? "provider.connection.validate" : "provider.connection.read",
+          action: isBinding ? "provider.connection.bind" : isValidation ? "provider.connection.validate" : isRotation ? "provider.connection.rotate" : isRevocation ? "provider.connection.revoke" : "provider.connection.read",
           applicationId,
           assignments: {
             async isTenantApplicationActive(tenantId, appId) {
@@ -2564,6 +2568,31 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
           });
           sendJson(request, response, 200, result);
+        } else if (isRotation || isRevocation) {
+          const body = await readJson(request);
+          const expectedVersion = body.expectedVersion;
+          if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+            sendJson(request, response, 400, { error: "PROVIDER_CONNECTION_EXPECTED_VERSION_INVALID" }); return;
+          }
+          if (isRotation) {
+            const secretReference = body.secretReference;
+            if (typeof secretReference !== "string" || !/^synthetic:\/\/[A-Za-z0-9._/-]{1,180}$/.test(secretReference)) {
+              sendJson(request, response, 400, { error: "SYNTHETIC_SECRET_REFERENCE_REQUIRED" }); return;
+            }
+            const rotated = await options.providerConnectionRepository.rotateSecretReference({
+              tenantId: identity.tenantId, applicationId, connectionId: connectionId!,
+              actorId: identity.actorId, secretReference, expectedVersion,
+              correlationId, auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+            });
+            sendJson(request, response, 200, rotated);
+          } else {
+            const revoked = await options.providerConnectionRepository.revoke({
+              tenantId: identity.tenantId, applicationId, connectionId: connectionId!,
+              actorId: identity.actorId, expectedVersion, correlationId,
+              auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+            });
+            sendJson(request, response, 200, revoked);
+          }
         } else if (isBinding) {
           const body = await readJson(request);
           const allowedCapabilities = body.allowedCapabilities;
@@ -2596,6 +2625,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             code === "PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED" ||
             code === "PROVIDER_CONNECTION_VERSION_CONFLICT" ||
             code === "PROVIDER_CONNECTION_NOT_ACTIVE" ||
+            code === "PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED" ||
+            code === "PROVIDER_CONNECTION_REVOKED" ||
             code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
           : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
             code === "REQUEST_BODY_TOO_LARGE" || code === "Unexpected end of JSON input" ? 400 : 503;
