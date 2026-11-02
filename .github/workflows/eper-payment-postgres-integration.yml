@@ -13,6 +13,13 @@ on:
   pull_request:
     paths:
       - ".github/workflows/eper-payment-postgres-integration.yml"
+      - "eper/packages/identity/**"
+      - "eper/packages/workflows/**"
+      - "eper/packages/audit/**"
+      - "eper/apps/api/platform-customer-admin-provisioning-route.ts"
+      - "eper/tests/postgres-platform-customer-admin-provisioning.integration.test.mjs"
+      - "eper/tests/platform-customer-admin-provisioning-store.test.mjs"
+      - "eper/tests/platform-customer-admin-provisioning-route.test.mjs"
       - "eper/packages/payments/**"
       - "eper/packages/pricing/**"
       - "eper/packages/audit/migrations/**"
@@ -128,6 +135,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply all payment migrations through the deployment runner
         run: npm run migrate:payments
+      - name: Apply identity schema migrations
+        run: npm run migrate:identity
+      - name: Apply workflow schema migrations
+        run: npm run migrate:workflows
       - name: Apply durable audit schema migrations
         run: npm run migrate:audit
       - name: Apply campaign scheduler migrations
@@ -136,6 +147,8 @@ jobs:
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
         run: node --test tests/customer-lifecycle-store.integration.test.mjs
+      - name: Exercise platform Customer Admin provisioning and recovery transactions
+        run: node --test tests/postgres-platform-customer-admin-provisioning.integration.test.mjs
       - name: Exercise PostgreSQL campaign dispatch race and event idempotency
         env:
           EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
