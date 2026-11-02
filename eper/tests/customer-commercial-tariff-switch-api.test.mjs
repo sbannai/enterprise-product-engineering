@@ -28,7 +28,7 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
         version: input.expectedVersion + 1, acceptedAmount: "499.00", acceptedCurrency: "INR" };
     },
   };
-  const server = createAppServer({ tenantApplicationAssignmentStore: store, commercialTariffAdminStore: { async list() { return [{ tariffKey: "multi-app", tariffVersion: 2, billingBasis: "multi_application", maxApplications: 3, amount: "499.00", currency: "INR", billingInterval: "monthly", effectiveFrom: "2026-01-01T00:00:00.000Z", effectiveTo: null, tariffStatus: "active" }]; } } });
+  const server = createAppServer({ tenantApplicationAssignmentStore: store, customerIdentitySessionStore: {}, actorApplicationAssignmentStore: {}, commercialTariffAdminStore: { async list() { return [{ tariffKey: "multi-app", tariffVersion: 2, billingBasis: "multi_application", maxApplications: 3, amount: "499.00", currency: "INR", billingInterval: "monthly", effectiveFrom: "2026-01-01T00:00:00.000Z", effectiveTo: null, tariffStatus: "active" }]; } } });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address();
