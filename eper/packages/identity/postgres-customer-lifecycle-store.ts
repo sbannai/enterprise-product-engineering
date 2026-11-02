@@ -1,5 +1,6 @@
 import {
   appendAuditEventInTransaction,
+  assertAuditStoreReady,
   hashAuditEnvelope,
   type AuditEnvironment,
   type AuditSqlClient,
@@ -69,27 +70,40 @@ export class PostgresCustomerLifecycleStore {
   constructor(private readonly pool: AuditSqlPool) {}
 
   async assertReady(): Promise<void> {
-    const client = await this.pool.connect();
     try {
-      const result = await client.query<{ account_table: string | null; audit_table: string | null }>(`
-        SELECT to_regclass('public.eper_customer_account')::text AS account_table,
-               to_regclass('public.eper_audit_events')::text AS audit_table
-      `);
-      if (!result.rows[0]?.account_table) throw new Error("CUSTOMER_LIFECYCLE_SCHEMA_NOT_APPLIED");
-      if (!result.rows[0]?.audit_table) throw new Error("CUSTOMER_LIFECYCLE_REQUIRES_DURABLE_AUDIT");
-      const columns = await client.query<{ column_name: string }>(`
-        SELECT column_name FROM information_schema.columns
-        WHERE table_schema='public' AND table_name='eper_customer_account'
-      `);
-      const names = new Set(columns.rows.map(row => row.column_name));
-      for (const required of ["customer_status", "status_reason", "effective_at", "version", "updated_at", "updated_by"]) {
-        if (!names.has(required)) throw new Error("CUSTOMER_LIFECYCLE_SCHEMA_VERSION_UNSUPPORTED");
+      // Validate the append-only chain and singleton head before accepting lifecycle traffic.
+      await assertAuditStoreReady(this.pool);
+      const client = await this.pool.connect();
+      try {
+        const columns = await client.query<{ table_name: string; column_name: string }>(`
+          SELECT table_name, column_name FROM information_schema.columns
+          WHERE table_schema='public'
+            AND table_name IN ('eper_customer_account', 'eper_audit_events')
+        `);
+        const byTable = new Map<string, Set<string>>();
+        for (const row of columns.rows) {
+          const names = byTable.get(row.table_name) ?? new Set<string>();
+          names.add(row.column_name);
+          byTable.set(row.table_name, names);
+        }
+        const accountColumns = byTable.get("eper_customer_account") ?? new Set<string>();
+        for (const required of ["tenant_id", "customer_status", "status_reason", "effective_at", "version", "updated_at", "updated_by"]) {
+          if (!accountColumns.has(required)) throw new Error("CUSTOMER_LIFECYCLE_SCHEMA_VERSION_UNSUPPORTED");
+        }
+        const auditColumns = byTable.get("eper_audit_events") ?? new Set<string>();
+        for (const required of ["event_id", "occurred_at", "tenant_id", "application_id", "environment", "actor_type",
+          "actor_id", "effective_roles", "action", "outcome", "reason_code", "resource_type", "resource_id",
+          "operation_id", "correlation_id", "request_id", "source", "operation_name", "service_version",
+          "approval_id", "parent_event_id", "idempotency_key", "schema_version", "before_hash", "after_hash",
+          "payload", "previous_event_hash", "event_hash", "integrity_metadata"]) {
+          if (!auditColumns.has(required)) throw new Error("CUSTOMER_LIFECYCLE_AUDIT_SCHEMA_VERSION_UNSUPPORTED");
+        }
+      } finally {
+        client.release();
       }
     } catch (error) {
-      if (error instanceof Error && /CUSTOMER_LIFECYCLE_/.test(error.message)) throw error;
+      if (error instanceof Error && /CUSTOMER_LIFECYCLE_|EPER_AUDIT_/.test(error.message)) throw error;
       throw new Error("CUSTOMER_LIFECYCLE_READINESS_FAILED", { cause: error });
-    } finally {
-      client.release();
     }
   }
 
