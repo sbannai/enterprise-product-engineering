@@ -1,6 +1,7 @@
 import type { AuditSqlPool } from "../audit/audit-event-store.js";
 import {
   evaluateApplicationAddonAccess,
+  evaluateCustomerTariffAccess,
   evaluateModuleAccess,
   type AccessDecision,
   type AddonEntitlementStatus,
@@ -72,6 +73,7 @@ export class PostgresModuleEntitlementService {
         module_permission: string | null;
         addon_entitlement: string | null;
         customer_account: string | null;
+        customer_tariff_assignment: string | null;
       }>(`
         SELECT
           to_regclass('public.eper_module_catalog')::text AS module_catalog,
@@ -79,11 +81,13 @@ export class PostgresModuleEntitlementService {
           to_regclass('public.eper_customer_module_entitlement')::text AS module_entitlement,
           to_regclass('public.eper_customer_module_permission')::text AS module_permission,
           to_regclass('public.eper_application_addon_entitlement')::text AS addon_entitlement,
-          to_regclass('public.eper_customer_account')::text AS customer_account
+          to_regclass('public.eper_customer_account')::text AS customer_account,
+          to_regclass('public.eper_customer_tariff_assignment')::text AS customer_tariff_assignment
       `);
       const row = result.rows[0];
       if (!row || !row.module_catalog || !row.module_price || !row.module_entitlement ||
-          !row.module_permission || !row.addon_entitlement || !row.customer_account) {
+          !row.module_permission || !row.addon_entitlement || !row.customer_account ||
+          !row.customer_tariff_assignment) {
         throw new Error("EPER_MODULE_ENTITLEMENT_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
@@ -131,15 +135,15 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
-      const now = (context.now ?? new Date()).getTime();
-      const tariffStarts = row?.tariff_starts_at ? new Date(row.tariff_starts_at).getTime() : null;
-      const tariffEnds = row?.tariff_ends_at ? new Date(row.tariff_ends_at).getTime() : null;
-      if (row?.tariff_assignment_status === "active" &&
-          (tariffStarts === null || now >= tariffStarts) &&
-          (tariffEnds === null || now < tariffEnds) &&
-          Number(row.active_application_count) > Number(row.tariff_max_applications)) {
-        return { allowed: false, reason: "tariff_overage" };
-      }
+      const commercial = evaluateCustomerTariffAccess({
+        assignmentStatus: row?.tariff_assignment_status ?? null,
+        maxApplications: row?.tariff_max_applications ?? null,
+        activeApplicationCount: row?.active_application_count ?? 0,
+        startsAt: row?.tariff_starts_at,
+        endsAt: row?.tariff_ends_at,
+        now: context.now,
+      });
+      if (!commercial.allowed) return commercial;
       return evaluateModuleAccess({
         moduleStatus: row?.module_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
@@ -192,15 +196,15 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
-      const now = (context.now ?? new Date()).getTime();
-      const tariffStarts = row?.tariff_starts_at ? new Date(row.tariff_starts_at).getTime() : null;
-      const tariffEnds = row?.tariff_ends_at ? new Date(row.tariff_ends_at).getTime() : null;
-      if (row?.tariff_assignment_status === "active" &&
-          (tariffStarts === null || now >= tariffStarts) &&
-          (tariffEnds === null || now < tariffEnds) &&
-          Number(row.active_application_count) > Number(row.tariff_max_applications)) {
-        return { allowed: false, reason: "tariff_overage" };
-      }
+      const commercial = evaluateCustomerTariffAccess({
+        assignmentStatus: row?.tariff_assignment_status ?? null,
+        maxApplications: row?.tariff_max_applications ?? null,
+        activeApplicationCount: row?.active_application_count ?? 0,
+        startsAt: row?.tariff_starts_at,
+        endsAt: row?.tariff_ends_at,
+        now: context.now,
+      });
+      if (!commercial.allowed) return commercial;
       return evaluateApplicationAddonAccess({
         addonStatus: row?.addon_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
