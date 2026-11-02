@@ -16,6 +16,10 @@ on:
       - "eper/packages/payments/**"
       - "eper/packages/pricing/**"
       - "eper/packages/audit/migrations/**"
+      - "eper/packages/integrations/**"
+      - "eper/tests/provider-connection-repository.test.mjs"
+      - "eper/tests/provider-configuration-migration.test.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/packages/campaign-scheduler/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-campaign-scheduler.mjs"
@@ -136,6 +140,8 @@ jobs:
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
         run: node --test tests/customer-lifecycle-store.integration.test.mjs
+      - name: Exercise provider connection tenant/application RLS and lifecycle
+        run: node --test tests/postgres-provider-connection.integration.test.mjs
       - name: Exercise PostgreSQL campaign dispatch race and event idempotency
         env:
           EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
