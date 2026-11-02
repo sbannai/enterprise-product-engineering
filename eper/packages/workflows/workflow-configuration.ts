@@ -53,7 +53,7 @@ export interface WorkflowDefinition {
   rules?: WorkflowRule[];
 }
 
-const RULE_FIELD_PATH = /^[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*){0,7}$/;
+const RULE_FIELD_PATH = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*){0,7}$/;
 const RULE_OPERATORS: readonly WorkflowRuleOperator[] = ["eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "exists"];
 
 function validRuleValue(value: unknown): boolean {
