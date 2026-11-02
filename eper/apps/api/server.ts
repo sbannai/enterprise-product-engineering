@@ -55,6 +55,8 @@ import type { PostgresActorApplicationAssignmentStore } from "../../packages/ide
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
+import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
+import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
 
 
 function acceptsVersionedJson(request: IncomingMessage): boolean {
@@ -502,7 +504,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -2468,6 +2470,62 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
 
+
+    // Application-scoped provider connection read API. Mutations are added only
+    // after the same identity/authorization boundary is proven end-to-end.
+    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections$/.exec(requestUrl.pathname);
+    if (providerConnectionsPath) {
+      if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      if (!options.providerConnectionRepository || !options.customerIdentitySessionStore ||
+          !options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
+          !options.workflowActorRoleAssignmentStore) {
+        sendJson(request, response, 503, { error: "provider_connections_unavailable" }); return;
+      }
+      let applicationId: string;
+      try { applicationId = decodeURIComponent(providerConnectionsPath[1]); }
+      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
+      if (!applicationId.trim() || applicationId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" }); return;
+      }
+      const identity = await resolveCustomerBrowserIdentity({
+        cookieHeader: request.headers.cookie, applicationId,
+        sessionStore: options.customerIdentitySessionStore,
+        tenantAssignments: options.tenantApplicationAssignmentStore,
+        actorAssignments: options.actorApplicationAssignmentStore,
+      });
+      if (!identity) {
+        sendApiError(request, response, 401, "UNAUTHENTICATED",
+          "A valid browser session with active tenant and actor application assignments is required.");
+        return;
+      }
+      try {
+        await authorizeProviderConnectionRequest({
+          actor: { tenantId: identity.tenantId, actorId: identity.actorId },
+          action: "provider.connection.read",
+          applicationId,
+          assignments: {
+            async isTenantApplicationActive(tenantId, appId) {
+              return (await options.tenantApplicationAssignmentStore!.listActive(tenantId)).includes(appId);
+            },
+            isActorAssigned: (tenantId, actorId, appId) =>
+              options.actorApplicationAssignmentStore!.isAssigned(tenantId, actorId, appId),
+          },
+          roles: new PostgresProviderRoleAuthorizer(options.workflowActorRoleAssignmentStore),
+        });
+        const connections = await options.providerConnectionRepository.listForApplication(identity.tenantId, applicationId);
+        sendJson(request, response, 200, { applicationId, connections });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "PROVIDER_CONNECTION_READ_FAILED";
+        const status = code === "PROVIDER_ACTION_FORBIDDEN" || code === "PROVIDER_APPLICATION_ACCESS_DENIED" ? 403
+          : code === "PROVIDER_UNAUTHENTICATED" ? 401 : 503;
+        sendApiError(request, response, status, code, status === 503
+          ? "Provider connections could not be loaded." : "You are not allowed to view provider connections.");
+      }
+      return;
+    }
 
     // Tenant-scoped customer ticket API. Disabled unless explicitly enabled and backed by
     // PostgreSQL plus the canonical transactional audit writer configured at startup.
