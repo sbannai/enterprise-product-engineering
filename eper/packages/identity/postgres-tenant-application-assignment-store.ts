@@ -69,6 +69,112 @@ export class PostgresTenantApplicationAssignmentStore {
   }
   async assign(input: ChangeTenantApplicationAssignmentInput): Promise<TenantApplicationAssignment> { return this.change(input, "active"); }
   async revoke(input: ChangeTenantApplicationAssignmentInput): Promise<TenantApplicationAssignment> { return this.change(input, "revoked"); }
+  async switchCustomerTariff(input: {
+    tenantId: string; tariffKey: string; tariffVersion: number; changedBy: string;
+    expectedVersion: number; acceptanceReference: string; environment: AuditEnvironment;
+    correlationId: string; serviceVersion?: string;
+  }): Promise<{ tenantId: string; tariffKey: string; tariffVersion: number; billingBasis: string;
+    maxApplications: number; acceptedAmount: string; acceptedCurrency: string; billingInterval: string;
+    version: number; startsAt: string; endsAt: string | null; acceptedBy: string;
+    acceptedAt: string; acceptanceReference: string }> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.changedBy, "changedBy");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(input.tariffKey) ||
+        !Number.isSafeInteger(input.tariffVersion) || input.tariffVersion < 1 ||
+        !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 ||
+        !input.acceptanceReference.trim() || input.acceptanceReference.length > 200 ||
+        !input.correlationId?.trim() || input.correlationId.length > 128) {
+      throw new Error("CUSTOMER_TARIFF_SWITCH_INPUT_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-tenant-commercial:" + input.tenantId]);
+      const customer = await client.query<{ customer_status: string }>(
+        "SELECT customer_status FROM eper_customer_account WHERE tenant_id=$1 FOR UPDATE", [input.tenantId]);
+      if (!customer.rows[0]) throw new Error("CUSTOMER_COMMERCIAL_ACCOUNT_NOT_CONFIGURED");
+      if (customer.rows[0].customer_status !== "active") throw new Error("CUSTOMER_NOT_ACTIVE");
+      const current = await client.query<{ version: number | string }>(
+        "SELECT version FROM eper_customer_tariff_assignment WHERE tenant_id=$1 FOR UPDATE", [input.tenantId]);
+      const currentVersion = current.rows[0] ? Number(current.rows[0].version) : 0;
+      if (currentVersion !== input.expectedVersion) throw new Error("CUSTOMER_TARIFF_VERSION_CONFLICT");
+      const plan = await client.query<{
+        billing_basis: string; max_applications: number | string; amount: string | number;
+        currency: string; billing_interval: string; effective_from: string | Date; effective_to: string | Date | null;
+        approval_state: string;
+      }>(`SELECT billing_basis, max_applications, amount, currency, billing_interval,
+                 effective_from, effective_to, approval_state
+            FROM eper_commercial_tariff_plan
+           WHERE tariff_key=$1 AND tariff_version=$2 AND tariff_status='active'
+             AND effective_from <= NOW() AND (effective_to IS NULL OR effective_to > NOW())
+           FOR SHARE`, [input.tariffKey, input.tariffVersion]);
+      const tariff = plan.rows[0];
+      if (!tariff) throw new Error("CUSTOMER_TARIFF_VERSION_NOT_EFFECTIVE");
+      if (tariff.approval_state === "pending" || tariff.approval_state === "rejected") {
+        throw new Error("CUSTOMER_TARIFF_VERSION_NOT_APPROVED");
+      }
+      const active = await client.query<{ count: number | string }>(
+        "SELECT COUNT(*) AS count FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND assignment_status='active'",
+        [input.tenantId]);
+      if (Number(active.rows[0]?.count ?? 0) > Number(tariff.max_applications)) {
+        throw new Error("CUSTOMER_TARIFF_SWITCH_REQUIRES_APPLICATION_SELECTION");
+      }
+      const version = currentVersion + 1;
+      const saved = await client.query<{
+        tenant_id: string; tariff_key: string; tariff_version: number | string; billing_basis: string;
+        max_applications: number | string; accepted_amount: string | number; accepted_currency: string;
+        billing_interval: string; version: number | string; starts_at: string | Date; ends_at: string | Date | null;
+        accepted_by: string; accepted_at: string | Date; acceptance_reference: string;
+      }>(`INSERT INTO eper_customer_tariff_assignment
+          (tenant_id, tariff_key, tariff_version, billing_basis, max_applications, accepted_amount,
+           accepted_currency, billing_interval, assignment_status, starts_at, ends_at, version,
+           updated_at, updated_by, accepted_by, accepted_at, acceptance_reference)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',NOW(),$9,$10,NOW(),$11,$11,NOW(),$12)
+        ON CONFLICT (tenant_id) DO UPDATE SET
+          tariff_key=EXCLUDED.tariff_key, tariff_version=EXCLUDED.tariff_version,
+          billing_basis=EXCLUDED.billing_basis, max_applications=EXCLUDED.max_applications,
+          accepted_amount=EXCLUDED.accepted_amount, accepted_currency=EXCLUDED.accepted_currency,
+          billing_interval=EXCLUDED.billing_interval, assignment_status='active',
+          starts_at=NOW(), ends_at=EXCLUDED.ends_at, version=EXCLUDED.version,
+          updated_at=NOW(), updated_by=EXCLUDED.updated_by, accepted_by=EXCLUDED.accepted_by,
+          accepted_at=NOW(), acceptance_reference=EXCLUDED.acceptance_reference
+        RETURNING tenant_id, tariff_key, tariff_version, billing_basis, max_applications,
+          accepted_amount, accepted_currency, billing_interval, version, starts_at, ends_at,
+          accepted_by, accepted_at, acceptance_reference`,
+        [input.tenantId,input.tariffKey,input.tariffVersion,tariff.billing_basis,Number(tariff.max_applications),
+          String(tariff.amount),String(tariff.currency).trim(),tariff.billing_interval,tariff.effective_to,
+          version,input.changedBy,input.acceptanceReference]);
+      const row=saved.rows[0];
+      if(!row) throw new Error("CUSTOMER_TARIFF_SWITCH_WRITE_RETURNED_NO_ROW");
+      await client.query(`INSERT INTO eper_customer_tariff_assignment_history
+        (tenant_id, assignment_version, tariff_key, tariff_version, billing_basis, max_applications,
+         accepted_amount, accepted_currency, billing_interval, assignment_status, starts_at, ends_at,
+         accepted_by, accepted_at, acceptance_reference)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10,$11,$12,$13,$14)`,
+        [row.tenant_id,Number(row.version),row.tariff_key,Number(row.tariff_version),row.billing_basis,
+          Number(row.max_applications),String(row.accepted_amount),String(row.accepted_currency).trim(),
+          row.billing_interval,row.starts_at,row.ends_at,row.accepted_by,row.accepted_at,row.acceptance_reference]);
+      await appendAuditEventInTransaction(client as AuditSqlClient,{
+        tenantId:input.tenantId,applicationId:"platform",environment:input.environment,actorType:"human",
+        actorId:input.changedBy,action:"customer.commercial_tariff.switched",outcome:"success",
+        reasonCode:"CUSTOMER_ACCEPTED_PUBLISHED_TARIFF",resourceType:"customer-tariff-assignment",
+        resourceId:input.tenantId,correlationId:input.correlationId,source:"api",
+        operationName:"POST /customer/commercial-tariff",serviceVersion:input.serviceVersion,
+        approvalId:input.acceptanceReference,
+        payload:{tariffKey:row.tariff_key,tariffVersion:Number(row.tariff_version),
+          billingBasis:row.billing_basis,maxApplications:Number(row.max_applications),
+          acceptedAmount:String(row.accepted_amount),acceptedCurrency:String(row.accepted_currency).trim(),
+          billingInterval:row.billing_interval,assignmentVersion:Number(row.version),
+          acceptanceReference:row.acceptance_reference},
+      });
+      await client.query("COMMIT");
+      return {...row, tariffVersion:Number(row.tariff_version),maxApplications:Number(row.max_applications),
+        acceptedAmount:String(row.accepted_amount),acceptedCurrency:String(row.accepted_currency).trim(),
+        version:Number(row.version),startsAt:new Date(row.starts_at).toISOString(),
+        endsAt:row.ends_at?new Date(row.ends_at).toISOString():null,acceptedAt:new Date(row.accepted_at).toISOString()};
+    } catch(error) { await client.query("ROLLBACK").catch(()=>undefined); throw error; }
+    finally { client.release(); }
+  }
   private async change(input: ChangeTenantApplicationAssignmentInput, status: "active" | "revoked"): Promise<TenantApplicationAssignment> {
     this.validateId(input.tenantId, "tenantId"); this.validateId(input.applicationId, "applicationId"); this.validateId(input.changedBy, "changedBy");
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) throw new Error("TENANT_APPLICATION_ASSIGNMENT_EXPECTED_VERSION_INVALID");
