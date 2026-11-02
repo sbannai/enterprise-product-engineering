@@ -137,10 +137,10 @@ test("commercially gated checkout rejects inactive customers, missing app grants
           (tenant_id, tariff_key, tariff_version, billing_basis, max_applications, accepted_amount,
            accepted_currency, billing_interval, assignment_status, starts_at, version, updated_by,
            accepted_by, accepted_at, acceptance_reference)
-         VALUES ($1, $2, 1, 'single_application', 1, 100, 'INR', 'monthly',
+         VALUES ($1, $2, 1, 'single_application', 1, $3, 'INR', 'monthly',
                  'active', NOW() - INTERVAL '1 day', 1, 'integration-test',
                  'customer-admin', NOW() - INTERVAL '1 day', 'accepted-' || $1)`,
-        [tenantId, tariffKey],
+        [tenantId, tariffKey, options.acceptedAmount ?? 100],
       );
       for (let i = 0; i < (options.appCount ?? 1); i++) {
         await pool.query(
@@ -181,6 +181,9 @@ test("commercially gated checkout rejects inactive customers, missing app grants
 
     const retiredTariff = await seed("retired-tariff", { tariffStatus: "retired" });
     assert.deepEqual(await reserve("retired-tariff", retiredTariff), { ok: false, reason: "commercial_ineligible" });
+
+    const priceDrift = await seed("price-drift", { acceptedAmount: 90 });
+    assert.deepEqual(await reserve("price-drift", priceDrift), { ok: false, reason: "commercial_ineligible" });
 
     const overLimit = await seed("over-limit", { appCount: 2 });
     assert.deepEqual(await reserve("over-limit", overLimit), { ok: false, reason: "commercial_ineligible" });
