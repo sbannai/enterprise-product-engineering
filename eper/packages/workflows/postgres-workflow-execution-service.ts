@@ -5,7 +5,7 @@ import {
   type AuditSqlClient,
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
-import type { WorkflowActivity, WorkflowDefinition, WorkflowField } from "./workflow-configuration.js";
+import { evaluateWorkflowRoutingRules, type WorkflowActivity, type WorkflowDefinition, type WorkflowField } from "./workflow-configuration.js";
 
 export type WorkflowTransitionAction = "submit" | "approve" | "reject" | "cancel";
 export type WorkflowInstanceStatus = "running" | "completed" | "rejected" | "cancelled" | "failed";
@@ -261,7 +261,25 @@ async function appendWorkflowOutboxEvent(
   );
 }
 
-function chooseNextActivity(activity: WorkflowActivity, targetActivityId?: string): string | null {
+function chooseNextActivity(
+  definition: WorkflowDefinition,
+  activity: WorkflowActivity,
+  data: Record<string, unknown>,
+  targetActivityId?: string,
+): string | null {
+  if (activity.routingRuleIds?.length) {
+    try {
+      const decision = evaluateWorkflowRoutingRules(definition, activity, data);
+      if (targetActivityId && targetActivityId !== decision.targetActivityId) {
+        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_RULE_TARGET_MISMATCH", 422);
+      }
+      return decision.targetActivityId;
+    } catch (error) {
+      if (error instanceof WorkflowExecutionError) throw error;
+      const code = error instanceof Error ? error.message : "WORKFLOW_EXECUTION_RULE_EVALUATION_FAILED";
+      throw new WorkflowExecutionError(code, 422);
+    }
+  }
   if (activity.nextActivityIds.length === 0) {
     if (targetActivityId) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_TARGET_NOT_ALLOWED", 422);
     return null;
@@ -558,7 +576,7 @@ export class PostgresWorkflowExecutionService {
         actorRole = current.roleId;
         validateActivityPayload(current.fields, payload);
         nextData = { ...nextData, ...payload };
-        nextActivityId = chooseNextActivity(current, input.targetActivityId);
+        nextActivityId = chooseNextActivity(definition, current, nextData, input.targetActivityId);
         if (nextActivityId === null) nextStatus = "completed";
       }
 
