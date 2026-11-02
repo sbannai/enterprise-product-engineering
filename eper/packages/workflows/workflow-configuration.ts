@@ -128,6 +128,7 @@ export function evaluateWorkflowRuleExpression(
   if (expression.kind === "all") return expression.conditions.every(child => evaluateWorkflowRuleExpression(child, data));
   if (expression.kind === "any") return expression.conditions.some(child => evaluateWorkflowRuleExpression(child, data));
   if (expression.kind === "not") return !evaluateWorkflowRuleExpression(expression.condition, data);
+  if (expression.kind !== "condition") return false;
   const field = readRuleField(data, expression.field);
   if (expression.operator === "exists") return field.exists;
   if (!field.exists) return false;
