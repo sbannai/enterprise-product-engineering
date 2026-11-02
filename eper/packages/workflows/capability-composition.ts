@@ -156,6 +156,9 @@ export function validateCapabilityComposition(
         add("composition.control.outcome", "Choose a valid outcome and a compatible next-step trigger.", { edgeId: edge.id });
         continue;
       }
+      const existing = incoming.get(edge.toNodeId) ?? new Set<string>();
+      existing.add(edge.toPortId);
+      incoming.set(edge.toNodeId, existing);
       adjacency.set(edge.fromNodeId, [...(adjacency.get(edge.fromNodeId) ?? []), edge.toNodeId]);
     } else {
       add("composition.edge.kind", "This connection type is not supported.", { edgeId: edge.id });
