@@ -111,7 +111,8 @@ test("revokes an active role with optimistic concurrency and an atomic audit eve
       }
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
       if (sql.includes("UPDATE eper_workflow_actor_role_assignment")) return { rows: [{ version: 4 }] };
-      if (sql.includes("INSERT INTO eper_audit_events")) return { rows: [{ last_event_hash: null }] };
+      if (sql.includes("SELECT last_event_hash FROM eper_audit_chain_head")) return { rows: [{ last_event_hash: null }] };
+      if (sql.includes("INSERT INTO eper_audit_events")) return { rows: [], rowCount: 1 };
       return { rows: [] };
     },
     release() { calls.push({ sql: "RELEASE" }); },
