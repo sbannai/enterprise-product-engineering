@@ -12,13 +12,13 @@ function fixture({ version = 4, status = "PENDING_VALIDATION", exists = true } =
     async query(sql, values = []) {
       calls.push({ sql, values });
       if (sql.includes("SELECT c.tenant_id, c.connection_id, c.provider_key, d.adapter_key")) {
-        return { rows: exists ? [{
+        return { rows: exists && values[1] === "app-a" ? [{
           tenant_id: "tenant-a", connection_id: "connection-a", provider_key: "mail",
           adapter_key: "mail-adapter", adapter_version: "1.0.0", auth_mode: "oauth",
           secret_reference: "vault://tenant-a/mail/credential", environment: "sandbox",
           safe_metadata: { region: "ap-south" }, connection_status: currentStatus,
           version: currentVersion,
-        }] : [], rowCount: exists ? 1 : 0 };
+        }] : [], rowCount: exists && values[1] === "app-a" ? 1 : 0 };
       }
       if (sql.includes("UPDATE eper_provider_connections")) {
         const [tenant, connection, expected, nextStatus] = values;
@@ -69,6 +69,8 @@ test("successful validation atomically activates, versions, records history and 
     ...common, expectedVersion: 4, outcome: "SUCCEEDED",
   });
   assert.deepEqual(result, { status: "ACTIVE", version: 5 });
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_provider_connections"));
+  assert.equal(update.values[5], "app-a");
   assert.deepEqual(state(), { currentVersion: 5, currentStatus: "ACTIVE" });
   assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_provider_connection_applications") && call.values[2] === "app-a"));
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_provider_validation_events")));
@@ -118,4 +120,12 @@ test("failed outcome requires a safe error code", async () => {
     ...common, expectedVersion: 4, outcome: "FAILED", errorCode: "token=private",
   }), /PROVIDER_VALIDATION_ERROR_CODE_INVALID/);
   assert.ok(!calls.some((call) => call.sql.includes("UPDATE eper_provider_connections")));
+});
+
+
+test("snapshot lookup cannot see a provider connection without the requested application binding", async () => {
+  const { store, calls } = fixture();
+  const snapshot = await store.getValidationSnapshot("tenant-a", "app-b", "connection-a");
+  assert.equal(snapshot, null);
+  assert.ok(calls.some((call) => call.sql.includes("b.application_id = $2") && call.values[1] === "app-b"));
 });
