@@ -19,6 +19,7 @@ async function createRuntimePool(pool) {
   $role$`);
   await pool.query("GRANT USAGE ON SCHEMA public TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT ON eper_provider_definitions TO eper_provider_test_runtime");
+  await pool.query("GRANT UPDATE (provider_status) ON eper_provider_definitions TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connections TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connection_applications TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_application_provider_policies TO eper_provider_test_runtime");
