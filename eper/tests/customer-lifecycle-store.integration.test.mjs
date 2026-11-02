@@ -55,6 +55,7 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
       assert.equal(usage?.tariffEffective, true);
       assert.equal(usage?.maxApplications, 2);
       assert.equal(usage?.activeApplicationCount, 3);
+      assert.deepEqual(usage?.activeApplicationIds, ["usage-app-1", "usage-app-2", "usage-app-3"]);
       assert.equal(usage?.allowanceStatus, "over_allowance");
       assert.equal(usage?.tariffAccessState, "over_allowance");
       assert.ok(usage?.usageEvaluatedAt);
