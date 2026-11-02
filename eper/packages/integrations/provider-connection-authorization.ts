@@ -56,8 +56,7 @@ export async function authorizeProviderConnectionRequest(
   input: ProviderConnectionAuthorizationInput,
 ): Promise<AuthorizedProviderScope> {
   const actor = input.actor;
-  if (!actor || !validId(actor.tenantId) || !validId(actor.actorId) ||
-) {
+  if (!actor || !validId(actor.tenantId) || !validId(actor.actorId)) {
     throw new Error("PROVIDER_UNAUTHENTICATED");
   }
 
