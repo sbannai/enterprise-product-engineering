@@ -25,9 +25,6 @@ import { PostgresProviderConnectionRepository } from "../../packages/integration
 import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
 import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
-import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
-import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
-import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
