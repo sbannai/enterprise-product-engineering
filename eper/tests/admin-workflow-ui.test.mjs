@@ -34,6 +34,11 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(html, /@media\s*\(max-width:\s*850px\)/i, "workflow layout must collapse at tablet widths");
     assert.match(html, /@media\s*\(max-width:\s*540px\)/i, "workflow forms must stack on narrow phones");
     assert.match(html, /Workflow designer/);
+    assert.match(html, /Customer Admin/);
+    assert.match(html, /Business Rule Engine/);
+    assert.match(html, /Visual workflow map/);
+    assert.match(html, /Routing rule IDs/);
+    assert.match(html, /data-k="routingRuleIds"/);
     assert.match(html, /Roles &amp; access|Roles & access/);
     assert.match(html, /Generated activities/);
     assert.match(html, /requiredPermission==='workflow:act'.*assignedRolePermissions\.includes\('workflow:admin'\)/);
