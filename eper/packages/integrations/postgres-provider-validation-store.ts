@@ -131,6 +131,16 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
         throw new Error("PROVIDER_CONNECTION_VERSION_CONFLICT");
       }
 
+      if (input.outcome === "FAILED") {
+        await client.query(
+          `UPDATE eper_provider_connection_applications
+           SET binding_status = 'SUSPENDED', version = version + 1,
+               updated_at = NOW(), updated_by = $3
+           WHERE tenant_id = $1 AND connection_id = $2`,
+          [input.tenantId, input.connectionId, input.actorId],
+        );
+      }
+
       await client.query(
         `INSERT INTO eper_provider_validation_events
           (validation_event_id, tenant_id, connection_id, provider_key,
