@@ -61,6 +61,19 @@ test("role definition fails closed when tenant application is inactive", async (
   assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_role_definition")), false);
 });
 
+test("role definition requires an explicit boolean delegable value", async () => {
+  const { calls, pool } = fixture();
+  await assert.rejects(
+    new PostgresWorkflowRoleDefinitionStore(pool).replace({ ...input, delegable: undefined }),
+    /WORKFLOW_ROLE_DEFINITION_DELEGABLE_INVALID/,
+  );
+  await assert.rejects(
+    new PostgresWorkflowRoleDefinitionStore(pool).replace({ ...input, delegable: "true" }),
+    /WORKFLOW_ROLE_DEFINITION_DELEGABLE_INVALID/,
+  );
+  assert.equal(calls.length, 0);
+});
+
 test("role definition rejects unknown or duplicate permissions before database access", async () => {
   const { calls, pool } = fixture();
   await assert.rejects(
