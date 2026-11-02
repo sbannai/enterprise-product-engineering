@@ -191,6 +191,20 @@ test("commercially gated checkout rejects inactive customers, missing app grants
     const eligible = await seed("eligible");
     const allowed = await reserve("eligible", eligible);
     assert.equal(allowed.ok, true, "an active customer with an accepted effective tariff and one granted app may reserve checkout");
+    const persistedAcceptance = await pool.query(
+      `SELECT commercial_acceptance_snapshot FROM eper_payment_orders
+        WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1`,
+      [eligible.tenantId],
+    );
+    const acceptance = persistedAcceptance.rows[0]?.commercial_acceptance_snapshot;
+    assert.equal(acceptance?.tenantId, eligible.tenantId);
+    assert.equal(acceptance?.applicationId, eligible.applicationId);
+    assert.equal(acceptance?.billingBasis, "single_application");
+    assert.equal(acceptance?.maxApplications, 1);
+    assert.equal(acceptance?.acceptedAmount, 100);
+    assert.equal(acceptance?.acceptedCurrency, "INR");
+    assert.equal(acceptance?.acceptedBy, "customer-admin");
+    assert.equal(acceptance?.acceptanceReference, "accepted-" + eligible.tenantId);
   } finally {
     await pool.end();
   }
