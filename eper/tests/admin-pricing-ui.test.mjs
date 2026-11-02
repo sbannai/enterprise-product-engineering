@@ -56,6 +56,7 @@ test("admin UI, price-book management, resolver and vendor configuration are API
     assert.match(html, /ACCESS BLOCKED · TARIFF INACTIVE/);
     assert.match(html, /ACCESS BLOCKED · TARIFF NOT YET EFFECTIVE/);
     assert.match(html, /ACCESS BLOCKED · TARIFF EXPIRED/);
+    assert.match(html, /ACCESS BLOCKED · TARIFF CONFIGURATION INVALID/);
     assert.match(html, /CUSTOMER /);
     assert.match(html, /This console reports the returned customer and allowance state; it is not itself the enforcement mechanism/);
     assert.match(html, /Require independent approval/);
