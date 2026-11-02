@@ -47,6 +47,10 @@ test("admin UI, price-book management, resolver and vendor configuration are API
     assert.match(html, /Price Book/);
     assert.match(html, /Market Resolver/);
     assert.match(html, /Payment Vendor/);
+    assert.match(html, /Tariff catalogue editor/);
+    assert.match(html, /Create tariff draft/);
+    assert.match(html, /Require independent approval/);
+    assert.match(html, /Published and draft tariff versions/);
     assert.match(html, /Feedback &amp; Ticketing/);
     assert.match(html, /openSupportWorkspace/);
     assert.match(html, /window.location.href="\/wireframes#support"/);
