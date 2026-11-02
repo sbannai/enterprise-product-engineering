@@ -29,6 +29,7 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-payment-store.integration.test.mjs"
       - "eper/tests/customer-lifecycle-store.integration.test.mjs"
+      - "eper/tests/postgres-module-entitlement-service.integration.test.mjs"
       - "eper/tests/postgres-payment-store.test.mjs"
       - "eper/tests/postgres-payment-api-route.test.mjs"
       - "eper/tests/postgres-legacy-order-snapshot-gate.test.mjs"
@@ -136,6 +137,8 @@ jobs:
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
         run: node --test tests/customer-lifecycle-store.integration.test.mjs
+      - name: Exercise PostgreSQL customer tariff enforcement at protected access checks
+        run: node --test tests/postgres-module-entitlement-service.integration.test.mjs
       - name: Exercise PostgreSQL campaign dispatch race and event idempotency
         env:
           EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
