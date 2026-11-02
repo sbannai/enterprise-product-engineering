@@ -43,11 +43,11 @@ test("customer lifecycle API is Product Admin-only and uses versioned status cha
 
     const list = await fetch(base + "/admin/customers", { headers: { authorization: admin.authorization } });
     assert.equal(list.status, 200);
-    assert.equal((await list.json()).customers[0].tenantId, "tenant-a");
+    assert.equal((await list.json()).data.customers[0].tenantId, "tenant-a");
 
     const get = await fetch(base + "/admin/customers/tenant-a", { headers: { authorization: admin.authorization } });
     assert.equal(get.status, 200);
-    assert.equal((await get.json()).customer.version, 1);
+    assert.equal((await get.json()).data.customer.version, 1);
 
     const changed = await fetch(base + "/admin/customers/tenant-a/status", {
       method: "PATCH", headers: admin,
@@ -56,7 +56,7 @@ test("customer lifecycle API is Product Admin-only and uses versioned status cha
     });
     assert.equal(changed.status, 200);
     const changedBody = await changed.json();
-    assert.equal(changedBody.customer.status, "suspended");
+    assert.equal(changedBody.data.customer.status, "suspended");
     assert.equal(calls.find(call => call[0] === "changeStatus")[1].changedBy, "product-admin");
     assert.equal(calls.find(call => call[0] === "changeStatus")[1].expectedVersion, 1);
 
