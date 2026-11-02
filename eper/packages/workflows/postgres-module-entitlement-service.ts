@@ -30,6 +30,11 @@ interface ModuleAccessRow {
   ends_at: string | Date | null;
   grace_until: string | Date | null;
   permission_allowed: boolean | null;
+  tariff_assignment_status: string | null;
+  tariff_starts_at: string | Date | null;
+  tariff_ends_at: string | Date | null;
+  tariff_max_applications: number | null;
+  active_application_count: number;
 }
 
 interface AddonAccessRow {
@@ -39,6 +44,11 @@ interface AddonAccessRow {
   effective_from: string | Date | null;
   effective_to: string | Date | null;
   permission_allowed: boolean | null;
+  tariff_assignment_status: string | null;
+  tariff_starts_at: string | Date | null;
+  tariff_ends_at: string | Date | null;
+  tariff_max_applications: number | null;
+  active_application_count: number;
 }
 
 /**
@@ -69,11 +79,14 @@ export class PostgresModuleEntitlementService {
           to_regclass('public.eper_customer_module_entitlement')::text AS module_entitlement,
           to_regclass('public.eper_customer_module_permission')::text AS module_permission,
           to_regclass('public.eper_application_addon_entitlement')::text AS addon_entitlement,
-          to_regclass('public.eper_customer_account')::text AS customer_account
+          to_regclass('public.eper_customer_account')::text AS customer_account,
+          to_regclass('public.eper_customer_tariff_assignment')::text AS customer_tariff_assignment,
+          to_regclass('public.eper_tenant_application_assignment')::text AS tenant_application_assignment
       `);
       const row = result.rows[0];
       if (!row || !row.module_catalog || !row.module_price || !row.module_entitlement ||
-          !row.module_permission || !row.addon_entitlement || !row.customer_account) {
+          !row.module_permission || !row.addon_entitlement || !row.customer_account ||
+          !row.customer_tariff_assignment || !row.tenant_application_assignment) {
         throw new Error("EPER_MODULE_ENTITLEMENT_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
@@ -97,7 +110,11 @@ export class PostgresModuleEntitlementService {
     try {
       const result = await client.query<ModuleAccessRow>(
         `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
-                e.grace_until, p.allowed AS permission_allowed
+                e.grace_until, p.allowed AS permission_allowed,
+                t.assignment_status AS tariff_assignment_status, t.starts_at AS tariff_starts_at,
+                t.ends_at AS tariff_ends_at, t.max_applications AS tariff_max_applications,
+                (SELECT COUNT(*)::int FROM eper_tenant_application_assignment aa
+                  WHERE aa.tenant_id=$2 AND aa.assignment_status='active') AS active_application_count
            FROM (SELECT $1::text AS module_key) requested
            LEFT JOIN eper_customer_account ca ON ca.tenant_id = $2
            LEFT JOIN eper_module_catalog c ON c.module_key = requested.module_key
@@ -106,11 +123,14 @@ export class PostgresModuleEntitlementService {
            LEFT JOIN eper_customer_module_permission p
              ON p.tenant_id = $2 AND p.module_key = requested.module_key
             AND p.role_key = $3 AND p.permission_key = $4
+           LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id=$2
           LIMIT 1`,
         [moduleKey, context.tenantId, context.roleKey, context.permissionKey],
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
+      const commercial = evaluateCommercialApplicationAllowance(row, context.now);
+      if (!commercial.allowed) return commercial;
       return evaluateModuleAccess({
         moduleStatus: row?.module_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
@@ -139,7 +159,11 @@ export class PostgresModuleEntitlementService {
     try {
       const result = await client.query<AddonAccessRow>(
         `SELECT ca.customer_status, c.status AS addon_status, e.entitlement_status, e.effective_from, e.effective_to,
-                p.allowed AS permission_allowed
+                p.allowed AS permission_allowed,
+                t.assignment_status AS tariff_assignment_status, t.starts_at AS tariff_starts_at,
+                t.ends_at AS tariff_ends_at, t.max_applications AS tariff_max_applications,
+                (SELECT COUNT(*)::int FROM eper_tenant_application_assignment aa
+                  WHERE aa.tenant_id=$2 AND aa.assignment_status='active') AS active_application_count
            FROM (SELECT $1::text AS addon_key) requested
            LEFT JOIN eper_customer_account ca ON ca.tenant_id = $2
            LEFT JOIN eper_module_catalog c ON c.module_key = requested.addon_key
@@ -148,11 +172,14 @@ export class PostgresModuleEntitlementService {
            LEFT JOIN eper_customer_module_permission p
              ON p.tenant_id = $2 AND p.module_key = requested.addon_key
             AND p.role_key = $4 AND p.permission_key = $5
+           LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id=$2
           LIMIT 1`,
         [addonKey, context.tenantId, context.applicationId, context.roleKey, context.permissionKey],
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
+      const commercial = evaluateCommercialApplicationAllowance(row, context.now);
+      if (!commercial.allowed) return commercial;
       return evaluateApplicationAddonAccess({
         addonStatus: row?.addon_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
@@ -166,6 +193,33 @@ export class PostgresModuleEntitlementService {
       client.release();
     }
   }
+}
+
+function evaluateCommercialApplicationAllowance(
+  row: {
+    tariff_assignment_status?: string | null;
+    tariff_starts_at?: string | Date | null;
+    tariff_ends_at?: string | Date | null;
+    tariff_max_applications?: number | null;
+    active_application_count?: number | null;
+  } | undefined,
+  now?: Date,
+): AccessDecision {
+  if (!row?.tariff_assignment_status) return { allowed: false, reason: "tariff_missing" };
+  if (row.tariff_assignment_status !== "active") return { allowed: false, reason: "tariff_inactive" };
+  const at = (now ?? new Date()).getTime();
+  const starts = row.tariff_starts_at == null ? Number.NaN : new Date(row.tariff_starts_at).getTime();
+  const ends = row.tariff_ends_at == null ? null : new Date(row.tariff_ends_at).getTime();
+  if (!Number.isFinite(starts) || at < starts || (ends !== null && (!Number.isFinite(ends) || at >= ends))) {
+    return { allowed: false, reason: "tariff_inactive" };
+  }
+  if (!Number.isSafeInteger(Number(row.tariff_max_applications)) || Number(row.tariff_max_applications) < 1) {
+    return { allowed: false, reason: "tariff_inactive" };
+  }
+  if (Number(row.active_application_count ?? 0) > Number(row.tariff_max_applications)) {
+    return { allowed: false, reason: "tariff_overage" };
+  }
+  return { allowed: true, reason: "allowed" };
 }
 
 function validateContext(context: TrustedAccessContext): void {
