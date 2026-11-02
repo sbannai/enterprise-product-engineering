@@ -5,7 +5,7 @@ import { PostgresWorkflowRoleDefinitionStore } from "../dist/packages/workflows/
 const input = {
   tenantId: "tenant-01", applicationId: "app-01", roleId: "finance-approver",
   name: "Finance approver", description: "Approves expense requests",
-  permissions: ["workflow:view", "workflow:approve"], status: "active",
+  permissions: ["workflow:view", "workflow:approve"], delegable: true, status: "active",
   expectedVersion: 0, changedBy: "admin-01", environment: "sandbox", correlationId: "corr-01",
 };
 
@@ -15,7 +15,7 @@ function fixture({ tenantStatus = "active", priorVersion = null } = {}) {
   const row = {
     tenant_id: input.tenantId, application_id: input.applicationId, role_id: input.roleId,
     name: input.name, description: input.description, permissions: input.permissions,
-    role_status: input.status, version: priorVersion ? priorVersion + 1 : 1,
+    role_status: input.status, delegable: input.delegable, version: priorVersion ? priorVersion + 1 : 1,
     updated_at: now, updated_by: input.changedBy,
   };
   const client = {
@@ -41,6 +41,7 @@ test("role definition is application-scoped and audited in the same transaction"
   const result = await new PostgresWorkflowRoleDefinitionStore(pool).replace(input);
   assert.equal(result.roleId, "finance-approver");
   assert.deepEqual(result.permissions, ["workflow:view", "workflow:approve"]);
+  assert.equal(result.delegable, true);
   assert.equal(result.version, 1);
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(", true)")));
   assert.ok(calls.some(call => call.sql.includes("pg_advisory_xact_lock")));
