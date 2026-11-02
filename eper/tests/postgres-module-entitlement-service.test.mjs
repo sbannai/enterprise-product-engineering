@@ -75,6 +75,7 @@ test("module access fails closed when application is not assigned to tenant", as
 
 test("module access fails closed when role permission is absent", async () => {
   const { pool } = makePool({
+    customer_status: "active",
     module_status: "active",
     entitlement_status: "active",
     starts_at: null,
@@ -113,6 +114,7 @@ test("add-on access is application-scoped and pending payment is denied", async 
 
 test("add-on access fails closed when no entitlement row exists", async () => {
   const { pool } = makePool({
+    customer_status: "active",
     addon_status: "active",
     entitlement_status: null,
     effective_from: null,
