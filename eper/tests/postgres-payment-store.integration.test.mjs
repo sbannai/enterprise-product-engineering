@@ -110,6 +110,81 @@ test("order-time transaction snapshot is persisted and immutable", { skip: !data
   }
 });
 
+test("commercially gated checkout rejects inactive customers, missing app grants and tariff-limit overruns", { skip: !databaseUrl }, async () => {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  try {
+    const store = new PostgresPaymentStore(pool, true);
+    async function seed(label, options = {}) {
+      const tenantId = "commercial-" + label + "-" + randomUUID();
+      const applicationId = "app-" + randomUUID();
+      const tariffKey = "tariff-" + randomUUID();
+      await pool.query(
+        `INSERT INTO eper_customer_account (tenant_id, customer_status, status_reason, effective_at, updated_by)
+         VALUES ($1, $2, 'integration fixture', NOW() - INTERVAL '1 minute', 'integration-test')`,
+        [tenantId, options.status ?? "active"],
+      );
+      await pool.query(
+        `INSERT INTO eper_commercial_tariff_plan
+          (tariff_key, tariff_version, billing_basis, max_applications, amount, currency,
+           billing_interval, effective_from, tariff_status, created_by)
+         VALUES ($1, 1, 'single_application', 1, 100, 'INR', 'monthly',
+                 NOW() - INTERVAL '1 day', 'active', 'integration-test')`,
+        [tariffKey],
+      );
+      await pool.query(
+        `INSERT INTO eper_customer_tariff_assignment
+          (tenant_id, tariff_key, tariff_version, billing_basis, max_applications, accepted_amount,
+           accepted_currency, billing_interval, assignment_status, starts_at, version, updated_by,
+           accepted_by, accepted_at, acceptance_reference)
+         VALUES ($1, $2, 1, 'single_application', 1, 100, 'INR', 'monthly',
+                 'active', NOW() - INTERVAL '1 day', 1, 'integration-test',
+                 'customer-admin', NOW() - INTERVAL '1 day', 'accepted-' || $1)`,
+        [tenantId, tariffKey],
+      );
+      for (let i = 0; i < (options.appCount ?? 1); i++) {
+        await pool.query(
+          `INSERT INTO eper_tenant_application_assignment
+            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1, $2, 'active', 'integration-test', 'integration-test')`,
+          [tenantId, i === 0 ? applicationId : "extra-" + randomUUID()],
+        );
+      }
+      return { tenantId, applicationId };
+    }
+    async function reserve(label, fixture) {
+      const invoiceReference = "invoice-" + randomUUID();
+      const approvedAt = new Date().toISOString();
+      return store.reserveOrder({
+        tenantId: fixture.tenantId, invoiceReference, idempotencyKey: label + "-" + randomUUID(),
+        amountMinor: 10000, currency: "INR", invoiceSourceId: "commercial-test",
+        invoiceSourceVersion: "v1", invoiceApprovedAt: approvedAt,
+        transactionSnapshot: {
+          tenantId: fixture.tenantId, reference: invoiceReference, applicationId: fixture.applicationId,
+          kind: "GENERAL", description: "Commercial eligibility integration test",
+          amountDueMinor: 10000, currency: "INR", status: "DUE", lineItems: [], adjustments: [],
+          sourceId: "commercial-test", sourceVersion: "v1", approvedAt,
+        },
+      });
+    }
+
+    const inactive = await seed("inactive", { status: "inactive" });
+    assert.deepEqual(await reserve("inactive", inactive), { ok: false, reason: "commercial_ineligible" });
+
+    const missingGrant = await seed("missing-grant", { appCount: 0 });
+    assert.deepEqual(await reserve("missing-grant", missingGrant), { ok: false, reason: "commercial_ineligible" });
+
+    const overLimit = await seed("over-limit", { appCount: 2 });
+    assert.deepEqual(await reserve("over-limit", overLimit), { ok: false, reason: "commercial_ineligible" });
+
+    const eligible = await seed("eligible");
+    const allowed = await reserve("eligible", eligible);
+    assert.equal(allowed.ok, true, "an active customer with an accepted effective tariff and one granted app may reserve checkout");
+  } finally {
+    await pool.end();
+  }
+});
+
 test("migration runner rejects checksum drift and does not record failed migrations", { skip: !databaseUrl }, async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "eper-payment-migrations-"));
   const { Pool } = await import("pg");
