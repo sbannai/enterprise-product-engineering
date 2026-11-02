@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { chooseNextWorkflowActivity } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
 import {
   WorkflowConfigurationError,
   WorkflowConfigurationService,
@@ -91,4 +92,15 @@ test("workflow configuration service validates rule graph before accepting a dra
   assert.equal(service.replaceWorkflows([definition])[0].rules.length, 3);
   assert.throws(() => service.replaceWorkflows([{ ...definition, rules: [{ ...definition.rules[0], targetActivityId: "not-a-step" }] }]),
     /invalid_workflow_rule/);
+});
+
+
+test("workflow transition service uses the pinned definition rules instead of client-selected branches", () => {
+  const activity = definition.activities[0];
+  assert.equal(chooseNextWorkflowActivity(definition, activity, { purchase: { amount: 12000 } }), "finance");
+  assert.equal(chooseNextWorkflowActivity(definition, activity, { purchase: { amount: 3000 } }), "manager");
+  assert.throws(
+    () => chooseNextWorkflowActivity(definition, activity, { purchase: { amount: 12000 } }, "standard"),
+    /WORKFLOW_EXECUTION_RULE_TARGET_MISMATCH/,
+  );
 });
