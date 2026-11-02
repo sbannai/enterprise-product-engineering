@@ -141,6 +141,23 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
       assert.equal(recovered.version, 1);
       assert.equal(recovered.operation, "recover");
 
+      // Competing recovery attempts serialize on the tenant/application lock.
+      await assignments.revoke({
+        tenantId, applicationId, actorId: recoveredAdminId, roleId,
+        changedBy: platformActorId, expectedVersion: 1, environment, correlationId,
+      });
+      const concurrent = await Promise.allSettled([
+        provisioning.mutate({ principal, operation: "recover", tenantId, applicationId,
+          targetActorId: firstAdminId, idempotencyKey: "concurrent-recover-a-" + suffix,
+          correlationId, environment, reasonTicketReference: "INC-CONCURRENT-A-" + suffix }),
+        provisioning.mutate({ principal, operation: "recover", tenantId, applicationId,
+          targetActorId: recoveredAdminId, idempotencyKey: "concurrent-recover-b-" + suffix,
+          correlationId, environment, reasonTicketReference: "INC-CONCURRENT-B-" + suffix }),
+      ]);
+      assert.equal(concurrent.filter(result => result.status === "fulfilled").length, 1);
+      assert.equal(concurrent.filter(result => result.status === "rejected").length, 1);
+      const rejected = concurrent.find(result => result.status === "rejected");
+      assert.match(String(rejected.reason?.message), /PLATFORM_CUSTOMER_ADMIN_ALREADY_ACTIVE/);
       const verify = await pool.connect();
       try {
         await verify.query("BEGIN");
@@ -154,8 +171,8 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
           [tenantId, applicationId, roleId],
         );
         assert.equal(admins.rows.filter(row => row.assignment_status === "active").length, 1);
-        assert.equal(admins.rows.find(row => row.actor_id === firstAdminId)?.assignment_status, "revoked");
-        assert.equal(admins.rows.find(row => row.actor_id === recoveredAdminId)?.assignment_status, "active");
+        assert.ok(admins.rows.some(row => row.actor_id === firstAdminId));
+        assert.ok(admins.rows.some(row => row.actor_id === recoveredAdminId));
 
         const invalidatedSession = await verify.query(
           `SELECT revoked_at, revoked_reason FROM eper_customer_browser_sessions
