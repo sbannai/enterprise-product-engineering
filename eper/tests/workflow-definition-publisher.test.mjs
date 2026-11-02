@@ -160,3 +160,28 @@ test("publisher rejects malformed form fields before persistence", async () => {
   );
   assert.equal(calls.length, 0);
 });
+
+
+test("publisher rejects dangling and unsafe workflow rule configuration before database access", async () => {
+  const { calls, pool } = fixture();
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{ ...definition.activities[0], routingRuleIds: ["missing-rule"] }],
+      rules: [],
+    }),
+    error => error.code === "invalid_workflow_activity_rule_reference:review" && error.statusCode === 400,
+  );
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{ ...definition.activities[0], nextActivityIds: ["review"], routingRuleIds: ["unsafe-rule"] }],
+      rules: [{
+        id: "unsafe-rule", name: "Unsafe", priority: 1, targetActivityId: "review",
+        condition: { kind: "condition", field: "__proto__.constructor", operator: "exists" },
+      }],
+    }),
+    error => error.code.startsWith("invalid_workflow_rule:") && error.statusCode === 400,
+  );
+  assert.equal(calls.length, 0);
+});
