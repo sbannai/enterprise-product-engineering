@@ -3,8 +3,8 @@
 BEGIN;
 
 -- Preserve grant provenance explicitly. Existing assigned_by remains the actor
--- who performed the most recent grant; grantor_actor_id is immutable provenance
--- for the currently active grant and is cleared on revocation.
+-- who performed the most recent grant; grantor_actor_id is retained as
+-- historical grant provenance after revocation for audit and assignment history.
 ALTER TABLE eper_workflow_actor_role_assignment
   ADD COLUMN IF NOT EXISTS grantor_actor_id varchar(128);
 
