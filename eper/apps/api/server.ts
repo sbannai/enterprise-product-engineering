@@ -57,6 +57,7 @@ import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
 import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
+import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 
 
 function acceptsVersionedJson(request: IncomingMessage): boolean {
@@ -504,7 +505,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -2477,7 +2478,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      const isBinding = Boolean(providerConnectionsPath[2]);
+      const operation = providerConnectionsPath[3];\n      const isBinding = operation === "bind";\n      const isValidation = operation === "validate";
       if ((!isBinding && request.method !== "GET") || (isBinding && request.method !== "POST")) {
         sendMethodNotAllowed(request, response, isBinding ? "POST" : "GET"); return;
       }
@@ -2534,7 +2535,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       try {
         await authorizeProviderConnectionRequest({
           actor: { tenantId: identity.tenantId, actorId: identity.actorId },
-          action: isBinding ? "provider.connection.bind" : "provider.connection.read",
+          action: isBinding ? "provider.connection.bind" : isValidation ? "provider.connection.validate" : "provider.connection.read",
           applicationId,
           assignments: {
             async isTenantApplicationActive(tenantId, appId) {
@@ -2572,7 +2573,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const code = error instanceof Error ? error.message : "PROVIDER_CONNECTION_OPERATION_FAILED";
         const status = code === "PROVIDER_ACTION_FORBIDDEN" || code === "PROVIDER_APPLICATION_ACCESS_DENIED" ? 403
           : code === "PROVIDER_UNAUTHENTICATED" ? 401
-          : code === "PROVIDER_CONNECTION_NOT_FOUND" ? 404
+          : code === "PROVIDER_CONNECTION_NOT_FOUND" ? 404\n          : code === "PROVIDER_CONNECTION_NOT_VALIDATABLE" || code === "PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED" ? 409\n          : code === "PROVIDER_CONNECTION_VERSION_CONFLICT" ? 409
           : code === "PROVIDER_CONNECTION_NOT_ACTIVE" || code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
           : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
             code === "REQUEST_BODY_TOO_LARGE" || code === "Unexpected end of JSON input" ? 400 : 503;
