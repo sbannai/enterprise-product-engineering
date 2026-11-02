@@ -86,12 +86,12 @@ export class PostgresTenantApplicationAssignmentStore {
         const commercial = await client.query<{
           customer_status: string;
           assignment_status: string | null;
-          starts_at: string | Date | null;
-          ends_at: string | Date | null;
+          tariff_effective: boolean;
           max_applications: number | string | null;
           active_application_count: number | string;
         }>(`
-          SELECT c.customer_status, t.assignment_status, t.starts_at, t.ends_at,
+          SELECT c.customer_status, t.assignment_status,
+                 (t.starts_at <= NOW() AND (t.ends_at IS NULL OR t.ends_at > NOW())) AS tariff_effective,
                  t.max_applications,
                  (SELECT COUNT(*) FROM eper_tenant_application_assignment a
                    WHERE a.tenant_id = c.tenant_id
@@ -105,9 +105,7 @@ export class PostgresTenantApplicationAssignmentStore {
         const control = commercial.rows[0];
         if (!control) throw new Error("CUSTOMER_COMMERCIAL_ACCOUNT_NOT_CONFIGURED");
         if (control.customer_status !== "active") throw new Error("CUSTOMER_NOT_ACTIVE");
-        if (control.assignment_status !== "active" ||
-            (control.starts_at && new Date(control.starts_at).getTime() > Date.now()) ||
-            (control.ends_at && new Date(control.ends_at).getTime() <= Date.now())) {
+        if (control.assignment_status !== "active" || control.tariff_effective !== true) {
           throw new Error("CUSTOMER_TARIFF_NOT_ACTIVE");
         }
         if (Number(control.active_application_count) >= Number(control.max_applications)) {
