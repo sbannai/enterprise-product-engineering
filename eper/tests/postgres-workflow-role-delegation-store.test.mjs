@@ -78,7 +78,7 @@ test("rejects privilege escalation and elevated permission delegation", async ()
   const { pool: escalationPool } = fixture({ targetPermissions: ["workflow:view", "workflow:approve"] });
   await assert.rejects(
     new PostgresWorkflowRoleDelegationStore(escalationPool).grant(input),
-    /WORKFLOW_ROLE_DELEGATION_PEER_ADMIN_MODIFICATION_FORBIDDEN/,
+    /WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN/,
   );
   const { pool: elevatedPool } = fixture({ grantorPermissions: ["access:manage", "workflow:admin"] ,
     targetPermissions: ["workflow:admin"] });
