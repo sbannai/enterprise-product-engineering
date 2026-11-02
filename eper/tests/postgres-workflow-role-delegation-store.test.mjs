@@ -109,6 +109,9 @@ test("revokes an active role with optimistic concurrency and an atomic audit eve
       if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
         return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
       }
+      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) {
+        return { rows: [{ permissions: ["workflow:view"] }] };
+      }
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
       if (sql.includes("UPDATE eper_workflow_actor_role_assignment")) return { rows: [{ version: 4 }] };
       if (sql.includes("SELECT last_event_hash FROM eper_audit_chain_head")) return { rows: [{ last_event_hash: null }] };
@@ -133,6 +136,7 @@ test("revocation rejects stale versions and rolls back", async () => {
     async query(sql) {
       calls.push(sql);
       if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) return { rows: [{ permissions: ["access:manage"] }] };
+      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["workflow:view"] }] };
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 9 }] };
       return { rows: [] };
     },
