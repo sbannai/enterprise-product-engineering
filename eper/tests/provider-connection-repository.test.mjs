@@ -124,12 +124,14 @@ test("invalid tenant identity is rejected before database access", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("application binding sets tenant and application RLS context before lookup", async () => {
+test("application binding permits pending validation and records pending binding status", async () => {
   const { repository, calls } = fixture({ status: "PENDING_VALIDATION" });
-  await assert.rejects(() => repository.bindApplication({
+  await repository.bindApplication({
     ...audit, applicationId: "app-a", connectionId: "connection-a",
-    allowedCapabilities: ["sms.send"],
-  }), /PROVIDER_CONNECTION_NOT_FOUND|PROVIDER_CONNECTION_NOT_ACTIVE|PROVIDER_CAPABILITY_NOT_SUPPORTED/);
+    allowedCapabilities: ["email.send"],
+  });
+  const insert = calls.find((call) => call.sql.includes("INSERT INTO eper_provider_connection_applications"));
+  assert.equal(insert.values[6], "PENDING_VALIDATION");
   assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
   assert.ok(calls.some((call) => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
 });
