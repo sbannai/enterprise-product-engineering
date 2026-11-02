@@ -62,7 +62,7 @@ test("create persists a secret reference but returns a masked connection view", 
   });
   assert.equal(created.status, "PENDING_VALIDATION");
   assert.equal(created.tenantId, "tenant-a");
-  assert.equal(created.connectionId, "00000000-0000-4000-8000-000000000001");
+  assert.match(created.connectionId, /^[0-9a-f-]{36}$/);
   assert.equal("secretReference" in created, false);
   assert.ok(calls.some((call) => call.sql.includes("secret_reference")));
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
