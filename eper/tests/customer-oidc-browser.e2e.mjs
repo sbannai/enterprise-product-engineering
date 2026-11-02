@@ -154,9 +154,9 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
     await page.getByLabel("Business impact").fill("The customer workspace support journey must be authenticated and scoped.");
     await page.getByRole("button",{name:"Submit ticket"}).click();
-    await page.getByText(/Ticket submitted\\. Reference:/).waitFor();
-    const confirmation=await page.getByText(/Ticket submitted\\. Reference:/).textContent();
-    const ticketMatch=confirmation?.match(/Reference:\\s*([0-9a-f-]{36})/i);
+    await page.getByText(/Ticket submitted\. Reference:/).waitFor();
+    const confirmation=await page.getByText(/Ticket submitted\. Reference:/).textContent();
+    const ticketMatch=confirmation?.match(/Reference:\s*([0-9a-f-]{36})/i);
     assert.ok(ticketMatch,"customer confirmation must include the durable ticket reference: "+confirmation);
     ticketId=ticketMatch[1];
     const persistedTicket=await pool.query("SELECT tenant_id,application_id,created_by,status FROM eper_support_tickets WHERE id=$1",[ticketId]);
