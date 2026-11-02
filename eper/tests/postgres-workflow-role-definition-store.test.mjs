@@ -88,3 +88,33 @@ test("role definition rejects unknown or duplicate permissions before database a
   );
   assert.equal(calls.length, 0);
 });
+
+
+test("schema readiness requires the explicit role scope metadata column", async () => {
+  const readinessRow = {
+    role_table: "eper_workflow_role_definition",
+    row_security: true,
+    force_row_security: true,
+    policy_present: true,
+    delegable_column_present: true,
+    scope_type_column_present: true,
+  };
+  const poolFor = row => ({
+    async connect() {
+      return {
+        async query(sql) {
+          assert.match(sql, /scope_type/);
+          return { rows: [{ ...readinessRow, ...row }] };
+        },
+        release() {},
+      };
+    },
+  });
+  await assert.doesNotReject(
+    new PostgresWorkflowRoleDefinitionStore(poolFor({})).assertReady(),
+  );
+  await assert.rejects(
+    new PostgresWorkflowRoleDefinitionStore(poolFor({ scope_type_column_present: false })).assertReady(),
+    /EPER_WORKFLOW_ROLE_DEFINITION_SCHEMA_NOT_READY/,
+  );
+});
