@@ -30,6 +30,11 @@ interface ModuleAccessRow {
   ends_at: string | Date | null;
   grace_until: string | Date | null;
   permission_allowed: boolean | null;
+  tariff_assignment_status: string | null;
+  tariff_max_applications: number | string | null;
+  active_application_count: number | string;
+  tariff_starts_at: string | Date | null;
+  tariff_ends_at: string | Date | null;
 }
 
 interface AddonAccessRow {
@@ -97,9 +102,19 @@ export class PostgresModuleEntitlementService {
     try {
       const result = await client.query<ModuleAccessRow>(
         `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
-                e.grace_until, p.allowed AS permission_allowed
+                e.grace_until, p.allowed AS permission_allowed,
+                ta.assignment_status AS tariff_assignment_status,
+                ta.max_applications AS tariff_max_applications,
+                COALESCE(active_apps.application_count, 0) AS active_application_count,
+                ta.starts_at AS tariff_starts_at, ta.ends_at AS tariff_ends_at
            FROM (SELECT $1::text AS module_key) requested
            LEFT JOIN eper_customer_account ca ON ca.tenant_id = $2
+           LEFT JOIN eper_customer_tariff_assignment ta ON ta.tenant_id = $2
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) AS application_count
+               FROM eper_tenant_application_assignment aa
+              WHERE aa.tenant_id = $2 AND aa.assignment_status = 'active'
+           ) active_apps ON TRUE
            LEFT JOIN eper_module_catalog c ON c.module_key = requested.module_key
            LEFT JOIN eper_customer_module_entitlement e
              ON e.tenant_id = $2 AND e.module_key = requested.module_key
@@ -111,6 +126,15 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
+      const now = (context.now ?? new Date()).getTime();
+      const tariffStarts = row?.tariff_starts_at ? new Date(row.tariff_starts_at).getTime() : null;
+      const tariffEnds = row?.tariff_ends_at ? new Date(row.tariff_ends_at).getTime() : null;
+      if (row?.tariff_assignment_status === "active" &&
+          (tariffStarts === null || now >= tariffStarts) &&
+          (tariffEnds === null || now < tariffEnds) &&
+          Number(row.active_application_count) > Number(row.tariff_max_applications)) {
+        return { allowed: false, reason: "tariff_overage" };
+      }
       return evaluateModuleAccess({
         moduleStatus: row?.module_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
