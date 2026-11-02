@@ -84,14 +84,24 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
         assert.equal(history.find(row => row.applicationId === applicationId)?.version, 2);
       });
 
-      await t.test("multi-application tariff permits only the purchased application count", async () => {
-        const second = await tenantStore.assign({ ...common, applicationId: limitApplicationId, expectedVersion: 0 });
-        assert.equal(second.status, "active");
-        await assert.rejects(
+      await t.test("concurrent multi-application activation cannot exceed the purchased count", async () => {
+        const attempts = await Promise.allSettled([
+          tenantStore.assign({ ...common, applicationId: limitApplicationId, expectedVersion: 0 }),
           tenantStore.assign({ ...common, applicationId: overLimitApplicationId, expectedVersion: 0 }),
-          { message: "CUSTOMER_APPLICATION_TARIFF_LIMIT_EXCEEDED" },
-        );
-        const revoked = await tenantStore.revoke({ ...common, applicationId: limitApplicationId, expectedVersion: 1 });
+        ]);
+        assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1);
+        const rejected = attempts.find(result => result.status === "rejected");
+        assert.match(String(rejected?.reason?.message), /CUSTOMER_APPLICATION_TARIFF_LIMIT_EXCEEDED/);
+        const active = await tenantStore.listActive(tenantId);
+        assert.equal(active.length, 2, "one original plus exactly one concurrent activation");
+        const extraApplicationId = active.find(id => id !== applicationId);
+        assert.ok(extraApplicationId);
+        const extraAssignment = (await tenantStore.listAssignments(tenantId))
+          .find(row => row.applicationId === extraApplicationId);
+        assert.ok(extraAssignment);
+        const revoked = await tenantStore.revoke({
+          ...common, applicationId: extraApplicationId, expectedVersion: extraAssignment.version,
+        });
         assert.equal(revoked.status, "revoked");
       });
 
