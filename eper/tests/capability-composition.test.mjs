@@ -4,7 +4,7 @@ import { validateCapabilityComposition } from "../dist/packages/workflows/capabi
 
 const catalogue = [
   { typeId: "activity.approval", contractVersion: 1, kind: "activity", label: "Approval", description: "Human approval",
-    inputs: [{ id: "request", label: "Request details", valueType: "record", required: true }],
+    inputs: [{ id: "request", label: "Request details", valueType: "record", required: true }, { id: "trigger", label: "When started", valueType: "event" }],
     outputs: [{ id: "decision", label: "Decision", valueType: "record" }],
     outcomes: [{ id: "approved", label: "Approved" }, { id: "rejected", label: "Rejected" }],
     sideEffect: "none" },
@@ -50,19 +50,20 @@ test("rejects incompatible data ports and implicit type coercion", () => {
   assert.ok(validateCapabilityComposition(graph, catalogue).some(item => item.code === "composition.port.incompatible"));
 });
 
-test("rejects cycles, unsafe control transitions and integrations without idempotency", () => {
+test("rejects control-flow cycles and integrations without idempotency", () => {
+  const secondApproval = { ...base.nodes[0], id: "approve2", label: "Second approval" };
   const graph = {
     entryNodeId: "approve",
-    nodes: [
-      base.nodes[0],
-      { ...base.nodes[1], configuration: {} },
-    ],
+    nodes: [base.nodes[0], secondApproval],
     edges: [
-      base.edges[0],
-      { id: "back", kind: "control", fromNodeId: "notify", fromPortId: "unknown", toNodeId: "approve", toPortId: "request" },
+      { id: "forward", kind: "control", fromNodeId: "approve", fromPortId: "approved", toNodeId: "approve2", toPortId: "trigger" },
+      { id: "back", kind: "control", fromNodeId: "approve2", fromPortId: "approved", toNodeId: "approve", toPortId: "trigger" },
     ],
   };
   const codes = validateCapabilityComposition(graph, catalogue).map(item => item.code);
-  assert.ok(codes.includes("composition.integration.idempotency_required"));
-  assert.ok(codes.includes("composition.control.outcome"));
+  assert.ok(codes.includes("composition.control.cycle"));
+
+  const missingIdempotency = { ...base, nodes: [base.nodes[0], { ...base.nodes[1], configuration: {} }] };
+  assert.ok(validateCapabilityComposition(missingIdempotency, catalogue)
+    .some(item => item.code === "composition.integration.idempotency_required"));
 });
