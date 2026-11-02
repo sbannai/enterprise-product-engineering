@@ -1947,7 +1947,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Product Admin customer lifecycle controls are durable and audit-backed only.
     if (requestUrl.pathname === "/admin/customers" ||
-        /^\/admin\\/customers\\/[^/]+(?:\\/status)?$/.test(requestUrl.pathname)) {
+        /^\/admin\/customers\/[^/]+(?:\/status)?$/.test(requestUrl.pathname)) {
       if (process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
@@ -1961,7 +1961,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const store = options.customerLifecycleStore;
       if (!store) { sendJson(request, response, 503, { error: "CUSTOMER_LIFECYCLE_STORE_UNAVAILABLE" }); return; }
-      const match = /^\/admin\\/customers\\/([^/]+)(?:\\/status)?$/.exec(requestUrl.pathname);
+      const match = /^\/admin\/customers\/([^/]+)(?:\/status)?$/.exec(requestUrl.pathname);
       try {
         if (requestUrl.pathname === "/admin/customers" && request.method === "GET") {
           sendApiSuccess(request, response, 200, { customers: await store.list(), persistence: "postgres" }); return;
