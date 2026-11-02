@@ -129,8 +129,8 @@ test("commercially gated checkout rejects inactive customers, missing app grants
           (tariff_key, tariff_version, billing_basis, max_applications, amount, currency,
            billing_interval, effective_from, tariff_status, created_by)
          VALUES ($1, 1, 'single_application', 1, 100, 'INR', 'monthly',
-                 NOW() - INTERVAL '1 day', 'active', 'integration-test')`,
-        [tariffKey],
+                 NOW() - INTERVAL '1 day', $2, 'integration-test')`,
+        [tariffKey, options.tariffStatus ?? 'active'],
       );
       await pool.query(
         `INSERT INTO eper_customer_tariff_assignment
@@ -146,8 +146,8 @@ test("commercially gated checkout rejects inactive customers, missing app grants
         await pool.query(
           `INSERT INTO eper_tenant_application_assignment
             (tenant_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1, $2, 'active', 'integration-test', 'integration-test')`,
-          [tenantId, i === 0 ? applicationId : "extra-" + randomUUID()],
+           VALUES ($1, $2, $3, 'integration-test', 'integration-test')`,
+          [tenantId, i === 0 ? applicationId : "extra-" + randomUUID(), options.grantStatus ?? 'active'],
         );
       }
       return { tenantId, applicationId };
@@ -173,6 +173,12 @@ test("commercially gated checkout rejects inactive customers, missing app grants
 
     const missingGrant = await seed("missing-grant", { appCount: 0 });
     assert.deepEqual(await reserve("missing-grant", missingGrant), { ok: false, reason: "commercial_ineligible" });
+
+    const revokedGrant = await seed("revoked-grant", { grantStatus: "revoked" });
+    assert.deepEqual(await reserve("revoked-grant", revokedGrant), { ok: false, reason: "commercial_ineligible" });
+
+    const retiredTariff = await seed("retired-tariff", { tariffStatus: "retired" });
+    assert.deepEqual(await reserve("retired-tariff", retiredTariff), { ok: false, reason: "commercial_ineligible" });
 
     const overLimit = await seed("over-limit", { appCount: 2 });
     assert.deepEqual(await reserve("over-limit", overLimit), { ok: false, reason: "commercial_ineligible" });
