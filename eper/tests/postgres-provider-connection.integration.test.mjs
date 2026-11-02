@@ -129,8 +129,13 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
           } };
         } },
       );
+      await repository.bindApplication({
+        tenantId: tenantA, applicationId: appA, connectionId, actorId,
+        allowedCapabilities: ["email.send"], correlationId: "bind-" + suffix,
+        auditEnvironment: "sandbox",
+      });
       const validated = await validation.validate({
-        tenantId: tenantA, connectionId, actorId, correlationId: "validate-" + suffix,
+        tenantId: tenantA, applicationId: appA, connectionId, actorId, correlationId: "validate-" + suffix,
         auditEnvironment: "sandbox",
       });
       assert.deepEqual(validated, {
@@ -142,11 +147,6 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         [tenantA, connectionId],
       ));
       assert.deepEqual(history.rows.map(row => row.validation_outcome), ["SUCCEEDED"]);
-      await repository.bindApplication({
-        tenantId: tenantA, applicationId: appA, connectionId, actorId,
-        allowedCapabilities: ["email.send"], correlationId: "bind-" + suffix,
-        auditEnvironment: "sandbox",
-      });
       const appAConnections = await repository.listForApplication(tenantA, appA);
       assert.equal(appAConnections.length, 1);
       assert.equal(appAConnections[0].connectionId, connectionId);
@@ -162,7 +162,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         } },
       );
       const degraded = await failedValidation.validate({
-        tenantId: tenantA, connectionId, actorId, correlationId: "validate-fail-" + suffix,
+        tenantId: tenantA, applicationId: appA, connectionId, actorId, correlationId: "validate-fail-" + suffix,
         auditEnvironment: "sandbox",
       });
       assert.deepEqual(degraded, {
@@ -175,17 +175,17 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       ));
       assert.equal(suspendedAfterFailure.rows[0]?.binding_status, "SUSPENDED");
 
+      await repository.bindApplication({
+        tenantId: tenantA, applicationId: appA, connectionId, actorId,
+        allowedCapabilities: ["email.send"], correlationId: "rebind-after-failure-" + suffix,
+        auditEnvironment: "sandbox",
+      });
       const revalidated = await validation.validate({
-        tenantId: tenantA, connectionId, actorId, correlationId: "validate-retry-" + suffix,
+        tenantId: tenantA, applicationId: appA, connectionId, actorId, correlationId: "validate-retry-" + suffix,
         auditEnvironment: "sandbox",
       });
       assert.equal(revalidated.status, "ACTIVE");
       assert.equal(revalidated.version, 4);
-      await repository.bindApplication({
-        tenantId: tenantA, applicationId: appA, connectionId, actorId,
-        allowedCapabilities: ["email.send"], correlationId: "rebind-" + suffix,
-        auditEnvironment: "sandbox",
-      });
       const historyAfterRetry = await withScope(scopedPool, tenantA, null, async (client) => client.query(
         "SELECT validation_outcome FROM eper_provider_validation_events WHERE tenant_id=$1 AND connection_id=$2 ORDER BY validated_at",
         [tenantA, connectionId],
@@ -234,7 +234,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.deepEqual(hiddenFromOtherApplication, [0, 0, 0]);
 
       const rotated = await repository.rotateSecretReference({
-        tenantId: tenantA, connectionId, actorId,
+        tenantId: tenantA, applicationId: appA, connectionId, actorId,
         secretReference: "vault://tenant-a/provider/credential-v2",
         expectedVersion: 4, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
       });
@@ -247,7 +247,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(suspended.rows[0]?.binding_status, "SUSPENDED");
 
       const revoked = await repository.revoke({
-        tenantId: tenantA, connectionId, actorId, expectedVersion: 5,
+        tenantId: tenantA, applicationId: appA, connectionId, actorId, expectedVersion: 5,
         correlationId: "revoke-" + suffix, auditEnvironment: "sandbox",
       });
       assert.equal(revoked.version, 6);
