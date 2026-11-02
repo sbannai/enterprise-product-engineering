@@ -108,6 +108,14 @@ function toConnection(row: ConnectionRow): ProviderConnection {
 export class PostgresProviderConnectionRepository {
   constructor(private readonly pool: AuditSqlPool) {}
 
+  private async setTenantContext(client: AuditSqlClient, tenantId: string): Promise<void> {
+    await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+  }
+
+  private async setApplicationContext(client: AuditSqlClient, applicationId: string): Promise<void> {
+    await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+  }
+
   async create(input: CreateProviderConnectionInput): Promise<ProviderConnection> {
     this.validateIdentity(input.tenantId, "TENANT");
     this.validateIdentity(input.actorId, "ACTOR");
@@ -124,6 +132,7 @@ export class PostgresProviderConnectionRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
       const provider = await client.query<{ provider_status: string }>(
         "SELECT provider_status FROM eper_provider_definitions WHERE provider_key = $1 FOR SHARE",
         [input.providerKey],
@@ -164,13 +173,19 @@ export class PostgresProviderConnectionRepository {
     this.validateIdentity(connectionId, "CONNECTION_ID");
     const client = await this.pool.connect();
     try {
+      await client.query("BEGIN");
+      await this.setTenantContext(client, tenantId);
       const result = await client.query<ConnectionRow>(
         `SELECT tenant_id, connection_id, provider_key, display_name, auth_mode,
           connection_status, environment, safe_metadata, version, created_at, updated_at
          FROM eper_provider_connections WHERE tenant_id = $1 AND connection_id = $2`,
         [tenantId, connectionId],
       );
+      await client.query("COMMIT");
       return result.rows[0] ? toConnection(result.rows[0]) : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
     } finally {
       client.release();
     }
@@ -189,6 +204,8 @@ export class PostgresProviderConnectionRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
+      await this.setApplicationContext(client, input.applicationId);
       const connection = await client.query<{
         provider_key: string; connection_status: ProviderConnectionStatus;
         capabilities: string[] | string;
@@ -250,6 +267,7 @@ export class PostgresProviderConnectionRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
       const prior = await client.query<{ version: number | string; connection_status: ProviderConnectionStatus }>(
         "SELECT version, connection_status FROM eper_provider_connections WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",
         [input.tenantId, input.connectionId],
@@ -268,6 +286,12 @@ export class PostgresProviderConnectionRepository {
       );
       const row = saved.rows[0];
       if (!row) throw new Error("PROVIDER_CONNECTION_ROTATION_RETURNED_NO_ROW");
+      await client.query(
+        `UPDATE eper_provider_connection_applications SET binding_status = 'SUSPENDED',
+          version = version + 1, updated_at = NOW(), updated_by = $3
+         WHERE tenant_id = $1 AND connection_id = $2`,
+        [input.tenantId, input.connectionId, input.actorId],
+      );
       await this.audit(client, {
         tenantId: input.tenantId, applicationId: "eper", environment: input.auditEnvironment,
         actorId: input.actorId, action: "provider.connection.rotate_secret_reference",
@@ -294,6 +318,7 @@ export class PostgresProviderConnectionRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
       const prior = await client.query<{ version: number | string }>(
         "SELECT version FROM eper_provider_connections WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",
         [input.tenantId, input.connectionId],
