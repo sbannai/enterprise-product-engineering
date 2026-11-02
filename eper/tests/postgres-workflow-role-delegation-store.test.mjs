@@ -10,7 +10,7 @@ const input = {
 };
 
 function fixture({ tenantStatus = "active", grantorPermissions = ["access:manage", "workflow:view"],
-  targetPermissions = ["workflow:view"], targetDelegable = true, targetActorStatus = "active", priorVersion = null } = {}) {
+  targetPermissions = ["workflow:view"], targetDelegable = true, targetScopeType = "application", targetActorStatus = "active", priorVersion = null } = {}) {
   const calls = [];
   const now = "2026-11-02T05:00:00.000Z";
   const client = {
@@ -18,7 +18,7 @@ function fixture({ tenantStatus = "active", grantorPermissions = ["access:manage
       calls.push({ sql, values });
       if (sql.includes("eper_tenant_application_assignment")) return { rows: [{ assignment_status: tenantStatus }] };
       if (sql.includes("FROM eper_workflow_actor_role_assignment ra")) return { rows: [{ permissions: grantorPermissions }] };
-      if (sql.includes("FROM eper_workflow_role_definition")) return { rows: [{ permissions: targetPermissions, delegable: targetDelegable }] };
+      if (sql.includes("FROM eper_workflow_role_definition")) return { rows: [{ permissions: targetPermissions, delegable: targetDelegable, scope_type: targetScopeType }] };
       if (sql.includes("eper_actor_application_assignment")) return { rows: [{ assignment_status: targetActorStatus }] };
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) {
         return { rows: priorVersion === null ? [] : [{ version: priorVersion }] };
@@ -84,6 +84,14 @@ test("rejects a role unless its explicit catalogue delegable flag is true", asyn
   assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")), false);
 });
 
+test("rejects tenant-wide or unknown role scopes until tenant-wide delegation is implemented", async () => {
+  const { calls, pool } = fixture({ targetScopeType: "tenant" });
+  await assert.rejects(new PostgresWorkflowRoleDelegationStore(pool).grant(input),
+    /WORKFLOW_ROLE_DELEGATION_TARGET_ROLE_SCOPE_UNSUPPORTED/);
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")), false);
+});
+
 test("rejects privilege escalation and elevated permission delegation", async () => {
   const { pool: escalationPool } = fixture({ targetPermissions: ["workflow:view", "workflow:approve"] });
   await assert.rejects(
@@ -120,7 +128,7 @@ test("revokes an active role with optimistic concurrency and an atomic audit eve
         return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
       }
       if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) {
-        return { rows: [{ permissions: ["workflow:view"], delegable: true }] };
+        return { rows: [{ permissions: ["workflow:view"], delegable: true, scope_type: "application" }] };
       }
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
       if (sql.includes("UPDATE eper_workflow_actor_role_assignment")) return { rows: [{ version: 4 }] };
@@ -146,7 +154,7 @@ test("revocation rejects stale versions and rolls back", async () => {
     async query(sql) {
       calls.push(sql);
       if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
-      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["workflow:view"] }] };
+      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["workflow:view"], scope_type: "application" }] };
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 9 }] };
       return { rows: [] };
     },
