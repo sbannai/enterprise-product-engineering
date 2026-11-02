@@ -128,3 +128,33 @@ test("permission check denies absent permission and rejects unknown permission k
   );
   assert.equal(invalid.calls.length, 0);
 });
+
+
+test("role assignment directory lists tenant/application history under transaction-local RLS context", async () => {
+  const calls = [];
+  const now = "2026-11-02T05:00:00.000Z";
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (sql.includes("SELECT r.* FROM eper_workflow_actor_role_assignment r")) {
+        return { rows: [{
+          tenant_id: input.tenantId, application_id: input.applicationId, actor_id: input.actorId,
+          role_id: input.roleId, assignment_status: "revoked", version: 4,
+          assigned_at: now, assigned_by: "admin-01", revoked_at: now, revoked_by: "admin-02",
+          updated_at: now, updated_by: "admin-02",
+        }] };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const store = new PostgresWorkflowActorRoleAssignmentStore({ async connect() { return client; } });
+  const rows = await store.listAssignments(input.tenantId, input.applicationId);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "revoked");
+  assert.equal(rows[0].version, 4);
+  assert.equal(rows[0].revokedBy, "admin-02");
+  assert.ok(calls.some(c => c.sql.includes("set_config('eper.tenant_id'")));
+  assert.ok(calls.some(c => c.sql.includes("set_config('eper.application_id'")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
