@@ -8,18 +8,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../dist/apps/api/server.js";
 
-test("browser OIDC login grants protected settings, logout revokes access", async () => {
+test("browser OIDC login grants the customer workspace and support journey, logout revokes access", async () => {
   const proxyKeys = ["HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","http_proxy","https_proxy","all_proxy","NO_PROXY","no_proxy"];
   const proxyPrevious = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]));
   for (const key of proxyKeys) delete process.env[key];
   process.env.NO_PROXY = "127.0.0.1,localhost";
   process.env.no_proxy = process.env.NO_PROXY;
-  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
+  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_CUSTOMER_OIDC_ENABLED:"true", EPER_CUSTOMER_IDENTITY_PERSISTENCE:"postgres",
-    EPER_CUSTOMER_PORTAL_API_ENABLED:"true",
-    EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({"tenant-01":["settings"]}),
+    EPER_CUSTOMER_PORTAL_API_ENABLED:"true", EPER_TICKETING_API_ENABLED:"true",
+    EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({"tenant-01":["settings","tickets-feedback"]}),
     EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({"tenant-01":{"app-01":{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
   });
   const state="s".repeat(43), sessionToken="t".repeat(43);
@@ -29,14 +29,24 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     async consumeLoginTransaction(){return {nonceHash:"n",pkceVerifierCiphertext:"p",issuer:"https://idp.example.test",redirectUri:origin+"/customer/auth/oidc/callback"};},
     async resolveSubject(issuer,subject){return {issuer,subject,tenantId:"tenant-01",actorId:"actor-01",status:"active",version:1};},
     async createSession(){active=true;return {sessionToken,session:{tenantId:"tenant-01",actorId:"actor-01"}};},
-    async resolveSession(token){return active&&token===sessionToken?{tenantId:"tenant-01",actorId:"actor-01"}:null;},
+    async resolveSession(token){return active&&token===sessionToken?{tenantId:"tenant-01",actorId:"actor-01",issuer:"https://idp.example.test",subject:"subject-01",createdAt:"2026-11-02T00:00:00.000Z",lastSeenAt:"2026-11-02T00:00:00.000Z",idleExpiresAt:"2026-11-02T08:00:00.000Z",absoluteExpiresAt:"2026-11-03T00:00:00.000Z"}:null;},
     async revokeSession(token){assert.equal(token,sessionToken);active=false;return true;},
   };
   try {
     const client={async beginLogin(){return {authorizationUrl:origin+"/mock-idp?state="+state,state};},async completeLogin(){return {issuer:"https://idp.example.test",subject:"subject-01"};}};
-    const serverOptions={customerOidcClient:client,customerIdentitySessionStore:store,
-      tenantApplicationAssignmentStore:{async listActive(){return ["app-01"];}},
-      actorApplicationAssignmentStore:{async isAssigned(){return true;}},
+    const tickets=[];
+    const replies=[];
+    const ticketId="00000000-0000-4000-8000-000000000001";
+    const ticketStore={
+      async assertReady(){},
+      async create(identity,input){const ticket={id:ticketId,tenantId:identity.tenantId,applicationId:identity.applicationId,actorId:identity.actorId,...input,status:"new",severity:"normal",createdAt:"2026-11-02T00:00:00.000Z"};tickets.push(ticket);return ticket;},
+      async list(identity,filters){return tickets.filter(ticket=>ticket.tenantId===identity.tenantId&&ticket.applicationId===filters.applicationId);},
+      async listReplies(identity,id,visibility){if(id!==ticketId||!tickets.some(ticket=>ticket.tenantId===identity.tenantId&&ticket.applicationId===identity.applicationId))return null;return replies.filter(reply=>visibility!=="customer"||reply.visibility==="customer_visible");},
+      async addReply(identity,id,body,authorRole){if(id!==ticketId||!tickets.some(ticket=>ticket.tenantId===identity.tenantId&&ticket.applicationId===identity.applicationId))return null;const reply={id:"reply-01",authorRole,body,createdAt:"2026-11-02T00:01:00.000Z",visibility:"customer_visible"};replies.push(reply);return reply;},
+    };
+    const serverOptions={customerOidcClient:client,customerIdentitySessionStore:store,ticketStore,
+      tenantApplicationAssignmentStore:{async listActive(){return ["app-01"]; }},
+      actorApplicationAssignmentStore:{async listActive(){return ["app-01"];},async isAssigned(){return true;}},
       customerOidcPublicOrigin:"https://localhost",customerCsrfSecret:"c".repeat(48)};
     server=createAppServer(serverOptions);
     await new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"0.0.0.0",resolve);});
@@ -62,17 +72,39 @@ test("browser OIDC login grants protected settings, logout revokes access", asyn
     browser=await chromium.launch({headless:true});
     const context=await browser.newContext({ignoreHTTPSErrors:true});
     const page=await context.newPage();
-    await page.goto(origin+"/customer/auth/oidc/start?returnTo="+encodeURIComponent("/customer/settings?applicationId=app-01"));
+    const customerResponses=[];
+    const pageErrors=[];
+    const requestFailures=[];
+    const consoleErrors=[];
+    page.on("response",response=>{const url=new URL(response.url());if(url.pathname.startsWith("/customer/"))customerResponses.push(url.pathname+" "+response.status());});
+    page.on("pageerror",error=>pageErrors.push(error.message));
+    page.on("requestfailed",request=>{if(request.url().includes("/customer/"))requestFailures.push(request.url()+" "+request.failure()?.errorText);});
+    page.on("console",message=>{if(message.type()==="error")consoleErrors.push(message.text());});
+    await page.goto(origin+"/customer-portal-preview");
+    await page.getByRole("link",{name:"Sign in with your organization"}).click();
     await page.getByRole("link",{name:"Continue sign in"}).click();
-    await page.waitForURL("**/customer/settings?applicationId=app-01");
+    await page.waitForURL("**/customer-portal-preview");
+    await page.waitForTimeout(1200);
+    const connectionMessage=await page.locator("#connectResult").textContent();
+    assert.equal(connectionMessage,"Your organization session is active.",
+      "browser workspace bootstrap failed; message="+connectionMessage+" url="+page.url()+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
+    await page.getByRole("button",{name:"Tickets & Feedback"}).click();
+    await page.getByLabel("Title").fill("Browser-authenticated support request");
+    await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
+    await page.getByLabel("Business impact").fill("The customer workspace support journey must be authenticated and scoped.");
+    await page.getByRole("button",{name:"Submit ticket"}).click();
+    await page.getByText("Ticket submitted. Reference: "+ticketId).waitFor();
+    await page.getByRole("button",{name:"View conversation"}).click();
+    await page.getByLabel("Reply to support").fill("Additional details from the customer browser session.");
+    await page.getByRole("button",{name:"Send reply"}).click();
+    await page.getByText("Reply sent.").waitFor();
+    await page.getByText("Additional details from the customer browser session.").waitFor();
     const allowed=await page.goto(origin+"/customer/settings?applicationId=app-01");
     assert.equal(allowed.status(),200);
     assert.deepEqual(await allowed.json(),{applicationId:"app-01",settings:{displayName:"Customer workspace",locale:"en-US",currency:"USD"}});
-    const logout=await page.evaluate(async()=>{
-      const csrf=document.cookie.split("; ").find(v=>v.startsWith("__Host-eper_csrf="))?.split("=")[1]??"";
-      return (await fetch("/customer/auth/logout",{method:"POST",headers:{"x-csrf-token":csrf}})).status;
-    });
-    assert.equal(logout,204);
+    await page.goto(origin+"/customer-portal-preview");
+    await page.getByRole("button",{name:"Sign out"}).click();
+    await page.getByRole("link",{name:"Sign in with your organization"}).waitFor();
     const denied=await page.goto(origin+"/customer/settings?applicationId=app-01");
     assert.equal(denied.status(),401);
     assert.equal((await denied.json()).error.code,"UNAUTHENTICATED");

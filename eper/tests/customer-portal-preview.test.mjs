@@ -30,7 +30,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
-    for (const label of ["Help Center", "Growth Hub", "My Applications", "Plan &amp; Billing", "Switch tariff plan", "Accept and switch plan", "customerTariffAccepted", "/customer/commercial-tariff", "Single-Application", "Multi-Application", "Select which active applications to revoke", "customerTariffRevoke", "CUSTOMER_ACCEPTED_TARIFF_DOWNGRADE_SELECTION", "These changes and the tariff switch are committed together, or none are applied.", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups"]) {
+    for (const label of ["Help Center", "Growth Hub", "My Applications", "Plan &amp; Billing", "Switch tariff plan", "Accept and switch plan", "customerTariffAccepted", "/customer/commercial-tariff", "Single-Application", "Multi-Application", "Select which active applications to revoke", "customerTariffRevoke", "CUSTOMER_ACCEPTED_TARIFF_DOWNGRADE_SELECTION", "These changes and the tariff switch are committed together, or none are applied.", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "NOT CONNECTED", "customerCredential", "Connect workspace", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups", "Sign in with your organization", "Sign out", "/customer/auth/oidc/start"]) {
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.match(html, /customer navigation/i);
@@ -41,8 +41,10 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /@media\s*\(max-width:\s*380px\)/i, "narrow-phone layout breakpoint is required");
     assert.match(html, /nav button[^}]*min-height:\s*44px/i, "navigation targets must be touch-friendly");
     assert.match(html, /:focus-visible/i, "keyboard focus must be visible");
-    assert.match(html, /authorization:"Bearer "\+requestToken/i, "API calls must carry the captured in-memory customer credential");
-    assert.match(html, /Promise\.all\(\[api\("\/customer\/session"\),api\("\/customer\/portal\/context"\),api\("\/customer\/workspace\/modules"\)\]\)/, "independent workspace bootstrap requests must run concurrently");
+    assert.match(html, /credentials:"same-origin"/i, "customer APIs must use the browser session cookie");
+    assert.match(html, /headers\["x-csrf-token"\]=csrf/i, "unsafe customer API requests must carry the same-origin CSRF token");
+    assert.match(html, /const session=await api\("\/customer\/session"\)/, "workspace bootstrap must resolve the browser session before loading customer data");
+    assert.match(html, /Promise\.all\(\[api\("\/customer\/portal\/context"\),api\("\/customer\/workspace\/modules"\)\]\)/, "workspace context and module requests must run concurrently after authentication");
     assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
     assert.match(html, /\/customer\/applications\/\"\+encodeURIComponent\(applicationId\)\+\"\/assets\//, "asset downloads must use the authenticated application-scoped download API");
     assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
@@ -66,12 +68,12 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /sequence!==ticketLoadSequence\|\|application\.value\.trim\(\)!==app/, "late ticket responses must not overwrite the selected application history");
     assert.match(html, /let viewLoadSequence=0/, "customer workspace must sequence async view loads");
     assert.match(html, /let sessionGeneration=0/, "customer session lifecycle must have a generation guard");
-    assert.match(html, /const requestGeneration=sessionGeneration;const requestToken=bearerToken/, "each API call must capture its initiating customer session");
-    assert.match(html, /if\(requestGeneration!==sessionGeneration\|\|requestToken!==bearerToken\)throw new Error\("customer_session_changed"\)/, "API responses must be rejected after disconnect or reconnect");
-    assert.match(html, /if\(!requestToken\)throw new Error\("customer_session_disconnected"\)/, "API calls must fail closed without an active customer credential");
+    assert.match(html, /const requestGeneration=sessionGeneration;if\(path!=="\/customer\/session"&&!authenticated\)/, "each API call must be bound to the active browser session generation");
+    assert.match(html, /if\(requestGeneration!==sessionGeneration\)throw new Error\("customer_session_changed"\)/, "API responses must be rejected after logout or reconnect");
+    assert.match(html, /if\(path!=="\/customer\/session"&&!authenticated\)throw new Error\("customer_session_disconnected"\)/, "customer API calls must fail closed without an authenticated browser session");
     assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
-    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;bearerToken="";enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "disconnect must invalidate in-flight requests and clear customer data");
+    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests and clear customer data");
     assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
     assert.match(html, /ticketViewSessionGeneration=sessionGeneration/, "ticket view application bootstrap must capture its session");
     assert.match(html, /if\(ticketViewSessionGeneration!==sessionGeneration\)return;const assigned=/, "late assigned-application responses must not mutate a stale ticket view");
@@ -162,7 +164,7 @@ test("customer session endpoint rejects missing and unknown credentials", async 
   }
 });
 
-test("customer session endpoint returns only server-mapped identity", async () => {
+test("customer session endpoint returns server-mapped identity and its authentication source", async () => {
   const previous = process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON;
   const credential = "customer-test-credential-that-is-long-enough-123456";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
@@ -181,7 +183,7 @@ test("customer session endpoint returns only server-mapped identity", async () =
     });
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).data, {
-      authenticated: true, tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer"
+      authenticated: true, tenantId: "tenant-test", actorId: "actor-test", roleKey: "customer", authentication: "server-bearer-map"
     });
     assert.equal(response.headers.get("cache-control"), "no-store");
   } finally {
