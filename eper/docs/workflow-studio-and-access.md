@@ -73,6 +73,18 @@ Workflow definitions may include a version-pinned `rules` collection. Activities
 
 ### Current UI scope and remaining work
 
-The current UI provides a simple single-condition authoring form for routing rules and a visual activity/transition overview. The domain evaluator supports nested boolean groups, but a multi-condition visual group editor, richer drag-and-drop graph editing, draft retrieval/editing through a dedicated application-scoped draft store, and a customer OIDC-session-backed browser experience remain follow-on work. Do not describe those as complete. The existing preview still does not execute a business transaction.
+The current UI provides a simple single-condition authoring form for routing rules and a visual activity/transition overview. Application-scoped draft list/read/save APIs and PostgreSQL persistence now exist, with optimistic version checks and a separate publish hand-off to immutable workflow versions. The UI selects an application, loads its workflow roles and drafts, saves a new draft version, and can publish that draft. The domain evaluator supports nested boolean groups, but a multi-condition visual group editor, richer drag-and-drop graph editing, full actor-role assignment management inside the studio, and a customer OIDC-session-backed browser experience remain follow-on work. Do not describe those as complete. The existing preview still does not execute a business transaction.
 
 The current change is an initial integrated vertical slice, not a declaration that all of EPER-CW-056/057 acceptance criteria are complete. End-to-end browser validation, tenant-boundary negative tests, durable draft concurrency tests, publication approval lifecycle, and runtime rule-routing integration tests must pass before capability status is upgraded.
+
+
+### Application-scoped draft API and lifecycle
+
+Migration `009_workflow_definition_drafts.sql` adds `eper_workflow_definition_drafts` with forced tenant/application row-level security. The API host readiness-checks the store before starting when workflow execution is enabled.
+
+- `GET /admin/applications/:applicationId/workflow-definitions` lists only drafts in the authorized application.
+- `GET /admin/applications/:applicationId/workflow-definitions/:workflowId/draft` reads one draft.
+- `PUT /admin/applications/:applicationId/workflow-definitions/:workflowId/draft` validates the workflow against active application roles and saves with an expected draft version.
+- `POST /admin/applications/:applicationId/workflow-definitions/:workflowId/publish` publishes the saved draft as a new immutable version; it does not mutate existing instances.
+- Every draft save rechecks active tenant/application and actor/application assignments in the transaction, takes an application/workflow advisory lock, checks the expected version, and appends an audit event atomically.
+- The Customer Workflow Studio now selects an application, loads its workflow drafts and role definitions, saves application-scoped drafts, and invokes the publish hand-off. Actor-to-role assignments remain separately administered and are checked by the preview/runtime APIs.
