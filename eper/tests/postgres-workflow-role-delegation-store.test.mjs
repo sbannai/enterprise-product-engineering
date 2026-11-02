@@ -160,6 +160,52 @@ test("cannot revoke a role outside the grantor's delegable permission boundary",
 });
 
 
+test("cannot revoke a peer Customer Admin without separate role:assign authority", async () => {
+  const { calls, pool } = fixture({
+    grantorPermissions: ["access:manage", "workflow:view"],
+    targetPermissions: ["access:manage", "workflow:view"],
+  });
+  await assert.rejects(
+    new PostgresWorkflowRoleDelegationStore(pool).revoke({ ...input, expectedVersion: 3 }),
+    /WORKFLOW_ROLE_DELEGATION_PEER_ADMIN_MODIFICATION_FORBIDDEN/,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("SET assignment_status='revoked'")), false);
+});
+
+test("an explicitly authorized Customer Admin may revoke a peer when another admin remains", async () => {
+  const calls = [];
+  const locks = [];
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (sql.includes("pg_advisory_xact_lock")) locks.push(values);
+      if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
+        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"] }] };
+      }
+      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) {
+        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"] }] };
+      }
+      if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
+      if (sql.includes("COUNT(DISTINCT ra.actor_id)")) return { rows: [{ admin_count: 2 }] };
+      if (sql.includes("UPDATE eper_workflow_actor_role_assignment")) return { rows: [{ version: 4 }] };
+      if (sql.includes("SELECT last_event_hash FROM eper_audit_chain_head")) return { rows: [{ last_event_hash: null }] };
+      if (sql.includes("INSERT INTO eper_audit_events")) return { rows: [], rowCount: 1 };
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const result = await new PostgresWorkflowRoleDelegationStore({ async connect() { return client; } })
+    .revoke({ ...input, targetRoleId: "customer-admin", expectedVersion: 3 });
+  assert.equal(result.status, "revoked");
+  assert.equal(result.version, 4);
+  assert.ok(locks.some(values => values[0] === JSON.stringify([
+    "customer-admin-last-admin", input.tenantId, input.applicationId,
+  ])));
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
 test("cannot revoke the final active Customer Admin assignment", async () => {
   const calls = [];
   const advisoryLocks = [];
@@ -168,10 +214,10 @@ test("cannot revoke the final active Customer Admin assignment", async () => {
       calls.push(sql);
       if (sql.includes("pg_advisory_xact_lock")) advisoryLocks.push(values);
       if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
-        return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
+        return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"] }] };
       }
       if (sql.includes("SELECT version FROM eper_workflow_actor_role_assignment")) return { rows: [{ version: 3 }] };
-      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["access:manage"] }] };
+      if (sql.includes("SELECT permissions FROM eper_workflow_role_definition")) return { rows: [{ permissions: ["access:manage", "role:assign", "workflow:view"] }] };
       if (sql.includes("COUNT(DISTINCT ra.actor_id)")) return { rows: [{ admin_count: 1 }] };
       return { rows: [] };
     },
