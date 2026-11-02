@@ -123,7 +123,7 @@ test("revokes an active role with optimistic concurrency and an atomic audit eve
   assert.equal(result.version, 4);
   assert.equal(result.revokedBy, input.grantorActorId);
   assert.ok(calls.some(call => call.sql.includes("SET assignment_status='revoked'")));
-  assert.ok(calls.some(call => call.sql.includes("workflow.role_assignment.revoke")));
+  assert.ok(calls.some(call => call.values?.includes("workflow.role_assignment.revoke")));
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
 
