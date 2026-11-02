@@ -206,3 +206,18 @@ For each USP ID, maintain:
 
 
 **Baseline refresh (2026-11-01):** The current `main` baseline is `b33ca6daba19c8629cfbe199db1391368d9b4148`. The merged PR heads for the outbox reliability hardening and admin operations slice passed their reported exact-head CI checks before merge. No check-run result is yet recorded here for this merge commit itself. This confirms only the constituent technical validation; it does not upgrade workflow operations to production-ready or business-accepted status.
+
+
+## 10. Owner-directed Customer Admin workflow design capability — 2026-11-02
+
+**Ownership decision:** Customer Admin—not Product Admin—is the business workflow-design owner within the Customer Admin's authorized tenant and application scope. Product Admin retains platform-level governance, shared capability configuration and policy boundaries; it does not routinely design or modify customer-specific workflows.
+
+### Customer Admin Rule Engine and Visual Workflow Designer
+
+- **Rule Engine (EPER-CW-056, v1.6.0 DRAFT):** Customer Admin configures reusable, versioned rules for activity conditions, conditional routing, approvals, actor/role constraints, due dates, SLA timers, escalations and exception paths. Rules are deterministic, typed, server-evaluated, testable and explainable. No arbitrary script, dynamic code or user-supplied SQL.
+- **Visual Workflow Designer (EPER-CW-057, v1.6.0 DRAFT):** Customer Admin creates workflows and reopens existing workflows to modify them as new drafts. The designer supports activities, sequence, dependencies, decision branches, approvals, actors/roles, due dates, exception paths and Rule Engine references.
+- **Integrated experience:** Rules can be attached to designer activities/transitions; rule changes and designer changes remain synchronized in the same workflow draft. Customer Admin can validate, simulate, compare and submit a draft for configured approval before publication.
+- **Version safety:** Published workflow definitions are immutable. Editing creates a successor version; running instances remain pinned to their original version unless an explicitly authorized migration is performed.
+- **Governance:** Enforce tenant/application isolation, server-side RBAC, optimistic concurrency, durable PostgreSQL persistence, audit trails and publication approvals. Product Admin policy cannot be bypassed; Customer Admin cannot access another tenant's definitions or rules.
+
+**USP linkage:** This extends USP-001 (workflow execution engine) and USP-004 (business rules and decision engine), and adds a customer-facing low-code workflow authoring experience to the Build and Automate pillars. These are DRAFT requirements and must not be represented as implemented or CI-validated until the end-to-end UI/API/persistence/authorization/audit behavior and requirement-specific tests pass.
