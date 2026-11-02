@@ -90,6 +90,32 @@ Do not infer loops from a back-edge in the canvas.
 
 Reporting is read-oriented and must not become an indirect write path. An Integration may perform an external side effect only through the governed execution boundary and required human approval policy.
 
+### 4.1 Activity actions: alerts and video conferencing
+
+An Activity is a work step, but it may also carry one or more configured actions. Customer Admins should discover these actions inside the Activity designer using an **Add action** experience; they should not have to build a separate low-level integration graph for routine needs. Internally, each action resolves to a typed, versioned Integration capability and executes through the shared authorization, outbox, idempotency, retry and audit boundary.
+
+Initial action catalogue examples:
+
+| Activity action | Trigger points | Customer-facing configuration | Outputs / behavior |
+|---|---|---|---|
+| Send alert / notification | Activity created or assigned; due soon; overdue; approved/rejected/completed; escalation | Channel (in-app, email, SMS or WhatsApp where configured), recipients or role, message template, language and timing | Delivery/acceptance status, provider reference and failure outcome; never expose provider credentials |
+| Schedule video conference | Activity created, assigned or explicitly scheduled; optionally on an approval/review step | Connected provider (e.g. Google Meet or Zoom), title, start/end or duration, participants/roles, timezone and reminder policy | Meeting URL, provider meeting ID, scheduled time and creation status, available to authorized downstream steps |
+| Send meeting reminder | Before meeting start; reschedule or cancellation | Recipients, lead time and message template | Delivery status and reminder audit |
+
+Design and runtime rules:
+
+- Activity actions are optional, reusable and independently configurable; an Activity with no actions remains a valid human or system task.
+- Triggers are explicit lifecycle events, not hidden timer polling. Time-based triggers must use the platform scheduler and durable due-work records.
+- The designer shows action setup in business language and only offers providers/channels configured and enabled for that customer/application.
+- Participant and recipient resolution uses authorized application actors/roles and explicit business data mappings. Cross-application identities or contacts are never implicitly included.
+- Provider credentials and connection secrets are stored in governed integration configuration, never in workflow JSON, browser state, logs or published snapshots.
+- External side effects are idempotent, retry-bounded and auditable. A queued request is not reported as a delivered alert or successfully created meeting until provider outcome is known.
+- Provider failure follows an explicit action outcome (retrying, failed or needs attention) and configured workflow exception/escalation path; it must not silently mark the Activity complete.
+- Meeting URLs and participant details are sensitive outputs. Only authorized actors in the same tenant/application may view them.
+- The Activity designer may expose approval-before-send as a policy option where the action or customer governance requires it; the policy is enforced by the server, not just the UI.
+
+This gives customers a simple experience—“notify these people” or “schedule a review meeting”—while keeping provider-specific behavior behind reusable Integration capability contracts.
+
 ## 5. Customer Admin authoring journey
 
 1. **Start with intent:** choose a business outcome or a template (e.g. “employee leave approval”).
