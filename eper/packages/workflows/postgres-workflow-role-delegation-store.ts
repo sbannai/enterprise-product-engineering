@@ -281,6 +281,12 @@ export class PostgresWorkflowRoleDelegationStore {
       const version = Number(current.rows[0].version);
       if (version !== input.expectedVersion) throw new Error("WORKFLOW_ROLE_DELEGATION_VERSION_CONFLICT:" + version);
       if (targetPermissions.includes("access:manage")) {
+        // Serialize all Customer Admin revocations within this tenant/application.
+        // Without this shared lock, two concurrent revocations could each observe
+        // two active admins and both commit, leaving the application with none.
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          JSON.stringify(["customer-admin-last-admin", input.tenantId, input.applicationId]),
+        ]);
         const adminCount = await client.query<{ admin_count: number | string }>(
           `SELECT COUNT(DISTINCT ra.actor_id)::int AS admin_count
              FROM eper_workflow_actor_role_assignment ra
