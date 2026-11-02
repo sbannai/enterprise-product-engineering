@@ -34,13 +34,17 @@ test("tenant application assignment reads are explicitly tenant-scoped", async (
 });
 
 
-function fakeWritePool({ prior = [], failAudit = false } = {}) {
+function fakeWritePool({ prior = [], failAudit = false, commercial = {
+  customer_status: "active", assignment_status: "active", tariff_effective: true,
+  max_applications: 3, active_application_count: 0,
+} } = {}) {
   const calls = [];
   const now = "2026-10-30T00:00:00.000Z";
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
       if (/SELECT version FROM eper_tenant_application_assignment/.test(sql)) return { rows: prior, rowCount: prior.length };
+      if (/FROM eper_customer_account c/.test(sql)) return { rows: [commercial], rowCount: 1 };
       if (/INSERT INTO eper_tenant_application_assignment/.test(sql)) return { rows: [{
         tenant_id: values[0], application_id: values[1], assignment_status: values[2],
         version: prior.length ? Number(prior[0].version) + 1 : 1, assigned_at: now, assigned_by: values[3],
@@ -108,4 +112,45 @@ test("tenant application revoke rejects a missing assignment", async () => {
     { message: "TENANT_APPLICATION_ASSIGNMENT_NOT_FOUND" });
   assert.ok(calls.some(call => call.sql === "ROLLBACK"));
   assert.ok(!calls.some(call => /INSERT INTO eper_tenant_application_assignment/.test(call.sql)));
+});
+
+
+test("tenant application activation rejects inactive customers before mutation", async () => {
+  const { calls, pool } = fakeWritePool({ commercial: {
+    customer_status: "suspended", assignment_status: "active", tariff_effective: true,
+    max_applications: 3, active_application_count: 0,
+  } });
+  await assert.rejects(() => new PostgresTenantApplicationAssignmentStore(pool).assign(changeInput),
+    { message: "CUSTOMER_NOT_ACTIVE" });
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some(call => /INSERT INTO eper_tenant_application_assignment/.test(call.sql)));
+});
+
+test("tenant application activation rejects a missing commercial tariff", async () => {
+  const { calls, pool } = fakeWritePool({ commercial: {
+    customer_status: "active", assignment_status: null, tariff_effective: false,
+    max_applications: null, active_application_count: 0,
+  } });
+  await assert.rejects(() => new PostgresTenantApplicationAssignmentStore(pool).assign(changeInput),
+    { message: "CUSTOMER_TARIFF_NOT_ACTIVE" });
+  assert.ok(!calls.some(call => /INSERT INTO eper_tenant_application_assignment/.test(call.sql)));
+});
+
+test("tenant application activation enforces the accepted application count", async () => {
+  const { calls, pool } = fakeWritePool({ commercial: {
+    customer_status: "active", assignment_status: "active", tariff_effective: true,
+    max_applications: 1, active_application_count: 1,
+  } });
+  await assert.rejects(() => new PostgresTenantApplicationAssignmentStore(pool).assign(changeInput),
+    { message: "CUSTOMER_APPLICATION_TARIFF_LIMIT_EXCEEDED" });
+  assert.ok(!calls.some(call => /INSERT INTO eper_tenant_application_assignment/.test(call.sql)));
+});
+
+test("tenant application activation serializes on tenant-wide commercial lock", async () => {
+  const { calls, pool } = fakeWritePool();
+  await new PostgresTenantApplicationAssignmentStore(pool).assign(changeInput);
+  assert.ok(calls.some(call =>
+    call.sql.includes("pg_advisory_xact_lock") &&
+    call.values.includes("eper-tenant-commercial:tenant-a"),
+  ));
 });
