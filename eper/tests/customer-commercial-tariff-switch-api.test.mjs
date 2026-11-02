@@ -22,6 +22,7 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
   const calls = [];
   const store = {
     async getCustomerTariffAssignment(tenantId) { return { tenantId, version: 3, billingBasis: "single_application", acceptedAmount: "599.00" }; },
+    async listAssignments() { return [{applicationId:"app-a",status:"active",version:2},{applicationId:"app-b",status:"active",version:4}]; },
     async switchCustomerTariff(input) {
       calls.push(input);
       return { tenantId: input.tenantId, tariffKey: input.tariffKey, tariffVersion: input.tariffVersion,
@@ -38,6 +39,7 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     const catalogue = await fetch(url, { headers });
     assert.equal(catalogue.status, 200);
     const catalogueBody = await catalogue.json();
+    assert.deepEqual(catalogueBody.applicationAssignments,[{applicationId:"app-a",status:"active",version:2},{applicationId:"app-b",status:"active",version:4}]);
     assert.equal(catalogueBody.assignment.version, 3);
     assert.equal(catalogueBody.tariffs.length, 1);
     assert.equal(catalogueBody.tariffs[0].tariffKey, "multi-app");
@@ -50,12 +52,14 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     const accepted = await fetch(url, { method: "POST", headers, body: JSON.stringify({
       tariffKey: "multi-app", tariffVersion: 2, expectedVersion: 1,
       accepted: true, acceptanceReference: "CONTRACT-2026-01",
+      revokeApplications:[{applicationId:"app-b",expectedVersion:4}],
     }) });
     assert.equal(accepted.status, 200);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].tenantId, "tenant-customer");
     assert.equal(calls[0].changedBy, "customer-owner");
     assert.equal(calls[0].acceptanceReference, "CONTRACT-2026-01");
+    assert.deepEqual(calls[0].revokeApplications,[{applicationId:"app-b",expectedVersion:4}]);
   } finally {
     await new Promise(resolve => server.close(resolve));
     for (const key of keys) {
