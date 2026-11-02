@@ -9,7 +9,7 @@ function request({ authorization, body = {}, method = "POST" } = {}) {
   const payload = Buffer.from(JSON.stringify(body));
   return {
     method,
-    headers: { authorization },
+    headers: { authorization, "idempotency-key": "request-key-01" },
     async *[Symbol.asyncIterator]() { if (payload.length) yield payload; },
   };
 }
@@ -56,7 +56,6 @@ test("platform route rejects caller-supplied authority fields before store acces
       authorization: "Bearer " + credential,
       body: {
         targetActorId: "actor-01",
-        idempotencyKey: "request-key-01",
         platformActorId: "forged-platform-actor",
         tenantId: "forged-tenant",
         roleId: "product-admin",
@@ -78,7 +77,7 @@ test("platform route derives actor from trusted mapping and resource scope from 
   const handled = await handlePlatformCustomerAdminProvisioningRoute(
     request({
       authorization: "Bearer " + credential,
-      body: { targetActorId: "actor-01", idempotencyKey: "request-key-01" },
+      body: { targetActorId: "actor-01" },
     }),
     res,
     "/platform/tenants/tenant-01/applications/app-01/customer-admins",
@@ -111,7 +110,7 @@ test("platform recovery route requires explicit reason and recovery permission",
   await handlePlatformCustomerAdminProvisioningRoute(
     request({
       authorization: "Bearer " + credential,
-      body: { targetActorId: "actor-01", idempotencyKey: "request-key-01", reasonTicketReference: "INC-1" },
+      body: { targetActorId: "actor-01", reasonTicketReference: "INC-1" },
     }),
     res,
     "/platform/tenants/tenant-01/applications/app-01/customer-admin-recovery",
