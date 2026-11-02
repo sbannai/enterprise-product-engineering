@@ -17,8 +17,8 @@ OIDC authentication proves identity only. It never grants a role. Role and appli
 ## 2. Delegation invariants
 
 - Initial Customer Admin assignment is Product Admin-only.
-- Customer Admin delegation is opt-in per role and permission; no implicit administrator inheritance.
-- A Customer Admin cannot grant Product Admin, platform permissions, billing authority, tenant lifecycle authority, or permissions they do not currently possess.
+- Customer Admin delegation is opt-in per role through the explicit durable `delegable` catalogue flag, and remains permission-subset constrained; no implicit administrator inheritance.
+- A Customer Admin cannot grant Product Admin, platform permissions, billing authority, tenant lifecycle authority, non-delegable roles, or permissions they do not currently possess.
 - A grant must be within the same tenant and an application the tenant owns. Tenant-wide grants require an explicit tenant-wide scope and a permission specifically marked tenant-wide.
 - No self-grant, no cross-tenant target, no browser-supplied tenant/actor/role authority.
 - Delegation cannot increase privilege: granted permission set must be a subset of the delegator's currently effective delegable permissions.
@@ -41,7 +41,7 @@ Implement a tenant-scoped delegation record with:
 
 Enforce foreign keys to tenant/application, actor/application, and role-definition records. Add unique/partial indexes preventing duplicate active grants. Apply and FORCE RLS to tenant-scoped records. Use a narrowly privileged service role for cross-tenant Product Admin operations; never bypass RLS using client-provided context.
 
-Use an explicit role catalogue attribute such as `delegable` and an explicit scope classification. Do not infer delegability from permission names or role labels.
+Use the explicit role catalogue `delegable` flag as the grant gate and an explicit scope classification. The flag defaults to false; do not infer delegability from permission names or role labels.
 
 ## 4. Mutation transaction
 
