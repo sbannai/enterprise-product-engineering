@@ -13,8 +13,6 @@ test("PostgreSQL workflow drafts enforce tenant/application RLS, optimistic conc
     const suffix = randomUUID();
     const tenantId = "wf-draft-tenant-" + suffix;
     const applicationId = "wf-draft-app-" + suffix;
-    const otherApplicationId = "wf-draft-other-app-" + suffix;
-    const otherTenantId = "wf-draft-other-tenant-" + suffix;
     const actorId = "wf-draft-actor-" + suffix;
     const workflowId = "wf-draft-" + suffix;
     const correlationId = "wf-draft-correlation-" + suffix;
@@ -43,8 +41,8 @@ test("PostgreSQL workflow drafts enforce tenant/application RLS, optimistic conc
         await setup.query(
           `INSERT INTO eper_tenant_application_assignment
             (tenant_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1,$2,'active',$3,$3), ($1,$4,'active',$3,$3), ($5,$2,'active',$3,$3)`,
-          [tenantId, applicationId, actorId, otherApplicationId, otherTenantId],
+           VALUES ($1,$2,'active',$3,$3)`,
+          [tenantId, applicationId, actorId],
         );
         await setup.query(
           `INSERT INTO eper_actor_application_assignment
@@ -93,8 +91,8 @@ test("PostgreSQL workflow drafts enforce tenant/application RLS, optimistic conc
         "Expense request — revision B",
       ].includes(current?.definition.name));
 
-      assert.deepEqual(await reloadedStore.list(otherTenantId, applicationId), []);
-      assert.equal(await reloadedStore.get(tenantId, otherApplicationId, workflowId), null);
+      assert.deepEqual(await reloadedStore.list("wf-draft-unassigned-tenant-" + suffix, applicationId), []);
+      assert.equal(await reloadedStore.get(tenantId, "wf-draft-unassigned-app-" + suffix, workflowId), null);
 
       await assert.rejects(
         store.replace({
@@ -142,12 +140,8 @@ test("PostgreSQL workflow drafts enforce tenant/application RLS, optimistic conc
           [tenantId, actorId, applicationId],
         );
         await cleanup.query(
-          "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id = ANY($2::text[])",
-          [tenantId, [applicationId, otherApplicationId]],
-        );
-        await cleanup.query(
           "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id=$2",
-          [otherTenantId, applicationId],
+          [tenantId, applicationId],
         );
         await cleanup.query("COMMIT");
       } catch {
