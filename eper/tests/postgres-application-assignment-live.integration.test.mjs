@@ -251,11 +251,39 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
           functionName = undefined;
         }
       });
+      await t.test("customer tariff switching snapshots accepted price and retains immutable assignment history", async () => {
+        const customerContext = { ...common, correlationId: "customer-tariff-switch-" + suffix };
+        const switchedDown = await tenantStore.switchCustomerTariff({
+          ...customerContext, tariffKey: catalogueTariffKey, tariffVersion: 2,
+          expectedVersion: 1, acceptanceReference: "CI-DOWNGRADE-" + suffix,
+        });
+        assert.equal(switchedDown.billingBasis, "single_application");
+        assert.equal(switchedDown.maxApplications, 1);
+        assert.equal(switchedDown.acceptedAmount, "599.0000");
+        assert.equal(switchedDown.version, 2);
+        assert.equal(switchedDown.acceptedBy, changedBy);
+        const switchedUp = await tenantStore.switchCustomerTariff({
+          ...customerContext, tariffKey, tariffVersion: 1,
+          expectedVersion: 2, acceptanceReference: "CI-UPGRADE-" + suffix,
+        });
+        assert.equal(switchedUp.billingBasis, "multi_application");
+        assert.equal(switchedUp.maxApplications, 2);
+        assert.equal(switchedUp.acceptedAmount, "100.0000");
+        assert.equal(switchedUp.version, 3);
+        const history = await pool.query(
+          `SELECT assignment_version, tariff_key, tariff_version, accepted_amount, acceptance_reference
+             FROM eper_customer_tariff_assignment_history
+            WHERE tenant_id=$1 ORDER BY assignment_version`, [tenantId]);
+        assert.deepEqual(history.rows.map(row => Number(row.assignment_version)), [1, 2, 3]);
+        assert.equal(history.rows[1].acceptance_reference, "CI-DOWNGRADE-" + suffix);
+        assert.equal(history.rows[2].acceptance_reference, "CI-UPGRADE-" + suffix);
+      });
     } finally {
       if (triggerName) await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON eper_audit_events`).catch(() => {});
       if (functionName) await pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`).catch(() => {});
       await pool.query("DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_tariff_assignment_history WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_customer_tariff_assignment WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_customer_account WHERE tenant_id=$1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key=$1", [tariffKey]).catch(() => {});
