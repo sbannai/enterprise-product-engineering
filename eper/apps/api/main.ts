@@ -152,7 +152,7 @@ if (actorAssignmentMode !== "environment" && actorAssignmentMode !== "postgres")
 if (actorAssignmentMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_ACTOR_ASSIGNMENTS_REQUIRE_POSTGRES_AND_DURABLE_AUDIT");
 }
-if (platformCustomerAdminEnabled && (!paymentPool || auditMode !== "postgres" ||
+if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled) && (!paymentPool || auditMode !== "postgres" ||
     customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres")) {
   throw new Error("PLATFORM_CUSTOMER_ADMIN_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
 }
