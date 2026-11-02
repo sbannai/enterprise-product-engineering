@@ -27,6 +27,9 @@ export interface AccessDecision {
   reason:
     | "allowed"
     | "customer_inactive"
+    | "tariff_missing"
+    | "tariff_inactive"
+    | "tariff_overage"
     | "module_disabled"
     | "entitlement_missing"
     | "entitlement_inactive"
