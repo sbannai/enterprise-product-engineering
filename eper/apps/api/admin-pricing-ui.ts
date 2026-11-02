@@ -57,7 +57,7 @@ ${enterpriseDesignSystemCss}
 <div class="field"><label for="tariffKey">Plan key</label><input id="tariffKey" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{1,127}" placeholder="single-app or multi-app"></div>
 <div class="field"><label for="tariffBasis">Billing basis</label><select id="tariffBasis"><option value="single_application">Single application</option><option value="multi_application">Multi application</option></select></div>
 <div class="field"><label for="tariffApps">Included applications</label><input id="tariffApps" type="number" min="1" max="10000" value="1" required></div>
-<div class="field"><label for="tariffAmount">Tariff cost</label><input id="tariffAmount" inputmode="decimal" pattern="(0|[1-9][0-9]*)(\\.[0-9]{1,4})?" placeholder="e.g. 499.00" required></div>
+<div class="field"><label for="tariffAmount">Tariff cost</label><input id="tariffAmount" inputmode="decimal" pattern="(0|[1-9][0-9]*)(\.[0-9]{1,4})?" placeholder="e.g. 499.00" required></div>
 <div class="field"><label for="tariffCurrency">Currency</label><input id="tariffCurrency" maxlength="3" minlength="3" value="INR" required></div>
 <div class="field"><label for="tariffInterval">Billing interval</label><select id="tariffInterval"><option value="monthly">Monthly</option><option value="annual">Annual</option><option value="one_time">One time</option></select></div>
 <div class="field"><label for="tariffEffective">Effective from</label><input id="tariffEffective" type="datetime-local" required></div>
