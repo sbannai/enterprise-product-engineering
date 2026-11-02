@@ -36,3 +36,19 @@ test("provider operations and webhooks enforce idempotency and replay correlatio
   assert.match(migration, /payload_digest TEXT NOT NULL/);
   assert.match(migration, /'NEEDS_ATTENTION'/);
 });
+
+test("provider tenant tables force RLS and application tables require both scope keys", () => {
+  for (const table of [
+    "eper_provider_connections",
+    "eper_provider_connection_applications",
+    "eper_application_provider_policies",
+    "eper_provider_operations",
+    "eper_provider_webhook_receipts",
+  ]) {
+    assert.match(migration, new RegExp("ALTER TABLE " + table + " ENABLE ROW LEVEL SECURITY"));
+    assert.match(migration, new RegExp("ALTER TABLE " + table + " FORCE ROW LEVEL SECURITY"));
+  }
+  assert.match(migration, /tenant_id = current_setting\('eper\.tenant_id', true\)/);
+  assert.match(migration, /application_id = current_setting\('eper\.application_id', true\)/);
+  assert.match(migration, /tenant_id TEXT NOT NULL CHECK[^\n]*\n  application_id TEXT NOT NULL CHECK/);
+});
