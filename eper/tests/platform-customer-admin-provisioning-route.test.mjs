@@ -46,6 +46,13 @@ test("platform Customer Admin console is served only when the platform API is en
     assert.equal(handled, true);
     assert.equal(res.statusCode, 200);
     assert.match(res.headers["content-security-policy"], /default-src 'none'/);
+    assert.doesNotMatch(res.headers["content-security-policy"], /unsafe-inline/);
+    const scriptNonce = res.headers["content-security-policy"].match(/script-src 'nonce-([^']+)'/)?.[1];
+    const styleNonce = res.headers["content-security-policy"].match(/style-src 'nonce-([^']+)'/)?.[1];
+    assert.ok(scriptNonce);
+    assert.ok(styleNonce);
+    assert.ok(res.body.includes(`<script nonce="${scriptNonce}">`));
+    assert.ok(res.body.includes(`<style nonce="${styleNonce}">`));
     assert.match(res.body, /Platform Admin/);
     assert.match(res.body, /customer_admin:recover/);
     assert.match(res.body, /idempotency-key/);
