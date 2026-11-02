@@ -61,7 +61,7 @@ export interface ValidateProviderConnectionInput {
   connectionId: string;
   actorId: string;
   correlationId: string;
-  auditEnvironment: string;
+  auditEnvironment: AuditEnvironment;
 }
 
 export interface ValidateProviderConnectionResult {
