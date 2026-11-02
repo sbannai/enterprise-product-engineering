@@ -152,7 +152,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(connectionMessage,"Your organization session is active.",
       "browser workspace bootstrap failed; message="+connectionMessage+" url="+page.url()+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
     const sessionIdentity=await page.evaluate(async()=>{const response=await fetch("/customer/session");return response.json();});
-    assert.equal(sessionIdentity.roleKey,"customer-user","OIDC claims must not elevate the customer workspace role");
+    assert.equal(sessionIdentity.data?.roleKey,"customer-user","OIDC claims must not elevate the customer workspace role");
     const tariffAttempt=await page.evaluate(async()=>{
       const csrf=document.cookie.split("; ").find(value=>value.startsWith("__Host-eper_csrf="))?.split("=").slice(1).join("=")||"";
       const response=await fetch("/customer/commercial-tariff",{method:"POST",headers:{"content-type":"application/json","x-csrf-token":csrf},body:JSON.stringify({accepted:true,acceptanceReference:"BROWSER-E2E-UNAUTHORIZED",tariffKey:"multi-app",tariffVersion:1,expectedVersion:1,revokeApplications:[]})});
