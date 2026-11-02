@@ -158,9 +158,11 @@ test("cannot revoke a role outside the grantor's delegable permission boundary",
 
 test("cannot revoke the final active Customer Admin assignment", async () => {
   const calls = [];
+  const advisoryLocks = [];
   const client = {
-    async query(sql) {
+    async query(sql, values = []) {
       calls.push(sql);
+      if (sql.includes("pg_advisory_xact_lock")) advisoryLocks.push(values);
       if (sql.includes("SELECT rd.permissions FROM eper_workflow_actor_role_assignment")) {
         return { rows: [{ permissions: ["access:manage", "workflow:view"] }] };
       }
@@ -174,6 +176,8 @@ test("cannot revoke the final active Customer Admin assignment", async () => {
   const store = new PostgresWorkflowRoleDelegationStore({ async connect() { return client; } });
   await assert.rejects(store.revoke({ ...input, targetRoleId: "customer-admin", expectedVersion: 3 }),
     /LAST_CUSTOMER_ADMIN_PROTECTED/);
+  assert.ok(advisoryLocks.some(values =>
+    values[0] === JSON.stringify(["customer-admin-last-admin", input.tenantId, input.applicationId])));
   assert.ok(calls.includes("ROLLBACK"));
   assert.equal(calls.some(sql => sql.includes("SET assignment_status='revoked'")), false);
 });
