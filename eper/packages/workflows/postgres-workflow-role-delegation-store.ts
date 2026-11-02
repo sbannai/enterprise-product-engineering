@@ -256,6 +256,21 @@ export class PostgresWorkflowRoleDelegationStore {
       if (!permissions.includes("access:manage")) {
         throw new Error("WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED");
       }
+      const targetRole = await client.query<{ permissions: string[] | string }>(
+        `SELECT permissions FROM eper_workflow_role_definition
+          WHERE tenant_id=$1 AND application_id=$2 AND role_id=$3 AND role_status='active' FOR SHARE`,
+        [input.tenantId, input.applicationId, input.targetRoleId],
+      );
+      if (!targetRole.rows[0]) throw new Error("WORKFLOW_ROLE_DELEGATION_TARGET_ROLE_NOT_ACTIVE");
+      const rawTargetPermissions = targetRole.rows[0].permissions;
+      const targetPermissions = typeof rawTargetPermissions === "string"
+        ? JSON.parse(rawTargetPermissions) as string[]
+        : rawTargetPermissions;
+      if (targetPermissions.some(permission =>
+        (ELEVATED_PERMISSIONS as readonly string[]).includes(permission) ||
+        !permissions.includes(permission))) {
+        throw new Error("WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN");
+      }
       const current = await client.query<{ version: number | string }>(
         `SELECT version FROM eper_workflow_actor_role_assignment
           WHERE tenant_id=$1 AND application_id=$2 AND actor_id=$3 AND role_id=$4
