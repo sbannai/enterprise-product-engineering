@@ -6,6 +6,7 @@ export interface CampaignWorkerOptions {
   workerId: string;
   batchSize?: number;
   idleDelayMs?: number;
+  leaseRenewalIntervalMs?: number;
   maxAttempts?: number;
   signal?: AbortSignal;
   /** Must reload current schedule/approval/consent/channel policy immediately before dispatch. */
@@ -38,10 +39,12 @@ export async function runCampaignExecutionWorker(
   if (!options.workerId?.trim()) throw new Error("CAMPAIGN_WORKER_ID_REQUIRED");
   const batchSize = options.batchSize ?? 10;
   const idleDelayMs = options.idleDelayMs ?? 1000;
+  const leaseRenewalIntervalMs = options.leaseRenewalIntervalMs ?? 60000;
   const maxAttempts = options.maxAttempts ?? 5;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) throw new Error("CAMPAIGN_CLAIM_LIMIT_INVALID");
   if (!Number.isInteger(idleDelayMs) || idleDelayMs < 100 || idleDelayMs > 60000) throw new Error("CAMPAIGN_WORKER_IDLE_DELAY_INVALID");
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) throw new Error("CAMPAIGN_RETRY_POLICY_INVALID");
+  if (!Number.isInteger(leaseRenewalIntervalMs) || leaseRenewalIntervalMs < 10 || leaseRenewalIntervalMs > 120000) throw new Error("CAMPAIGN_LEASE_RENEWAL_INTERVAL_INVALID");
 
   while (!options.signal?.aborted) {
     let executions: CampaignExecutionRecord[];
@@ -62,6 +65,17 @@ export async function runCampaignExecutionWorker(
 
     await Promise.all(executions.map(async (execution) => {
       if (options.signal?.aborted) return;
+      let renewalInFlight = false;
+      const renewalTimer = setInterval(() => {
+        if (renewalInFlight || options.signal?.aborted) return;
+        renewalInFlight = true;
+        void store.renewExecutionLease({
+          tenantId: execution.tenantId, applicationId: execution.applicationId,
+          executionId: execution.id, workerId: options.workerId,
+        }).then((renewed) => {
+          if (!renewed) options.onError?.(new Error("CAMPAIGN_EXECUTION_LEASE_LOST"));
+        }).catch((error) => options.onError?.(error)).finally(() => { renewalInFlight = false; });
+      }, leaseRenewalIntervalMs);
       try {
         // Fail closed: never call the provider unless current policy authorizes this execution.
         // The implementation must re-read authoritative state; do not authorize from the claimed row alone.
@@ -156,6 +170,8 @@ export async function runCampaignExecutionWorker(
           tenantId: execution.tenantId, applicationId: execution.applicationId,
           executionId: execution.id, workerId: options.workerId, errorCode: code, maxAttempts,
         }).catch(options.onError);
+      } finally {
+        clearInterval(renewalTimer);
       }
     }));
   }
