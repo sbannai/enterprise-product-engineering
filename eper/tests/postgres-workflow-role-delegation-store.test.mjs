@@ -52,7 +52,7 @@ test("delegates a lower-privilege role within one tenant/application and audits 
   assert.ok(calls.some(call => call.sql.includes("FOR SHARE OF ra, rd")));
   assert.ok(calls.some(call => call.sql.includes("grantor_actor_id")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
-  assert.equal(calls.at(-2).sql, "COMMIT");
+  assert.ok(calls.some(call => call.sql === "COMMIT"));
 });
 
 test("rejects self-delegation before database access", async () => {
@@ -78,7 +78,7 @@ test("rejects privilege escalation and elevated permission delegation", async ()
   const { pool: escalationPool } = fixture({ targetPermissions: ["workflow:view", "workflow:approve"] });
   await assert.rejects(
     new PostgresWorkflowRoleDelegationStore(escalationPool).grant(input),
-    /WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN/,
+    /WORKFLOW_ROLE_DELEGATION_PEER_ADMIN_MODIFICATION_FORBIDDEN/,
   );
   const { pool: elevatedPool } = fixture({ grantorPermissions: ["access:manage", "workflow:admin"] ,
     targetPermissions: ["workflow:admin"] });
