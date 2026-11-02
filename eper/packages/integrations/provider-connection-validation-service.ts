@@ -107,9 +107,6 @@ export class ProviderConnectionValidationService {
     if (snapshot.environment !== "development" && snapshot.environment !== "sandbox") {
       throw new Error("PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED");
     }
-    if (snapshot.environment !== "development" && snapshot.environment !== "sandbox") {
-      throw new Error("PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED");
-    }
     if (!Number.isSafeInteger(snapshot.version) || snapshot.version < 1) {
       throw new Error("PROVIDER_CONNECTION_VERSION_INVALID");
     }
