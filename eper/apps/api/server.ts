@@ -1827,7 +1827,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (requestUrl.pathname === "/admin/commercial-tariffs" && request.method === "POST") {
           const body = await readJson(request);
           const allowed = ["tariffKey", "billingBasis", "maxApplications", "amount", "currency", "billingInterval", "effectiveFrom", "effectiveTo", "changeReason", "approvalRequired"];
-          if (Object.keys(body).some((key) => !allowed.includes(key))) {
+          if (Object.keys(body).some((key) => !allowed.includes(key)) || typeof body.approvalRequired !== "boolean" ||
+              typeof body.tariffKey !== "string" || typeof body.billingBasis !== "string" ||
+              typeof body.maxApplications !== "number" || typeof body.amount !== "string" ||
+              typeof body.currency !== "string" || typeof body.billingInterval !== "string" ||
+              typeof body.effectiveFrom !== "string" || typeof body.changeReason !== "string") {
             sendApiError(request, response, 400, "INVALID_TARIFF_BODY", "Only tariff catalogue fields are accepted."); return;
           }
           const created = await store.createDraft({
