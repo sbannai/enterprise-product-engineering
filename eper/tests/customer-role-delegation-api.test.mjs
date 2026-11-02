@@ -52,7 +52,12 @@ function dependencies(permissions = ["access:manage", "workflow:view"]) {
         assignedBy: "admin-01", revokedAt: null, revokedBy: null, updatedAt: "2026-11-02T00:00:00.000Z",
         updatedBy: "admin-01" }]; },
     },
-    roleDefinitionStore: { async list() { return [{ roleId: "customer-admin", status: "active", permissions }]; } },
+    roleDefinitionStore: { async list() { return [
+      { roleId: "customer-admin", name: "Customer Admin", description: "Administrative role",
+        status: "active", permissions },
+      { roleId: "workflow-reader", name: "Workflow Reader", description: "Read-only workflow access",
+        status: "active", permissions: ["workflow:view"] },
+    ]; } },
     delegationStore: {
       async grant(input) {
         calls.push({ action: "grant", ...input });
@@ -201,7 +206,8 @@ test("customer admin can load the scoped role directory and assignment history",
       assert.equal(response.status, 200);
       const body = await response.json();
       assert.equal(body.data.assignments[0].actorId, "user-02");
-      assert.equal(body.data.roles[0].roleId, "customer-admin");
+      assert.deepEqual(body.data.roles.map(role => role.roleId), ["workflow-reader"]);
+      assert.equal(body.data.roles.some(role => role.permissions.includes("access:manage")), false);
     });
   } finally { restore(); }
 });
