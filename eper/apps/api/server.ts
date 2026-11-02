@@ -2472,15 +2472,22 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
 
-    // Application-scoped provider connection read and bind APIs.
-    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/bind)?$/.exec(requestUrl.pathname);
+    // Application-scoped provider connection read, bind and validation APIs.
+    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/(bind|validate))?$/.exec(requestUrl.pathname);
     if (providerConnectionsPath) {
       if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      const operation = providerConnectionsPath[3];\n      const isBinding = operation === "bind";\n      const isValidation = operation === "validate";
-      if ((!isBinding && request.method !== "GET") || (isBinding && request.method !== "POST")) {
-        sendMethodNotAllowed(request, response, isBinding ? "POST" : "GET"); return;
+      const connectionIdRaw = providerConnectionsPath[2];
+      const operation = providerConnectionsPath[3];
+      const isBinding = operation === "bind";
+      const isValidation = operation === "validate";
+      if ((!operation && request.method !== "GET") || ((isBinding || isValidation) && request.method !== "POST")) {
+        sendMethodNotAllowed(request, response, operation ? "POST" : "GET"); return;
+      }
+      if (isValidation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
+          !options.providerValidationService)) {
+        sendJson(request, response, 404, { error: "not_found" }); return;
       }
       if (!options.providerConnectionRepository || !options.customerIdentitySessionStore ||
           !options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
@@ -2494,8 +2501,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 400, { error: "invalid_application_id" }); return;
       }
       let connectionId: string | undefined;
-      if (isBinding) {
-        try { connectionId = decodeURIComponent(providerConnectionsPath[2]); }
+      if (connectionIdRaw) {
+        try { connectionId = decodeURIComponent(connectionIdRaw); }
         catch { sendJson(request, response, 400, { error: "invalid_connection_id_encoding" }); return; }
         if (!/^[0-9a-f-]{36}$/i.test(connectionId)) {
           sendJson(request, response, 400, { error: "invalid_connection_id" }); return;
@@ -2512,7 +2519,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           "A valid browser session with active tenant and actor application assignments is required.");
         return;
       }
-      if (isBinding) {
+      if (isBinding || isValidation) {
         const cookies = parseCookieHeader(request.headers.cookie);
         const sessionToken = cookies.get("__Host-eper_session") ?? "";
         const csrfHeader = request.headers["x-csrf-token"];
@@ -2546,7 +2553,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           },
           roles: new PostgresProviderRoleAuthorizer(options.workflowActorRoleAssignmentStore),
         });
-        if (isBinding) {
+        if (isValidation) {
+          const result = await options.providerValidationService!.validate({
+            tenantId: identity.tenantId,
+            connectionId: connectionId!,
+            actorId: identity.actorId,
+            correlationId,
+            auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+          });
+          sendJson(request, response, 200, result);
+        } else if (isBinding) {
           const body = await readJson(request);
           const allowedCapabilities = body.allowedCapabilities;
           if (!Array.isArray(allowedCapabilities) || allowedCapabilities.length < 1 ||
@@ -2573,15 +2589,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const code = error instanceof Error ? error.message : "PROVIDER_CONNECTION_OPERATION_FAILED";
         const status = code === "PROVIDER_ACTION_FORBIDDEN" || code === "PROVIDER_APPLICATION_ACCESS_DENIED" ? 403
           : code === "PROVIDER_UNAUTHENTICATED" ? 401
-          : code === "PROVIDER_CONNECTION_NOT_FOUND" ? 404\n          : code === "PROVIDER_CONNECTION_NOT_VALIDATABLE" || code === "PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED" ? 409\n          : code === "PROVIDER_CONNECTION_VERSION_CONFLICT" ? 409
-          : code === "PROVIDER_CONNECTION_NOT_ACTIVE" || code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
+          : code === "PROVIDER_CONNECTION_NOT_FOUND" ? 404
+          : code === "PROVIDER_CONNECTION_NOT_VALIDATABLE" ||
+            code === "PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED" ||
+            code === "PROVIDER_CONNECTION_VERSION_CONFLICT" ||
+            code === "PROVIDER_CONNECTION_NOT_ACTIVE" ||
+            code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
           : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
             code === "REQUEST_BODY_TOO_LARGE" || code === "Unexpected end of JSON input" ? 400 : 503;
         sendApiError(request, response, status, code, status === 503
           ? "Provider connection operation could not be completed."
           : status === 403 ? "You are not allowed to manage provider connections."
           : status === 404 ? "The provider connection was not found."
-          : status === 409 ? "The provider connection is inactive or does not support the requested capabilities."
+          : status === 409 ? "The provider connection is inactive, not validatable, or has changed."
           : "The provider connection request is invalid.");
       }
       return;
