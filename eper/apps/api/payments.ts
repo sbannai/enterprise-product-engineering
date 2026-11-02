@@ -492,6 +492,7 @@ export async function handlePaymentRoute(req: IncomingMessage, res: ServerRespon
           : reservation.reason === "invoice_already_paid" ? 409
           : reservation.reason === "order_creation_in_progress" ? 409
           : reservation.reason === "order_creation_reconciliation_required" ? 503
+          : reservation.reason === "commercial_ineligible" ? 409
           : 500;
         json(req, res, status, { error: reservation.reason }); return true;
       }
