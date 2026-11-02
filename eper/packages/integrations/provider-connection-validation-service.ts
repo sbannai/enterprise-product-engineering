@@ -52,7 +52,7 @@ export interface ProviderValidationStore {
     errorCode?: string;
     actorId: string;
     correlationId: string;
-    auditEnvironment: string;
+    auditEnvironment: AuditEnvironment;
   }): Promise<{ status: "ACTIVE" | "DEGRADED"; version: number }>;
 }
 
