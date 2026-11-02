@@ -1,0 +1,160 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { createPostgresPaymentPool } from "../dist/packages/payments/postgres-payment-runtime.js";
+import { PostgresWorkflowDefinitionDraftStore } from "../dist/packages/workflows/postgres-workflow-definition-draft-store.js";
+
+const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
+
+test("PostgreSQL workflow drafts enforce tenant/application RLS, optimistic concurrency and atomic audit",
+  { skip: !databaseConfigured },
+  async () => {
+    const pool = createPostgresPaymentPool();
+    const suffix = randomUUID();
+    const tenantId = "wf-draft-tenant-" + suffix;
+    const applicationId = "wf-draft-app-" + suffix;
+    const otherApplicationId = "wf-draft-other-app-" + suffix;
+    const otherTenantId = "wf-draft-other-tenant-" + suffix;
+    const actorId = "wf-draft-actor-" + suffix;
+    const workflowId = "wf-draft-" + suffix;
+    const correlationId = "wf-draft-correlation-" + suffix;
+    const store = new PostgresWorkflowDefinitionDraftStore(pool);
+    const environment = "sandbox";
+
+    const definition = (name) => ({
+      id: workflowId,
+      name,
+      status: "DRAFT",
+      activities: [{
+        id: "submit",
+        title: "Submit request",
+        type: "TASK",
+        roleId: "requester",
+        permission: "workflow:act",
+        nextActivityIds: [],
+        fields: [],
+      }],
+    });
+
+    try {
+      await store.assertReady();
+      const setup = await pool.connect();
+      try {
+        await setup.query(
+          `INSERT INTO eper_tenant_application_assignment
+            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,'active',$3,$3), ($1,$4,'active',$3,$3), ($5,$2,'active',$3,$3)`,
+          [tenantId, applicationId, actorId, otherApplicationId, otherTenantId],
+        );
+        await setup.query(
+          `INSERT INTO eper_actor_application_assignment
+            (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,$3,'active',$2,$2)`,
+          [tenantId, actorId, applicationId],
+        );
+      } finally { setup.release(); }
+
+      const created = await store.replace({
+        tenantId, applicationId, workflowId, definition: definition("Expense request"),
+        expectedVersion: 0, changeReason: "Initial design", changedBy: actorId,
+        environment, correlationId, serviceVersion: "workflow-draft-integration-test",
+      });
+      assert.equal(created.draftVersion, 1);
+      assert.equal(created.createdBy, actorId);
+      assert.equal(created.updatedBy, actorId);
+
+      const reloadedStore = new PostgresWorkflowDefinitionDraftStore(pool);
+      const reloaded = await reloadedStore.get(tenantId, applicationId, workflowId);
+      assert.equal(reloaded?.draftVersion, 1);
+      assert.equal(reloaded?.definition.name, "Expense request");
+      assert.equal((await reloadedStore.list(tenantId, applicationId)).length, 1);
+
+      const concurrent = await Promise.allSettled([
+        store.replace({
+          tenantId, applicationId, workflowId, definition: definition("Expense request — revision A"),
+          expectedVersion: 1, changeReason: "Concurrent edit A", changedBy: actorId,
+          environment, correlationId: correlationId + "-a",
+        }),
+        store.replace({
+          tenantId, applicationId, workflowId, definition: definition("Expense request — revision B"),
+          expectedVersion: 1, changeReason: "Concurrent edit B", changedBy: actorId,
+          environment, correlationId: correlationId + "-b",
+        }),
+      ]);
+      assert.equal(concurrent.filter(result => result.status === "fulfilled").length, 1);
+      assert.equal(concurrent.filter(result => result.status === "rejected").length, 1);
+      const conflict = concurrent.find(result => result.status === "rejected");
+      assert.match(conflict.reason.message, /^WORKFLOW_DRAFT_VERSION_CONFLICT:2$/);
+
+      const current = await reloadedStore.get(tenantId, applicationId, workflowId);
+      assert.equal(current?.draftVersion, 2);
+      assert.ok([
+        "Expense request — revision A",
+        "Expense request — revision B",
+      ].includes(current?.definition.name));
+
+      assert.deepEqual(await reloadedStore.list(otherTenantId, applicationId), []);
+      assert.equal(await reloadedStore.get(tenantId, otherApplicationId, workflowId), null);
+
+      await assert.rejects(
+        store.replace({
+          tenantId, applicationId, workflowId, definition: definition("Unauthorized edit"),
+          expectedVersion: 2, changeReason: "Unassigned actor", changedBy: "wf-draft-unassigned-" + suffix,
+          environment, correlationId: correlationId + "-unassigned",
+        }),
+        /WORKFLOW_DRAFT_ACTOR_APPLICATION_NOT_ACTIVE/,
+      );
+
+      const verify = await pool.connect();
+      try {
+        await verify.query("BEGIN");
+        await verify.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await verify.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+        const audit = await verify.query(
+          `SELECT COUNT(*)::int AS count
+             FROM eper_audit_events
+            WHERE tenant_id = $1 AND application_id = $2
+              AND action = 'workflow.definition_draft.replace'`,
+          [tenantId, applicationId],
+        );
+        assert.equal(audit.rows[0].count, 2, "only the create and one winning concurrent update are audited");
+        await verify.query("COMMIT");
+      } catch (error) {
+        await verify.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally { verify.release(); }
+    } finally {
+      const cleanup = await pool.connect();
+      try {
+        await cleanup.query("BEGIN");
+        await cleanup.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await cleanup.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+        await cleanup.query(
+          "DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1 AND application_id=$2 AND workflow_id=$3",
+          [tenantId, applicationId, workflowId],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_audit_events WHERE tenant_id=$1 AND application_id=$2",
+          [tenantId, applicationId],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1 AND actor_id=$2 AND application_id=$3",
+          [tenantId, actorId, applicationId],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id = ANY($2::text[])",
+          [tenantId, [applicationId, otherApplicationId]],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id=$2",
+          [otherTenantId, applicationId],
+        );
+        await cleanup.query("COMMIT");
+      } catch {
+        await cleanup.query("ROLLBACK").catch(() => undefined);
+      } finally {
+        cleanup.release();
+        await pool.end();
+      }
+    }
+  });
