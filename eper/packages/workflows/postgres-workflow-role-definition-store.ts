@@ -78,7 +78,8 @@ export class PostgresWorkflowRoleDefinitionStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        role_table: string | null; row_security: boolean; force_row_security: boolean; policy_present: boolean;
+        role_table: string | null; row_security: boolean; force_row_security: boolean;
+        policy_present: boolean; delegable_column_present: boolean;
       }>(`
         SELECT to_regclass('public.eper_workflow_role_definition')::text AS role_table,
                COALESCE(c.relrowsecurity, false) AS row_security,
@@ -86,12 +87,17 @@ export class PostgresWorkflowRoleDefinitionStore {
                EXISTS (SELECT 1 FROM pg_policies p
                         WHERE p.schemaname = 'public'
                           AND p.tablename = 'eper_workflow_role_definition'
-                          AND p.policyname = 'tenant_application_isolation') AS policy_present
+                          AND p.policyname = 'tenant_application_isolation') AS policy_present,
+               EXISTS (SELECT 1 FROM information_schema.columns col
+                        WHERE col.table_schema = 'public'
+                          AND col.table_name = 'eper_workflow_role_definition'
+                          AND col.column_name = 'delegable') AS delegable_column_present
           FROM (SELECT 1) seed
           LEFT JOIN pg_class c ON c.oid = to_regclass('public.eper_workflow_role_definition')
       `);
       const row = result.rows[0];
-      if (!row?.role_table || !row.row_security || !row.force_row_security || !row.policy_present) {
+      if (!row?.role_table || !row.row_security || !row.force_row_security ||
+          !row.policy_present || !row.delegable_column_present) {
         throw new Error("EPER_WORKFLOW_ROLE_DEFINITION_SCHEMA_NOT_READY");
       }
     } catch (error) {
@@ -145,6 +151,9 @@ export class PostgresWorkflowRoleDefinitionStore {
     }
     if (input.status !== "active" && input.status !== "disabled") {
       throw new Error("WORKFLOW_ROLE_DEFINITION_STATUS_INVALID");
+    }
+    if (typeof input.delegable !== "boolean") {
+      throw new Error("WORKFLOW_ROLE_DEFINITION_DELEGABLE_INVALID");
     }
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
       throw new Error("WORKFLOW_ROLE_DEFINITION_EXPECTED_VERSION_INVALID");
