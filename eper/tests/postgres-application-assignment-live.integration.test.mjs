@@ -253,10 +253,14 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
       });
       await t.test("customer tariff switching snapshots accepted price and retains immutable assignment history", async () => {
         const customerContext = { ...common, correlationId: "customer-tariff-switch-" + suffix };
+        const selectedForRevocation = "app-downgrade-" + suffix;
+        await tenantStore.assign({ ...common, applicationId: selectedForRevocation, expectedVersion: 0 });
         const switchedDown = await tenantStore.switchCustomerTariff({
           ...customerContext, tariffKey: catalogueTariffKey, tariffVersion: 2,
           expectedVersion: 1, acceptanceReference: "CI-DOWNGRADE-" + suffix,
+          revokeApplications: [{ applicationId: selectedForRevocation, expectedVersion: 1 }],
         });
+        assert.deepEqual(await tenantStore.listActive(tenantId), [applicationId]);
         assert.equal(switchedDown.billingBasis, "single_application");
         assert.equal(switchedDown.maxApplications, 1);
         assert.equal(switchedDown.acceptedAmount, "599.0000");
