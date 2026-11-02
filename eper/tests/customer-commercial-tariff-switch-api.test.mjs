@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 const TOKEN = "eper-customer-commercial-switch-test-token-with-32-chars";
-const MEMBER_TOKEN = "eper-customer-member-switch-test-token-with-32-chars";
 
-test("customer tariff switch requires explicit acceptance and trusted customer-admin identity", async () => {
+test("customer tariff switch rejects legacy bearer identity in durable OIDC mode", async () => {
   const keys = ["EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
     "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON"];
@@ -18,24 +17,20 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     EPER_AUDIT_PERSISTENCE: "postgres",
     EPER_CUSTOMER_ACCESS_IDENTITIES_JSON: JSON.stringify({
       [TOKEN]: { tenantId: "tenant-customer", actorId: "customer-owner", roleKey: "customer-admin" },
-      [MEMBER_TOKEN]: { tenantId: "tenant-customer", actorId: "customer-member", roleKey: "customer-member" },
     }),
   });
-  const calls = [];
+  let switchCalls = 0;
   const store = {
     async getCustomerTariffAssignment(tenantId) { return { tenantId, version: 3, billingBasis: "single_application", acceptedAmount: "599.00" }; },
-    async listAssignments() { return [
-      {applicationId:"app-a",status:"active",version:2},
-      {applicationId:"app-b",status:"active",version:4},
-      {applicationId:"app-old",status:"revoked",version:5},
-    ]; },
-    async switchCustomerTariff(input) {
-      calls.push(input);
-      return { tenantId: input.tenantId, tariffKey: input.tariffKey, tariffVersion: input.tariffVersion,
-        version: input.expectedVersion + 1, acceptedAmount: "499.00", acceptedCurrency: "INR" };
-    },
+    async listAssignments() { return [{applicationId:"app-a",status:"active",version:2}]; },
+    async switchCustomerTariff() { switchCalls++; throw new Error("legacy bearer identity must never reach tariff switching"); },
   };
-  const server = createAppServer({ tenantApplicationAssignmentStore: store, customerIdentitySessionStore: {}, actorApplicationAssignmentStore: {}, commercialTariffAdminStore: { async list() { return [{ tariffKey: "multi-app", tariffVersion: 2, billingBasis: "multi_application", maxApplications: 3, amount: "499.00", currency: "INR", billingInterval: "monthly", effectiveFrom: "2026-01-01T00:00:00.000Z", effectiveTo: null, tariffStatus: "active" }]; } } });
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: store,
+    customerIdentitySessionStore: { async resolveSession() { return null; } },
+    actorApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+    commercialTariffAdminStore: { async list() { return []; } },
+  });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address();
@@ -43,40 +38,13 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     const url = `http://127.0.0.1:${address.port}/customer/commercial-tariff`;
     const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
     const catalogue = await fetch(url, { headers });
-    assert.equal(catalogue.status, 200);
-    const catalogueBody = await catalogue.json();
-    assert.deepEqual(catalogueBody.applicationAssignments,[
-      {applicationId:"app-a",status:"active",version:2},
-      {applicationId:"app-b",status:"active",version:4},
-    ]);
-    const memberDenied = await fetch(url, { method: "POST", headers: {
-      authorization: `Bearer ${MEMBER_TOKEN}`, "content-type": "application/json",
-    }, body: JSON.stringify({
+    assert.equal(catalogue.status, 401, "durable OIDC mode must not accept legacy bearer identity");
+    const denied = await fetch(url, { method: "POST", headers, body: JSON.stringify({
       tariffKey: "multi-app", tariffVersion: 2, expectedVersion: 1,
       accepted: true, acceptanceReference: "CONTRACT-2026-01",
     }) });
-    assert.equal(memberDenied.status, 403);
-    assert.equal(calls.length, 0);
-    assert.equal(catalogueBody.assignment.version, 3);
-    assert.equal(catalogueBody.tariffs.length, 1);
-    assert.equal(catalogueBody.tariffs[0].tariffKey, "multi-app");
-    const unaccepted = await fetch(url, { method: "POST", headers, body: JSON.stringify({
-      tariffKey: "multi-app", tariffVersion: 2, expectedVersion: 1,
-      accepted: false, acceptanceReference: "CONTRACT-2026-01",
-    }) });
-    assert.equal(unaccepted.status, 400);
-    assert.equal(calls.length, 0);
-    const accepted = await fetch(url, { method: "POST", headers, body: JSON.stringify({
-      tariffKey: "multi-app", tariffVersion: 2, expectedVersion: 1,
-      accepted: true, acceptanceReference: "CONTRACT-2026-01",
-      revokeApplications:[{applicationId:"app-b",expectedVersion:4}],
-    }) });
-    assert.equal(accepted.status, 200);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].tenantId, "tenant-customer");
-    assert.equal(calls[0].changedBy, "customer-owner");
-    assert.equal(calls[0].acceptanceReference, "CONTRACT-2026-01");
-    assert.deepEqual(calls[0].revokeApplications,[{applicationId:"app-b",expectedVersion:4}]);
+    assert.equal(denied.status, 401);
+    assert.equal(switchCalls, 0, "unauthenticated bearer identity must not invoke the tariff store");
   } finally {
     await new Promise(resolve => server.close(resolve));
     for (const key of keys) {

@@ -1198,8 +1198,21 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      const identity = resolveCustomerAccessIdentity(request);
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "A trusted customer credential is required."); return; }
+      if (request.method === "POST" && process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres") {
+        const sessionToken = parseCookieHeader(request.headers.cookie).get(CUSTOMER_SESSION_COOKIE) ?? "";
+        const origin = typeof request.headers.origin === "string" ? request.headers.origin : undefined;
+        const csrfHeader = typeof request.headers["x-csrf-token"] === "string" ? request.headers["x-csrf-token"] : undefined;
+        if (!verifyCustomerBrowserCsrf({
+          method: request.method, origin, expectedOrigin: options.customerOidcPublicOrigin ?? "",
+          cookieHeader: request.headers.cookie, csrfHeader, sessionToken,
+          secret: options.customerCsrfSecret ?? "",
+        })) {
+          sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED", "A valid same-origin CSRF token is required.");
+          return;
+        }
+      }
       if (request.method === "GET") {
         if (!options.tenantApplicationAssignmentStore || !options.commercialTariffAdminStore) {
           sendJson(request, response, 503, { error: "customer_tariff_catalogue_unavailable" }); return;
