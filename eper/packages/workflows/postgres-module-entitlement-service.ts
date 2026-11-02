@@ -1,6 +1,7 @@
 import type { AuditSqlPool } from "../audit/audit-event-store.js";
 import {
   evaluateApplicationAddonAccess,
+  evaluateCustomerTariffAccess,
   evaluateModuleAccess,
   type AccessDecision,
   type AddonEntitlementStatus,
@@ -33,7 +34,7 @@ interface ModuleAccessRow {
   tariff_assignment_status: string | null;
   tariff_starts_at: string | Date | null;
   tariff_ends_at: string | Date | null;
-  tariff_max_applications: number | null;
+  max_applications: number | string | null;
   active_application_count: number;
 }
 
@@ -47,7 +48,7 @@ interface AddonAccessRow {
   tariff_assignment_status: string | null;
   tariff_starts_at: string | Date | null;
   tariff_ends_at: string | Date | null;
-  tariff_max_applications: number | null;
+  max_applications: number | string | null;
   active_application_count: number;
 }
 
@@ -114,7 +115,7 @@ export class PostgresModuleEntitlementService {
         `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
                 e.grace_until, p.allowed AS permission_allowed,
                 t.assignment_status AS tariff_assignment_status, t.starts_at AS tariff_starts_at,
-                t.ends_at AS tariff_ends_at, t.max_applications AS tariff_max_applications,
+                t.ends_at AS tariff_ends_at, t.max_applications,
                 (SELECT COUNT(*)::int FROM eper_tenant_application_assignment aa
                   WHERE aa.tenant_id=$2 AND aa.assignment_status='active') AS active_application_count
            FROM (SELECT $1::text AS module_key) requested
@@ -131,7 +132,7 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
-      const commercial = evaluateCommercialApplicationAllowance(row, context.now);
+      const commercial = evaluateCustomerTariffAccess({ assignmentStatus: row?.tariff_assignment_status ?? null, maxApplications: row?.max_applications ?? null, activeApplicationCount: row?.active_application_count ?? 0, startsAt: row?.tariff_starts_at, endsAt: row?.tariff_ends_at, now: context.now });
       if (!commercial.allowed) return commercial;
       return evaluateModuleAccess({
         moduleStatus: row?.module_status ?? "disabled",
@@ -163,7 +164,7 @@ export class PostgresModuleEntitlementService {
         `SELECT ca.customer_status, c.status AS addon_status, e.entitlement_status, e.effective_from, e.effective_to,
                 p.allowed AS permission_allowed,
                 t.assignment_status AS tariff_assignment_status, t.starts_at AS tariff_starts_at,
-                t.ends_at AS tariff_ends_at, t.max_applications AS tariff_max_applications,
+                t.ends_at AS tariff_ends_at, t.max_applications,
                 (SELECT COUNT(*)::int FROM eper_tenant_application_assignment aa
                   WHERE aa.tenant_id=$2 AND aa.assignment_status='active') AS active_application_count
            FROM (SELECT $1::text AS addon_key) requested
@@ -180,7 +181,7 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
-      const commercial = evaluateCommercialApplicationAllowance(row, context.now);
+      const commercial = evaluateCustomerTariffAccess({ assignmentStatus: row?.tariff_assignment_status ?? null, maxApplications: row?.max_applications ?? null, activeApplicationCount: row?.active_application_count ?? 0, startsAt: row?.tariff_starts_at, endsAt: row?.tariff_ends_at, now: context.now });
       if (!commercial.allowed) return commercial;
       return evaluateApplicationAddonAccess({
         addonStatus: row?.addon_status ?? "disabled",
@@ -195,33 +196,6 @@ export class PostgresModuleEntitlementService {
       client.release();
     }
   }
-}
-
-function evaluateCommercialApplicationAllowance(
-  row: {
-    tariff_assignment_status?: string | null;
-    tariff_starts_at?: string | Date | null;
-    tariff_ends_at?: string | Date | null;
-    tariff_max_applications?: number | null;
-    active_application_count?: number | null;
-  } | undefined,
-  now?: Date,
-): AccessDecision {
-  if (!row?.tariff_assignment_status) return { allowed: false, reason: "tariff_missing" };
-  if (row.tariff_assignment_status !== "active") return { allowed: false, reason: "tariff_inactive" };
-  const at = (now ?? new Date()).getTime();
-  const starts = row.tariff_starts_at == null ? Number.NaN : new Date(row.tariff_starts_at).getTime();
-  const ends = row.tariff_ends_at == null ? null : new Date(row.tariff_ends_at).getTime();
-  if (!Number.isFinite(starts) || at < starts || (ends !== null && (!Number.isFinite(ends) || at >= ends))) {
-    return { allowed: false, reason: "tariff_inactive" };
-  }
-  if (!Number.isSafeInteger(Number(row.tariff_max_applications)) || Number(row.tariff_max_applications) < 1) {
-    return { allowed: false, reason: "tariff_inactive" };
-  }
-  if (Number(row.active_application_count ?? 0) > Number(row.tariff_max_applications)) {
-    return { allowed: false, reason: "tariff_overage" };
-  }
-  return { allowed: true, reason: "allowed" };
 }
 
 function validateContext(context: TrustedAccessContext): void {
