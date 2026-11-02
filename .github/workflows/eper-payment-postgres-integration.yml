@@ -13,6 +13,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/eper-payment-postgres-integration.yml"
+      - ".github/workflows/eper-local-developer-setup.yml"
       - "eper/packages/identity/**"
       - "eper/packages/workflows/**"
       - "eper/packages/audit/**"
