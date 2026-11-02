@@ -114,13 +114,16 @@ export class PostgresPaymentStore {
         `SELECT table_name, column_name FROM information_schema.columns
           WHERE table_schema = 'public'
             AND ((table_name = 'eper_payment_orders' AND column_name IN ('transaction_snapshot', 'transaction_public_id'))
-              OR (table_name = 'eper_payment_receipts' AND column_name IN ('transaction_snapshot', 'document_pdf')))`
+              OR (table_name = 'eper_payment_receipts' AND column_name IN ('transaction_snapshot', 'commercial_acceptance_snapshot', 'document_pdf'))
+              OR (table_name = 'eper_payment_orders' AND column_name = 'commercial_acceptance_snapshot'))`
       );
       const found = new Set(columns.rows.map((row) => row.table_name + "." + row.column_name));
       const requiredColumnsPresent = [
         "eper_payment_orders.transaction_snapshot",
         "eper_payment_orders.transaction_public_id",
+        "eper_payment_orders.commercial_acceptance_snapshot",
         "eper_payment_receipts.transaction_snapshot",
+        "eper_payment_receipts.commercial_acceptance_snapshot",
         "eper_payment_receipts.document_pdf",
       ].every((name) => found.has(name));
       if (!requiredColumnsPresent) return false;
@@ -912,9 +915,10 @@ export class PostgresPaymentStore {
         id: string | number; tenant_id: string; invoice_reference: string;
         amount_minor: string | number; currency: string; status: string; provider_payment_id: string | null;
         transaction_snapshot: TrustedTransactionSnapshot | null;
+        commercial_acceptance_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT id, tenant_id, invoice_reference, amount_minor, currency, status, provider_payment_id,
-                transaction_snapshot
+                transaction_snapshot, commercial_acceptance_snapshot
            FROM eper_payment_orders WHERE provider_order_id = $1 FOR UPDATE`,
         [input.providerOrderId],
       );
@@ -972,9 +976,12 @@ export class PostgresPaymentStore {
       const receiptNumber = input.receiptNumber;
       // Receipt PDF generation happens in a later layer; the event hash is not a PDF hash.
       await client.query(
-        `INSERT INTO eper_payment_receipts (tenant_id, payment_order_id, receipt_number, transaction_snapshot)
-         VALUES ($1, $2, $3, $4::jsonb)`,
-        [order.tenant_id, order.id, receiptNumber, input.transactionSnapshot ? JSON.stringify(input.transactionSnapshot) : null],
+        `INSERT INTO eper_payment_receipts
+          (tenant_id, payment_order_id, receipt_number, transaction_snapshot, commercial_acceptance_snapshot)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)`,
+        [order.tenant_id, order.id, receiptNumber,
+          input.transactionSnapshot ? JSON.stringify(input.transactionSnapshot) : null,
+          order.commercial_acceptance_snapshot ? JSON.stringify(order.commercial_acceptance_snapshot) : null],
       );
       const receiptPublicId = String((await client.query<{ receipt_public_id: string }>(
         `SELECT receipt_public_id FROM eper_payment_receipts WHERE payment_order_id = $1`,
