@@ -80,6 +80,35 @@ test("platform remediation route is hidden while disabled and POST-only while en
   assert.equal(wrongMethod.statusCode, 405);
 });
 
+
+test("platform remediation UI is same-origin, no-store and CSP-nonced", async () => {
+  process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED = "true";
+  const res = response();
+  await handlePlatformApplicationRemediationRoute(
+    request({ method: "GET", body: {} }), res, "/platform/application-remediation/ui",
+    { environment: "sandbox", store: { async remediate() { throw new Error("MUST_NOT_CALL"); } } },
+  );
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers["content-security-policy"], /script-src 'nonce-/);
+  assert.match(res.headers["content-security-policy"], /connect-src 'self'/);
+  assert.equal(res.headers["cache-control"], "no-store");
+  assert.match(res.body, /Expected assignment version/);
+  assert.match(res.body, /mandatory incident\/ticket reference and reason/i);
+  assert.match(res.body, /confirm\(/);
+  assert.match(res.body, /application:remediate/);
+  assert.doesNotMatch(res.body, /localStorage|sessionStorage/);
+});
+
+test("platform remediation UI is hidden when feature is disabled", async () => {
+  delete process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED;
+  const res = response();
+  await handlePlatformApplicationRemediationRoute(
+    request({ method: "GET", body: {} }), res, "/platform/application-remediation/ui",
+    { environment: "sandbox", store: { async remediate() { throw new Error("MUST_NOT_CALL"); } } },
+  );
+  assert.equal(res.statusCode, 404);
+});
+
 test.after(() => {
   if (previousMapping === undefined) delete process.env.EPER_PLATFORM_ADMIN_IDENTITIES_JSON;
   else process.env.EPER_PLATFORM_ADMIN_IDENTITIES_JSON = previousMapping;
