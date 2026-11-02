@@ -83,3 +83,25 @@ See the complete 45-row source export. The source IDs are immutable and must not
 - Preserve immutable tariff/contract snapshots and reconcile them with payment, invoice and receipt records.
 - Add positive, negative, concurrency, tenant-isolation, restart/recovery and audit tests. Evidence must be tied to the exact commit and CI run.
 - These requirements do not authorize live payment processing, chargeable cloud provisioning or Business UAT. Business UAT remains separately gated.
+
+## 8. Owner-directed product USP — customer tariff mobility (2026-11-02)
+
+**Disposition:** Explicit Product Owner direction. Treat as a distinct product differentiator and additive candidate requirement; it does not alter or renumber the approved 228 requirements or the original v34 baseline.
+
+| Candidate ID | Priority | Requirement | Acceptance criteria |
+|---|---|---|---|
+| EPER-CW-051 | MUST / P0 | EPER shall provide a customer-facing tariff mobility experience that allows an authorized customer administrator to switch between Single-Application and Multi-Application tariff plans, subject to Platform Admin commercial policy, accepted pricing and entitlement validation. Tariff mobility shall be positioned as a core EPER USP: customers can start with one application, scale to multiple applications as they grow, and return to a smaller plan when their active usage permits. | Customer admin can compare eligible single-/multi-application plans, permitted application counts, billing interval, currency and total payable price before confirming a change; customer can request or complete an eligible switch through an authenticated, authorized workflow; the system displays the effective date and immutable price/tariff snapshot before acceptance; the switch is versioned, auditable and reflected consistently in customer workspace, Admin monitoring, entitlements, invoices and receipts; Platform Admin can configure which plans are customer-switchable, approval requirements, effective-date rules and any explicitly approved fees/proration policy; no undisclosed charge or silent repricing is permitted. |
+| EPER-CW-052 | MUST / P0 | EPER shall safely manage a tariff downgrade when the customer's currently active application count exceeds the destination plan's limit. | Before confirming a downgrade, show the applications that exceed the destination limit and require the authorized customer admin to select which applications remain active or to cancel the downgrade; do not delete applications or their data; selected excess applications are deactivated only through an explicit, confirmed and audited transition at the effective time; if no valid selection is made, the downgrade is not applied; background jobs and API access for deactivated applications are blocked after the transition. |
+
+### Tariff mobility experience and commercial safeguards
+
+1. **Discover and compare:** Customer workspace displays the current tariff, eligible alternatives, application allowance, billing interval, currency, total price and material differences. No vague "contact sales" dead end for plans configured as self-service switchable.
+2. **Single → Multi:** Customer selects an eligible multi-application plan, sees the full accepted price and effective date, confirms the change, and can activate additional applications only after the new entitlement becomes effective.
+3. **Multi → Single:** Customer is shown the active applications that exceed the single-application limit and must select the one to retain, or cancel the downgrade. Data is retained for deactivated applications subject to retention policy; no silent deletion.
+4. **Admin policy:** Platform Admin controls eligible plans, customer self-service availability, approval gates, effective-date rules, and any explicitly approved proration/fees. Customer actions cannot alter tariff catalogue values or bypass limits.
+5. **Atomic transition:** Tariff snapshot and entitlement transition are committed consistently with concurrency control. A failed transition leaves the prior accepted tariff and entitlements intact.
+6. **Transparent billing:** Display any immediate amount due, credit, proration or next renewal amount only when the applicable policy and calculation are configured and validated. Otherwise disclose that the switch is scheduled for the next billing boundary or requires Admin review; never invent a charge.
+7. **Audit and monitoring:** Record requester, approver where applicable, previous and new tariff/version, selected retained applications, price snapshot, effective time, transition outcome and correlation ID. Admin dashboard reports switch requests, completions, rejections and exceptions.
+8. **USP measurement:** Product analytics shall report single-to-multi upgrades, multi-to-single downgrades, time to switch, failed transitions and application growth/retention, with tenant isolation and privacy controls.
+
+**Positioning statement:** "Start with one application. Scale to many. Switch plans as your business evolves—with transparent pricing and no platform migration."
