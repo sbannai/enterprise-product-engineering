@@ -45,7 +45,13 @@ function dependencies(permissions = ["access:manage", "workflow:view"]) {
     actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, appId) {
       return tenantId === "tenant-01" && actorId === "admin-01" && appId === "app-01";
     } },
-    actorRoleAssignmentStore: { async listActiveRoleIds() { return ["customer-admin"]; } },
+    actorRoleAssignmentStore: {
+      async listActiveRoleIds() { return ["customer-admin"]; },
+      async listAssignments() { return [{ tenantId: "tenant-01", applicationId: "app-01", actorId: "user-02",
+        roleId: "workflow-reader", status: "active", version: 1, assignedAt: "2026-11-02T00:00:00.000Z",
+        assignedBy: "admin-01", revokedAt: null, revokedBy: null, updatedAt: "2026-11-02T00:00:00.000Z",
+        updatedBy: "admin-01" }]; },
+    },
     roleDefinitionStore: { async list() { return [{ roleId: "customer-admin", status: "active", permissions }]; } },
     delegationStore: {
       async grant(input) {
@@ -171,6 +177,31 @@ test("customer admin can revoke a role assignment with CSRF proof and expected v
       assert.equal(deps.calls.length, 1);
       assert.equal(deps.calls[0].action, "revoke");
       assert.equal(deps.calls[0].grantorActorId, "admin-01");
+    });
+  } finally { restore(); }
+});
+
+
+test("customer admin can load the scoped role directory and assignment history", async () => {
+  const restore = configure();
+  const deps = dependencies();
+  try {
+    await withServer({
+      customerIdentitySessionStore: deps.customerIdentitySessionStore,
+      tenantApplicationAssignmentStore: deps.tenantApplicationAssignmentStore,
+      actorApplicationAssignmentStore: deps.actorApplicationAssignmentStore,
+      workflowRoleDefinitionStore: deps.roleDefinitionStore,
+      workflowActorRoleAssignmentStore: deps.actorRoleAssignmentStore,
+      workflowRoleDelegationStore: deps.delegationStore,
+      customerOidcPublicOrigin: ORIGIN, customerCsrfSecret: SECRET,
+    }, async base => {
+      const response = await fetch(base + "/customer/applications/app-01/workflow-role-delegations", {
+        method: "GET", headers: { cookie },
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.data.assignments[0].actorId, "user-02");
+      assert.equal(body.data.roles[0].roleId, "customer-admin");
     });
   } finally { restore(); }
 });
