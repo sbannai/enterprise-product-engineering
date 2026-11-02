@@ -30,7 +30,7 @@ export interface AccessDecision {
     | "tariff_inactive"
     | "tariff_not_started"
     | "tariff_expired"
-    | "tariff_application_limit_exceeded"
+    | "tariff_overage"
     | "module_disabled"
     | "entitlement_missing"
     | "entitlement_inactive"
@@ -101,7 +101,7 @@ export function evaluateCustomerTariffAccess(input: CustomerTariffAccessInput): 
   const ends = toTime(input.endsAt);
   if (starts !== null && now < starts) return deny("tariff_not_started");
   if (ends !== null && now >= ends) return deny("tariff_expired");
-  if (activeCount > allowance) return deny("tariff_application_limit_exceeded");
+  if (activeCount > allowance) return deny("tariff_overage");
   return { allowed: true, reason: "allowed" };
 }
 
