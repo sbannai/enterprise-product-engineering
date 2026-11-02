@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { authorizeProviderConnectionRequest } from "../dist/packages/integrations/provider-connection-authorization.js";
+import {
+  authorizeProviderConnectionRequest,
+  PostgresProviderRoleAuthorizer,
+} from "../dist/packages/integrations/provider-connection-authorization.js";
 
 function fixture({ tenantActive = true, actorAssigned = true, roleAllowed = true, roleError = null } = {}) {
   const calls = [];
@@ -103,4 +106,31 @@ test("tenant-level connection creation still requires explicit role authorizatio
   assert.equal(scope.applicationId, null);
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0][0], "role-policy");
+});
+
+
+test("PostgreSQL role adapter maps application actions to explicit provider grants", async () => {
+  const calls = [];
+  const adapter = new PostgresProviderRoleAuthorizer({
+    async hasPermission(...args) { calls.push(args); return true; },
+  });
+  assert.equal(await adapter.authorize({
+    tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin",
+    action: "provider.connection.rotate", applicationId: "app-a",
+  }), true);
+  assert.deepEqual(calls, [[
+    "tenant-a", "app-a", "actor-a", "customer-admin", "provider.connection.rotate",
+  ]]);
+});
+
+test("PostgreSQL role adapter denies tenant-level create without a tenant admin grant model", async () => {
+  let called = false;
+  const adapter = new PostgresProviderRoleAuthorizer({
+    async hasPermission() { called = true; return true; },
+  });
+  assert.equal(await adapter.authorize({
+    tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin",
+    action: "provider.connection.create", applicationId: null,
+  }), false);
+  assert.equal(called, false);
 });
