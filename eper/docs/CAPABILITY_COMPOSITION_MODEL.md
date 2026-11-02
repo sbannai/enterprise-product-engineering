@@ -168,6 +168,45 @@ The catalogue is extensible; examples do not imply that every provider adapter i
 
 A workflow action stores only a stable provider-connection reference, capability identifier/version, business configuration and policy reference. At execution, the server resolves the connection within trusted tenant/application scope, checks current status and entitlement, then dispatches through the provider adapter. Published workflow versions pin the required capability contract and policy identity, not raw credentials. Connection rotation can therefore occur without editing every workflow, while revocation and compatibility changes remain visible and governed.
 
+**Canonical provider configuration resources**
+
+Keep the following resources separate; do not overload the existing generic tenant admin-configuration JSON row with application-level credentials or delivery state:
+
+| Resource | Scope and owner | Purpose |
+|---|---|---|
+| ProviderDefinition | Platform catalogue; Product Admin | Provider identity, adapter contract/version, supported capabilities, auth modes, configuration descriptor and lifecycle |
+| ProviderCapability | Platform catalogue; Product Admin | Specific operations such as email.send, sms.send, whatsapp.send, push.send, meeting.create, meeting.update and meeting.cancel |
+| ProviderConnection | Tenant-owned; Customer Admin or authorized platform operations | Connection identity, provider, auth mode, secret reference, lifecycle state, environment and safe health metadata |
+| ProviderConnectionApplicationBinding | Tenant + application | Explicitly grants an application use of a tenant connection and records its permitted capability set |
+| ApplicationProviderPolicy | Tenant + application | Sender/calendar identity, templates, consent/suppression, quiet hours, limits, approved audiences and action policy |
+| ProviderOperation | Tenant + application + execution | Idempotency key, action/correlation reference, provider request reference, attempt count, outcome and timestamps |
+| ProviderWebhookReceipt | Provider + tenant/application correlation | Authenticated, replay-protected provider callback receipt and normalized delivery/meeting status |
+| ProviderAuditEvent | Tenant + application or platform scope | Configuration, authorization, rotation, test, suspension, revocation and operational audit evidence |
+
+Connection secrets are references into an approved secret-management abstraction, never values in these rows. The abstraction must support create/read-by-reference/rotate/revoke with access policy and redaction; the concrete secret backend is deployment configuration and must not be hard-coded into provider adapters.
+
+**Scope and lifecycle rules**
+
+- A tenant may own a reusable connection and explicitly bind it to selected applications. An application may also own a dedicated connection. A tenant-wide connection does not automatically grant every application access.
+- A connection is usable only if its provider definition and requested capability are active, the connection state is ACTIVE, the application binding grants that capability, the caller/runtime identity is authorized, and commercial entitlement/usage policy permits the operation.
+- The connection's secret reference is resolved only by the server-side adapter at dispatch time. Customer Admin read APIs return connection metadata and masked identity, never a secret or token.
+- Rotation updates the secret reference under optimistic concurrency, audits the change and preserves the stable connection ID. Existing workflow snapshots continue to refer to that connection ID; no workflow edit is required.
+- Suspension/revocation immediately prevents new dispatches. In-flight operations follow an explicit policy: safely retry only if idempotency permits; otherwise move to a visible needs-attention/terminal state. Never silently fall back to another provider.
+- Provider deletion is a deprecation/tombstone operation while referenced by connections, published workflows or retained operations. Hard deletion is prohibited until references and retention obligations are resolved.
+- Provider callbacks must map to a known operation and tenant/application binding; unknown, duplicate, stale or invalidly signed callbacks are rejected or quarantined without mutating workflow state.
+- Audit events record actor, scope, connection ID, before/after safe metadata digests, correlation ID and outcome. They must not contain credentials, message bodies, full meeting links or unnecessary personal data.
+
+**API and persistence boundary**
+
+Proposed business-oriented API surface:
+- Product Admin: manage provider definitions/capabilities, activate/suspend/deprecate catalogue entries and inspect aggregate health.
+- Customer Admin: list available providers; create/authorize a connection; test it in sandbox; list/read masked connection metadata; bind/unbind it to an application; configure application policy; rotate/revoke; inspect authorized usage and failures.
+- Runtime service: resolve a connection for a specific tenant/application/capability; create an idempotent operation; dispatch; accept authenticated provider callbacks; expose normalized operation status to authorized workflow execution.
+
+Persistence must enforce tenant/application scope in service authorization and PostgreSQL constraints/policies, not just UI filters. Use unique stable IDs, foreign keys, explicit environment, optimistic versions and indexes for tenant/application/provider/state and operation idempotency. Credential access is a separate least-privilege boundary from ordinary configuration reads. Configuration mutation and its audit event commit atomically. Provider operations and outbox records use durable transaction boundaries; webhook processing is idempotent.
+
+Do not add these tables to the existing generic admin configuration resource without a migration and explicit scope redesign: that store currently keys configuration by tenant and resource type, while provider bindings, policies and operations require application scope and distinct retention/security controls.
+
 **Configuration experience**
 
 - Product Admin → Integrations Catalogue: provider adapters, capabilities, platform credentials/secret references, availability, versions and global limits.
