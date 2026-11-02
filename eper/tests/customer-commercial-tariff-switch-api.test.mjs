@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
 
 const TOKEN = "eper-customer-commercial-switch-test-token-with-32-chars";
+const MEMBER_TOKEN = "eper-customer-member-switch-test-token-with-32-chars";
 
 test("customer tariff switch requires explicit acceptance and trusted customer-admin identity", async () => {
   const keys = ["EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
@@ -17,12 +18,17 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     EPER_AUDIT_PERSISTENCE: "postgres",
     EPER_CUSTOMER_ACCESS_IDENTITIES_JSON: JSON.stringify({
       [TOKEN]: { tenantId: "tenant-customer", actorId: "customer-owner", roleKey: "customer-admin" },
+      [MEMBER_TOKEN]: { tenantId: "tenant-customer", actorId: "customer-member", roleKey: "customer-member" },
     }),
   });
   const calls = [];
   const store = {
     async getCustomerTariffAssignment(tenantId) { return { tenantId, version: 3, billingBasis: "single_application", acceptedAmount: "599.00" }; },
-    async listAssignments() { return [{applicationId:"app-a",status:"active",version:2},{applicationId:"app-b",status:"active",version:4}]; },
+    async listAssignments() { return [
+      {applicationId:"app-a",status:"active",version:2},
+      {applicationId:"app-b",status:"active",version:4},
+      {applicationId:"app-old",status:"revoked",version:5},
+    ]; },
     async switchCustomerTariff(input) {
       calls.push(input);
       return { tenantId: input.tenantId, tariffKey: input.tariffKey, tariffVersion: input.tariffVersion,
@@ -39,7 +45,18 @@ test("customer tariff switch requires explicit acceptance and trusted customer-a
     const catalogue = await fetch(url, { headers });
     assert.equal(catalogue.status, 200);
     const catalogueBody = await catalogue.json();
-    assert.deepEqual(catalogueBody.applicationAssignments,[{applicationId:"app-a",status:"active",version:2},{applicationId:"app-b",status:"active",version:4}]);
+    assert.deepEqual(catalogueBody.applicationAssignments,[
+      {applicationId:"app-a",status:"active",version:2},
+      {applicationId:"app-b",status:"active",version:4},
+    ]);
+    const memberDenied = await fetch(url, { method: "POST", headers: {
+      authorization: `Bearer ${MEMBER_TOKEN}`, "content-type": "application/json",
+    }, body: JSON.stringify({
+      tariffKey: "multi-app", tariffVersion: 2, expectedVersion: 1,
+      accepted: true, acceptanceReference: "CONTRACT-2026-01",
+    }) });
+    assert.equal(memberDenied.status, 403);
+    assert.equal(calls.length, 0);
     assert.equal(catalogueBody.assignment.version, 3);
     assert.equal(catalogueBody.tariffs.length, 1);
     assert.equal(catalogueBody.tariffs[0].tariffKey, "multi-app");
