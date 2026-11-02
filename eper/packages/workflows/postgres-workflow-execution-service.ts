@@ -261,7 +261,7 @@ async function appendWorkflowOutboxEvent(
   );
 }
 
-function chooseNextActivity(
+export function chooseNextWorkflowActivity(
   definition: WorkflowDefinition,
   activity: WorkflowActivity,
   data: Record<string, unknown>,
@@ -576,7 +576,7 @@ export class PostgresWorkflowExecutionService {
         actorRole = current.roleId;
         validateActivityPayload(current.fields, payload);
         nextData = { ...nextData, ...payload };
-        nextActivityId = chooseNextActivity(definition, current, nextData, input.targetActivityId);
+        nextActivityId = chooseNextWorkflowActivity(definition, current, nextData, input.targetActivityId);
         if (nextActivityId === null) nextStatus = "completed";
       }
 
