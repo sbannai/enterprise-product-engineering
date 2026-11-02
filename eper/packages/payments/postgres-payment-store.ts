@@ -156,12 +156,16 @@ export class PostgresPaymentStore {
            JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'public'
             AND ((c.relname = 'eper_payment_orders' AND con.conname = 'eper_payment_orders_transaction_snapshot_object_check')
-              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_transaction_snapshot_object_check'))`
+              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_transaction_snapshot_object_check')
+              OR (c.relname = 'eper_payment_orders' AND con.conname = 'eper_payment_orders_commercial_acceptance_object_check')
+              OR (c.relname = 'eper_payment_receipts' AND con.conname = 'eper_payment_receipts_commercial_acceptance_object_check'))`
       );
       const foundConstraints = new Set(constraints.rows.map((row) => row.table_name + "." + row.constraint_name));
       return [
         "eper_payment_orders.eper_payment_orders_transaction_snapshot_object_check",
         "eper_payment_receipts.eper_payment_receipts_transaction_snapshot_object_check",
+        "eper_payment_orders.eper_payment_orders_commercial_acceptance_object_check",
+        "eper_payment_receipts.eper_payment_receipts_commercial_acceptance_object_check",
       ].every((name) => foundConstraints.has(name));
     } finally {
       client.release();
