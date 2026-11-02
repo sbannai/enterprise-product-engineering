@@ -2,7 +2,6 @@ name: EPER Customer OIDC Browser E2E
 
 on:
   pull_request:
-    branches: ["main"]
     paths:
       - "eper/apps/api/**"
       - "eper/packages/identity/**"
