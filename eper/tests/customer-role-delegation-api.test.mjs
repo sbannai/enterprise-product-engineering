@@ -47,12 +47,20 @@ function dependencies(permissions = ["access:manage", "workflow:view"]) {
     } },
     actorRoleAssignmentStore: { async listActiveRoleIds() { return ["customer-admin"]; } },
     roleDefinitionStore: { async list() { return [{ roleId: "customer-admin", status: "active", permissions }]; } },
-    delegationStore: { async grant(input) {
-      calls.push(input);
-      return { tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.targetActorId,
-        roleId: input.targetRoleId, grantorActorId: input.grantorActorId, status: "active", version: 1,
-        assignedAt: new Date().toISOString(), assignedBy: input.grantorActorId };
-    } },
+    delegationStore: {
+      async grant(input) {
+        calls.push({ action: "grant", ...input });
+        return { tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.targetActorId,
+          roleId: input.targetRoleId, grantorActorId: input.grantorActorId, status: "active", version: 1,
+          assignedAt: new Date().toISOString(), assignedBy: input.grantorActorId };
+      },
+      async revoke(input) {
+        calls.push({ action: "revoke", ...input });
+        return { tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.targetActorId,
+          roleId: input.targetRoleId, status: "revoked", version: input.expectedVersion + 1,
+          revokedBy: input.grantorActorId };
+      },
+    },
   };
 }
 
@@ -135,6 +143,34 @@ test("role delegation rejects missing CSRF proof and cross-tenant application me
       });
       assert.equal(noCsrf.status, 401);
       assert.equal(deps.calls.length, 0);
+    });
+  } finally { restore(); }
+});
+
+
+test("customer admin can revoke a role assignment with CSRF proof and expected version", async () => {
+  const restore = configure();
+  const deps = dependencies();
+  try {
+    await withServer({
+      customerIdentitySessionStore: deps.customerIdentitySessionStore,
+      tenantApplicationAssignmentStore: deps.tenantApplicationAssignmentStore,
+      actorApplicationAssignmentStore: deps.actorApplicationAssignmentStore,
+      workflowRoleDefinitionStore: deps.roleDefinitionStore,
+      workflowActorRoleAssignmentStore: deps.actorRoleAssignmentStore,
+      workflowRoleDelegationStore: deps.delegationStore,
+      customerOidcPublicOrigin: ORIGIN, customerCsrfSecret: SECRET,
+    }, async base => {
+      const response = await fetch(base + "/customer/applications/app-01/workflow-role-delegations", {
+        method: "DELETE", headers: { cookie, origin: ORIGIN, "x-csrf-token": CSRF, "content-type": "application/json" },
+        body: JSON.stringify({ actorId: "user-02", roleId: "workflow-reader", expectedVersion: 1 }),
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.data.assignment.status, "revoked");
+      assert.equal(deps.calls.length, 1);
+      assert.equal(deps.calls[0].action, "revoke");
+      assert.equal(deps.calls[0].grantorActorId, "admin-01");
     });
   } finally { restore(); }
 });
