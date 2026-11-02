@@ -95,6 +95,29 @@ export class PostgresModuleEntitlementService {
 
     const client = await this.pool.connect();
     try {
+      const tariff = await client.query<{
+        max_applications: number | string;
+        active_application_count: number | string;
+      }>(
+        `SELECT t.max_applications,
+                (SELECT COUNT(*)::int
+                   FROM eper_tenant_application_assignment a
+                  WHERE a.tenant_id = t.tenant_id
+                    AND a.assignment_status = 'active') AS active_application_count
+           FROM eper_customer_tariff_assignment t
+          WHERE t.tenant_id = $1
+            AND t.assignment_status = 'active'
+            AND t.starts_at <= $2
+          ORDER BY t.starts_at DESC
+          LIMIT 1`,
+        [context.tenantId, context.now ?? new Date()],
+      );
+      const effectiveTariff = tariff.rows[0];
+      if (effectiveTariff &&
+          Number(effectiveTariff.active_application_count) > Number(effectiveTariff.max_applications)) {
+        return { allowed: false, reason: "tariff_overage" };
+      }
+
       const result = await client.query<ModuleAccessRow>(
         `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
                 e.grace_until, p.allowed AS permission_allowed
