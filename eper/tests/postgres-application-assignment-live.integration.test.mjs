@@ -283,6 +283,7 @@ test("live PostgreSQL tenant and actor application assignments: migrations, conc
         assert.equal(history.rows[2].acceptance_reference, "CI-UPGRADE-" + suffix);
       });
       await t.test("customer tariff downgrade audit failure rolls back application revocation and tariff acceptance", async () => {
+        const customerContext = { ...common, correlationId: "customer-tariff-downgrade-rollback-" + suffix };
         const rollbackDowngradeApplicationId = "app-downgrade-rollback-" + suffix;
         await tenantStore.assign({ ...common, applicationId: rollbackDowngradeApplicationId, expectedVersion: 0 });
         functionName = "eper_test_tariff_audit_fail_" + suffix;
