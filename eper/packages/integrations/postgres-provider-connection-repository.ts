@@ -268,7 +268,7 @@ export class PostgresProviderConnectionRepository {
       );
       const row = connection.rows[0];
       if (!row) throw new ProviderConnectionNotFoundError();
-      if (row.connection_status !== "ACTIVE") throw new Error("PROVIDER_CONNECTION_NOT_ACTIVE");
+      if (row.connection_status !== "ACTIVE" && row.connection_status !== "PENDING_VALIDATION") throw new Error("PROVIDER_CONNECTION_NOT_ACTIVE");
       const supported = new Set(typeof row.capabilities === "string"
         ? JSON.parse(row.capabilities) as string[] : row.capabilities);
       if (capabilities.some((capability) => !supported.has(capability))) {
@@ -278,13 +278,13 @@ export class PostgresProviderConnectionRepository {
         `INSERT INTO eper_provider_connection_applications
           (tenant_id, application_id, connection_id, provider_key, allowed_capabilities,
            binding_status, updated_by)
-         VALUES ($1,$2,$3,$4,$5::jsonb,'ACTIVE',$6)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$7,$6)
          ON CONFLICT (tenant_id, application_id, connection_id) DO UPDATE SET
            allowed_capabilities = EXCLUDED.allowed_capabilities,
-           binding_status = 'ACTIVE', version = eper_provider_connection_applications.version + 1,
+           binding_status = EXCLUDED.binding_status, version = eper_provider_connection_applications.version + 1,
            updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
         [input.tenantId, input.applicationId, input.connectionId, row.provider_key,
-          JSON.stringify(capabilities), input.actorId],
+          JSON.stringify(capabilities), input.actorId, row.connection_status === "ACTIVE" ? "ACTIVE" : "PENDING_VALIDATION"],
       );
       await this.audit(client, {
         tenantId: input.tenantId, applicationId: input.applicationId,
