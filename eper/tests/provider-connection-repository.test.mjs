@@ -98,13 +98,14 @@ test("secret rotation preserves connection identity and forces revalidation", as
   assert.equal(rotated.version, 2);
   assert.equal(rotated.status, "PENDING_VALIDATION");
   assert.ok(calls.some((call) => call.sql.includes("SET secret_reference")));
+  assert.ok(calls.some((call) => call.sql.includes("set_config") && call.values[0] === "app-a"));
   assert.ok(calls.some((call) => call.sql.includes("SET binding_status = 'SUSPENDED'")));
 });
 
 test("stale rotation is rejected before changing the connection", async () => {
   const { repository, calls } = fixture({ version: 3 });
   await assert.rejects(() => repository.rotateSecretReference({
-    ...audit, connectionId: "connection-a", secretReference: "vault://new-version",
+    ...audit, applicationId: "app-a", connectionId: "connection-a", secretReference: "vault://new-version",
     expectedVersion: 2,
   }), (error) => error instanceof ProviderConnectionConflictError && error.currentVersion === 3);
   assert.ok(!calls.some((call) => call.sql.includes("SET secret_reference")));
@@ -118,6 +119,7 @@ test("revocation disables all application bindings in the same audited transacti
   assert.equal(revoked.status, "REVOKED");
   assert.ok(calls.some((call) => call.sql.includes("UPDATE eper_provider_connection_applications")));
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.ok(calls.some((call) => call.sql.includes("set_config") && call.values[0] === "app-a"));
   assert.ok(calls.some((call) => call.sql === "COMMIT"));
 });
 
