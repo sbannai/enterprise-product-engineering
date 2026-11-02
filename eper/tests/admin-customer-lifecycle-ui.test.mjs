@@ -71,7 +71,10 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
     assert.match(html, /customerRows/);
     assert.match(html, /data-save-customer/);
     assert.match(html, /expectedVersion:record.version/);
-    assert.match(html, /append-only audit ledger/);\n    assert.match(html, /Accepted tariff/);\n    assert.match(html, /Active apps \/ allowance/);\n    assert.match(html, /OVER LIMIT/);
+    assert.match(html, /append-only audit ledger/);
+    assert.match(html, /Accepted tariff/);
+    assert.match(html, /Active apps \/ allowance/);
+    assert.match(html, /OVER LIMIT/);
 
     const unauthorized = await fetch(`${base}/admin/customers`);
     assert.equal(unauthorized.status, 401);
