@@ -105,3 +105,26 @@ See the complete 45-row source export. The source IDs are immutable and must not
 8. **USP measurement:** Product analytics shall report single-to-multi upgrades, multi-to-single downgrades, time to switch, failed transitions and application growth/retention, with tenant isolation and privacy controls.
 
 **Positioning statement:** "Start with one application. Scale to many. Switch plans as your business evolves—with transparent pricing and no platform migration."
+
+## 9. Owner-directed product administration — tariff price management (2026-11-02)
+
+**Disposition:** Explicit Product Owner direction. Product Admin is the authoritative owner of tariff catalogue pricing. This is additive candidate scope and does not change the approved 228 requirements, 38 chapters, or original v34 source baseline.
+
+| Candidate ID | Priority | Requirement | Acceptance criteria |
+|---|---|---|---|
+| EPER-CW-053 | MUST / P0 | Authorized Product Admin shall be able to create, modify, version, activate, schedule and retire the cost of Single-Application and Multi-Application tariff plans, including configured application allowances and explicitly defined add-on charges. | Product Admin can edit plan price, currency, billing interval, application allowance and effective dates through a role-protected API and Admin UI; every edit creates a new immutable tariff version with actor, timestamp, reason/change reference and approval state; Admin can preview the customer-facing plan and price before publication; only an activated version effective for the relevant date is offered to customers; existing accepted customer tariff snapshots remain unchanged unless a separately authorized customer contract change is accepted; concurrent edits use optimistic version checks; all changes are durably audited and tenant-isolated. |
+| EPER-CW-054 | MUST / P0 | EPER shall preserve price integrity across customer tariff switching, quotation and billing when Product Admin changes tariff catalogue prices. | A customer switching after a new tariff version becomes effective is shown the applicable new price and must explicitly accept it; an in-progress or accepted switch retains the exact quoted tariff version and price snapshot under its stated validity/effective-time rules; existing contracts are not silently repriced; invoices, payments and receipts reference the accepted customer price snapshot; expired or superseded quotes cannot be accepted without a refreshed quote and renewed customer consent. |
+
+### Product Admin tariff pricing controls
+
+1. **Editable commercial fields:** plan name/description, single- or multi-application billing basis, included application count, base cost, currency, billing interval, add-on pricing where explicitly supported, effective-from/effective-to, customer self-service eligibility and publication status.
+2. **Draft and publish lifecycle:** Admin edits create a draft version; authorized publication activates it immediately or schedules it for a future effective date. A draft never changes customer-visible pricing or entitlement.
+3. **Immutable history:** Never overwrite a published tariff version. Corrections create a successor version; retain who changed what, when, why, approval reference and before/after values.
+4. **Existing customer protection:** Each accepted customer assignment keeps its own tariff/version/price snapshot. Catalogue edits affect only eligible new assignments or future customer-accepted changes, according to the configured contract policy.
+5. **Switch journey integration:** Customer plan comparison and switch confirmation always resolve the currently eligible published price version. Show currency, billing interval, application allowance, effective date and any configured fees before consent.
+6. **Approval and separation of duties:** Configure which Product Admin roles may draft, approve and publish prices. Where policy requires dual control, the author cannot approve their own change. Record approval evidence.
+7. **Validation:** Reject invalid/negative prices, unsupported currencies or intervals, overlapping effective versions where disallowed, and application limits inconsistent with the billing basis. Do not invent tax, proration, discounts or overage rules.
+8. **Operational integrity:** Persist catalogue and customer contract snapshots in PostgreSQL; use transactional/version checks; propagate the effective version consistently to plan comparison, entitlement checks, quote, invoice, payment and receipt services.
+9. **Testing:** Include role/permission, draft-versus-published visibility, scheduled activation, concurrent edit conflict, immutable history, customer-consent, quote expiry, grandfathered contract, tenant-isolation and invoice/receipt snapshot tests.
+
+**Admin workspace placement:** Plans & Tariffs → Plan Catalogue → Edit Price → Preview → Submit for Approval (when required) → Publish/Schedule. Provide version history and customer impact preview before publication.
