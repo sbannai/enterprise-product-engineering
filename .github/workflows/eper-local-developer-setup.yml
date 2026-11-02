@@ -6,7 +6,6 @@ concurrency:
 
 on:
   pull_request:
-    branches: ["main"]
     paths:
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
