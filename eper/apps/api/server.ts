@@ -878,6 +878,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const identity = resolveAdminConfigIdentity(request);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (identity.roleKey !== "customer_admin") {
+        sendApiError(request, response, 403, "CUSTOMER_ADMIN_ROLE_REQUIRED",
+          "Workflow authoring and publication are reserved for an authorized Customer Admin.");
+        return;
+      }
       if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
           !options.workflowRoleDefinitionStore || !options.workflowActorRoleAssignmentStore ||
           !options.workflowDefinitionPublisher) {
@@ -2088,6 +2093,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         adminIdentity = resolveAdminConfigIdentity(request);
         if (!adminIdentity) {
           sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+          return;
+        }
+        if (["/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath) &&
+            adminIdentity.roleKey !== "customer_admin") {
+          sendApiError(request, response, 403, "CUSTOMER_ADMIN_ROLE_REQUIRED",
+            "Workflow design and rule configuration are reserved for an authorized Customer Admin.");
           return;
         }
       } else {
