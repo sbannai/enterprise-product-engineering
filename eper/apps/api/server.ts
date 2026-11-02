@@ -920,14 +920,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (workflowRoleDetail) {
           if (request.method !== "PUT") { sendMethodNotAllowed(request, response, "PUT"); return; }
           const body = await readJson(request);
-          if (!allowedBodyKeys(body, ["name", "description", "permissions", "status", "expectedVersion"])) {
-            sendApiError(request, response, 400, "INVALID_WORKFLOW_ROLE_BODY", "Only role definition fields are accepted."); return;
+          if (!allowedBodyKeys(body, ["name", "description", "permissions", "status", "expectedVersion", "delegable"]) ||
+              typeof body.delegable !== "boolean") {
+            sendApiError(request, response, 400, "INVALID_WORKFLOW_ROLE_BODY", "Role definition fields and an explicit delegable boolean are required."); return;
           }
           const role = await options.workflowRoleDefinitionStore.replace({
             tenantId: identity.tenantId, applicationId, roleId: workflowRoleDetail[2],
             name: body.name as string, description: body.description as string | undefined,
             permissions: body.permissions as import("../../packages/workflows/postgres-workflow-role-definition-store.js").WorkflowRolePermission[],
-            status: body.status as "active" | "disabled", expectedVersion: body.expectedVersion as number,
+            status: body.status as "active" | "disabled", delegable: body.delegable as boolean,
+            expectedVersion: body.expectedVersion as number,
             changedBy: identity.actorId, environment, correlationId, serviceVersion: options.serviceVersion,
           });
           sendApiSuccess(request, response, 200, { role }); return;
