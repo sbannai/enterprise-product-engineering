@@ -268,7 +268,7 @@ export class PostgresProviderConnectionRepository {
       );
       const row = connection.rows[0];
       if (!row) throw new ProviderConnectionNotFoundError();
-      if (row.connection_status !== "ACTIVE" && row.connection_status !== "PENDING_VALIDATION") throw new Error("PROVIDER_CONNECTION_NOT_ACTIVE");
+      if (row.connection_status !== "ACTIVE" && row.connection_status !== "PENDING_VALIDATION" && row.connection_status !== "DEGRADED") throw new Error("PROVIDER_CONNECTION_NOT_ACTIVE");
       const supported = new Set(typeof row.capabilities === "string"
         ? JSON.parse(row.capabilities) as string[] : row.capabilities);
       if (capabilities.some((capability) => !supported.has(capability))) {
