@@ -72,6 +72,8 @@ export class PostgresModuleEntitlementService {
         module_permission: string | null;
         addon_entitlement: string | null;
         customer_account: string | null;
+        customer_tariff_assignment: string | null;
+        tenant_application_assignment: string | null;
       }>(`
         SELECT
           to_regclass('public.eper_module_catalog')::text AS module_catalog,
