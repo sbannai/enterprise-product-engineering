@@ -21,7 +21,7 @@ The resolver returns only:
 
 Initial permissions:
 - `customer_admin:provision` — assign the first active Customer Admin where none exists;
-- `customer_admin:recover` — restore administrative access after verified lockout.
+- `customer_admin:recover` — restore administrative access after verified lockout.\n- `application:remediate` — explicitly suspend/revoke one tenant application assignment after version-checked operator confirmation; defined in follow-on issue #346 and is not part of Customer Admin provisioning/recovery routes.
 
 The principal MUST NOT contain a tenant ID, application ID, customer role, or target actor. Those are requested resources, never authority claims.
 
