@@ -16,24 +16,7 @@ async function createRuntimePool(pool) {
         EXECUTE 'CREATE ROLE eper_provider_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS';
       END IF;
     END
-  $roleimport test from "node:test";
-import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import pg from "pg";
-import { PostgresProviderConnectionRepository } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
-import { PostgresProviderValidationStore } from "../dist/packages/integrations/postgres-provider-validation-store.js";
-import { ProviderConnectionValidationService } from "../dist/packages/integrations/provider-connection-validation-service.js";
-
-const { Pool } = pg;
-const connectionString = process.env.DATABASE_URL;
-
-async function createRuntimePool(pool) {
-  await pool.query(`DO $role$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_provider_test_runtime') THEN
-        EXECUTE 'CREATE ROLE eper_provider_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS';
-      END IF;
-);
+  $role$`);
   await pool.query("GRANT USAGE ON SCHEMA public TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT ON eper_provider_definitions TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connections TO eper_provider_test_runtime");
