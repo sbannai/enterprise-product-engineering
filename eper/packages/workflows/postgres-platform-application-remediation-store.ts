@@ -176,10 +176,12 @@ export class PostgresPlatformApplicationRemediationStore {
         [input.tenantId],
       );
       const tariff = await client.query<{
-        customer_status: string; assignment_status: string | null; starts_at: string | Date | null;
-        ends_at: string | Date | null; max_applications: number | string | null;
+        customer_status: string; assignment_status: string | null; tariff_effective: boolean;
+        max_applications: number | string | null; evaluated_at: string | Date;
       }>(
-        `SELECT c.customer_status, t.assignment_status, t.starts_at, t.ends_at, t.max_applications
+        `SELECT c.customer_status, t.assignment_status,
+                 (t.starts_at <= NOW() AND (t.ends_at IS NULL OR t.ends_at > NOW())) AS tariff_effective,
+                 t.max_applications, NOW() AS evaluated_at
            FROM eper_customer_account c
            LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id=c.tenant_id
           WHERE c.tenant_id=$1`,
@@ -188,9 +190,7 @@ export class PostgresPlatformApplicationRemediationStore {
       const activeApplicationCount = Number(count.rows[0]?.active_count ?? 0);
       const tariffRow = tariff.rows[0];
       const maxApplications = tariffRow?.max_applications == null ? null : Number(tariffRow.max_applications);
-      const effective = tariffRow?.assignment_status === "active" && tariffRow.starts_at != null &&
-        new Date(tariffRow.starts_at).getTime() <= Date.now() &&
-        (tariffRow.ends_at == null || new Date(tariffRow.ends_at).getTime() > Date.now());
+      const effective = tariffRow?.assignment_status === "active" && tariffRow.tariff_effective === true;
       const tariffAccessState: PlatformApplicationRemediationResult["tariffAccessState"] =
         tariffRow?.customer_status !== "active" ? "customer_inactive" :
         !tariffRow?.assignment_status ? "tariff_missing" :
