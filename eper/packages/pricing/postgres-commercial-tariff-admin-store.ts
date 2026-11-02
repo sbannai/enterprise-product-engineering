@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { SqlClient, SqlPool } from "../payments/postgres-payment-store.js";
 import { appendAuditEventInTransaction, type AuditEnvironment } from "../audit/audit-event-store.js";
 
 export type CommercialBillingBasis = "single_application" | "multi_application";
@@ -27,6 +27,9 @@ export interface CommercialTariffRecord extends CommercialTariffInput {
   createdBy: string;
   publishedAt?: string | null;
   publishedBy?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  approvalReference?: string | null;
 }
 
 export interface CommercialTariffAdminContext {
@@ -43,11 +46,6 @@ export class CommercialTariffAdminError extends Error {
     this.name = "CommercialTariffAdminError";
   }
 }
-
-type SqlClient = {
-  query<Row = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<{ rows: Row[]; rowCount: number | null }>;
-  release(): void;
-};
 
 function validateInput(input: CommercialTariffInput): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(input.tariffKey)) throw new CommercialTariffAdminError("INVALID_TARIFF_KEY", 400);
@@ -81,42 +79,51 @@ function mapRecord(row: Record<string, unknown>): CommercialTariffRecord {
     createdAt: new Date(row.created_at as string | Date).toISOString(), createdBy: String(row.created_by),
     publishedAt: row.published_at ? new Date(row.published_at as string | Date).toISOString() : null,
     publishedBy: row.published_by == null ? null : String(row.published_by),
+    approvedAt: row.approved_at ? new Date(row.approved_at as string | Date).toISOString() : null,
+    approvedBy: row.approved_by == null ? null : String(row.approved_by),
+    approvalReference: row.approval_reference == null ? null : String(row.approval_reference),
   };
 }
 
 export class PostgresCommercialTariffAdminStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: SqlPool) {}
 
   async assertReady(): Promise<void> {
-    const result = await this.pool.query<{ plans: string | null; audit: string | null }>(`
-      SELECT to_regclass('public.eper_commercial_tariff_plan')::text AS plans,
-             to_regclass('public.eper_audit_events')::text AS audit
-    `);
-    if (!result.rows[0]?.plans) throw new Error("COMMERCIAL_TARIFF_SCHEMA_NOT_APPLIED");
-    if (!result.rows[0]?.audit) throw new Error("COMMERCIAL_TARIFF_REQUIRES_DURABLE_AUDIT");
-    const columns = await this.pool.query<{ column_name: string }>(`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_schema='public' AND table_name='eper_commercial_tariff_plan'
-    `);
-    const names = new Set(columns.rows.map((row) => row.column_name));
-    for (const required of ["change_reason", "approval_required", "approval_state", "published_at", "published_by", "approved_at", "approved_by", "approval_reference"]) {
-      if (!names.has(required)) throw new Error("COMMERCIAL_TARIFF_SCHEMA_VERSION_UNSUPPORTED");
-    }
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ plans: string | null; audit: string | null }>(`
+        SELECT to_regclass('public.eper_commercial_tariff_plan')::text AS plans,
+               to_regclass('public.eper_audit_events')::text AS audit
+      `);
+      if (!result.rows[0]?.plans) throw new Error("COMMERCIAL_TARIFF_SCHEMA_NOT_APPLIED");
+      if (!result.rows[0]?.audit) throw new Error("COMMERCIAL_TARIFF_REQUIRES_DURABLE_AUDIT");
+      const columns = await client.query<{ column_name: string }>(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='eper_commercial_tariff_plan'
+      `);
+      const names = new Set(columns.rows.map((row) => row.column_name));
+      for (const required of ["change_reason", "approval_required", "approval_state", "published_at", "published_by", "approved_at", "approved_by", "approval_reference"]) {
+        if (!names.has(required)) throw new Error("COMMERCIAL_TARIFF_SCHEMA_VERSION_UNSUPPORTED");
+      }
+    } finally { client.release(); }
   }
 
   async list(context: CommercialTariffAdminContext): Promise<CommercialTariffRecord[]> {
     void context;
-    const result = await this.pool.query(`
-      SELECT * FROM eper_commercial_tariff_plan
-      ORDER BY tariff_key ASC, tariff_version DESC
-      LIMIT 5000
-    `);
-    return result.rows.map((row) => mapRecord(row as Record<string, unknown>));
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT * FROM eper_commercial_tariff_plan
+        ORDER BY tariff_key ASC, tariff_version DESC
+        LIMIT 5000
+      `);
+      return result.rows.map((row) => mapRecord(row as Record<string, unknown>));
+    } finally { client.release(); }
   }
 
   async createDraft(input: CommercialTariffInput, context: CommercialTariffAdminContext): Promise<CommercialTariffRecord> {
     validateInput(input);
-    const client = await this.pool.connect() as unknown as SqlClient;
+    const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`eper-commercial-tariff:${input.tariffKey}`]);
@@ -238,9 +245,9 @@ export class PostgresCommercialTariffAdminStore {
         outcome: "success", reasonCode: "PRODUCT_ADMIN_TARIFF_PUBLISHED", resourceType: "commercial_tariff",
         resourceId: input.tariffKey + ":" + input.tariffVersion, correlationId: context.correlationId,
         source: "api", operationName: "commercial-tariff.publish", serviceVersion: context.serviceVersion,
-        approvalId: input.approvalReference,
+        approvalId: current.approvalReference ?? undefined,
         payload: { tariffKey: input.tariffKey, tariffVersion: input.tariffVersion,
-          approvalState: current.approvalState, approvalReference: input.approvalReference ?? null },
+          approvalState: current.approvalState, approvalReference: current.approvalReference ?? null },
       });
       await client.query("COMMIT");
       return mapRecord(published.rows[0]);
