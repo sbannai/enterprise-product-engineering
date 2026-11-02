@@ -15,7 +15,7 @@ function fixture({ tenantStatus = "active", priorVersion = null } = {}) {
   const row = {
     tenant_id: input.tenantId, application_id: input.applicationId, role_id: input.roleId,
     name: input.name, description: input.description, permissions: input.permissions,
-    role_status: input.status, delegable: input.delegable, version: priorVersion ? priorVersion + 1 : 1,
+    role_status: input.status, delegable: input.delegable, scope_type: "application", version: priorVersion ? priorVersion + 1 : 1,
     updated_at: now, updated_by: input.changedBy,
   };
   const client = {
@@ -42,6 +42,8 @@ test("role definition is application-scoped and audited in the same transaction"
   assert.equal(result.roleId, "finance-approver");
   assert.deepEqual(result.permissions, ["workflow:view", "workflow:approve"]);
   assert.equal(result.delegable, true);
+  assert.equal(result.scopeType, "application");
+  assert.ok(calls.find(call => call.sql.includes("INSERT INTO eper_workflow_role_definition")).sql.includes("scope_type"));
   assert.equal(calls.find(call => call.sql.includes("INSERT INTO eper_workflow_role_definition")).values[7], true);
   assert.equal(result.version, 1);
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(", true)")));
