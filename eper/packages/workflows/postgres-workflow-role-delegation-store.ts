@@ -120,13 +120,14 @@ export class PostgresWorkflowRoleDelegationStore {
         throw new Error("WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED");
       }
 
-      const targetRole = await client.query<{ permissions: string[] | string }>(
-        `SELECT permissions FROM eper_workflow_role_definition
+      const targetRole = await client.query<{ permissions: string[] | string; delegable: boolean }>(
+        `SELECT permissions, delegable FROM eper_workflow_role_definition
           WHERE tenant_id = $1 AND application_id = $2 AND role_id = $3
             AND role_status = 'active' FOR SHARE`,
         [input.tenantId, input.applicationId, input.targetRoleId],
       );
       if (!targetRole.rows[0]) throw new Error("WORKFLOW_ROLE_DELEGATION_TARGET_ROLE_NOT_ACTIVE");
+      if (targetRole.rows[0].delegable !== true) throw new Error("WORKFLOW_ROLE_DELEGATION_TARGET_ROLE_NOT_DELEGABLE");
       const targetPermissions = typeof targetRole.rows[0].permissions === "string"
         ? JSON.parse(targetRole.rows[0].permissions) as string[]
         : targetRole.rows[0].permissions;
