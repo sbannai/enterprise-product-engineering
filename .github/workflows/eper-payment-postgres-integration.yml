@@ -39,7 +39,7 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-payment-store.integration.test.mjs"
       - "eper/tests/customer-lifecycle-store.integration.test.mjs"
-      - "eper/tests/postgres-module-entitlement-service.integration.test.mjs"
+      - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
       - "eper/tests/postgres-payment-store.test.mjs"
       - "eper/tests/postgres-payment-api-route.test.mjs"
       - "eper/tests/postgres-legacy-order-snapshot-gate.test.mjs"
@@ -152,7 +152,7 @@ jobs:
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
         run: node --test tests/customer-lifecycle-store.integration.test.mjs
       - name: Exercise PostgreSQL customer tariff enforcement at protected access checks
-        run: node --test tests/postgres-module-entitlement-service.integration.test.mjs
+        run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
       - name: Exercise PostgreSQL role delegation, application scope and last-admin concurrency
         run: node --test tests/postgres-workflow-role-delegation.integration.test.mjs
       - name: Exercise platform Customer Admin provisioning and recovery transactions
