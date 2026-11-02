@@ -150,6 +150,26 @@ test("PostgreSQL platform application remediation is tenant-scoped, versioned, i
       assert.equal(result.tariffAccessState, "within_allowance");
       assert.equal(result.replayed, false);
 
+      await assert.rejects(
+        store.remediate({
+          ...input,
+          applicationId: keepApplicationId,
+          expectedAssignmentVersion: 2,
+          idempotencyKey: "stale-version-" + suffix,
+        }),
+        /PLATFORM_APPLICATION_REMEDIATION_VERSION_CONFLICT/,
+      );
+      const unchangedAssignment = await pool.query(
+        `SELECT assignment_status, version
+           FROM eper_tenant_application_assignment
+          WHERE tenant_id=$1 AND application_id=$2`,
+        [primary.tenantId, keepApplicationId],
+      );
+      assert.deepEqual(
+        [unchangedAssignment.rows[0].assignment_status, Number(unchangedAssignment.rows[0].version)],
+        ["active", 1],
+      );
+
       const assignmentsAfter = await pool.query(
         `SELECT application_id, assignment_status, version
            FROM eper_tenant_application_assignment
