@@ -29,7 +29,7 @@ function fixture({ tenantActive = true, actorAssigned = true, roleAllowed = true
   };
 }
 
-const actor = { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin" };
+const actor = { tenantId: "tenant-a", actorId: "actor-a" };
 
 test("authorizes only after current tenant membership, actor assignment and role policy pass", async () => {
   const f = fixture();
@@ -112,25 +112,43 @@ test("tenant-level connection creation still requires explicit role authorizatio
 test("PostgreSQL role adapter maps application actions to explicit provider grants", async () => {
   const calls = [];
   const adapter = new PostgresProviderRoleAuthorizer({
-    async hasPermission(...args) { calls.push(args); return true; },
+    async listActiveRoleIds(...args) { calls.push(["roles", ...args]); return ["workflow-operator", "customer-admin"]; },
+    async hasPermission(...args) { calls.push(["permission", ...args]); return args[3] === "customer-admin"; },
   });
   assert.equal(await adapter.authorize({
-    tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin",
+    tenantId: "tenant-a", actorId: "actor-a",
     action: "provider.connection.rotate", applicationId: "app-a",
   }), true);
-  assert.deepEqual(calls, [[
-    "tenant-a", "app-a", "actor-a", "customer-admin", "provider.connection.rotate",
-  ]]);
+  assert.deepEqual(calls, [
+    ["roles", "tenant-a", "app-a", "actor-a"],
+    ["permission", "tenant-a", "app-a", "actor-a", "workflow-operator", "provider.connection.rotate"],
+    ["permission", "tenant-a", "app-a", "actor-a", "customer-admin", "provider.connection.rotate"],
+  ]);
 });
 
 test("PostgreSQL role adapter denies tenant-level create without a tenant admin grant model", async () => {
   let called = false;
   const adapter = new PostgresProviderRoleAuthorizer({
+    async listActiveRoleIds() { called = true; return ["customer-admin"]; },
     async hasPermission() { called = true; return true; },
   });
   assert.equal(await adapter.authorize({
-    tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin",
+    tenantId: "tenant-a", actorId: "actor-a",
     action: "provider.connection.create", applicationId: null,
   }), false);
   assert.equal(called, false);
+});
+
+
+test("PostgreSQL role adapter denies actors with no active durable role assignments", async () => {
+  const calls = [];
+  const adapter = new PostgresProviderRoleAuthorizer({
+    async listActiveRoleIds(...args) { calls.push(args); return []; },
+    async hasPermission() { throw new Error("must not check an unassigned role"); },
+  });
+  assert.equal(await adapter.authorize({
+    tenantId: "tenant-a", actorId: "actor-a",
+    action: "provider.connection.read", applicationId: "app-a",
+  }), false);
+  assert.deepEqual(calls, [["tenant-a", "app-a", "actor-a"]]);
 });
