@@ -149,7 +149,7 @@ export async function handleCustomerRoleDelegationRoute(
       sendApiError(request, response, 400, "INVALID_JSON_BODY", "A valid JSON object is required.");
     } else {
       const conflict = /VERSION_CONFLICT/.test(message);
-      const forbidden = /FORBIDDEN|NOT_AUTHORIZED|NOT_ACTIVE/.test(message);
+      const forbidden = /FORBIDDEN|NOT_AUTHORIZED|NOT_ACTIVE|PROTECTED/.test(message);
       const invalid = /INVALID|REQUIRED/.test(message);
       const status = conflict ? 409 : forbidden ? 403 : /NOT_FOUND/.test(message) ? 404 : invalid ? 400 : 503;
       const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").slice(0, 64) || "ROLE_DELEGATION_FAILED";
