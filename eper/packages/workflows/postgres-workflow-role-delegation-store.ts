@@ -215,7 +215,8 @@ export class PostgresWorkflowRoleDelegationStore {
     } finally {
       client.release();
     }
-  
+  }
+
   /** Revokes one scoped assignment and records the revocation atomically. */
   async revoke(input: DelegateWorkflowRoleInput): Promise<{ tenantId: string; applicationId: string; actorId: string; roleId: string; status: "revoked"; version: number; revokedBy: string }> {
     for (const [name, value] of Object.entries({
