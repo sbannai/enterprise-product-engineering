@@ -8,6 +8,7 @@ function makePool(row) {
     async query(sql, values = []) {
       calls.push({ sql, values });
       if (sql.includes("to_regclass")) return { rows: [{
+        customer_account: "eper_customer_account",
         module_catalog: "eper_module_catalog",
         module_price: "eper_module_price",
         module_entitlement: "eper_customer_module_entitlement",
@@ -31,6 +32,7 @@ const context = {
 
 test("module access queries tenant entitlement and role permission using bound parameters", async () => {
   const { pool, calls } = makePool({
+    customer_status: "active",
     module_status: "active",
     entitlement_status: "active",
     starts_at: "2026-10-01T00:00:00Z",
@@ -48,6 +50,15 @@ test("module access queries tenant entitlement and role permission using bound p
   assert.equal((await service.checkModule(context, "billing")).allowed, true);
   const query = calls.find((call) => call.sql.includes("eper_customer_module_entitlement"));
   assert.deepEqual(query.values, ["billing", "tenant-a", "customer-admin", "module.use"]);
+});
+
+test("module access blocks existing application when customer is inactive", async () => {
+  const { pool } = makePool({
+    customer_status: "suspended", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkModule(context, "billing"), { allowed: false, reason: "customer_inactive" });
 });
 
 test("module access fails closed when application is not assigned to tenant", async () => {
@@ -82,6 +93,7 @@ test("module access fails closed when role permission is absent", async () => {
 
 test("add-on access is application-scoped and pending payment is denied", async () => {
   const { pool, calls } = makePool({
+    customer_status: "active",
     addon_status: "active",
     entitlement_status: "pending_payment",
     effective_from: null,
@@ -121,4 +133,16 @@ test("service readiness requires every entitlement schema table", async () => {
   await assert.doesNotReject(() => new PostgresModuleEntitlementService(pool, {
     async isAssignedToTenant() { return true; },
   }).assertReady());
+});
+
+
+test("add-on access blocks existing application when customer is inactive", async () => {
+  const { pool } = makePool({
+    customer_status: "disabled", addon_status: "active", entitlement_status: "active",
+    effective_from: null, effective_to: null, permission_allowed: true,
+  });
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkApplicationAddon(context, "marketing"), {
+    allowed: false, reason: "customer_inactive",
+  });
 });
