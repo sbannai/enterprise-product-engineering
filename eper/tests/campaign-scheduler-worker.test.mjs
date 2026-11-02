@@ -23,6 +23,7 @@ function fakeStore(claimed = []) {
   return {
     calls,
     async recoverStaleExecutions(...args) { calls.push(["recover", ...args]); return 0; },
+    async renewExecutionLease(input) { calls.push(["renew-lease", input]); return true; },
     async materializeDueOneTimeSchedules() { calls.push("materialize-once"); return 0; },
     async materializeDueRecurringSchedules() { calls.push("materialize-recurring"); return 0; },
     async claimExecutions(workerId, batchSize) { calls.push(["claim", workerId, batchSize]); return claimed.splice(0); },
@@ -274,4 +275,59 @@ test("worker requeues a paused schedule after dispatch fence denial", async () =
   assert.equal(dispatchCalls, 0);
   assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "defer-paused"));
   assert.equal(store.calls.some((call) => Array.isArray(call) && call[0] === "fail"), false);
+});
+
+test("worker periodically renews the tenant-scoped lease while dispatch is in flight", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  let renewals = 0;
+  store.renewExecutionLease = async (input) => { store.calls.push(["renew-lease", input]); renewals += 1; return true; };
+  await runCampaignExecutionWorker(store, async () => {
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    controller.abort();
+    return { outcome: { accepted: true } };
+  }, { workerId: "worker-heartbeat", signal: controller.signal, idleDelayMs: 100, leaseRenewalIntervalMs: 10, authorizeDispatch: async () => true });
+  assert.ok(renewals >= 1, "long-running dispatch should renew its lease");
+  const renewal = store.calls.find((call) => Array.isArray(call) && call[0] === "renew-lease");
+  assert.equal(renewal[1].tenantId, "tenant-a");
+  assert.equal(renewal[1].applicationId, "app-a");
+  assert.equal(renewal[1].executionId, "execution-1");
+  assert.equal(renewal[1].workerId, "worker-heartbeat");
+});
+
+test("worker reports lease loss during active processing", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  const reported = [];
+  store.renewExecutionLease = async () => false;
+  await runCampaignExecutionWorker(store, async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    controller.abort();
+    return { outcome: { accepted: true } };
+  }, { workerId: "worker-lease-lost", signal: controller.signal, idleDelayMs: 100, leaseRenewalIntervalMs: 10, authorizeDispatch: async () => true, onError: (error) => reported.push(error.message) });
+  assert.ok(reported.includes("CAMPAIGN_EXECUTION_LEASE_LOST"));
+});
+
+test("worker keeps renewing its lease when shutdown begins during an in-flight provider call", async () => {
+  const controller = new AbortController();
+  const store = fakeStore([execution()]);
+  let renewals = 0;
+  store.renewExecutionLease = async (input) => {
+    store.calls.push(["renew-lease", input]);
+    renewals += 1;
+    return true;
+  };
+  await runCampaignExecutionWorker(store, async () => {
+    controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    return { outcome: { accepted: true } };
+  }, {
+    workerId: "worker-shutdown-in-flight",
+    signal: controller.signal,
+    idleDelayMs: 100,
+    leaseRenewalIntervalMs: 10,
+    authorizeDispatch: async () => true,
+  });
+  assert.ok(renewals >= 1, "shutdown must not stop lease renewal before the provider call settles");
+  assert.ok(store.calls.some((call) => Array.isArray(call) && call[0] === "complete"));
 });
