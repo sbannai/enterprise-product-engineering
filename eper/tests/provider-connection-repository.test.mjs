@@ -20,6 +20,11 @@ function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "m
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("FROM eper_provider_connections c") && sql.includes("JOIN eper_provider_connection_applications b")) {
+        return { rows: [{
+          ...row(), binding_status: "ACTIVE", allowed_capabilities: ["email.send"],
+        }], rowCount: 1 };
+      }
       if (sql.includes("SELECT provider_status FROM eper_provider_definitions")) {
         return { rows: [{ provider_status: "ACTIVE" }], rowCount: 1 };
       }
@@ -127,4 +132,25 @@ test("application binding sets tenant and application RLS context before lookup"
   }), /PROVIDER_CONNECTION_NOT_FOUND|PROVIDER_CONNECTION_NOT_ACTIVE|PROVIDER_CAPABILITY_NOT_SUPPORTED/);
   assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
   assert.ok(calls.some((call) => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
+});
+
+
+test("application listing returns only bound safe connection fields under tenant and application RLS", async () => {
+  const { repository, calls } = fixture();
+  const listed = await repository.listForApplication("tenant-a", "app-a");
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].applicationId, "app-a");
+  assert.equal(listed[0].bindingStatus, "ACTIVE");
+  assert.deepEqual(listed[0].allowedCapabilities, ["email.send"]);
+  assert.equal("secretReference" in listed[0], false);
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
+  assert.ok(calls.some((call) => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
+  assert.ok(calls.some((call) => call.sql.includes("JOIN eper_provider_connection_applications")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("application listing rejects invalid scope before database access", async () => {
+  const { repository, calls } = fixture();
+  await assert.rejects(() => repository.listForApplication("tenant-a", " "), /PROVIDER_APPLICATION_ID_INVALID/);
+  assert.equal(calls.length, 0);
 });
