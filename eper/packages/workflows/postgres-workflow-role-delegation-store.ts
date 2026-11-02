@@ -266,12 +266,15 @@ export class PostgresWorkflowRoleDelegationStore {
       const targetPermissions = typeof rawTargetPermissions === "string"
         ? JSON.parse(rawTargetPermissions) as string[]
         : rawTargetPermissions;
-      // Revocation only removes access; it cannot grant privilege. Permit an
-      // authorized Customer Admin to revoke an existing Customer Admin role,
-      // while still requiring every target permission to be within the actor's
-      // own permission set. The final-admin guard below protects availability.
-      if (targetPermissions.some(permission => !permissions.includes(permission))) {
-        throw new Error("WORKFLOW_ROLE_DELEGATION_PRIVILEGE_ESCALATION_FORBIDDEN");
+      // A Customer Admin may revoke peer/superior administration only when
+      // their own durable role carries the separate role:assign authority.
+      // This path never revokes workflow:admin; ordinary delegated roles must
+      // remain within the grantor's effective permission set.
+      if (targetPermissions.includes("workflow:admin") ||
+          ((targetPermissions.includes("access:manage") || targetPermissions.includes("role:assign")) &&
+            !permissions.includes("role:assign")) ||
+          targetPermissions.some(permission => !permissions.includes(permission))) {
+        throw new Error("WORKFLOW_ROLE_DELEGATION_PEER_ADMIN_MODIFICATION_FORBIDDEN");
       }
       const current = await client.query<{ version: number | string }>(
         `SELECT version FROM eper_workflow_actor_role_assignment
