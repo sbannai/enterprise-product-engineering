@@ -257,21 +257,32 @@ export class PostgresWorkflowRoleDelegationStore {
       if (!current.rows[0]) throw new Error("WORKFLOW_ROLE_DELEGATION_ASSIGNMENT_NOT_FOUND");
       const version = Number(current.rows[0].version);
       if (version !== input.expectedVersion) throw new Error("WORKFLOW_ROLE_DELEGATION_VERSION_CONFLICT:" + version);
-      const adminCount = await client.query<{ admin_count: number | string }>(
-        `SELECT COUNT(DISTINCT ra.actor_id)::int AS admin_count
-           FROM eper_workflow_actor_role_assignment ra
-           JOIN eper_actor_application_assignment aa
-             ON aa.tenant_id=ra.tenant_id AND aa.application_id=ra.application_id
-            AND aa.actor_id=ra.actor_id AND aa.assignment_status='active'
-           JOIN eper_workflow_role_definition rd
-             ON rd.tenant_id=ra.tenant_id AND rd.application_id=ra.application_id
-            AND rd.role_id=ra.role_id AND rd.role_status='active'
-          WHERE ra.tenant_id=$1 AND ra.application_id=$2
-            AND ra.assignment_status='active' AND rd.permissions ? 'access:manage'`,
-        [input.tenantId, input.applicationId],
+      const targetRole = await client.query<{ permissions: string[] | string }>(
+        `SELECT permissions FROM eper_workflow_role_definition
+          WHERE tenant_id=$1 AND application_id=$2 AND role_id=$3 AND role_status='active' FOR SHARE`,
+        [input.tenantId, input.applicationId, input.targetRoleId],
       );
-      if (Number(adminCount.rows[0]?.admin_count ?? 0) <= 1) {
-        throw new Error("WORKFLOW_ROLE_DELEGATION_LAST_CUSTOMER_ADMIN_PROTECTED");
+      const targetPermissions = targetRole.rows[0]
+        ? (typeof targetRole.rows[0].permissions === "string"
+          ? JSON.parse(targetRole.rows[0].permissions) as string[] : targetRole.rows[0].permissions)
+        : [];
+      if (targetPermissions.includes("access:manage")) {
+        const adminCount = await client.query<{ admin_count: number | string }>(
+          `SELECT COUNT(DISTINCT ra.actor_id)::int AS admin_count
+             FROM eper_workflow_actor_role_assignment ra
+             JOIN eper_actor_application_assignment aa
+               ON aa.tenant_id=ra.tenant_id AND aa.application_id=ra.application_id
+              AND aa.actor_id=ra.actor_id AND aa.assignment_status='active'
+             JOIN eper_workflow_role_definition rd
+               ON rd.tenant_id=ra.tenant_id AND rd.application_id=ra.application_id
+              AND rd.role_id=ra.role_id AND rd.role_status='active'
+            WHERE ra.tenant_id=$1 AND ra.application_id=$2
+              AND ra.assignment_status='active' AND rd.permissions ? 'access:manage'`,
+          [input.tenantId, input.applicationId],
+        );
+        if (Number(adminCount.rows[0]?.admin_count ?? 0) <= 1) {
+          throw new Error("WORKFLOW_ROLE_DELEGATION_LAST_CUSTOMER_ADMIN_PROTECTED");
+        }
       }
       const saved = await client.query<{ version: number | string }>(
         `UPDATE eper_workflow_actor_role_assignment
