@@ -2471,14 +2471,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
 
-    // Application-scoped provider connection read API. Mutations are added only
-    // after the same identity/authorization boundary is proven end-to-end.
-    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections$/.exec(requestUrl.pathname);
+    // Application-scoped provider connection read and bind APIs.
+    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/bind)?$/.exec(requestUrl.pathname);
     if (providerConnectionsPath) {
       if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      const isBinding = Boolean(providerConnectionsPath[2]);
+      if ((!isBinding && request.method !== "GET") || (isBinding && request.method !== "POST")) {
+        sendMethodNotAllowed(request, response, isBinding ? "POST" : "GET"); return;
+      }
       if (!options.providerConnectionRepository || !options.customerIdentitySessionStore ||
           !options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
           !options.workflowActorRoleAssignmentStore) {
@@ -2489,6 +2491,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
       if (!applicationId.trim() || applicationId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(applicationId)) {
         sendJson(request, response, 400, { error: "invalid_application_id" }); return;
+      }
+      let connectionId: string | undefined;
+      if (isBinding) {
+        try { connectionId = decodeURIComponent(providerConnectionsPath[2]); }
+        catch { sendJson(request, response, 400, { error: "invalid_connection_id_encoding" }); return; }
+        if (!/^[0-9a-f-]{36}$/i.test(connectionId)) {
+          sendJson(request, response, 400, { error: "invalid_connection_id" }); return;
+        }
       }
       const identity = await resolveCustomerBrowserIdentity({
         cookieHeader: request.headers.cookie, applicationId,
@@ -2501,10 +2511,30 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           "A valid browser session with active tenant and actor application assignments is required.");
         return;
       }
+      if (isBinding) {
+        const cookies = parseCookieHeader(request.headers.cookie);
+        const sessionToken = cookies.get("__Host-eper_session") ?? "";
+        const csrfHeader = request.headers["x-csrf-token"];
+        const csrfValid = verifyCustomerBrowserCsrf({
+          method: request.method,
+          origin: request.headers.origin,
+          expectedOrigin: options.customerOidcPublicOrigin ?? process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+          cookieHeader: request.headers.cookie,
+          csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
+          sessionToken,
+          secret: options.customerCsrfSecret ?? process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+        });
+        if (!csrfValid) {
+          sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",
+            "A valid same-origin CSRF token is required for this browser request.");
+          return;
+        }
+      }
+      const correlationId = resolveApiRequestId(request);
       try {
         await authorizeProviderConnectionRequest({
           actor: { tenantId: identity.tenantId, actorId: identity.actorId },
-          action: "provider.connection.read",
+          action: isBinding ? "provider.connection.bind" : "provider.connection.read",
           applicationId,
           assignments: {
             async isTenantApplicationActive(tenantId, appId) {
@@ -2515,14 +2545,43 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           },
           roles: new PostgresProviderRoleAuthorizer(options.workflowActorRoleAssignmentStore),
         });
-        const connections = await options.providerConnectionRepository.listForApplication(identity.tenantId, applicationId);
-        sendJson(request, response, 200, { applicationId, connections });
+        if (isBinding) {
+          const body = await readJson(request);
+          const allowedCapabilities = body.allowedCapabilities;
+          if (!Array.isArray(allowedCapabilities) || allowedCapabilities.length < 1 ||
+              allowedCapabilities.length > 32 ||
+              allowedCapabilities.some((value) => typeof value !== "string" ||
+                !value.trim() || value.length > 128)) {
+            sendJson(request, response, 400, { error: "invalid_provider_capabilities" }); return;
+          }
+          await options.providerConnectionRepository.bindApplication({
+            tenantId: identity.tenantId,
+            applicationId,
+            connectionId: connectionId!,
+            actorId: identity.actorId,
+            allowedCapabilities: allowedCapabilities as string[],
+            correlationId,
+            auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+          });
+          sendJson(request, response, 200, { applicationId, connectionId, bindingStatus: "ACTIVE" });
+        } else {
+          const connections = await options.providerConnectionRepository.listForApplication(identity.tenantId, applicationId);
+          sendJson(request, response, 200, { applicationId, connections });
+        }
       } catch (error) {
-        const code = error instanceof Error ? error.message : "PROVIDER_CONNECTION_READ_FAILED";
+        const code = error instanceof Error ? error.message : "PROVIDER_CONNECTION_OPERATION_FAILED";
         const status = code === "PROVIDER_ACTION_FORBIDDEN" || code === "PROVIDER_APPLICATION_ACCESS_DENIED" ? 403
-          : code === "PROVIDER_UNAUTHENTICATED" ? 401 : 503;
+          : code === "PROVIDER_UNAUTHENTICATED" ? 401
+          : code === "PROVIDER_CONNECTION_NOT_FOUND" ? 404
+          : code === "PROVIDER_CONNECTION_NOT_ACTIVE" || code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
+          : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
+            code === "REQUEST_BODY_TOO_LARGE" || code === "Unexpected end of JSON input" ? 400 : 503;
         sendApiError(request, response, status, code, status === 503
-          ? "Provider connections could not be loaded." : "You are not allowed to view provider connections.");
+          ? "Provider connection operation could not be completed."
+          : status === 403 ? "You are not allowed to manage provider connections."
+          : status === 404 ? "The provider connection was not found."
+          : status === 409 ? "The provider connection is inactive or does not support the requested capabilities."
+          : "The provider connection request is invalid.");
       }
       return;
     }
