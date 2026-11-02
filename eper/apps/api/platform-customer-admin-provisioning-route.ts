@@ -90,14 +90,15 @@ export async function handlePlatformCustomerAdminProvisioningRoute(
     const body = await readBody(request);
     const operation = route[3] === "customer-admins" ? "provision" : "recover";
     const allowedKeys = operation === "provision"
-      ? ["targetActorId", "idempotencyKey"]
-      : ["targetActorId", "idempotencyKey", "reasonTicketReference"];
+      ? ["targetActorId"]
+      : ["targetActorId", "reasonTicketReference"];
     if (Object.keys(body).some((key) => !allowedKeys.includes(key))) {
       respond(request, response, 400, { error: "invalid_platform_customer_admin_body" });
       return true;
     }
+    const idempotencyKey = request.headers["idempotency-key"];
     if (typeof body.targetActorId !== "string" ||
-        typeof body.idempotencyKey !== "string" ||
+        typeof idempotencyKey !== "string" || !idempotencyKey.trim() ||
         (operation === "recover" && typeof body.reasonTicketReference !== "string")) {
       respond(request, response, 400, { error: "platform_customer_admin_fields_required" });
       return true;
@@ -112,7 +113,7 @@ export async function handlePlatformCustomerAdminProvisioningRoute(
       tenantId: route[1],
       applicationId: route[2],
       targetActorId: body.targetActorId,
-      idempotencyKey: body.idempotencyKey,
+      idempotencyKey,
       correlationId,
       environment: dependencies.environment,
       ...(operation === "recover" ? { reasonTicketReference: body.reasonTicketReference as string } : {}),
