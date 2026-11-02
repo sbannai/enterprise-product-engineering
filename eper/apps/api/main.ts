@@ -25,6 +25,9 @@ import { PostgresProviderConnectionRepository } from "../../packages/integration
 import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
 import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
+import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
+import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
+import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -223,8 +226,19 @@ if ((providerConnectionsEnabled || providerValidationEnabled) && (!paymentPool |
 const providerConnectionRepository = providerConnectionsEnabled && paymentPool
   ? new PostgresProviderConnectionRepository(paymentPool)
   : undefined;
+if (providerValidationEnabled && (!providerConnectionsEnabled ||
+    process.env.EPER_PROVIDER_VALIDATION_MODE !== "synthetic")) {
+  throw new Error("PROVIDER_VALIDATION_API_REQUIRES_PROVIDER_API_AND_EXPLICIT_SYNTHETIC_MODE");
+}
+const providerValidationService = providerValidationEnabled && paymentPool
+  ? new ProviderConnectionValidationService(
+      new PostgresProviderValidationStore(paymentPool),
+      new SyntheticProviderSecretResolver(),
+      new SyntheticProviderValidationAdapterRegistry(),
+    )
+  : undefined;
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || providerConnectionsEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || providerConnectionsEnabled || providerValidationEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
