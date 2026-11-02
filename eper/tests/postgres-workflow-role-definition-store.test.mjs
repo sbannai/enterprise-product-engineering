@@ -42,6 +42,7 @@ test("role definition is application-scoped and audited in the same transaction"
   assert.equal(result.roleId, "finance-approver");
   assert.deepEqual(result.permissions, ["workflow:view", "workflow:approve"]);
   assert.equal(result.delegable, true);
+  assert.equal(calls.find(call => call.sql.includes("INSERT INTO eper_workflow_role_definition")).values[7], true);
   assert.equal(result.version, 1);
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.sql.includes(", true)")));
   assert.ok(calls.some(call => call.sql.includes("pg_advisory_xact_lock")));
