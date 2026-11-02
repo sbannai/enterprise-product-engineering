@@ -8,6 +8,7 @@ import { PostgresCustomerLifecycleStore } from "../../packages/identity/postgres
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresWorkflowRoleDefinitionStore } from "../../packages/workflows/postgres-workflow-role-definition-store.js";
 import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflows/postgres-workflow-actor-role-assignment-store.js";
+import { PostgresWorkflowRoleDelegationStore } from "../../packages/workflows/postgres-workflow-role-delegation-store.js";
 import { WorkflowDefinitionPublisher } from "../../packages/workflows/workflow-definition-publisher.js";
 import { PostgresWorkflowExecutionService } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
@@ -32,6 +33,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
 const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
+const workflowRoleDelegationEnabled = process.env.EPER_WORKFLOW_ROLE_DELEGATION_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
@@ -39,7 +41,7 @@ const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSI
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || customerIdentityPersistenceMode === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || customerIdentityPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
@@ -210,7 +212,7 @@ if (customerOidcEnabled) {
   });
 }
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
@@ -222,6 +224,14 @@ const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
   : undefined;
 const workflowExecutionService = workflowExecutionEnabled && paymentPool
   ? new PostgresWorkflowExecutionService(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (workflowRoleDelegationEnabled && (!paymentPool || auditMode !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres" ||
+    !tenantApplicationAssignmentStore || !actorApplicationAssignmentStore)) {
+  throw new Error("WORKFLOW_ROLE_DELEGATION_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
+}
+const workflowRoleDelegationStore = workflowRoleDelegationEnabled && paymentPool
+  ? new PostgresWorkflowRoleDelegationStore(paymentPool)
   : undefined;
 if (workflowRoleDefinitionStore) await workflowRoleDefinitionStore.assertReady();
 if (workflowActorRoleAssignmentStore) await workflowActorRoleAssignmentStore.assertReady();
@@ -294,7 +304,7 @@ const server = createAppServer({
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore,
+  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore,
   workflowDefinitionPublisher, workflowExecutionService,
 });
 
