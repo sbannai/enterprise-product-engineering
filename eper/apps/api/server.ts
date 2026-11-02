@@ -684,6 +684,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (message === "REQUEST_BODY_TOO_LARGE") {
         sendApiError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body is too large."); return;
       }
+      if (error instanceof WorkflowConfigurationError) {
+        const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "INVALID_WORKFLOW_CONFIGURATION";
+        sendApiError(request, response, error.statusCode, code, "The workflow configuration is invalid."); return;
+      }
       if (error instanceof WorkflowExecutionError || error instanceof WorkflowDefinitionPublishError) {
         sendApiError(request, response, error.statusCode, error.code, "The workflow operation could not be completed.");
         return;
