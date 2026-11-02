@@ -228,7 +228,10 @@ test("PostgreSQL serializes concurrent Customer Admin revocations and preserves 
       assert.equal(outcomes.filter(result => result.status === "fulfilled").length, 1);
       assert.equal(outcomes.filter(result => result.status === "rejected").length, 1);
       const rejected = outcomes.find(result => result.status === "rejected");
-      assert.match(String(rejected.reason?.message), /WORKFLOW_ROLE_DELEGATION_LAST_CUSTOMER_ADMIN_PROTECTED/);
+      // Depending on lock order, the losing transaction either observes the last-admin guard
+      // or finds that its grantor role was already revoked by the winning transaction.
+      assert.match(String(rejected.reason?.message),
+        /WORKFLOW_ROLE_DELEGATION_LAST_CUSTOMER_ADMIN_PROTECTED|WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED/);
 
       const remaining = await assignments.listAssignments(tenantId, applicationId);
       assert.equal(remaining.filter(assignment => assignment.status === "active" && assignment.roleId === roleId).length, 1);
