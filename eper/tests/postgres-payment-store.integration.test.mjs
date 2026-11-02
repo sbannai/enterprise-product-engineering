@@ -46,7 +46,7 @@ test("order-time transaction snapshot is persisted and immutable", { skip: !data
     const idempotencyKey = "snapshot-idem-" + randomUUID();
     const providerOrderId = "order_" + randomUUID().replaceAll("-", "");
     const transactionSnapshot = {
-      tenantId, reference: invoiceReference, kind: "ECOMMERCE",
+      tenantId, reference: invoiceReference, applicationId: "application-" + tenantId, kind: "ECOMMERCE",
       description: "Immutable snapshot integration checkout", amountDueMinor: 12500,
       currency: "INR", status: "DUE",
       lineItems: [
@@ -186,6 +186,7 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       transactionSnapshot: {
         tenantId,
         reference: invoiceReference,
+        applicationId: "application-" + tenantId,
         kind: "ECOMMERCE",
         description: "Integration test checkout",
         amountDueMinor: 12500,
@@ -350,7 +351,7 @@ test("PostgresPaymentStore persists idempotent orders and captures exactly once"
       invoiceApprovedAt: new Date().toISOString(),
     };
     reservationInput.transactionSnapshot = {
-      tenantId, reference: reservationInput.invoiceReference, kind: "GENERAL",
+      tenantId, reference: reservationInput.invoiceReference, applicationId: "application-" + tenantId, kind: "GENERAL",
       description: "Order reservation integration fixture", amountDueMinor: reservationInput.amountMinor,
       currency: "INR", status: "DUE", lineItems: [], adjustments: [],
       sourceId: reservationInput.invoiceSourceId, sourceVersion: reservationInput.invoiceSourceVersion,
@@ -433,7 +434,7 @@ test("PostgresPaymentStore requires reconciliation for an expired order-creation
       invoiceApprovedAt: new Date().toISOString(),
     };
     input.transactionSnapshot = {
-      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      tenantId: input.tenantId, reference: input.invoiceReference, applicationId: "application-" + input.tenantId, kind: "GENERAL",
       description: "Lease reconciliation integration fixture", amountDueMinor: input.amountMinor,
       currency: "INR", status: "DUE", lineItems: [], adjustments: [],
       sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
@@ -488,7 +489,7 @@ test("PostgresPaymentStore serializes concurrent reservations for the same idemp
       invoiceApprovedAt: new Date().toISOString(),
     };
     input.transactionSnapshot = {
-      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      tenantId: input.tenantId, reference: input.invoiceReference, applicationId: "application-" + input.tenantId, kind: "GENERAL",
       description: "Concurrent reservation integration fixture", amountDueMinor: input.amountMinor,
       currency: "INR", status: "DUE", lineItems: [], adjustments: [],
       sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
@@ -535,7 +536,7 @@ test("PostgresPaymentStore prevents concurrent active orders for one invoice acr
       invoiceApprovedAt,
     };
     const snapshot = {
-      tenantId, reference: invoiceReference, kind: "GENERAL",
+      tenantId, reference: invoiceReference, applicationId: "application-" + tenantId, kind: "GENERAL",
       description: "Concurrent different-key reservation fixture", amountDueMinor: 12500,
       currency: "INR", status: "DUE", lineItems: [], adjustments: [],
       sourceId: common.invoiceSourceId, sourceVersion: common.invoiceSourceVersion,
@@ -577,7 +578,7 @@ test("definitive gateway rejection permits retry with the same idempotency key",
       invoiceApprovedAt: new Date().toISOString(),
     };
     input.transactionSnapshot = {
-      tenantId: input.tenantId, reference: input.invoiceReference, kind: "GENERAL",
+      tenantId: input.tenantId, reference: input.invoiceReference, applicationId: "application-" + input.tenantId, kind: "GENERAL",
       description: "Definitive gateway rejection retry fixture", amountDueMinor: input.amountMinor,
       currency: "INR", status: "DUE", lineItems: [], adjustments: [],
       sourceId: input.invoiceSourceId, sourceVersion: input.invoiceSourceVersion,
