@@ -828,13 +828,18 @@ export class PostgresCampaignSchedulerStore {
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
-    const result = await this.pool.query(
-      `UPDATE eper_campaign_executions SET locked_at=now(), updated_at=now()
-       WHERE tenant_id=$1 AND application_id=$2 AND id=$3
-         AND status='running' AND locked_by=$4 RETURNING id`,
-      [tenantId, applicationId, input.executionId, workerId],
-    );
-    return result.rows.length === 1;
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `UPDATE eper_campaign_executions SET locked_at=now(), updated_at=now()
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3
+           AND status='running' AND locked_by=$4 RETURNING id`,
+        [tenantId, applicationId, input.executionId, workerId],
+      );
+      return result.rows.length === 1;
+    } finally {
+      client.release();
+    }
   }
 
   /** Recover worker crashes; replay remains safe only when dispatch side effects honor the job idempotency key. */
