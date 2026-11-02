@@ -68,5 +68,6 @@ renderPermissions([]);newWorkflow();newRole();
 </script></body></html>`;
 
 export function isAdminWorkflowUiRequest(request: IncomingMessage): boolean {
-  return request.method === "GET" && (request.url ?? "").split("?")[0] === "/admin/workflow-ui";
+  const path = (request.url ?? "").split("?")[0];
+  return request.method === "GET" && (path === "/admin/workflow-ui" || path === "/customer/workflow-studio");
 }
