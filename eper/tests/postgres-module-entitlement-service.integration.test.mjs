@@ -100,10 +100,10 @@ test("live PostgreSQL module and add-on access enforce accepted customer tariff 
         VALUES ($1, $2, 'active', $3, $3)
       `, [tenantId, secondApplicationId, actorId]);
       assert.deepEqual(await service.checkModule(context, moduleKey), {
-        allowed: false, reason: "tariff_application_limit_exceeded",
+        allowed: false, reason: "tariff_overage",
       });
       assert.deepEqual(await service.checkApplicationAddon(context, addonKey), {
-        allowed: false, reason: "tariff_application_limit_exceeded",
+        allowed: false, reason: "tariff_overage",
       });
 
       await pool.query("DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id=$2",
