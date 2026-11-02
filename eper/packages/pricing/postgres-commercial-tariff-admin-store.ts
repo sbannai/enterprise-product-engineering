@@ -161,6 +161,51 @@ export class PostgresCommercialTariffAdminStore {
     } finally { client.release(); }
   }
 
+  async approve(input: { tariffKey: string; tariffVersion: number; approvalReference: string }, context: CommercialTariffAdminContext): Promise<CommercialTariffRecord> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(input.tariffKey) ||
+        !Number.isSafeInteger(input.tariffVersion) || input.tariffVersion < 1 ||
+        !input.approvalReference.trim() || input.approvalReference.length > 200) {
+      throw new CommercialTariffAdminError("INVALID_TARIFF_APPROVAL_INPUT", 400);
+    }
+    const client = await this.pool.connect() as unknown as SqlClient;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`eper-commercial-tariff:${input.tariffKey}`]);
+      const found = await client.query<Record<string, unknown>>(
+        "SELECT * FROM eper_commercial_tariff_plan WHERE tariff_key=$1 AND tariff_version=$2 FOR UPDATE",
+        [input.tariffKey, input.tariffVersion],
+      );
+      if (!found.rows[0]) throw new CommercialTariffAdminError("TARIFF_VERSION_NOT_FOUND", 404);
+      const current = mapRecord(found.rows[0]);
+      if (current.tariffStatus !== "draft" || current.approvalState !== "pending") {
+        throw new CommercialTariffAdminError("TARIFF_NOT_AWAITING_APPROVAL", 409);
+      }
+      if (current.createdBy === context.actorId) throw new CommercialTariffAdminError("TARIFF_MAKER_CANNOT_APPROVE_OWN_CHANGE", 403);
+      const approved = await client.query<Record<string, unknown>>( `
+        UPDATE eper_commercial_tariff_plan
+        SET approval_state='approved', approved_at=NOW(), approved_by=$3, approval_reference=$4
+        WHERE tariff_key=$1 AND tariff_version=$2 AND tariff_status='draft' AND approval_state='pending'
+        RETURNING *
+      `, [input.tariffKey, input.tariffVersion, context.actorId, input.approvalReference]);
+      if (!approved.rows[0]) throw new CommercialTariffAdminError("TARIFF_APPROVAL_CONFLICT", 409);
+      await appendAuditEventInTransaction(client as never, {
+        tenantId: context.tenantId, applicationId: "platform", environment: context.environment,
+        actorType: "human", actorId: context.actorId, action: "commercial.tariff.approved",
+        outcome: "success", reasonCode: "PRODUCT_ADMIN_TARIFF_APPROVED", resourceType: "commercial_tariff",
+        resourceId: input.tariffKey + ":" + input.tariffVersion, correlationId: context.correlationId,
+        source: "api", operationName: "commercial-tariff.approve", serviceVersion: context.serviceVersion,
+        approvalId: input.approvalReference,
+        payload: { tariffKey: input.tariffKey, tariffVersion: input.tariffVersion,
+          createdBy: current.createdBy, approvalReference: input.approvalReference },
+      });
+      await client.query("COMMIT");
+      return mapRecord(approved.rows[0]);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async publish(input: { tariffKey: string; tariffVersion: number; expectedStatus: CommercialApprovalState; approvalReference?: string }, context: CommercialTariffAdminContext): Promise<CommercialTariffRecord> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(input.tariffKey) ||
         !Number.isSafeInteger(input.tariffVersion) || input.tariffVersion < 1) {
