@@ -1,5 +1,6 @@
 import {
   appendAuditEventInTransaction,
+  hashAuditEnvelope,
   type AuditEnvironment,
   type AuditSqlClient,
   type AuditSqlPool,
@@ -181,8 +182,8 @@ export class PostgresCustomerLifecycleStore {
         source: "api",
         operationName: "customer.lifecycle.change_status",
         serviceVersion: input.serviceVersion,
-        beforeHash: JSON.stringify({ status: before.status, reason: before.reason, version: before.version }),
-        afterHash: JSON.stringify({ status: after.status, reason: after.reason, version: after.version }),
+        beforeHash: hashAuditEnvelope({ status: before.status, reason: before.reason, version: before.version }),
+        afterHash: hashAuditEnvelope({ status: after.status, reason: after.reason, version: after.version }),
         payload: { previousStatus: before.status, status: after.status, reason: after.reason,
           effectiveAt: after.effectiveAt, previousVersion: before.version, version: after.version },
       });
