@@ -10,7 +10,6 @@ export interface TrustedProviderActor {
   /** Resolved from a server-validated OIDC session, never request JSON. */
   tenantId: string;
   actorId: string;
-  roleKey: string;
 }
 
 export interface ProviderApplicationAssignmentReader {
@@ -23,7 +22,6 @@ export interface ProviderRoleAuthorizer {
   authorize(input: {
     tenantId: string;
     actorId: string;
-    roleKey: string;
     action: ProviderConnectionAction;
     applicationId: string | null;
   }): Promise<boolean>;
@@ -59,7 +57,7 @@ export async function authorizeProviderConnectionRequest(
 ): Promise<AuthorizedProviderScope> {
   const actor = input.actor;
   if (!actor || !validId(actor.tenantId) || !validId(actor.actorId) ||
-      !validId(actor.roleKey)) {
+) {
     throw new Error("PROVIDER_UNAUTHENTICATED");
   }
 
@@ -86,7 +84,6 @@ export async function authorizeProviderConnectionRequest(
     allowed = await input.roles.authorize({
       tenantId: actor.tenantId,
       actorId: actor.actorId,
-      roleKey: actor.roleKey,
       action: input.action,
       applicationId,
     });
@@ -111,6 +108,7 @@ function validId(value: unknown): value is string {
 
 /** Adapter from the provider permission vocabulary to durable application role grants. */
 export interface ProviderRolePermissionReader {
+  listActiveRoleIds(tenantId: string, applicationId: string, actorId: string): Promise<string[]>;
   hasPermission(
     tenantId: string,
     applicationId: string,
@@ -139,17 +137,21 @@ export class PostgresProviderRoleAuthorizer implements ProviderRoleAuthorizer {
   async authorize(input: {
     tenantId: string;
     actorId: string;
-    roleKey: string;
     action: ProviderConnectionAction;
     applicationId: string | null;
   }): Promise<boolean> {
     if (!input.applicationId) return false;
-    return this.assignments.hasPermission(
-      input.tenantId,
-      input.applicationId,
-      input.actorId,
-      input.roleKey,
-      PROVIDER_ACTION_PERMISSION[input.action],
+    const roleIds = await this.assignments.listActiveRoleIds(
+      input.tenantId, input.applicationId, input.actorId,
     );
+    if (roleIds.length === 0) return false;
+    const grants = await Promise.all(roleIds.map(roleId => this.assignments.hasPermission(
+      input.tenantId,
+      input.applicationId as string,
+      input.actorId,
+      roleId,
+      PROVIDER_ACTION_PERMISSION[input.action],
+    )));
+    return grants.some(Boolean);
   }
 }
