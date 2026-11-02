@@ -215,5 +215,76 @@ export class PostgresWorkflowRoleDelegationStore {
     } finally {
       client.release();
     }
+  
+  /** Revokes one scoped assignment and records the revocation atomically. */
+  async revoke(input: DelegateWorkflowRoleInput): Promise<{ tenantId: string; applicationId: string; actorId: string; roleId: string; status: "revoked"; version: number; revokedBy: string }> {
+    for (const [name, value] of Object.entries({
+      tenantId: input.tenantId, applicationId: input.applicationId,
+      grantorActorId: input.grantorActorId, grantorRoleId: input.grantorRoleId,
+      targetActorId: input.targetActorId, targetRoleId: input.targetRoleId,
+    })) validateId(value, name);
+    if (input.grantorActorId === input.targetActorId) throw new Error("WORKFLOW_ROLE_DELEGATION_SELF_REVOKE_FORBIDDEN");
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) throw new Error("WORKFLOW_ROLE_DELEGATION_EXPECTED_VERSION_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [input.tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [input.applicationId]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+        JSON.stringify([input.tenantId, input.applicationId, input.targetActorId, input.targetRoleId]),
+      ]);
+      const grantor = await client.query<{ permissions: string[] | string }>(
+        `SELECT rd.permissions FROM eper_workflow_actor_role_assignment ra
+          JOIN eper_actor_application_assignment aa
+            ON aa.tenant_id=ra.tenant_id AND aa.application_id=ra.application_id
+           AND aa.actor_id=ra.actor_id AND aa.assignment_status='active'
+          JOIN eper_workflow_role_definition rd
+            ON rd.tenant_id=ra.tenant_id AND rd.application_id=ra.application_id
+           AND rd.role_id=ra.role_id AND rd.role_status='active'
+         WHERE ra.tenant_id=$1 AND ra.application_id=$2 AND ra.actor_id=$3
+           AND ra.role_id=$4 AND ra.assignment_status='active' FOR SHARE OF ra, rd`,
+        [input.tenantId, input.applicationId, input.grantorActorId, input.grantorRoleId],
+      );
+      const permissions = grantor.rows[0] ? (typeof grantor.rows[0].permissions === "string"
+        ? JSON.parse(grantor.rows[0].permissions) as string[] : grantor.rows[0].permissions) : [];
+      if (!permissions.includes("access:manage")) throw new Error("WORKFLOW_ROLE_DELEGATION_GRANTOR_NOT_AUTHORIZED");
+      const current = await client.query<{ version: number | string }>(
+        `SELECT version FROM eper_workflow_actor_role_assignment
+          WHERE tenant_id=$1 AND application_id=$2 AND actor_id=$3 AND role_id=$4
+            AND assignment_status='active' FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.targetActorId, input.targetRoleId],
+      );
+      if (!current.rows[0]) throw new Error("WORKFLOW_ROLE_DELEGATION_ASSIGNMENT_NOT_FOUND");
+      const version = Number(current.rows[0].version);
+      if (version !== input.expectedVersion) throw new Error("WORKFLOW_ROLE_DELEGATION_VERSION_CONFLICT:" + version);
+      const saved = await client.query<{ version: number | string }>(
+        `UPDATE eper_workflow_actor_role_assignment
+            SET assignment_status='revoked', version=version+1, revoked_at=NOW(),
+                revoked_by=$5, updated_at=NOW(), updated_by=$5
+          WHERE tenant_id=$1 AND application_id=$2 AND actor_id=$3 AND role_id=$4
+          RETURNING version`,
+        [input.tenantId, input.applicationId, input.targetActorId, input.targetRoleId, input.grantorActorId],
+      );
+      if (!saved.rows[0]) throw new Error("WORKFLOW_ROLE_DELEGATION_REVOKE_WRITE_FAILED");
+      const nextVersion = Number(saved.rows[0].version);
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        environment: input.environment, actorType: "human", actorId: input.grantorActorId,
+        action: "workflow.role_assignment.revoke", outcome: "success",
+        resourceType: "workflow-actor-role-assignment", resourceId: input.targetActorId,
+        correlationId: input.correlationId, source: "api",
+        operationName: "DELETE /applications/:applicationId/workflow-role-delegations",
+        serviceVersion: input.serviceVersion,
+        payload: { grantorActorId: input.grantorActorId, targetActorId: input.targetActorId,
+          targetRoleId: input.targetRoleId, version: nextVersion },
+      });
+      await client.query("COMMIT");
+      return { tenantId: input.tenantId, applicationId: input.applicationId,
+        actorId: input.targetActorId, roleId: input.targetRoleId, status: "revoked",
+        version: nextVersion, revokedBy: input.grantorActorId };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
+    } finally { client.release(); }
   }
 }
