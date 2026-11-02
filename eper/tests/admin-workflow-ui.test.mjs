@@ -43,6 +43,8 @@ test("Customer Admin workflow studio, application roles, draft publishing and sh
     assert.match(html, /Application ID/);
     assert.match(html, /workflow-definitions/);
     assert.match(html, /publishWorkflow/);
+    assert.match(html, /Publish workflow/);
+    assert.doesNotMatch(html, /draft v|published v|Publish version/i, "workflow definition history must remain internal to Customer Admin");
     assert.match(html, /roleIds\.includes\(role\.id\)/);
     assert.match(html, /Generated activities/);
     assert.match(html, /requiredPermission==='workflow:act'.*assignedRolePermissions\.includes\('workflow:admin'\)/);
