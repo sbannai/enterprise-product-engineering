@@ -2,19 +2,29 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PostgresModuleEntitlementService } from "../dist/packages/workflows/postgres-module-entitlement-service.js";
 
-function makePool(row) {
+function makePool(row, tariff = {
+  assignment_status: "active",
+  max_applications: 1,
+  active_application_count: 1,
+  starts_at: "2026-10-01T00:00:00Z",
+  ends_at: null,
+}) {
   const calls = [];
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
       if (sql.includes("to_regclass")) return { rows: [{
         customer_account: "eper_customer_account",
+        customer_tariff_assignment: "eper_customer_tariff_assignment",
         module_catalog: "eper_module_catalog",
         module_price: "eper_module_price",
         module_entitlement: "eper_customer_module_entitlement",
         module_permission: "eper_customer_module_permission",
         addon_entitlement: "eper_application_addon_entitlement",
       }], rowCount: 1 };
+      if (sql.includes("FROM eper_customer_tariff_assignment")) {
+        return { rows: tariff ? [tariff] : [], rowCount: tariff ? 1 : 0 };
+      }
       return { rows: [row], rowCount: 1 };
     },
     release() { calls.push({ sql: "RELEASE", values: [] }); },
@@ -90,6 +100,15 @@ test("module access fails closed when role permission is absent", async () => {
     allowed: false,
     reason: "role_permission_denied",
   });
+});
+
+test("module access fails closed when the customer tariff assignment is missing", async () => {
+  const { pool } = makePool({
+    customer_status: "active", module_status: "active", entitlement_status: "active",
+    starts_at: null, ends_at: null, grace_until: null, permission_allowed: true,
+  }, null);
+  const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
+  assert.deepEqual(await service.checkModule(context, "billing"), { allowed: false, reason: "tariff_inactive" });
 });
 
 test("add-on access is application-scoped and pending payment is denied", async () => {
