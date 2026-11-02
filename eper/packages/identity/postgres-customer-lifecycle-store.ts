@@ -133,8 +133,7 @@ export class PostgresCustomerLifecycleStore {
       throw new CustomerLifecycleStoreError("CUSTOMER_LIFECYCLE_EXPECTED_VERSION_INVALID");
     }
     const effectiveTime = Date.parse(input.effectiveAt);
-    if (typeof input.effectiveAt !== "string" || !Number.isFinite(effectiveTime) ||
-        new Date(effectiveTime).toISOString() !== input.effectiveAt) {
+    if (typeof input.effectiveAt !== "string" || !Number.isFinite(effectiveTime)) {
       throw new CustomerLifecycleStoreError("CUSTOMER_LIFECYCLE_EFFECTIVE_AT_INVALID");
     }
     if (!input.correlationId?.trim() || input.correlationId.length > 128) {
@@ -163,7 +162,7 @@ export class PostgresCustomerLifecycleStore {
                version = version + 1, updated_at = NOW(), updated_by = $5
          WHERE tenant_id = $1
          RETURNING tenant_id, customer_status, status_reason, effective_at, version, updated_at, updated_by
-      `, [input.tenantId, input.status, input.reason.trim(), input.effectiveAt, input.changedBy]);
+      `, [input.tenantId, input.status, input.reason.trim(), new Date(effectiveTime).toISOString(), input.changedBy]);
       if (!saved.rows[0]) throw new CustomerLifecycleStoreError("CUSTOMER_LIFECYCLE_UPDATE_RETURNED_NO_ROW");
       const after = mapRow(saved.rows[0]);
       await appendAuditEventInTransaction(client as AuditSqlClient, {
