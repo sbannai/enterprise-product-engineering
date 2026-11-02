@@ -52,12 +52,12 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
 
       await roleStore.replace({
         tenantId, applicationId, roleId, name: "Employee",
-        permissions: ["workflow:admin"], status: "active",
+        permissions: ["workflow:admin"], delegable: false, status: "active",
         expectedVersion: 0, changedBy: actorId, environment, correlationId,
       });
       await roleStore.replace({
         tenantId, applicationId, roleId: "finance-approver", name: "Finance approver",
-        permissions: ["workflow:view", "workflow:approve"], status: "active",
+        permissions: ["workflow:view", "workflow:approve"], delegable: false, status: "active",
         expectedVersion: 0, changedBy: actorId, environment, correlationId,
       });
       await assignmentStore.assign({
