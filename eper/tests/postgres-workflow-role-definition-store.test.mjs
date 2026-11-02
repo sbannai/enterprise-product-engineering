@@ -65,11 +65,11 @@ test("role definition requires an explicit boolean delegable value", async () =>
   const { calls, pool } = fixture();
   await assert.rejects(
     new PostgresWorkflowRoleDefinitionStore(pool).replace({ ...input, delegable: undefined }),
-    /WORKFLOW_ROLE_DEFINITION_DELEGABLE_INVALID/,
+    /WORKFLOW_ROLE_DEFINITION_DELEGABLE_FLAG_INVALID/,
   );
   await assert.rejects(
     new PostgresWorkflowRoleDefinitionStore(pool).replace({ ...input, delegable: "true" }),
-    /WORKFLOW_ROLE_DEFINITION_DELEGABLE_INVALID/,
+    /WORKFLOW_ROLE_DEFINITION_DELEGABLE_FLAG_INVALID/,
   );
   assert.equal(calls.length, 0);
 });
