@@ -1146,6 +1146,50 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
+    if (requestUrl.pathname === "/customer/commercial-tariff") {
+      if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+          process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const identity = resolveAdminConfigIdentity(request);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized_or_unmapped_customer_identity" }); return; }
+      if (!["customer_admin", "product_admin", "platform_admin"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "CUSTOMER_ADMIN_ROLE_REQUIRED" }); return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      if (!options.tenantApplicationAssignmentStore) {
+        sendJson(request, response, 503, { error: "tenant_application_assignment_store_unavailable" }); return;
+      }
+      try {
+        const body = await readJson(request);
+        if (body.accepted !== true || typeof body.acceptanceReference !== "string" ||
+            typeof body.tariffKey !== "string" || !Number.isSafeInteger(body.tariffVersion) ||
+            !Number.isSafeInteger(body.expectedVersion) ||
+            Object.keys(body).some(key => !["accepted", "acceptanceReference", "tariffKey", "tariffVersion", "expectedVersion"].includes(key))) {
+          sendJson(request, response, 400, { error: "CUSTOMER_TARIFF_ACCEPTANCE_REQUIRED" }); return;
+        }
+        const assignment = await options.tenantApplicationAssignmentStore.switchCustomerTariff({
+          tenantId: identity.tenantId, changedBy: identity.actorId, tariffKey: body.tariffKey,
+          tariffVersion: body.tariffVersion as number, expectedVersion: body.expectedVersion as number,
+          acceptanceReference: body.acceptanceReference, environment: options.adminConfigEnvironment ?? "sandbox",
+          correlationId: resolveApiRequestId(request), serviceVersion: options.serviceVersion,
+        });
+        sendJson(request, response, 200, { assignment });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const status = message.includes("VERSION_CONFLICT") ? 409 :
+          message.includes("NOT_FOUND") ? 404 :
+          message.includes("INVALID") || message.includes("REQUIRED") ? 400 :
+          message.includes("NOT_ACTIVE") || message.includes("NOT_EFFECTIVE") || message.includes("NOT_APPROVED") ? 409 :
+          message.includes("APPLICATION_SELECTION") ? 409 : 503;
+        sendJson(request, response, status, { error: message || "customer_tariff_switch_failed" });
+      }
+      return;
+    }
+
     if (requestUrl.pathname === "/admin/tenant-application-assignments") {
       if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres" ||
