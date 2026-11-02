@@ -2573,7 +2573,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
                 !value.trim() || value.length > 128)) {
             sendJson(request, response, 400, { error: "invalid_provider_capabilities" }); return;
           }
-          await options.providerConnectionRepository.bindApplication({
+          const bindingStatus = await options.providerConnectionRepository.bindApplication({
             tenantId: identity.tenantId,
             applicationId,
             connectionId: connectionId!,
@@ -2582,7 +2582,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             correlationId,
             auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
           });
-          sendJson(request, response, 200, { applicationId, connectionId, bindingStatus: "ACTIVE" });
+          sendJson(request, response, 200, { applicationId, connectionId, bindingStatus });
         } else {
           const connections = await options.providerConnectionRepository.listForApplication(identity.tenantId, applicationId);
           sendJson(request, response, 200, { applicationId, connections });
