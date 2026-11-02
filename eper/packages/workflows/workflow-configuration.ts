@@ -230,7 +230,6 @@ export class WorkflowConfigurationService {
     }
 
     for (const workflow of candidate) {
-      validateWorkflowRuleConfiguration(workflow);
       if (workflow.activities.length > WorkflowConfigurationService.MAX_ACTIVITIES_PER_WORKFLOW) {
         throw new WorkflowConfigurationError("workflow_activity_capacity_exceeded:" + workflow.id, 413);
       }
@@ -266,6 +265,7 @@ export class WorkflowConfigurationService {
           throw new WorkflowConfigurationError("invalid_workflow_form_field:" + activity.id);
         }
       }
+      validateWorkflowRuleConfiguration(workflow);
     }
     this.workflows = structuredClone(candidate);
     return this.listWorkflows();
