@@ -206,7 +206,7 @@ export class PostgresCommercialTariffAdminStore {
     } finally { client.release(); }
   }
 
-  async publish(input: { tariffKey: string; tariffVersion: number; expectedStatus: CommercialApprovalState; approvalReference?: string }, context: CommercialTariffAdminContext): Promise<CommercialTariffRecord> {
+  async publish(input: { tariffKey: string; tariffVersion: number }, context: CommercialTariffAdminContext): Promise<CommercialTariffRecord> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$/.test(input.tariffKey) ||
         !Number.isSafeInteger(input.tariffVersion) || input.tariffVersion < 1) {
       throw new CommercialTariffAdminError("INVALID_TARIFF_VERSION_REFERENCE", 400);
