@@ -63,14 +63,14 @@ test("PostgreSQL customer lifecycle updates are versioned and audited atomically
       `, [rollbackTenantId, actorId]);
       await pool.query(`
         CREATE FUNCTION public.${functionName}() RETURNS trigger
-        LANGUAGE plpgsql AS $
+        LANGUAGE plpgsql AS $eper$
         BEGIN
           IF NEW.tenant_id = '${rollbackTenantId}' THEN
             RAISE EXCEPTION 'INJECTED_CUSTOMER_LIFECYCLE_AUDIT_FAILURE';
           END IF;
           RETURN NEW;
         END;
-        $;
+        $eper$;
       `);
       await pool.query(`
         CREATE TRIGGER ${triggerName}
