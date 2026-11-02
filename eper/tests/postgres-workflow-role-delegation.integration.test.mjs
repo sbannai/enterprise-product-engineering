@@ -65,10 +65,27 @@ test("PostgreSQL role delegation persists grant/revoke provenance, enforces scop
         permissions: ["workflow:view"], delegable: true, status: "active",
         expectedVersion: 0, changedBy: grantorId, environment, correlationId,
       });
+      await roleDefinitions.replace({
+        tenantId, applicationId, roleId: "restricted-reader", name: "Restricted Reader",
+        permissions: ["workflow:view"], delegable: false, status: "active",
+        expectedVersion: 0, changedBy: grantorId, environment, correlationId,
+      });
       await assignments.assign({
         tenantId, applicationId, actorId: grantorId, roleId: adminRoleId,
         changedBy: grantorId, expectedVersion: 0, environment, correlationId,
       });
+
+      const nonDelegableInput = {
+        tenantId, applicationId, grantorActorId: grantorId, grantorRoleId: adminRoleId,
+        targetActorId: targetId, targetRoleId: "restricted-reader", expectedVersion: 0,
+        environment, correlationId,
+      };
+      await assert.rejects(
+        delegations.grant(nonDelegableInput),
+        /WORKFLOW_ROLE_DELEGATION_TARGET_ROLE_NOT_DELEGABLE/,
+      );
+      const nonDelegableAssignment = await assignments.listAssignments(tenantId, applicationId);
+      assert.equal(nonDelegableAssignment.some(row => row.actorId === targetId && row.roleId === "restricted-reader"), false);
 
       const input = {
         tenantId, applicationId, grantorActorId: grantorId, grantorRoleId: adminRoleId,
