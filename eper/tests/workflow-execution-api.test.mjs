@@ -58,7 +58,7 @@ test("workflow administration requires both tenant ownership and active administ
   process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
   process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
   process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "admin-a" },
+    [token]: { tenantId: "tenant-a", actorId: "admin-a", roleKey: "customer_admin" },
   });
   let assigned = false;
   let listCalls = 0;
