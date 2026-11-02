@@ -52,8 +52,8 @@ export async function handleCustomerRoleDelegationRoute(
     sendApiError(request, response, 404, "NOT_FOUND", "The requested resource was not found.");
     return true;
   }
-  if (request.method !== "POST") {
-    response.writeHead(405, { allow: "POST", "cache-control": "no-store" });
+  if (request.method !== "POST" && request.method !== "DELETE") {
+    response.writeHead(405, { allow: "POST, DELETE", "cache-control": "no-store" });
     response.end();
     return true;
   }
@@ -107,16 +107,22 @@ export async function handleCustomerRoleDelegationRoute(
       sendApiError(request, response, 403, "CUSTOMER_ADMIN_DELEGATION_FORBIDDEN", "An authorized Customer Admin role is required.");
       return true;
     }
-    const assignment = await delegationStore.grant({
+    const delegationInput = {
       tenantId: identity.tenantId, applicationId,
       grantorActorId: identity.actorId, grantorRoleId: grantorRole.roleId,
       targetActorId: body.actorId, targetRoleId: body.roleId,
       expectedVersion: Number(body.expectedVersion),
-      environment: dependencies.environment ?? "sandbox",
+      environment: dependencies.environment ?? "sandbox" as const,
       correlationId: resolveApiRequestId(request),
       serviceVersion: dependencies.serviceVersion,
-    });
-    sendApiSuccess(request, response, 201, { assignment });
+    };
+    if (request.method === "DELETE") {
+      const assignment = await delegationStore.revoke(delegationInput);
+      sendApiSuccess(request, response, 200, { assignment });
+    } else {
+      const assignment = await delegationStore.grant(delegationInput);
+      sendApiSuccess(request, response, 201, { assignment });
+    }
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "WORKFLOW_ROLE_DELEGATION_FAILED";
