@@ -73,12 +73,16 @@ export class PostgresTenantApplicationAssignmentStore {
   async revoke(input: ChangeTenantApplicationAssignmentInput): Promise<TenantApplicationAssignment> { return this.change(input, "revoked"); }
   async getCustomerTariffAssignment(tenantId: string): Promise<Record<string, unknown> | null> {
     this.validateId(tenantId, "tenantId");
-    const result = await this.pool.query<Record<string, unknown>>(
-      `SELECT tenant_id, tariff_key, tariff_version, billing_basis, max_applications,
-              accepted_amount, accepted_currency, billing_interval, assignment_status,
-              starts_at, ends_at, version, accepted_by, accepted_at, acceptance_reference
-         FROM eper_customer_tariff_assignment WHERE tenant_id=$1`, [tenantId]);
-    const row=result.rows[0];
+    const client=await this.pool.connect();
+    let row: Record<string, unknown> | undefined;
+    try {
+      const result = await client.query<Record<string, unknown>>(
+        `SELECT tenant_id, tariff_key, tariff_version, billing_basis, max_applications,
+                accepted_amount, accepted_currency, billing_interval, assignment_status,
+                starts_at, ends_at, version, accepted_by, accepted_at, acceptance_reference
+           FROM eper_customer_tariff_assignment WHERE tenant_id=$1`, [tenantId]);
+      row=result.rows[0];
+    } finally { client.release(); }
     if(!row) return null;
     return {tenantId:row.tenant_id,tariffKey:row.tariff_key,tariffVersion:Number(row.tariff_version),
       billingBasis:row.billing_basis,maxApplications:Number(row.max_applications),
