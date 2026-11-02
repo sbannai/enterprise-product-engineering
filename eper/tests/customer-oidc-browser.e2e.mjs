@@ -23,7 +23,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
   for (const key of proxyKeys) delete process.env[key];
   process.env.NO_PROXY = "127.0.0.1,localhost";
   process.env.no_proxy = process.env.NO_PROXY;
-  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
+  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE","EPER_ADMIN_CONFIG_API_ENABLED","EPER_ADMIN_CONFIG_PERSISTENCE","EPER_AUDIT_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   const state="s".repeat(43), nonce="n".repeat(43);
   const issuer="https://idp.example.test";
@@ -38,6 +38,8 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     pool=new Pool({connectionString:process.env.DATABASE_URL,max:8});
     Object.assign(process.env, {
       EPER_CUSTOMER_OIDC_ENABLED:"true", EPER_CUSTOMER_IDENTITY_PERSISTENCE:"postgres",
+      EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE:"postgres",
+      EPER_ADMIN_CONFIG_API_ENABLED:"true", EPER_ADMIN_CONFIG_PERSISTENCE:"postgres", EPER_AUDIT_PERSISTENCE:"postgres",
       EPER_CUSTOMER_PORTAL_API_ENABLED:"true", EPER_TICKETING_API_ENABLED:"true",
       EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({[tenantId]:["settings","tickets-feedback"]}),
       EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({[tenantId]:{[applicationId]:{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
@@ -149,6 +151,15 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     const connectionMessage=await page.locator("#connectResult").textContent();
     assert.equal(connectionMessage,"Your organization session is active.",
       "browser workspace bootstrap failed; message="+connectionMessage+" url="+page.url()+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
+    const sessionIdentity=await page.evaluate(async()=>{const response=await fetch("/customer/session");return response.json();});
+    assert.equal(sessionIdentity.roleKey,"customer-user","OIDC claims must not elevate the customer workspace role");
+    const tariffAttempt=await page.evaluate(async()=>{
+      const csrf=document.cookie.split("; ").find(value=>value.startsWith("__Host-eper_csrf="))?.split("=").slice(1).join("=")||"";
+      const response=await fetch("/customer/commercial-tariff",{method:"POST",headers:{"content-type":"application/json","x-csrf-token":csrf},body:JSON.stringify({accepted:true,acceptanceReference:"BROWSER-E2E-UNAUTHORIZED",tariffKey:"multi-app",tariffVersion:1,expectedVersion:1,revokeApplications:[]})});
+      return {status:response.status,body:await response.json()};
+    });
+    assert.equal(tariffAttempt.status,403,"least-privilege customer-user must not switch tenant-wide tariff");
+    assert.equal(tariffAttempt.body.error.code,"CUSTOMER_TARIFF_SWITCH_FORBIDDEN");
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
     await page.getByLabel("Title").fill("Browser-authenticated support request");
     await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
