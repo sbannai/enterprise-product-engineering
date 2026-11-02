@@ -261,25 +261,7 @@ async function appendWorkflowOutboxEvent(
   );
 }
 
-export function chooseNextWorkflowActivity(
-  definition: WorkflowDefinition,
-  activity: WorkflowActivity,
-  data: Record<string, unknown>,
-  targetActivityId?: string,
-): string | null {
-  if (activity.routingRuleIds?.length) {
-    try {
-      const decision = evaluateWorkflowRoutingRules(definition, activity, data);
-      if (targetActivityId && targetActivityId !== decision.targetActivityId) {
-        throw new WorkflowExecutionError("WORKFLOW_EXECUTION_RULE_TARGET_MISMATCH", 422);
-      }
-      return decision.targetActivityId;
-    } catch (error) {
-      if (error instanceof WorkflowExecutionError) throw error;
-      const code = error instanceof Error ? error.message : "WORKFLOW_EXECUTION_RULE_EVALUATION_FAILED";
-      throw new WorkflowExecutionError(code, 422);
-    }
-  }
+function chooseNextActivityWithoutRules(activity: WorkflowActivity, targetActivityId?: string): string | null {
   if (activity.nextActivityIds.length === 0) {
     if (targetActivityId) throw new WorkflowExecutionError("WORKFLOW_EXECUTION_TARGET_NOT_ALLOWED", 422);
     return null;
@@ -295,6 +277,45 @@ export function chooseNextWorkflowActivity(
     throw new WorkflowExecutionError("WORKFLOW_EXECUTION_TARGET_REQUIRED", 422);
   }
   return targetActivityId;
+}
+
+export interface WorkflowRoutingDecisionTrace {
+  matchedRuleId: string;
+  evaluated: Array<{ ruleId: string; matched: boolean }>;
+}
+
+export function resolveWorkflowNextActivity(
+  definition: WorkflowDefinition,
+  activity: WorkflowActivity,
+  data: Record<string, unknown>,
+  targetActivityId?: string,
+): { targetActivityId: string | null; ruleDecision?: WorkflowRoutingDecisionTrace } {
+  if (!activity.routingRuleIds?.length) {
+    return { targetActivityId: chooseNextActivityWithoutRules(activity, targetActivityId) };
+  }
+  try {
+    const decision = evaluateWorkflowRoutingRules(definition, activity, data);
+    if (targetActivityId && targetActivityId !== decision.targetActivityId) {
+      throw new WorkflowExecutionError("WORKFLOW_EXECUTION_RULE_TARGET_MISMATCH", 422);
+    }
+    return {
+      targetActivityId: decision.targetActivityId,
+      ruleDecision: { matchedRuleId: decision.matchedRuleId, evaluated: decision.evaluated },
+    };
+  } catch (error) {
+    if (error instanceof WorkflowExecutionError) throw error;
+    const code = error instanceof Error ? error.message : "WORKFLOW_EXECUTION_RULE_EVALUATION_FAILED";
+    throw new WorkflowExecutionError(code, 422);
+  }
+}
+
+export function chooseNextWorkflowActivity(
+  definition: WorkflowDefinition,
+  activity: WorkflowActivity,
+  data: Record<string, unknown>,
+  targetActivityId?: string,
+): string | null {
+  return resolveWorkflowNextActivity(definition, activity, data, targetActivityId).targetActivityId;
 }
 
 /**
@@ -556,6 +577,7 @@ export class PostgresWorkflowExecutionService {
       let nextActivityId: string | null = null;
       let nextStatus: WorkflowInstanceStatus = "running";
       let nextData = parseObject(instance.data);
+      let routingDecision: WorkflowRoutingDecisionTrace | undefined;
       if (input.action === "cancel") {
         actorRole = await authorizeAdmin(client, input);
         nextStatus = "cancelled";
@@ -576,7 +598,9 @@ export class PostgresWorkflowExecutionService {
         actorRole = current.roleId;
         validateActivityPayload(current.fields, payload);
         nextData = { ...nextData, ...payload };
-        nextActivityId = chooseNextWorkflowActivity(definition, current, nextData, input.targetActivityId);
+        const routing = resolveWorkflowNextActivity(definition, current, nextData, input.targetActivityId);
+        nextActivityId = routing.targetActivityId;
+        routingDecision = routing.ruleDecision;
         if (nextActivityId === null) nextStatus = "completed";
       }
 
@@ -627,6 +651,7 @@ export class PostgresWorkflowExecutionService {
           action: input.action, resultingStatus: nextStatus, resultingVersion: nextVersion,
           fromActivityId: instance.current_activity_id, toActivityId: nextActivityId,
           payloadDigest: digest(payload), correlationId: input.correlationId,
+          ...(routingDecision ? { routingDecision } : {}),
         });
       await appendAuditEventInTransaction(client, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
@@ -636,7 +661,8 @@ export class PostgresWorkflowExecutionService {
         serviceVersion: input.serviceVersion ?? this.serviceVersion,
         beforeHash: digest({ status: instance.status, version: Number(instance.version), data: parseObject(instance.data) }),
         afterHash: digest(response),
-        payload: { action: input.action, resultingStatus: nextStatus, resultingVersion: nextVersion, targetActivityId: nextActivityId },
+        payload: { action: input.action, resultingStatus: nextStatus, resultingVersion: nextVersion, targetActivityId: nextActivityId,
+          ...(routingDecision ? { routingDecision } : {}) },
       });
       await client.query("COMMIT");
       return response;
