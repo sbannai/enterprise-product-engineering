@@ -1,3 +1,5 @@
+import type { AuditEnvironment } from "../audit/audit-event-store.js";
+
 export type ProviderValidationEnvironment = "development" | "sandbox" | "uat" | "production";
 export type ProviderValidationConnectionStatus =
   | "PENDING_VALIDATION" | "ACTIVE" | "DEGRADED" | "SUSPENDED" | "REVOKED";
