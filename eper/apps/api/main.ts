@@ -226,7 +226,7 @@ if ((providerConnectionsEnabled || providerValidationEnabled) && (!paymentPool |
 const providerConnectionRepository = providerConnectionsEnabled && paymentPool
   ? new PostgresProviderConnectionRepository(paymentPool)
   : undefined;
-if (providerValidationEnabled && (!providerConnectionsEnabled ||
+if (providerValidationEnabled && (process.env.NODE_ENV === "production" || !providerConnectionsEnabled ||
     process.env.EPER_PROVIDER_VALIDATION_MODE !== "synthetic")) {
   throw new Error("PROVIDER_VALIDATION_API_REQUIRES_PROVIDER_API_AND_EXPLICIT_SYNTHETIC_MODE");
 }
