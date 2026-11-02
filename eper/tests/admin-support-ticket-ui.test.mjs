@@ -33,3 +33,15 @@ test("support admin queue renders a safe, accessible reply thread and composer",
   assert.ok(html.includes('body:JSON.stringify({body,visibility})'), "reply text and visibility are submitted as JSON");
   assert.ok(html.includes('r.visibility==="internal"?"Internal note":"Customer-visible"'), "thread labels internal notes distinctly");
 });
+
+test("support admin queue exports every page matching the active filters", () => {
+  const html = adminSupportTicketUiHtml;
+  assert.match(html, /id="exportFilteredTickets"/);
+  assert.match(html, /Export all filtered results \(CSV\)/);
+  assert.ok(html.includes("async function exportFilteredQueue()"));
+  assert.ok(html.includes('new URLSearchParams({limit:"100",offset:String(offset)})'));
+  assert.ok(html.includes('if(p.hasMore!==true)break;'));
+  assert.ok(html.includes("offset+=page.length;"));
+  assert.ok(html.includes('el("exportFilteredTickets").disabled=tickets.length===0'));
+  assert.ok(html.includes('Exported "+rows.length+" tickets matching the current filters across all pages.'));
+});
