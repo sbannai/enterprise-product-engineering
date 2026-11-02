@@ -87,17 +87,21 @@ export async function handleCustomerRoleDelegationRoute(
   }
     
   if (request.method === "GET") {
-    const [assignments, roles] = await Promise.all([
-      actorRoleAssignmentStore.listAssignments(identity.tenantId, applicationId),
-      roleDefinitionStore.list(identity.tenantId, applicationId),
-    ]);
-    sendApiSuccess(request, response, 200, {
-      assignments,
-      roles: roles.filter(role => role.status === "active").map(role => ({
-        roleId: role.roleId, name: role.name, description: role.description,
-        permissions: role.permissions,
-      })),
-    });
+    try {
+      const [assignments, roles] = await Promise.all([
+        actorRoleAssignmentStore.listAssignments(identity.tenantId, applicationId),
+        roleDefinitionStore.list(identity.tenantId, applicationId),
+      ]);
+      sendApiSuccess(request, response, 200, {
+        assignments,
+        roles: roles.filter(role => role.status === "active").map(role => ({
+          roleId: role.roleId, name: role.name, description: role.description,
+          permissions: role.permissions,
+        })),
+      });
+    } catch {
+      sendApiError(request, response, 503, "ROLE_DIRECTORY_UNAVAILABLE", "The role directory could not be loaded.");
+    }
     return true;
   }
 
