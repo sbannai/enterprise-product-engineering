@@ -45,7 +45,7 @@ if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERS
   throw new Error("COMMERCIAL_TARIFF_ADMIN_REQUIRES_POSTGRES_ADMIN_CONFIG_AND_DURABLE_AUDIT");
 }
 const commercialTariffAdminStore = commercialTariffAdminEnabled && paymentPool
-  ? new PostgresCommercialTariffAdminStore(paymentPool)
+  ? new PostgresCommercialTariffAdminStore(paymentPool as unknown as Pool)
   : undefined;
 if (commercialTariffAdminStore) await commercialTariffAdminStore.assertReady();
 
