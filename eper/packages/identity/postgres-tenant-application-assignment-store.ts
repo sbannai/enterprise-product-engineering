@@ -32,10 +32,22 @@ export class PostgresTenantApplicationAssignmentStore {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ table_name: string | null }>("SELECT to_regclass('public.eper_tenant_application_assignment')::text AS table_name");
-      if (!result.rows[0]?.table_name) throw new Error("EPER_TENANT_APPLICATION_ASSIGNMENT_SCHEMA_NOT_APPLIED");
+      const result = await client.query<{
+        assignment_table: string | null;
+        customer_table: string | null;
+        tariff_plan_table: string | null;
+        tariff_assignment_table: string | null;
+      }>(`SELECT
+        to_regclass('public.eper_tenant_application_assignment')::text AS assignment_table,
+        to_regclass('public.eper_customer_account')::text AS customer_table,
+        to_regclass('public.eper_commercial_tariff_plan')::text AS tariff_plan_table,
+        to_regclass('public.eper_customer_tariff_assignment')::text AS tariff_assignment_table`);
+      const row = result.rows[0];
+      if (!row?.assignment_table || !row.customer_table || !row.tariff_plan_table || !row.tariff_assignment_table) {
+        throw new Error("EPER_CUSTOMER_COMMERCIAL_SCHEMA_NOT_APPLIED");
+      }
     } catch (error) {
-      if (error instanceof Error && error.message === "EPER_TENANT_APPLICATION_ASSIGNMENT_SCHEMA_NOT_APPLIED") throw error;
+      if (error instanceof Error && error.message === "EPER_CUSTOMER_COMMERCIAL_SCHEMA_NOT_APPLIED") throw error;
       throw new Error("EPER_TENANT_APPLICATION_ASSIGNMENT_READINESS_FAILED", { cause: error });
     } finally { client.release(); }
   }
