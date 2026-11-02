@@ -36,7 +36,7 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
   let current = { ...initial };
   const changes = [];
   const store = {
-    async list() { return [{ ...current, tariffKey: "multi-app", tariffVersion: 3, billingBasis: "multi_application", maxApplications: 2, activeApplicationCount: 3, allowanceStatus: "over_allowance" }]; },
+    async list() { return [{ ...current, tariffKey: "multi-app", tariffVersion: 3, billingBasis: "multi_application", tariffAssignmentStatus: "active", tariffEffective: true, maxApplications: 2, activeApplicationCount: 3, allowanceStatus: "over_allowance" }]; },
     async get(tenantId) { return tenantId === current.tenantId ? { ...current } : null; },
     async changeStatus(input) {
       changes.push(input);
