@@ -1,6 +1,7 @@
 import type { AuditSqlPool } from "../audit/audit-event-store.js";
 import {
   evaluateApplicationAddonAccess,
+  evaluateCustomerTariffAccess,
   evaluateModuleAccess,
   type AccessDecision,
   type AddonEntitlementStatus,
@@ -24,6 +25,11 @@ type ModuleStatus = "draft" | "active" | "deprecated" | "disabled";
 
 interface ModuleAccessRow {
   customer_status: string | null;
+  tariff_assignment_status: string | null;
+  tariff_starts_at: string | Date | null;
+  tariff_ends_at: string | Date | null;
+  max_applications: number | string | null;
+  active_application_count: number | string;
   module_status: ModuleStatus | null;
   entitlement_status: ModuleEntitlementStatus | null;
   starts_at: string | Date | null;
@@ -34,6 +40,11 @@ interface ModuleAccessRow {
 
 interface AddonAccessRow {
   customer_status: string | null;
+  tariff_assignment_status: string | null;
+  tariff_starts_at: string | Date | null;
+  tariff_ends_at: string | Date | null;
+  max_applications: number | string | null;
+  active_application_count: number | string;
   addon_status: ModuleStatus | null;
   entitlement_status: AddonEntitlementStatus | null;
   effective_from: string | Date | null;
@@ -62,6 +73,8 @@ export class PostgresModuleEntitlementService {
         module_permission: string | null;
         addon_entitlement: string | null;
         customer_account: string | null;
+        customer_tariff_assignment: string | null;
+        tenant_application_assignment: string | null;
       }>(`
         SELECT
           to_regclass('public.eper_module_catalog')::text AS module_catalog,
@@ -69,11 +82,14 @@ export class PostgresModuleEntitlementService {
           to_regclass('public.eper_customer_module_entitlement')::text AS module_entitlement,
           to_regclass('public.eper_customer_module_permission')::text AS module_permission,
           to_regclass('public.eper_application_addon_entitlement')::text AS addon_entitlement,
-          to_regclass('public.eper_customer_account')::text AS customer_account
+          to_regclass('public.eper_customer_account')::text AS customer_account,
+          to_regclass('public.eper_customer_tariff_assignment')::text AS customer_tariff_assignment,
+          to_regclass('public.eper_tenant_application_assignment')::text AS tenant_application_assignment
       `);
       const row = result.rows[0];
       if (!row || !row.module_catalog || !row.module_price || !row.module_entitlement ||
-          !row.module_permission || !row.addon_entitlement || !row.customer_account) {
+          !row.module_permission || !row.addon_entitlement || !row.customer_account ||
+          !row.customer_tariff_assignment || !row.tenant_application_assignment) {
         throw new Error("EPER_MODULE_ENTITLEMENT_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
@@ -96,10 +112,15 @@ export class PostgresModuleEntitlementService {
     const client = await this.pool.connect();
     try {
       const result = await client.query<ModuleAccessRow>(
-        `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
+        `SELECT ca.customer_status, t.assignment_status AS tariff_assignment_status,
+                t.starts_at AS tariff_starts_at, t.ends_at AS tariff_ends_at, t.max_applications,
+                (SELECT COUNT(*) FROM eper_tenant_application_assignment a
+                  WHERE a.tenant_id = $2 AND a.assignment_status = 'active') AS active_application_count,
+                c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
                 e.grace_until, p.allowed AS permission_allowed
            FROM (SELECT $1::text AS module_key) requested
            LEFT JOIN eper_customer_account ca ON ca.tenant_id = $2
+           LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id = $2
            LEFT JOIN eper_module_catalog c ON c.module_key = requested.module_key
            LEFT JOIN eper_customer_module_entitlement e
              ON e.tenant_id = $2 AND e.module_key = requested.module_key
@@ -111,6 +132,15 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
+      const tariff = evaluateCustomerTariffAccess({
+        assignmentStatus: row?.tariff_assignment_status ?? null,
+        maxApplications: row?.max_applications ?? null,
+        activeApplicationCount: row?.active_application_count ?? 0,
+        startsAt: row?.tariff_starts_at,
+        endsAt: row?.tariff_ends_at,
+        now: context.now,
+      });
+      if (!tariff.allowed) return tariff;
       return evaluateModuleAccess({
         moduleStatus: row?.module_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
@@ -138,10 +168,15 @@ export class PostgresModuleEntitlementService {
     const client = await this.pool.connect();
     try {
       const result = await client.query<AddonAccessRow>(
-        `SELECT ca.customer_status, c.status AS addon_status, e.entitlement_status, e.effective_from, e.effective_to,
+        `SELECT ca.customer_status, t.assignment_status AS tariff_assignment_status,
+                t.starts_at AS tariff_starts_at, t.ends_at AS tariff_ends_at, t.max_applications,
+                (SELECT COUNT(*) FROM eper_tenant_application_assignment a
+                  WHERE a.tenant_id = $2 AND a.assignment_status = 'active') AS active_application_count,
+                c.status AS addon_status, e.entitlement_status, e.effective_from, e.effective_to,
                 p.allowed AS permission_allowed
            FROM (SELECT $1::text AS addon_key) requested
            LEFT JOIN eper_customer_account ca ON ca.tenant_id = $2
+           LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id = $2
            LEFT JOIN eper_module_catalog c ON c.module_key = requested.addon_key
            LEFT JOIN eper_application_addon_entitlement e
              ON e.tenant_id = $2 AND e.application_id = $3 AND e.addon_key = requested.addon_key
@@ -153,6 +188,15 @@ export class PostgresModuleEntitlementService {
       );
       const row = result.rows[0];
       if (row?.customer_status !== "active") return { allowed: false, reason: "customer_inactive" };
+      const tariff = evaluateCustomerTariffAccess({
+        assignmentStatus: row?.tariff_assignment_status ?? null,
+        maxApplications: row?.max_applications ?? null,
+        activeApplicationCount: row?.active_application_count ?? 0,
+        startsAt: row?.tariff_starts_at,
+        endsAt: row?.tariff_ends_at,
+        now: context.now,
+      });
+      if (!tariff.allowed) return tariff;
       return evaluateApplicationAddonAccess({
         addonStatus: row?.addon_status ?? "disabled",
         entitlementStatus: row?.entitlement_status ?? null,
