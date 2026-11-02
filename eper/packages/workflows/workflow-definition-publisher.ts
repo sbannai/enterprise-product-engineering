@@ -5,7 +5,7 @@ import {
   type AuditSqlClient,
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
-import { workflowPermissionGranted, type WorkflowDefinition, type WorkflowPermission } from "./workflow-configuration.js";
+import { workflowPermissionGranted, validateWorkflowRuleConfiguration, type WorkflowDefinition, type WorkflowPermission } from "./workflow-configuration.js";
 
 export interface WorkflowPublisherContext {
   tenantId: string;
@@ -103,6 +103,11 @@ function validateDefinition(value: WorkflowDefinition): void {
     if (activity.nextActivityIds.some(id => !activityIds.has(id))) {
       throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_UNKNOWN_NEXT_ACTIVITY", 400);
     }
+  }
+  try { validateWorkflowRuleConfiguration(value); }
+  catch (error) {
+    const code = error instanceof Error ? error.message : "WORKFLOW_PUBLISH_INVALID_RULE_CONFIGURATION";
+    throw new WorkflowDefinitionPublishError(code, 400);
   }
 }
 
