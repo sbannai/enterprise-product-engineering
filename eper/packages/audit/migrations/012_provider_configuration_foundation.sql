@@ -100,8 +100,8 @@ CREATE TABLE IF NOT EXISTS eper_provider_webhook_receipts (
   provider_key TEXT NOT NULL REFERENCES eper_provider_definitions(provider_key),
   provider_event_id TEXT NOT NULL CHECK (length(btrim(provider_event_id)) BETWEEN 1 AND 256),
   operation_id UUID REFERENCES eper_provider_operations(operation_id),
-  tenant_id TEXT,
-  application_id TEXT,
+  tenant_id TEXT NOT NULL CHECK (length(btrim(tenant_id)) BETWEEN 1 AND 128),
+  application_id TEXT NOT NULL CHECK (length(btrim(application_id)) BETWEEN 1 AND 128),
   signature_valid BOOLEAN NOT NULL,
   payload_digest TEXT NOT NULL CHECK (payload_digest ~ '^[a-f0-9]{64}$'),
   processing_status TEXT NOT NULL CHECK (processing_status IN ('RECEIVED', 'PROCESSED', 'REJECTED', 'QUARANTINED')),
@@ -112,5 +112,52 @@ CREATE TABLE IF NOT EXISTS eper_provider_webhook_receipts (
 CREATE INDEX IF NOT EXISTS eper_provider_webhook_receipts_pending_idx
   ON eper_provider_webhook_receipts (processing_status, received_at)
   WHERE processing_status IN ('RECEIVED', 'QUARANTINED');
+
+-- Tenant isolation is enforced in PostgreSQL, not only by caller-supplied WHERE clauses.
+-- Runtime transactions must set eper.tenant_id; application-scoped tables also require
+-- eper.application_id. Missing context evaluates to NULL and therefore denies access.
+DO $$
+BEGIN
+  ALTER TABLE eper_provider_connections ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE eper_provider_connections FORCE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS eper_provider_connections_tenant_scope ON eper_provider_connections;
+  CREATE POLICY eper_provider_connections_tenant_scope ON eper_provider_connections
+    USING (tenant_id = current_setting('eper.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('eper.tenant_id', true));
+
+  ALTER TABLE eper_provider_connection_applications ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE eper_provider_connection_applications FORCE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS eper_provider_connection_applications_tenant_scope ON eper_provider_connection_applications;
+  CREATE POLICY eper_provider_connection_applications_tenant_scope ON eper_provider_connection_applications
+    USING (tenant_id = current_setting('eper.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('eper.tenant_id', true));
+
+  ALTER TABLE eper_application_provider_policies ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE eper_application_provider_policies FORCE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS eper_application_provider_policies_application_scope ON eper_application_provider_policies;
+  CREATE POLICY eper_application_provider_policies_application_scope ON eper_application_provider_policies
+    USING (tenant_id = current_setting('eper.tenant_id', true)
+       AND application_id = current_setting('eper.application_id', true))
+    WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
+       AND application_id = current_setting('eper.application_id', true));
+
+  ALTER TABLE eper_provider_operations ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE eper_provider_operations FORCE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS eper_provider_operations_application_scope ON eper_provider_operations;
+  CREATE POLICY eper_provider_operations_application_scope ON eper_provider_operations
+    USING (tenant_id = current_setting('eper.tenant_id', true)
+       AND application_id = current_setting('eper.application_id', true))
+    WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
+       AND application_id = current_setting('eper.application_id', true));
+
+  ALTER TABLE eper_provider_webhook_receipts ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE eper_provider_webhook_receipts FORCE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS eper_provider_webhook_receipts_application_scope ON eper_provider_webhook_receipts;
+  CREATE POLICY eper_provider_webhook_receipts_application_scope ON eper_provider_webhook_receipts
+    USING (tenant_id = current_setting('eper.tenant_id', true)
+       AND application_id = current_setting('eper.application_id', true))
+    WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
+       AND application_id = current_setting('eper.application_id', true));
+END $$;
 
 COMMIT;
