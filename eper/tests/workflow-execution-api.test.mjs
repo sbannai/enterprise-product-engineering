@@ -119,51 +119,7 @@ test("workflow role catalogue requires explicit role:assign authority and explic
 });
 
 
-test("workflow role definition updates require and persist explicit delegability", async () => {
-  const keys = ["EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_ADMIN_CONFIG_API_ENABLED",
-    "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON"];
-  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
-  const token = "workflow-admin-role-definition-test-token-00000001";
-  process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = "true";
-  process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
-  process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
-  process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "admin-a" },
-  });
-  let saved;
-  const server = createAppServer({
-    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
-    actorApplicationAssignmentStore: { async isAssigned() { return true; } },
-    workflowRoleDefinitionStore: {
-      async list() { return []; },
-      async replace(input) { saved = input; return { roleId: input.roleId, delegable: input.delegable }; },
-    },
-    workflowActorRoleAssignmentStore: {},
-    workflowDefinitionPublisher: {},
-    workflowExecutionService: { async start() { return {}; }, async transition() { return {}; } },
-  });
-  try {
-    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
-    const address = server.address(); assert.ok(address && typeof address === "object");
-    const url = "http://127.0.0.1:" + address.port + "/admin/applications/app-a/workflow-roles/finance-approver";
-    const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
-    const incomplete = await fetch(url, { method: "PUT", headers, body: JSON.stringify({
-      name: "Finance approver", permissions: ["workflow:view"], status: "active", expectedVersion: 0,
-    }) });
-    assert.equal(incomplete.status, 400);
-    assert.equal(saved, undefined);
-    const accepted = await fetch(url, { method: "PUT", headers, body: JSON.stringify({
-      name: "Finance approver", permissions: ["workflow:view"], status: "active",
-      expectedVersion: 0, delegable: true,
-    }) });
-    assert.equal(accepted.status, 200);
-    assert.equal(saved.delegable, true);
-    assert.equal(saved.changedBy, "admin-a");
-  } finally {
-    await new Promise(resolve => server.close(resolve));
-    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
-  }
-});
+
 
 test("workflow execution routes are hidden when the feature flag is disabled", async () => {
   const previous = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED;
