@@ -1156,10 +1156,32 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const identity = resolveCustomerAccessIdentity(request);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "A trusted customer credential is required."); return; }
+      if (request.method === "GET") {
+        if (!options.tenantApplicationAssignmentStore || !options.commercialTariffAdminStore) {
+          sendJson(request, response, 503, { error: "customer_tariff_catalogue_unavailable" }); return;
+        }
+        try {
+          const [assignment, records] = await Promise.all([
+            options.tenantApplicationAssignmentStore.getCustomerTariffAssignment(identity.tenantId),
+            options.commercialTariffAdminStore.list({ tenantId: identity.tenantId, actorId: identity.actorId,
+              correlationId: resolveApiRequestId(request), environment: options.adminConfigEnvironment ?? "sandbox",
+              serviceVersion: options.serviceVersion }),
+          ]);
+          const now=Date.now();
+          const tariffs=records.filter(record=>record.tariffStatus==="active" &&
+            Date.parse(record.effectiveFrom)<=now && (!record.effectiveTo || Date.parse(record.effectiveTo)>now))
+            .map(({tariffKey,tariffVersion,billingBasis,maxApplications,amount,currency,billingInterval,effectiveFrom,effectiveTo})=>
+              ({tariffKey,tariffVersion,billingBasis,maxApplications,amount,currency,billingInterval,effectiveFrom,effectiveTo}));
+          sendJson(request,response,200,{assignment,tariffs});
+        } catch {
+          sendJson(request,response,503,{error:"customer_tariff_catalogue_unavailable"});
+        }
+        return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "GET, POST"); return; }
       if (identity.roleKey !== "customer-admin") {
         sendApiError(request, response, 403, "CUSTOMER_TARIFF_SWITCH_FORBIDDEN", "A customer administrator role is required."); return;
       }
-      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
       if (!options.tenantApplicationAssignmentStore) {
         sendJson(request, response, 503, { error: "tenant_application_assignment_store_unavailable" }); return;
       }
