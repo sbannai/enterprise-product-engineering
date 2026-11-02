@@ -107,14 +107,40 @@ export class PostgresCustomerLifecycleStore {
     }
   }
 
-  async list(): Promise<CustomerLifecycleRecord[]> {
+  async list(): Promise<Array<CustomerLifecycleRecord & {
+    tariffKey: string | null; tariffVersion: number | null; billingBasis: string | null;
+    tariffAssignmentStatus: string | null; tariffEffective: boolean;
+    maxApplications: number | null; activeApplicationCount: number;
+    allowanceStatus: "not_configured" | "within_allowance" | "over_allowance";
+  }>> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<CustomerLifecycleRow>(`
-        SELECT tenant_id, customer_status, status_reason, effective_at, version, updated_at, updated_by
-        FROM eper_customer_account ORDER BY tenant_id LIMIT 5000
+      const result = await client.query<CustomerLifecycleRow & {
+        tariff_key: string | null; tariff_version: number | string | null; billing_basis: string | null;
+        tariff_assignment_status: string | null; tariff_effective: boolean | null;
+        max_applications: number | string | null; active_application_count: number | string;
+      }>(`
+        SELECT c.tenant_id, c.customer_status, c.status_reason, c.effective_at, c.version, c.updated_at, c.updated_by,
+               t.tariff_key, t.tariff_version, t.billing_basis, t.assignment_status AS tariff_assignment_status,
+               (t.starts_at <= NOW() AND (t.ends_at IS NULL OR t.ends_at > NOW())) AS tariff_effective,
+               t.max_applications,
+               (SELECT COUNT(*) FROM eper_tenant_application_assignment a
+                 WHERE a.tenant_id=c.tenant_id AND a.assignment_status='active') AS active_application_count
+          FROM eper_customer_account c
+          LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id=c.tenant_id
+         ORDER BY c.tenant_id LIMIT 5000
       `);
-      return result.rows.map(mapRow);
+      return result.rows.map(row => {
+        const activeApplicationCount = Number(row.active_application_count ?? 0);
+        const maxApplications = row.max_applications == null ? null : Number(row.max_applications);
+        const tariffEffective = row.tariff_assignment_status === "active" && row.tariff_effective === true;
+        const allowanceStatus = maxApplications == null ? "not_configured" :
+          activeApplicationCount > maxApplications ? "over_allowance" : "within_allowance";
+        return { ...mapRow(row), tariffKey: row.tariff_key,
+          tariffVersion: row.tariff_version == null ? null : Number(row.tariff_version),
+          billingBasis: row.billing_basis, tariffAssignmentStatus: row.tariff_assignment_status,
+          tariffEffective, maxApplications, activeApplicationCount, allowanceStatus };
+      });
     } finally {
       client.release();
     }

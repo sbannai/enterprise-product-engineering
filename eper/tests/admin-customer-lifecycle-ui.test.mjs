@@ -36,7 +36,7 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
   let current = { ...initial };
   const changes = [];
   const store = {
-    async list() { return [{ ...current }]; },
+    async list() { return [{ ...current, tariffKey: "multi-app", tariffVersion: 3, billingBasis: "multi_application", tariffAssignmentStatus: "active", tariffEffective: true, maxApplications: 2, activeApplicationCount: 3, allowanceStatus: "over_allowance" }]; },
     async get(tenantId) { return tenantId === current.tenantId ? { ...current } : null; },
     async changeStatus(input) {
       changes.push(input);
@@ -72,6 +72,9 @@ test("Product Admin customer lifecycle UI lists PostgreSQL accounts and performs
     assert.match(html, /data-save-customer/);
     assert.match(html, /expectedVersion:record.version/);
     assert.match(html, /append-only audit ledger/);
+    assert.match(html, /Accepted tariff/);
+    assert.match(html, /Active apps \/ allowance/);
+    assert.match(html, /OVER LIMIT/);
 
     const unauthorized = await fetch(`${base}/admin/customers`);
     assert.equal(unauthorized.status, 401);
