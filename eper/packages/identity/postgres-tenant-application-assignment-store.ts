@@ -121,6 +121,20 @@ export class PostgresTenantApplicationAssignmentStore {
       if (Number(active.rows[0]?.count ?? 0) > Number(tariff.max_applications)) {
         throw new Error("CUSTOMER_TARIFF_SWITCH_REQUIRES_APPLICATION_SELECTION");
       }
+      if (current.rows[0]) {
+        // Backfill pre-history assignments (including legacy rows created before migration 011).
+        await client.query(`INSERT INTO eper_customer_tariff_assignment_history
+          (tenant_id, assignment_version, tariff_key, tariff_version, billing_basis, max_applications,
+           accepted_amount, accepted_currency, billing_interval, assignment_status, starts_at, ends_at,
+           accepted_by, accepted_at, acceptance_reference)
+          SELECT tenant_id, version, tariff_key, tariff_version, billing_basis, max_applications,
+                 accepted_amount, accepted_currency, billing_interval, assignment_status, starts_at, ends_at,
+                 COALESCE(accepted_by, updated_by), COALESCE(accepted_at, updated_at),
+                 COALESCE(acceptance_reference, 'legacy-existing-acceptance')
+            FROM eper_customer_tariff_assignment
+           WHERE tenant_id=$1 AND version=$2
+          ON CONFLICT (tenant_id, assignment_version) DO NOTHING`, [input.tenantId,currentVersion]);
+      }
       const version = currentVersion + 1;
       const saved = await client.query<{
         tenant_id: string; tariff_key: string; tariff_version: number | string; billing_basis: string;
