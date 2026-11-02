@@ -38,21 +38,26 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
 
   async getValidationSnapshot(
     tenantId: string,
+    applicationId: string,
     connectionId: string,
   ): Promise<ProviderValidationSnapshot | null> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
       const result = await client.query<ValidationSnapshotRow>(
         `SELECT c.tenant_id, c.connection_id, c.provider_key, d.adapter_key,
           d.adapter_version, c.auth_mode, c.secret_reference, c.environment,
           c.safe_metadata, c.connection_status, c.version
          FROM eper_provider_connections c
          JOIN eper_provider_definitions d ON d.provider_key = c.provider_key
-         WHERE c.tenant_id = $1 AND c.connection_id = $2
-         FOR SHARE OF c, d`,
-        [tenantId, connectionId],
+         JOIN eper_provider_connection_applications b
+           ON b.tenant_id = c.tenant_id AND b.connection_id = c.connection_id
+         WHERE c.tenant_id = $1 AND b.application_id = $2 AND c.connection_id = $3
+           AND b.binding_status IN ('PENDING_VALIDATION', 'ACTIVE')
+         FOR SHARE OF c, d, b`,
+        [tenantId, applicationId, connectionId],
       );
       await client.query("COMMIT");
       const row = result.rows[0];
@@ -80,6 +85,7 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
 
   async recordValidationOutcome(input: {
     tenantId: string;
+    applicationId: string;
     connectionId: string;
     expectedVersion: number;
     outcome: "SUCCEEDED" | "FAILED";
@@ -103,6 +109,7 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('eper.tenant_id', $1, true)", [input.tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [input.applicationId]);
       const saved = await client.query<{
         provider_key: string;
         connection_status: "ACTIVE" | "DEGRADED";
@@ -113,9 +120,14 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
              updated_at = NOW(), updated_by = $5
          WHERE tenant_id = $1 AND connection_id = $2 AND version = $3
            AND connection_status IN ('PENDING_VALIDATION', 'ACTIVE', 'DEGRADED')
+           AND EXISTS (
+             SELECT 1 FROM eper_provider_connection_applications b
+             WHERE b.tenant_id = $1 AND b.application_id = $6 AND b.connection_id = $2
+               AND b.binding_status IN ('PENDING_VALIDATION', 'ACTIVE')
+           )
          RETURNING provider_key, connection_status, version`,
         [input.tenantId, input.connectionId, input.expectedVersion,
-          input.outcome === "SUCCEEDED" ? "ACTIVE" : "DEGRADED", input.actorId],
+          input.outcome === "SUCCEEDED" ? "ACTIVE" : "DEGRADED", input.actorId, input.applicationId],
       );
       const row = saved.rows[0];
       if (!row) {
@@ -131,15 +143,14 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
         throw new Error("PROVIDER_CONNECTION_VERSION_CONFLICT");
       }
 
-      if (input.outcome === "FAILED") {
-        await client.query(
-          `UPDATE eper_provider_connection_applications
-           SET binding_status = 'SUSPENDED', version = version + 1,
-               updated_at = NOW(), updated_by = $3
-           WHERE tenant_id = $1 AND connection_id = $2`,
-          [input.tenantId, input.connectionId, input.actorId],
-        );
-      }
+      await client.query(
+        `UPDATE eper_provider_connection_applications
+         SET binding_status = $4, version = version + 1,
+             updated_at = NOW(), updated_by = $5
+         WHERE tenant_id = $1 AND connection_id = $2 AND application_id = $3`,
+        [input.tenantId, input.connectionId, input.applicationId,
+          input.outcome === "SUCCEEDED" ? "ACTIVE" : "SUSPENDED", input.actorId],
+      );
 
       await client.query(
         `INSERT INTO eper_provider_validation_events
@@ -154,7 +165,7 @@ export class PostgresProviderValidationStore implements ProviderValidationStore 
 
       await appendAuditEventInTransaction(client, {
         tenantId: input.tenantId,
-        applicationId: "eper",
+        applicationId: input.applicationId,
         environment: input.auditEnvironment,
         actorType: "human",
         actorId: input.actorId,
