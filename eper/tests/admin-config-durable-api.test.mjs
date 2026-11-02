@@ -125,7 +125,7 @@ test("durable pricing reads the authenticated tenant's persisted price book", as
     EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
     EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({
       [TOKEN_A]: { tenantId: "tenant-a", actorId: "admin-a", roleKey: "customer_admin" },
-      [TOKEN_B]: { tenantId: "tenant-b", actorId: "admin-b", roleKey: "customer_admin" },
+      [TOKEN_B]: { tenantId: "tenant-b", actorId: "admin-b", roleKey: "product_admin" },
     }),
     EPER_PRICING_API_ENABLED: "true",
     // A shared pricing token must not override tenant identity in durable mode.
@@ -199,7 +199,7 @@ test("durable pricing returns 503 when the persisted price book store is unavail
     EPER_ADMIN_CONFIG_API_ENABLED: "true",
     EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
     EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({
-      [TOKEN_A]: { tenantId: "tenant-a", actorId: "admin-a", roleKey: "customer_admin" },
+      [TOKEN_A]: { tenantId: "tenant-a", actorId: "admin-a", roleKey: "product_admin" },
     }),
     EPER_PRICING_API_ENABLED: "true",
     EPER_PRICING_API_TOKEN: "legacy-shared-pricing-token-that-is-at-least-32-chars",
