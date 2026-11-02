@@ -200,7 +200,7 @@ export class PostgresPlatformApplicationRemediationStore {
         tenantId: input.tenantId, applicationId: input.applicationId,
         assignmentStatus: "revoked", assignmentVersion: Number(changed.rows[0].version),
         activeApplicationCount, maxApplications, tariffAccessState,
-        evaluatedAt: new Date().toISOString(), correlationId: input.correlationId, replayed: false,
+        evaluatedAt: tariffRow?.evaluated_at ? new Date(tariffRow.evaluated_at).toISOString() : new Date().toISOString(), correlationId: input.correlationId, replayed: false,
       };
 
       await client.query(
