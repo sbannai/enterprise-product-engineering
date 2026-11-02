@@ -46,11 +46,12 @@ test("commercial tariff API is Product Admin-only and supports audited draft, ap
       method: "POST", headers: admin,
       body: JSON.stringify({ tariffKey: "single-app", billingBasis: "single_application", maxApplications: 1,
         amount: "499.00", currency: "INR", billingInterval: "monthly",
-        effectiveFrom: "2026-12-01T00:00:00.000Z", changeReason: "Approved catalogue update", approvalRequired: true }),
+        effectiveFrom: "2026-12-01T00:00:00.000Z", effectiveTo: "2027-01-01T00:00:00.000Z", changeReason: "Approved catalogue update", approvalRequired: true }),
     });
     assert.equal(draft.status, 201);
     assert.equal(calls[1][0], "createDraft");
     assert.equal(calls[1][1].amount, "499.00");
+    assert.equal(calls[1][1].effectiveTo, "2027-01-01T00:00:00.000Z");
 
     const approval = await fetch(base + "/admin/commercial-tariffs/single-app/1/approve", {
       method: "POST", headers: admin, body: JSON.stringify({ approvalReference: "APR-1001" }),
