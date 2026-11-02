@@ -147,6 +147,12 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         allowedCapabilities: ["email.send"], correlationId: "bind-" + suffix,
         auditEnvironment: "sandbox",
       });
+      const appAConnections = await repository.listForApplication(tenantA, appA);
+      assert.equal(appAConnections.length, 1);
+      assert.equal(appAConnections[0].connectionId, connectionId);
+      assert.deepEqual(appAConnections[0].allowedCapabilities, ["email.send"]);
+      assert.equal("secretReference" in appAConnections[0], false);
+      assert.deepEqual(await repository.listForApplication(tenantA, appB), []);
 
       const failedValidation = new ProviderConnectionValidationService(
         validationStore,
