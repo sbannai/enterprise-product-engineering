@@ -155,3 +155,26 @@ See the complete 45-row source export. The source IDs are immutable and must not
 8. **Testing:** Include positive and negative rule evaluation, tenant-crossing denial, unauthorized designer access, invalid graph detection, rule-to-designer consistency, version immutability, running-instance pinning, concurrent draft edits, publication approval and restart/recovery tests.
 
 **Product distinction:** EPER should let each customer shape how their own work gets done—without needing Product Admin intervention or bespoke development for ordinary workflow changes.
+
+## 11. Owner-directed customer application alert and video settings — 2026-11-02
+
+**Disposition:** Added following explicit Product Owner agreement. This is additive v1.6.0 draft scope; it does not change or renumber the approved 228 requirements, 38 chapters, or existing candidate IDs.
+
+| Candidate ID | Priority | Requirement | Acceptance criteria |
+|---|---|---|---|
+| EPER-CW-058 | MUST / P1 | EPER shall provide customer-wide default alert and video-conferencing settings that are inherited by the customer's applications, with authorized application-level overrides. | Customer Admin can configure organisation defaults for permitted alert channels, sender identity, templates/language, timezone, quiet hours, meeting provider and standard meeting preferences; each application inherits these defaults when created; authorized Customer Admin can override supported settings for an individual application without changing other applications; each setting exposes whether its effective value is inherited or customised; resetting an override restores inheritance; changes are version-checked, durably persisted and audited. |
+| EPER-CW-059 | MUST / P1 | EPER shall enforce central platform and customer policy boundaries over inherited and application-specific alert/video settings. | Product Admin platform restrictions and customer-level security, consent, privacy and provider-eligibility policies are authoritative; an application override cannot weaken or bypass them; effective settings are resolved server-side for UI, APIs, workflow execution and background dispatch; unavailable, suspended or revoked provider connections fail closed without silent fallback; settings and resolution are tenant/application isolated and auditable. |
+
+### Customer and application settings model
+
+1. **Hierarchy:** Product Admin platform policy → Customer Admin general defaults → Application-specific overrides → Workflow action parameters. More specific settings may refine defaults but never weaken a higher-level restriction.
+2. **Customer defaults:** Configure supported alert channels, sender identities, templates/locales, timezone, quiet hours, default video provider, meeting duration and reminder preferences.
+3. **Application overrides:** Allow a customer administrator to customise only the settings permitted by central policy. An override in one application must not affect another application.
+4. **Effective-value visibility:** Show each setting as Inherited, Customised or Restricted. Provide an application-by-application comparison so Customer Admin can identify deviations from customer defaults.
+5. **Provider configuration boundary:** Credentials and provider connections remain in the provider-connection management boundary; workflow definitions and settings store only safe connection references and preferences, never raw secrets.
+6. **Workflow integration:** Workflow actions consume the resolved effective configuration at execution time. Workflow JSON must not duplicate or become the source of truth for customer/application-wide preferences.
+7. **Policy enforcement:** Consent, retention, recording, security and provider availability restrictions are centrally enforced. An application override may narrow a policy but cannot broaden permissions beyond the governing policy.
+8. **Change and audit:** Record actor, scope, prior and new values, version, reason, effective time and correlation ID. Concurrent updates use optimistic version checks.
+9. **Testing:** Include inheritance, explicit override, reset-to-inherit, cross-application isolation, tenant isolation, central-policy denial, provider suspension/revocation, concurrency, audit and background-dispatch resolution tests.
+
+**Admin workspace placement:** Customer Admin → General Settings → Alerts & Video; Application → Settings → Alerts & Video. The application screen shows inherited values and permits only policy-approved overrides.
