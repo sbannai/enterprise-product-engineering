@@ -166,7 +166,8 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByLabel("Business impact").fill("The customer workspace support journey must be authenticated and scoped.");
     await page.getByRole("button",{name:"Submit ticket"}).click();
     await page.waitForFunction(()=>{const value=document.querySelector("#ticketResult")?.textContent||"";return value.startsWith("Ticket submitted. Reference:")||value.startsWith("Submission outcome may be unknown.")},{timeout:10000}).catch(()=>{});
-    const ticketResult=await page.locator("#ticketResult").textContent();\n    assert.match(ticketResult||"",/^Ticket submitted\\. Reference:/,"customer ticket submission failed; result="+ticketResult+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
+    const ticketResult=await page.locator("#ticketResult").textContent();
+    assert.match(ticketResult||"",/^Ticket submitted\. Reference:/,"customer ticket submission failed; result="+ticketResult+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
     const confirmation=await page.getByText(/Ticket submitted\. Reference:/).textContent();
     const ticketMatch=confirmation?.match(/Reference:\s*([0-9a-f-]{36})/i);
     assert.ok(ticketMatch,"customer confirmation must include the durable ticket reference: "+confirmation);
