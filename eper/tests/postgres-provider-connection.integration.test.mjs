@@ -27,6 +27,12 @@ import { ProviderConnectionValidationService } from "../dist/packages/integratio
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
 
+async function createRuntimePool(pool) {
+  await pool.query(`DO $role$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_provider_test_runtime') THEN
+        EXECUTE 'CREATE ROLE eper_provider_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS';
+      END IF;
 );
   await pool.query("GRANT USAGE ON SCHEMA public TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT ON eper_provider_definitions TO eper_provider_test_runtime");
