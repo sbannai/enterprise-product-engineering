@@ -1154,10 +1154,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      const identity = resolveAdminConfigIdentity(request);
-      if (!identity) { sendJson(request, response, 401, { error: "unauthorized_or_unmapped_customer_identity" }); return; }
-      if (!["customer_admin", "product_admin", "platform_admin"].includes(identity.roleKey ?? "")) {
-        sendJson(request, response, 403, { error: "CUSTOMER_ADMIN_ROLE_REQUIRED" }); return;
+      const identity = resolveCustomerAccessIdentity(request);
+      if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "A trusted customer credential is required."); return; }
+      if (identity.roleKey !== "customer-admin") {
+        sendApiError(request, response, 403, "CUSTOMER_TARIFF_SWITCH_FORBIDDEN", "A customer administrator role is required."); return;
       }
       if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
       if (!options.tenantApplicationAssignmentStore) {
