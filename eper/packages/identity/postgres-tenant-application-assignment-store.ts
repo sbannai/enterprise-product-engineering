@@ -168,10 +168,12 @@ export class PostgresTenantApplicationAssignmentStore {
           acceptanceReference:row.acceptance_reference},
       });
       await client.query("COMMIT");
-      return {...row, tariffVersion:Number(row.tariff_version),maxApplications:Number(row.max_applications),
+      return {tenantId:row.tenant_id,tariffKey:row.tariff_key,tariffVersion:Number(row.tariff_version),
+        billingBasis:row.billing_basis,maxApplications:Number(row.max_applications),
         acceptedAmount:String(row.accepted_amount),acceptedCurrency:String(row.accepted_currency).trim(),
-        version:Number(row.version),startsAt:new Date(row.starts_at).toISOString(),
-        endsAt:row.ends_at?new Date(row.ends_at).toISOString():null,acceptedAt:new Date(row.accepted_at).toISOString()};
+        billingInterval:row.billing_interval,version:Number(row.version),startsAt:new Date(row.starts_at).toISOString(),
+        endsAt:row.ends_at?new Date(row.ends_at).toISOString():null,acceptedBy:row.accepted_by,
+        acceptedAt:new Date(row.accepted_at).toISOString(),acceptanceReference:row.acceptance_reference};
     } catch(error) { await client.query("ROLLBACK").catch(()=>undefined); throw error; }
     finally { client.release(); }
   }
