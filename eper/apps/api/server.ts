@@ -910,10 +910,25 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         const environment = options.adminConfigEnvironment ?? "sandbox";
         const correlationId = resolveApiRequestId(request);
+        const workflowRoles = workflowRoleCollection || workflowRoleDetail
+          ? await options.workflowRoleDefinitionStore.list(identity.tenantId, applicationId)
+          : [];
+        if (workflowRoleCollection || workflowRoleDetail) {
+          const activeRoleIds = await options.workflowActorRoleAssignmentStore.listActiveRoleIds(
+            identity.tenantId, applicationId, identity.actorId,
+          );
+          const canManageRoleCatalog = workflowRoles.some(role =>
+            role.status === "active" && activeRoleIds.includes(role.roleId) &&
+            role.permissions.includes("role:assign"),
+          );
+          if (!canManageRoleCatalog) {
+            sendApiError(request, response, 403, "WORKFLOW_ROLE_CATALOG_FORBIDDEN",
+              "Explicit role-assignment authority is required to manage the role catalogue."); return;
+          }
+        }
         if (workflowRoleCollection) {
           if (request.method === "GET") {
-            const roles = await options.workflowRoleDefinitionStore.list(identity.tenantId, applicationId);
-            sendApiSuccess(request, response, 200, { roles }); return;
+            sendApiSuccess(request, response, 200, { roles: workflowRoles }); return;
           }
           sendMethodNotAllowed(request, response, "GET"); return;
         }
