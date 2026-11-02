@@ -613,6 +613,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       serviceVersion: options.serviceVersion,
     })) return;
 
+    if (await handlePlatformApplicationRemediationRoute(request, response, requestUrl.pathname, {
+      store: options.platformApplicationRemediationStore,
+      environment: options.adminConfigEnvironment,
+      serviceVersion: options.serviceVersion,
+    })) return;
+
     if (await handleCustomerRoleDelegationRoute(request, response, requestUrl.pathname, {
       delegationStore: options.workflowRoleDelegationStore,
       roleDefinitionStore: options.workflowRoleDefinitionStore,
