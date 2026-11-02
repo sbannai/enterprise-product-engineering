@@ -1971,6 +1971,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             const tariff = await store.approve({ tariffKey, tariffVersion, approvalReference: body.approvalReference }, context);
             sendApiSuccess(request, response, 200, { tariff }); return;
           }
+          if (match[3] === "retire") {
+            if (Object.keys(body).some((key) => key !== "reason") || typeof body.reason !== "string") {
+              sendApiError(request, response, 400, "TARIFF_RETIREMENT_REASON_REQUIRED", "A retirement reason is required."); return;
+            }
+            const tariff = await store.retire({ tariffKey, tariffVersion, reason: body.reason }, context);
+            sendApiSuccess(request, response, 200, { tariff }); return;
+          }
           if (Object.keys(body).length) {
             sendApiError(request, response, 400, "PUBLISH_BODY_MUST_BE_EMPTY", "Publishing accepts no mutable tariff fields."); return;
           }
