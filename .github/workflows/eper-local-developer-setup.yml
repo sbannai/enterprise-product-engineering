@@ -6,7 +6,6 @@ concurrency:
 
 on:
   pull_request:
-    branches: ["main"]
     paths:
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
@@ -17,6 +16,7 @@ on:
       - "eper/packages/**"
       - "eper/tests/**"
       - ".github/workflows/eper-local-developer-setup.yml"
+      - ".github/workflows/eper-payment-postgres-integration.yml"
   workflow_dispatch:
 
 permissions:
