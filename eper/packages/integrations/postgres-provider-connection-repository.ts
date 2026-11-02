@@ -240,7 +240,7 @@ export class PostgresProviderConnectionRepository {
     }
   }
 
-  async bindApplication(input: BindProviderConnectionInput): Promise<void> {
+  async bindApplication(input: BindProviderConnectionInput): Promise<"ACTIVE" | "PENDING_VALIDATION"> {
     this.validateIdentity(input.tenantId, "TENANT");
     this.validateIdentity(input.applicationId, "APPLICATION_ID");
     this.validateIdentity(input.actorId, "ACTOR");
@@ -293,6 +293,7 @@ export class PostgresProviderConnectionRepository {
         correlationId: input.correlationId,
       });
       await client.query("COMMIT");
+      return row.connection_status === "ACTIVE" ? "ACTIVE" : "PENDING_VALIDATION";
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
