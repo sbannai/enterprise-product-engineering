@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 export const PLATFORM_ADMIN_PERMISSIONS = [
   "customer_admin:provision",
   "customer_admin:recover",
+  "application:remediate",
 ] as const;
 
 export type PlatformAdminPermission = typeof PLATFORM_ADMIN_PERMISSIONS[number];
