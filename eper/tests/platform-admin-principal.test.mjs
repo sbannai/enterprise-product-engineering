@@ -4,6 +4,7 @@ import { resolvePlatformAdminPrincipal } from "../dist/packages/identity/platfor
 
 const provisionCredential = "provision-secret-credential-0000000001";
 const recoverCredential = "recover-secret-credential-00000000000001";
+const remediationCredential = "remediate-secret-credential-00000001";
 
 function mapping(overrides = {}) {
   return JSON.stringify({
@@ -16,6 +17,11 @@ function mapping(overrides = {}) {
       platformActorId: "platform-breakglass-01",
       permissions: ["customer_admin:recover"],
       credentialId: "platform-key-rotation-02",
+    },
+    [remediationCredential]: {
+      platformActorId: "platform-remediation-01",
+      permissions: ["application:remediate"],
+      credentialId: "platform-key-rotation-03",
     },
     ...overrides,
   });
@@ -90,4 +96,16 @@ test("duplicate permissions and empty permission sets fail closed", () => {
   });
   assert.equal(resolvePlatformAdminPrincipal(`Bearer ${provisionCredential}`, duplicate), null);
   assert.equal(resolvePlatformAdminPrincipal(`Bearer ${provisionCredential}`, empty), null);
+});
+
+
+test("application remediation permission is independently assignable and does not imply customer-admin authority", () => {
+  const principal = resolvePlatformAdminPrincipal(`Bearer ${remediationCredential}`, mapping());
+  assert.deepEqual(principal, {
+    platformActorId: "platform-remediation-01",
+    permissions: ["application:remediate"],
+    credentialId: "platform-key-rotation-03",
+  });
+  assert.equal(principal?.permissions.includes("customer_admin:provision"), false);
+  assert.equal(principal?.permissions.includes("customer_admin:recover"), false);
 });
