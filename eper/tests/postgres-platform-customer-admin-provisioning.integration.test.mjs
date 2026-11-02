@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createPostgresPaymentPool } from "../dist/packages/payments/postgres-payment-runtime.js";
 import { PostgresWorkflowRoleDefinitionStore } from "../dist/packages/workflows/postgres-workflow-role-definition-store.js";
 import { PostgresWorkflowActorRoleAssignmentStore } from "../dist/packages/workflows/postgres-workflow-actor-role-assignment-store.js";
 import { PostgresPlatformCustomerAdminProvisioningStore } from "../dist/packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
+import { PostgresCustomerIdentitySessionStore } from "../dist/packages/identity/postgres-customer-identity-session-store.js";
 
 const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
 
@@ -29,6 +30,8 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
     const roleDefinitions = new PostgresWorkflowRoleDefinitionStore(pool);
     const assignments = new PostgresWorkflowActorRoleAssignmentStore(pool);
     const provisioning = new PostgresPlatformCustomerAdminProvisioningStore(pool);
+    const identitySessions = new PostgresCustomerIdentitySessionStore(pool);
+    let firstAdminSessionHash;
 
     try {
       await roleDefinitions.assertReady();
@@ -63,6 +66,20 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
         changedBy: platformActorId, environment, correlationId,
       });
 
+      await identitySessions.bindSubject({
+        issuer: "https://identity.example.test",
+        subject: "platform-subject-" + suffix,
+        tenantId, actorId: firstAdminId, provisionedBy: platformActorId, correlationId,
+      });
+      const browserSession = await identitySessions.createSession({
+        issuer: "https://identity.example.test",
+        subject: "platform-subject-" + suffix,
+        tenantId, actorId: firstAdminId,
+        idleExpiresAt: new Date(Date.now() + 15 * 60_000),
+        absoluteExpiresAt: new Date(Date.now() + 60 * 60_000),
+        correlationId,
+      });
+      firstAdminSessionHash = createHash("sha256").update(browserSession.sessionToken, "utf8").digest("hex");
       const first = await provisioning.mutate({
         principal, operation: "provision", tenantId, applicationId,
         targetActorId: firstAdminId, idempotencyKey: "first-" + suffix,
@@ -140,6 +157,14 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
         assert.equal(admins.rows.find(row => row.actor_id === firstAdminId)?.assignment_status, "revoked");
         assert.equal(admins.rows.find(row => row.actor_id === recoveredAdminId)?.assignment_status, "active");
 
+        const invalidatedSession = await verify.query(
+          `SELECT revoked_at, revoked_reason FROM eper_customer_browser_sessions
+            WHERE session_hash=$1 AND tenant_id=$2 AND actor_id=$3`,
+          [firstAdminSessionHash, tenantId, firstAdminId],
+        );
+        assert.equal(invalidatedSession.rows.length, 1);
+        assert.ok(invalidatedSession.rows[0].revoked_at);
+        assert.equal(invalidatedSession.rows[0].revoked_reason, "platform_customer_admin_role_changed");
         const ledger = await verify.query(
           `SELECT operation, platform_actor_id, credential_id, target_actor_id,
                   assignment_version, completed_at
