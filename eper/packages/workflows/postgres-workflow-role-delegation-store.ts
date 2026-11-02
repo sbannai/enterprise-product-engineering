@@ -280,18 +280,6 @@ export class PostgresWorkflowRoleDelegationStore {
       if (!current.rows[0]) throw new Error("WORKFLOW_ROLE_DELEGATION_ASSIGNMENT_NOT_FOUND");
       const version = Number(current.rows[0].version);
       if (version !== input.expectedVersion) throw new Error("WORKFLOW_ROLE_DELEGATION_VERSION_CONFLICT:" + version);
-      const targetRole = await client.query<{ permissions: string[] | string }>(
-        `SELECT permissions FROM eper_workflow_role_definition
-          WHERE tenant_id=$1 AND application_id=$2 AND role_id=$3 AND role_status='active' FOR SHARE`,
-        [input.tenantId, input.applicationId, input.targetRoleId],
-      );
-      let targetPermissions: string[] = [];
-      if (targetRole.rows[0]) {
-        const rawTargetPermissions = targetRole.rows[0].permissions;
-        targetPermissions = typeof rawTargetPermissions === "string"
-          ? JSON.parse(rawTargetPermissions) as string[]
-          : rawTargetPermissions;
-      }
       if (targetPermissions.includes("access:manage")) {
         const adminCount = await client.query<{ admin_count: number | string }>(
           `SELECT COUNT(DISTINCT ra.actor_id)::int AS admin_count
