@@ -140,6 +140,9 @@ export class PostgresWorkflowRoleDefinitionStore {
         new Set(input.permissions).size !== input.permissions.length) {
       throw new Error("WORKFLOW_ROLE_DEFINITION_PERMISSIONS_INVALID");
     }
+    if (typeof input.delegable !== "boolean") {
+      throw new Error("WORKFLOW_ROLE_DEFINITION_DELEGABLE_FLAG_INVALID");
+    }
     if (input.status !== "active" && input.status !== "disabled") {
       throw new Error("WORKFLOW_ROLE_DEFINITION_STATUS_INVALID");
     }
@@ -201,7 +204,7 @@ export class PostgresWorkflowRoleDefinitionStore {
         correlationId: input.correlationId, source: "api",
         operationName: "PUT /applications/:applicationId/workflow-roles/:roleId",
         serviceVersion: input.serviceVersion,
-        payload: { roleId: input.roleId, permissions: input.permissions, status: input.status, version: Number(row.version) },
+        payload: { roleId: input.roleId, permissions: input.permissions, delegable: input.delegable, status: input.status, version: Number(row.version) },
       });
       await client.query("COMMIT");
       return mapRole(row);
