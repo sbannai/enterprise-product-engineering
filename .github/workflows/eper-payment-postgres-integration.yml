@@ -18,6 +18,7 @@ on:
       - "eper/packages/audit/**"
       - "eper/apps/api/platform-customer-admin-provisioning-route.ts"
       - "eper/tests/postgres-platform-customer-admin-provisioning.integration.test.mjs"
+      - "eper/tests/postgres-workflow-role-delegation.integration.test.mjs"
       - "eper/tests/platform-customer-admin-provisioning-store.test.mjs"
       - "eper/tests/platform-customer-admin-provisioning-route.test.mjs"
       - "eper/packages/payments/**"
@@ -147,6 +148,8 @@ jobs:
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
         run: node --test tests/customer-lifecycle-store.integration.test.mjs
+      - name: Exercise PostgreSQL role delegation, application scope and last-admin concurrency
+        run: node --test tests/postgres-workflow-role-delegation.integration.test.mjs
       - name: Exercise platform Customer Admin provisioning and recovery transactions
         run: node --test tests/postgres-platform-customer-admin-provisioning.integration.test.mjs
       - name: Exercise PostgreSQL campaign dispatch race and event idempotency
