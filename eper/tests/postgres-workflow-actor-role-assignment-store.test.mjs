@@ -61,7 +61,7 @@ test("role grant checks both application assignments and appends audit atomicall
   assert.ok(calls.some(call => call.sql.includes("FOR SHARE") && call.sql.includes("eper_actor_application_assignment")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_actor_role_assignment")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
-  assert.equal(calls.at(-2).sql, "COMMIT");
+  assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
 test("role grant fails closed when actor is not assigned to the application", async () => {
