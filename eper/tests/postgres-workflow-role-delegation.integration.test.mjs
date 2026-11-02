@@ -144,3 +144,78 @@ test("PostgreSQL role delegation persists grant/revoke provenance, enforces scop
       await pool.end();
     }
   });
+
+
+test("PostgreSQL serializes concurrent Customer Admin revocations and preserves the last administrator",
+  { skip: !databaseConfigured },
+  async () => {
+    const pool = createPostgresPaymentPool();
+    const suffix = randomUUID();
+    const tenantId = "last-admin-tenant-" + suffix;
+    const applicationId = "last-admin-app-" + suffix;
+    const actorA = "last-admin-a-" + suffix;
+    const actorB = "last-admin-b-" + suffix;
+    const roleId = "customer-admin";
+    const correlationId = "last-admin-correlation-" + suffix;
+    const environment = "sandbox";
+    const roleDefinitions = new PostgresWorkflowRoleDefinitionStore(pool);
+    const assignments = new PostgresWorkflowActorRoleAssignmentStore(pool);
+    const delegations = new PostgresWorkflowRoleDelegationStore(pool);
+    try {
+      await roleDefinitions.assertReady();
+      await assignments.assertReady();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+        await client.query(
+          `INSERT INTO eper_tenant_application_assignment
+            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,'active',$3,$3)`,
+          [tenantId, applicationId, actorA],
+        );
+        await client.query(
+          `INSERT INTO eper_actor_application_assignment
+            (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,$3,'active',$2,$2), ($1,$4,$3,'active',$4,$4)`,
+          [tenantId, actorA, applicationId, actorB],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally { client.release(); }
+
+      await roleDefinitions.replace({
+        tenantId, applicationId, roleId, name: "Customer Admin",
+        permissions: ["access:manage", "role:assign", "workflow:view"],
+        delegable: false, status: "active", expectedVersion: 0,
+        changedBy: actorA, environment, correlationId,
+      });
+      await assignments.assign({
+        tenantId, applicationId, actorId: actorA, roleId,
+        changedBy: actorA, expectedVersion: 0, environment, correlationId,
+      });
+      await assignments.assign({
+        tenantId, applicationId, actorId: actorB, roleId,
+        changedBy: actorA, expectedVersion: 0, environment, correlationId,
+      });
+
+      const base = { tenantId, applicationId, targetRoleId: roleId, expectedVersion: 1,
+        environment, correlationId };
+      const outcomes = await Promise.allSettled([
+        delegations.revoke({ ...base, grantorActorId: actorA, grantorRoleId: roleId, targetActorId: actorB }),
+        delegations.revoke({ ...base, grantorActorId: actorB, grantorRoleId: roleId, targetActorId: actorA }),
+      ]);
+      assert.equal(outcomes.filter(result => result.status === "fulfilled").length, 1);
+      assert.equal(outcomes.filter(result => result.status === "rejected").length, 1);
+      const rejected = outcomes.find(result => result.status === "rejected");
+      assert.match(String(rejected.reason?.message), /WORKFLOW_ROLE_DELEGATION_LAST_CUSTOMER_ADMIN_PROTECTED/);
+
+      const remaining = await assignments.listAssignments(tenantId, applicationId);
+      assert.equal(remaining.filter(assignment => assignment.status === "active" && assignment.roleId === roleId).length, 1);
+    } finally {
+      await pool.end();
+    }
+  });
