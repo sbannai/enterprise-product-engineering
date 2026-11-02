@@ -145,8 +145,10 @@ test("commercially gated checkout rejects inactive customers, missing app grants
       for (let i = 0; i < (options.appCount ?? 1); i++) {
         await pool.query(
           `INSERT INTO eper_tenant_application_assignment
-            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
-           VALUES ($1, $2, $3, 'integration-test', 'integration-test')`,
+            (tenant_id, application_id, assignment_status, assigned_by, updated_by, revoked_at, revoked_by)
+           VALUES ($1, $2, $3, 'integration-test', 'integration-test',
+                   CASE WHEN $3 = 'revoked' THEN NOW() ELSE NULL END,
+                   CASE WHEN $3 = 'revoked' THEN 'integration-test' ELSE NULL END)`,
           [tenantId, i === 0 ? applicationId : "extra-" + randomUUID(), options.grantStatus ?? 'active'],
         );
       }
