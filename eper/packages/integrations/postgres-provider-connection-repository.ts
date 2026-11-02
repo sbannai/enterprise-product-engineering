@@ -303,10 +303,11 @@ export class PostgresProviderConnectionRepository {
   }
 
   async rotateSecretReference(input: {
-    tenantId: string; connectionId: string; actorId: string; secretReference: string;
+    tenantId: string; applicationId: string; connectionId: string; actorId: string; secretReference: string;
     expectedVersion: number; correlationId: string; auditEnvironment: AuditEnvironment;
   }): Promise<ProviderConnection> {
     this.validateIdentity(input.tenantId, "TENANT");
+    this.validateIdentity(input.applicationId, "APPLICATION_ID");
     this.validateIdentity(input.connectionId, "CONNECTION_ID");
     this.validateIdentity(input.actorId, "ACTOR");
     this.validateIdentity(input.secretReference, "SECRET_REFERENCE");
@@ -318,12 +319,13 @@ export class PostgresProviderConnectionRepository {
     try {
       await client.query("BEGIN");
       await this.setTenantContext(client, input.tenantId);
+      await this.setApplicationContext(client, input.applicationId);
       const prior = await client.query<{ version: number | string; connection_status: ProviderConnectionStatus }>(
         "SELECT version, connection_status FROM eper_provider_connections WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",
         [input.tenantId, input.connectionId],
       );
       if (!prior.rows[0]) throw new ProviderConnectionNotFoundError();
-      const currentVersion = Number(prior.rows[0].version);
+      const bindings = await client.query<{ application_id: string }>(\n        "SELECT application_id FROM eper_provider_connection_applications WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",\n        [input.tenantId, input.connectionId],\n      );\n      if (bindings.rows.length !== 1 || bindings.rows[0].application_id !== input.applicationId) {\n        throw new Error("PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED");\n      }\n      const currentVersion = Number(prior.rows[0].version);
       if (currentVersion !== input.expectedVersion) throw new ProviderConnectionConflictError(currentVersion);
       if (prior.rows[0].connection_status === "REVOKED") throw new Error("PROVIDER_CONNECTION_REVOKED");
       const saved = await client.query<ConnectionRow>(
@@ -343,7 +345,7 @@ export class PostgresProviderConnectionRepository {
         [input.tenantId, input.connectionId, input.actorId],
       );
       await this.audit(client, {
-        tenantId: input.tenantId, applicationId: "eper", environment: input.auditEnvironment,
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.auditEnvironment,
         actorId: input.actorId, action: "provider.connection.rotate_secret_reference",
         resourceId: input.connectionId, correlationId: input.correlationId,
       });
@@ -358,10 +360,11 @@ export class PostgresProviderConnectionRepository {
   }
 
   async revoke(input: {
-    tenantId: string; connectionId: string; actorId: string; expectedVersion: number;
+    tenantId: string; applicationId: string; connectionId: string; actorId: string; expectedVersion: number;
     correlationId: string; auditEnvironment: AuditEnvironment;
   }): Promise<ProviderConnection> {
     this.validateIdentity(input.tenantId, "TENANT");
+    this.validateIdentity(input.applicationId, "APPLICATION_ID");
     this.validateIdentity(input.connectionId, "CONNECTION_ID");
     this.validateIdentity(input.actorId, "ACTOR");
     this.validateCorrelation(input.correlationId);
@@ -369,12 +372,13 @@ export class PostgresProviderConnectionRepository {
     try {
       await client.query("BEGIN");
       await this.setTenantContext(client, input.tenantId);
+      await this.setApplicationContext(client, input.applicationId);
       const prior = await client.query<{ version: number | string }>(
         "SELECT version FROM eper_provider_connections WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",
         [input.tenantId, input.connectionId],
       );
       if (!prior.rows[0]) throw new ProviderConnectionNotFoundError();
-      const currentVersion = Number(prior.rows[0].version);
+      const bindings = await client.query<{ application_id: string }>(\n        "SELECT application_id FROM eper_provider_connection_applications WHERE tenant_id = $1 AND connection_id = $2 FOR UPDATE",\n        [input.tenantId, input.connectionId],\n      );\n      if (bindings.rows.length !== 1 || bindings.rows[0].application_id !== input.applicationId) {\n        throw new Error("PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED");\n      }\n      const currentVersion = Number(prior.rows[0].version);
       if (currentVersion !== input.expectedVersion) throw new ProviderConnectionConflictError(currentVersion);
       const saved = await client.query<ConnectionRow>(
         `UPDATE eper_provider_connections SET connection_status = 'REVOKED',
@@ -393,7 +397,7 @@ export class PostgresProviderConnectionRepository {
         [input.tenantId, input.connectionId, input.actorId],
       );
       await this.audit(client, {
-        tenantId: input.tenantId, applicationId: "eper", environment: input.auditEnvironment,
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.auditEnvironment,
         actorId: input.actorId, action: "provider.connection.revoke",
         resourceId: input.connectionId, correlationId: input.correlationId,
       });
