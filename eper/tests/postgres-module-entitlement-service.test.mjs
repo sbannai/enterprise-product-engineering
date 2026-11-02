@@ -21,7 +21,7 @@ function makePool(row) {
         tariff_assignment_status: "active",
         tariff_starts_at: "2026-10-01T00:00:00Z",
         tariff_ends_at: null,
-        tariff_max_applications: 1,
+        max_applications: 1,
         active_application_count: 1,
         ...row,
       }], rowCount: 1 };
@@ -155,7 +155,7 @@ test("module access denies every application when active assignments exceed the 
   });
   const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
   assert.deepEqual(await service.checkModule(context, "billing"), {
-    allowed: false, reason: "tariff_overage",
+    allowed: false, reason: "tariff_application_limit_exceeded",
   });
 });
 
@@ -167,7 +167,7 @@ test("application add-on access is denied during tariff overage as well", async 
   });
   const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
   assert.deepEqual(await service.checkApplicationAddon(context, "marketing"), {
-    allowed: false, reason: "tariff_overage",
+    allowed: false, reason: "tariff_application_limit_exceeded",
   });
 });
 
@@ -179,7 +179,7 @@ test("module access fails closed when a customer has no active tariff assignment
   });
   const service = new PostgresModuleEntitlementService(pool, { async isAssignedToTenant() { return true; } });
   assert.deepEqual(await service.checkModule(context, "billing"), {
-    allowed: false, reason: "tariff_missing",
+    allowed: false, reason: "tariff_inactive",
   });
 });
 
