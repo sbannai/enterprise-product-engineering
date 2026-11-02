@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { PostgresProviderConnectionRepository } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
+import { PostgresProviderValidationStore } from "../dist/packages/integrations/postgres-provider-validation-store.js";
+import { ProviderConnectionValidationService } from "../dist/packages/integrations/provider-connection-validation-service.js";
 
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
@@ -65,12 +67,36 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       );
       assert.equal(unscoped.rowCount, 0, "forced RLS denies reads without tenant context");
 
-      await withScope(pool, tenantA, null, async (client) => {
-        await client.query(
-          "UPDATE eper_provider_connections SET connection_status='ACTIVE' WHERE tenant_id=$1 AND connection_id=$2",
-          [tenantA, connectionId],
-        );
+      const validationStore = new PostgresProviderValidationStore(pool);
+      const validation = new ProviderConnectionValidationService(
+        validationStore,
+        { async resolve(reference) {
+          assert.equal(reference, "vault://tenant-a/provider/credential-v1");
+          return { token: "synthetic-only" };
+        } },
+        { get(key, version) {
+          assert.equal(key, "test-adapter");
+          assert.equal(version, "1");
+          return { async validateCredentials(input) {
+            assert.equal(input.environment, "sandbox");
+            assert.equal(input.credentials.token, "synthetic-only");
+            return { ok: true };
+          } };
+        } },
+      );
+      const validated = await validation.validate({
+        tenantId: tenantA, connectionId, actorId, correlationId: "validate-" + suffix,
+        auditEnvironment: "sandbox",
       });
+      assert.deepEqual(validated, {
+        connectionId, outcome: "SUCCEEDED", status: "ACTIVE", version: 2,
+      });
+      assert.equal(JSON.stringify(validated).includes("synthetic-only"), false);
+      const history = await withScope(pool, tenantA, null, async (client) => client.query(
+        "SELECT validation_outcome FROM eper_provider_validation_events WHERE tenant_id=$1 AND connection_id=$2",
+        [tenantA, connectionId],
+      ));
+      assert.deepEqual(history.rows.map(row => row.validation_outcome), ["SUCCEEDED"]);
       await repository.bindApplication({
         tenantId: tenantA, applicationId: appA, connectionId, actorId,
         allowedCapabilities: ["email.send"], correlationId: "bind-" + suffix,
@@ -121,9 +147,9 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       const rotated = await repository.rotateSecretReference({
         tenantId: tenantA, connectionId, actorId,
         secretReference: "vault://tenant-a/provider/credential-v2",
-        expectedVersion: 1, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
+        expectedVersion: 2, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
       });
-      assert.equal(rotated.version, 2);
+      assert.equal(rotated.version, 3);
       assert.equal(rotated.status, "PENDING_VALIDATION");
       const suspended = await withScope(pool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
@@ -135,7 +161,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         tenantId: tenantA, connectionId, actorId, expectedVersion: 2,
         correlationId: "revoke-" + suffix, auditEnvironment: "sandbox",
       });
-      assert.equal(revoked.version, 3);
+      assert.equal(revoked.version, 4);
       assert.equal(revoked.status, "REVOKED");
       const binding = await withScope(pool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
