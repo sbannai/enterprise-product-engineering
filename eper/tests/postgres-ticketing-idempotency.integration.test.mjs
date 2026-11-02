@@ -99,6 +99,24 @@ test("live PostgreSQL ticket creation idempotency: concurrency, conflict, tenant
       assert.equal(count.rows[0].count, 2);
     });
 
+    await t.test("customer ticket listing binds pagination and keeps tenant/application filters", async () => {
+      const prefix = "ticket-page-" + randomUUID();
+      await store.create(identity, { ...input, title: prefix + "-first" }, "ticket-page-first-" + randomUUID());
+      await store.create(identity, { ...input, title: prefix + "-second" }, "ticket-page-second-" + randomUUID());
+      const otherIdentity = { ...identity, tenantId: tenant + "-other" };
+      await store.create(otherIdentity, { ...input, title: prefix + "-foreign" }, "ticket-page-foreign-" + randomUUID());
+
+      const firstPage = await store.list({ tenantId: tenant }, { applicationId: app, search: prefix, limit: 1, offset: 0 });
+      const secondPage = await store.list({ tenantId: tenant }, { applicationId: app, search: prefix, limit: 1, offset: 1 });
+      const allOwned = await store.list({ tenantId: tenant }, { applicationId: app, search: prefix, limit: 10, offset: 0 });
+
+      assert.equal(firstPage.length, 1);
+      assert.equal(secondPage.length, 1);
+      assert.notEqual(firstPage[0].id, secondPage[0].id);
+      assert.equal(allOwned.length, 2);
+      assert.ok(allOwned.every(ticket => ticket.title.startsWith(prefix)));
+    });
+
     await t.test("missing ticket mutations do not append lifecycle audit events", async () => {
       const missingId = randomUUID();
       assert.equal(await store.changeStatus(identity, missingId, "resolved"), null);

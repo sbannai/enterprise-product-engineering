@@ -26,6 +26,22 @@ jobs:
     name: Chromium OIDC login, protected access, logout and revocation
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_local_only_password
+          POSTGRES_DB: eper_test_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_test_local"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://eper:eper_local_only_password@127.0.0.1:5432/eper_test_local
     defaults:
       run:
         working-directory: eper
@@ -42,7 +58,7 @@ jobs:
         run: npm install --no-save --package-lock=false playwright@1.56.1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Build EPER
-        run: npm run build
+      - name: Run fresh-clone PostgreSQL migrations and integration verification
+        run: npm run dev:verify
       - name: Run real-browser customer OIDC lifecycle
         run: node --test tests/customer-oidc-browser.e2e.mjs

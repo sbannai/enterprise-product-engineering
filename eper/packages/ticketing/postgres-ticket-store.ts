@@ -154,7 +154,7 @@ export class PostgresTicketStore {
     const result = await this.pool.connect().then(async client => {
       try {
         return await client.query<Record<string, unknown>>(
-          `SELECT * FROM eper_support_tickets${clauses.length ? " WHERE " + clauses.join(" AND ") : ""} ORDER BY created_at DESC LIMIT ${values.length - 1} OFFSET ${values.length}`, values,
+          "SELECT * FROM eper_support_tickets" + (clauses.length ? " WHERE " + clauses.join(" AND ") : "") + " ORDER BY created_at DESC LIMIT $" + (values.length - 1) + " OFFSET $" + values.length, values,
         );
       } finally { client.release(); }
     });

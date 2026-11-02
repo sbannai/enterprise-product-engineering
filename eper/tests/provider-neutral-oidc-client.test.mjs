@@ -81,7 +81,10 @@ test("callback rejects an invalid audience",async()=>{
 test("callback rejects a bad signature",async()=>{
   const store=storeFake(); const client=clientWith(()=>{
     const good=jwt({nonce:store.nonce});
-    return good.slice(0,-2)+"xx";
+    const [encodedHeader, encodedClaims, encodedSignature] = good.split(".");
+    const corruptedSignature = Buffer.from(encodedSignature, "base64url");
+    corruptedSignature[0] ^= 0x01;
+    return [encodedHeader, encodedClaims, corruptedSignature.toString("base64url")].join(".");
   });
   const started=await client.beginLogin(store); store.nonce=new URL(started.authorizationUrl).searchParams.get("nonce");
   await assert.rejects(()=>client.completeLogin(store,"authorization-code",started.state),{message:"EPER_OIDC_SIGNATURE_INVALID"});
