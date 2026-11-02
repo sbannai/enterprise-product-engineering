@@ -112,6 +112,7 @@ export class PostgresCustomerLifecycleStore {
     tariffAssignmentStatus: string | null; tariffEffective: boolean;
     tariffAccessState: "customer_inactive" | "tariff_missing" | "tariff_inactive" | "tariff_not_started" | "tariff_expired" | "over_allowance" | "within_allowance";
     usageEvaluatedAt: string;
+    activeApplicationIds: string[];
     maxApplications: number | null; activeApplicationCount: number;
     allowanceStatus: "not_configured" | "within_allowance" | "over_allowance";
   }>> {
@@ -122,6 +123,7 @@ export class PostgresCustomerLifecycleStore {
         tariff_assignment_status: string | null; tariff_effective: boolean | null;
         tariff_starts_at: string | Date | null; tariff_ends_at: string | Date | null;
         usage_evaluated_at: string | Date;
+        active_application_ids: string[];
         max_applications: number | string | null; active_application_count: number | string;
       }>(`
         SELECT c.tenant_id, c.customer_status, c.status_reason, c.effective_at, c.version, c.updated_at, c.updated_by,
@@ -131,7 +133,10 @@ export class PostgresCustomerLifecycleStore {
                NOW() AS usage_evaluated_at,
                t.max_applications,
                (SELECT COUNT(*) FROM eper_tenant_application_assignment a
-                 WHERE a.tenant_id=c.tenant_id AND a.assignment_status='active') AS active_application_count
+                 WHERE a.tenant_id=c.tenant_id AND a.assignment_status='active') AS active_application_count,
+               ARRAY(SELECT a.application_id FROM eper_tenant_application_assignment a
+                      WHERE a.tenant_id=c.tenant_id AND a.assignment_status='active'
+                      ORDER BY a.application_id) AS active_application_ids
           FROM eper_customer_account c
           LEFT JOIN eper_customer_tariff_assignment t ON t.tenant_id=c.tenant_id
          ORDER BY c.tenant_id LIMIT 5000
@@ -156,7 +161,7 @@ export class PostgresCustomerLifecycleStore {
           tariffVersion: row.tariff_version == null ? null : Number(row.tariff_version),
           billingBasis: row.billing_basis, tariffAssignmentStatus: row.tariff_assignment_status,
           tariffEffective, tariffAccessState, usageEvaluatedAt: new Date(row.usage_evaluated_at).toISOString(),
-          maxApplications, activeApplicationCount, allowanceStatus };
+          activeApplicationIds: row.active_application_ids ?? [], maxApplications, activeApplicationCount, allowanceStatus };
       });
     } finally {
       client.release();
