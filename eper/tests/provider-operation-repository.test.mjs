@@ -110,7 +110,7 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
   assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF o SKIP LOCKED")));
   assert.ok(calls.some(call => call.sql.includes("b.binding_status='ACTIVE'") && call.sql.includes("pc.connection_status='ACTIVE'") && call.sql.includes("b.allowed_capabilities ? o.capability_key")));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'")));
-  assert.ok(calls.some(call => call.sql.includes("provider.operation.dispatch_claimed")));
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events") && call.values.includes("provider.operation.dispatch_claimed")));
 });
 
 test("worker returns null when no due operation is available", async () => {
@@ -123,7 +123,7 @@ test("worker returns null when no due operation is available", async () => {
 
 test("outcome transition persists safe retry metadata and audit", async () => {
   const { repository, calls } = fixture({
-    savedOutcome: {
+    outcome: {
       operation_id: "00000000-0000-4000-8000-000000000001",
       tenant_id: "tenant-a", application_id: "app-a",
       connection_id: "00000000-0000-4000-8000-000000000002",
@@ -148,7 +148,7 @@ test("outcome transition persists safe retry metadata and audit", async () => {
 
 test("retry budget exhaustion moves the operation to NEEDS_ATTENTION", async () => {
   const { repository, calls } = fixture({
-    savedOutcome: {
+    outcome: {
       operation_id: "00000000-0000-4000-8000-000000000001",
       tenant_id: "tenant-a", application_id: "app-a",
       connection_id: "00000000-0000-4000-8000-000000000002",
@@ -170,7 +170,7 @@ test("retry budget exhaustion moves the operation to NEEDS_ATTENTION", async () 
 });
 
 test("outcome transition rejects stale or non-dispatching operations", async () => {
-  const { repository } = fixture({ savedOutcome: null });
+  const { repository } = fixture({ outcome: null });
   await assert.rejects(() => repository.recordOutcome({
     tenantId: "tenant-a", applicationId: "app-a",
     operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
