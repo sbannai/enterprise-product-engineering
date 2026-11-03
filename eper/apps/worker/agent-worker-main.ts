@@ -57,15 +57,20 @@ const sleep = (ms: number) => new Promise<void>((resolve) => {
 const pool = createPostgresPaymentPool();
 try {
   await assertAuditStoreReady(pool);
-  const schema = await pool.query<{ jobs: string | null; drafts: string | null; approvals: string | null; configs: string | null }>(`
-    SELECT to_regclass('public.eper_agent_jobs')::text AS jobs,
-           to_regclass('public.eper_agent_job_drafts')::text AS drafts,
-           to_regclass('public.eper_agent_approvals')::text AS approvals,
-           to_regclass('public.eper_agent_configurations')::text AS configs
-  `);
-  const tables = schema.rows[0];
-  if (!tables || Object.values(tables).some((value) => !value)) {
-    throw new Error("AGENT_WORKER_SCHEMA_NOT_READY");
+  const schemaClient = await pool.connect();
+  try {
+    const schema = await schemaClient.query<{ jobs: string | null; drafts: string | null; approvals: string | null; configs: string | null }>(`
+      SELECT to_regclass('public.eper_agent_jobs')::text AS jobs,
+             to_regclass('public.eper_agent_job_drafts')::text AS drafts,
+             to_regclass('public.eper_agent_approvals')::text AS approvals,
+             to_regclass('public.eper_agent_configurations')::text AS configs
+    `);
+    const tables = schema.rows[0];
+    if (!tables || Object.values(tables).some((value) => !value)) {
+      throw new Error("AGENT_WORKER_SCHEMA_NOT_READY");
+    }
+  } finally {
+    schemaClient.release();
   }
   const store = new PostgresAgentStore(pool);
   console.log("EPER agent worker started", { workerId, tenantId, applicationId, pollIntervalMs });
