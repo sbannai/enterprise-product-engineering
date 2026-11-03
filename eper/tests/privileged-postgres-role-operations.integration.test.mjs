@@ -94,11 +94,45 @@ test("dedicated provider-catalogue role performs audited create and rolls back c
       const created = await repository.create({ ...input, environment: "sandbox" });
       assert.equal(created.providerKey, providerKey);
       assert.equal(created.version, 1);
+
+      await assert.rejects(repository.update({
+        ...context, providerKey, expectedVersion: 1, displayName: "Must roll back",
+        environment: "invalid",
+      }));
+      const afterUpdateRollback = await repository.get(providerKey);
+      assert.equal(afterUpdateRollback?.displayName, "Role test provider");
+      assert.equal(afterUpdateRollback?.version, 1);
+
+      const updated = await repository.update({
+        ...context, providerKey, expectedVersion: 1,
+        displayName: "Role test provider updated", environment: "sandbox",
+      });
+      assert.equal(updated.version, 2);
+      assert.equal(updated.displayName, "Role test provider updated");
+
+      await assert.rejects(repository.setStatus({
+        ...context, providerKey, expectedVersion: 2, status: "SUSPENDED",
+        environment: "invalid",
+      }));
+      const afterStatusRollback = await repository.get(providerKey);
+      assert.equal(afterStatusRollback?.status, "ACTIVE");
+      assert.equal(afterStatusRollback?.version, 2);
+
+      const suspended = await repository.setStatus({
+        ...context, providerKey, expectedVersion: 2, status: "SUSPENDED",
+        environment: "sandbox",
+      });
+      assert.equal(suspended.status, "SUSPENDED");
+      assert.equal(suspended.version, 3);
+
       const audit = await ownerPool.query(
-        "SELECT action FROM eper_audit_events WHERE resource_id=$1",
+        "SELECT action FROM eper_audit_events WHERE resource_id=$1 ORDER BY occurred_at, action",
         [providerKey],
       );
-      assert.deepEqual(audit.rows.map(row => row.action), ["provider.catalogue.create"]);
+      assert.deepEqual(audit.rows.map(row => row.action).sort(), [
+        "provider.catalogue.create", "provider.catalogue.update",
+        "provider.catalogue.suspended",
+      ].sort());
     } finally {
       await runtimePool.end();
       await ownerPool.end();
