@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { PostgresProviderConnectionRepository } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
+import { PostgresEncryptedProviderPayloadStore } from "../dist/packages/integrations/postgres-encrypted-provider-payload-store.js";
 import {
   PostgresProviderOperationRepository,
   ProviderOperationStateConflictError,
@@ -21,6 +22,12 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
     const providerKey = "provider-op-" + suffix;
     const connectionRepository = new PostgresProviderConnectionRepository(pool);
     const operationRepository = new PostgresProviderOperationRepository(pool);
+    const payloadStore = new PostgresEncryptedProviderPayloadStore(
+      pool, Buffer.alloc(32, 23), {
+        async authorize() { return true; },
+        async authorizeCreate() { return true; },
+      },
+    );
     let connectionId;
     const auditEnvironment = "sandbox";
 
@@ -162,8 +169,43 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         [tenantId, applicationId],
       );
       assert.ok(audit.rows.length >= 10, "queue, claim, renewal, retry and recovery transitions must be audited");
+
+      const providerPayload = {
+        to: ["synthetic@example.invalid"],
+        body: "atomic-payload-" + suffix,
+      };
+      const payloadDigest = createHash("sha256")
+        .update(JSON.stringify(providerPayload), "utf8").digest("hex");
+      const atomicInput = {
+        tenantId, applicationId, connectionId, capabilityKey: "email.send",
+        capabilityVersion: "1", idempotencyKey: "atomic-" + suffix,
+        correlationId: "atomic-correlation-" + suffix, requestDigest: payloadDigest,
+        actorId, auditEnvironment, payload: providerPayload, payloadStore,
+      };
+      const atomicFirst = await operationRepository.enqueueWithPayload(atomicInput);
+      assert.equal(atomicFirst.created, true);
+      assert.equal(atomicFirst.operation.requestDigest, payloadDigest);
+      assert.deepEqual(await payloadStore.get({
+        tenantId, applicationId, operationId: atomicFirst.operation.operationId,
+        capabilityKey: "email.send", reference: atomicFirst.operation.payloadReference,
+        digest: payloadDigest,
+      }), providerPayload);
+      const payloadCountAfterCreate = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, atomicFirst.operation.operationId],
+      );
+      assert.equal(payloadCountAfterCreate.rows[0].count, 1, "initial enqueue must create exactly one payload");
+      const atomicDuplicate = await operationRepository.enqueueWithPayload(atomicInput);
+      assert.equal(atomicDuplicate.created, false);
+      assert.equal(atomicDuplicate.operation.operationId, atomicFirst.operation.operationId);
+      const payloadCountAfterRetry = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, atomicFirst.operation.operationId],
+      );
+      assert.equal(payloadCountAfterRetry.rows[0].count, 1, "idempotent retry must not create an orphan duplicate payload");
     } finally {
       if (connectionId) {
+        await pool.query("DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
         await pool.query("DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
         await pool.query("DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
         await pool.query("DELETE FROM eper_provider_connections WHERE tenant_id=$1 AND connection_id=$2", [tenantId, connectionId]).catch(() => undefined);
