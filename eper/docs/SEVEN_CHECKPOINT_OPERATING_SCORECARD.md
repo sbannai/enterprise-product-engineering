@@ -673,3 +673,74 @@ The branches implement tariff enforcement differently:
 For the combined candidate, retain a **single-statement** access decision (prefer #350's LATERAL count query shape), add #348's explicit readiness check for both tariff and tenant-application tables, and preserve the shared policy evaluator. This avoids a two-statement read window in #355 where tariff/application state could change between the guard query and the entitlement query. Merge #355's provider-specific role permissions and stores separately into the role-definition/assignment code, preserving existing delegation behavior from #348.
 
 No source files were changed in this analysis step. This is an integration resolution instruction, not a claim that the branches have been merged or tested together.
+
+
+## Dated engineering record — 2026-11-03 15:20 IST
+
+**Dynamically resolved main:** `51b803193c7009c1e7f8115cbb1022233285e940`. The main ref was re-read during this run and still points to this commit.
+
+### Merged foundations and mainline evidence
+
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; compare confirms this merge commit is an ancestor of current main.
+- PR #310 is closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; compare confirms this merge commit is an ancestor of current main.
+- Main push workflows against the exact current SHA: EPER CI [41436998850](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998850), 228/38 matrix [41436998930](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998930), G9 reconciliation [41436998941](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998941), six-family HTTP [41436998952](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998952), QA [41436998942](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998942), and container smoke [41436998825](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998825) passed.
+- Main integrated validation [41436998876](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998876) failed in the live PostgreSQL payment/entitlement job. Exact job log [125249170720](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998876/job/125249170720) shows `live PostgreSQL commercial access guard denies tariff overage, then restores only the retained application after versioned revocation`: expected `{ allowed: false, reason: "tariff_overage" }`, actual `{ allowed: true, reason: "allowed" }`. Main is not fully green.
+
+### Current PR consolidation and exact-head evidence
+
+The live open-PR set is #348, #356 and #365. PRs #350 and #357 were closed as superseded only after their workflow head `f6139e92303d3cb0804e69841d7aed0b85f8fd33` was included as the second parent of merge commit `1c6e7b9a7ccdedb6a0c6365d159eefa145f78ba9` in #365. Their Workflow Studio code and draft migration remain in the combined candidate; no source implementation was discarded.
+
+- **PR #348** remains draft at `e726dca47dad27c278ad011abf59f98aff8eb8df`. Its eight exact-head workflows all pass: fresh clone [41491401582](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41491401582), PostgreSQL [41491401877](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41491401877), customer OIDC browser [41491401640](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41491401640), 228/38 matrix [41491401593](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41491401593), plus workflow YAML, QA, payment contracts and controlled technical simulation. The tariff correction is present on this branch; its own branch still lacks the combined release/integration gate.
+- **PR #365** remains draft at `b6ccf82f76766346a44f99cad6ec8508c366350f`, based on integration branch `bd93fc6ccb17aa6a472ae4756bf6e1bbd7b8b7a5`, not main. GitHub currently reports it mergeable against that integration base. All nine returned workflows on this exact head pass: workflow YAML [41615317208](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317208), 228/38 matrix [41615317503](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317503), technical simulation [41615317105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317105), payment contracts [41615317107](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317107), customer OIDC browser [41615317110](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317110), fresh clone [41615317245](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317245), same-commit integrated validation [41615317207](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317207), QA [41615317104](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317104), and live PostgreSQL integration [41615317188](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41615317188).
+- The first combined build at `1c6e7b9...` found a duplicated `evaluateCustomerTariffAccess` definition created by the three-way file merge. The duplicate was removed on the owning #365 branch; the new exact head `b6ccf82...` then passed the complete returned workflow set. Checks from the superseded head are not used as current evidence.
+- PR #356 is this documentation-only scorecard refresh. Its prior exact head `d29d898...` still reproduces the mainline tariff failure; this new record updates the open-PR and integration evidence.
+
+### Pointer 1 — v34 to approved 228/38 baseline
+
+The mainline crosswalk preserves the original 45 v34 source rows and original acceptance statements. It records 0 exact full-coverage mappings, 45 partial links to shared controls, and 45 additive v1.6.0 draft candidates. The ten owner-directed commercial additions CW-046–CW-055 are separate from the original 45. No exact chapter requirement locator is fabricated; no approved 228 requirement or one of the 38 chapters is changed. Owner disposition of the additive draft remains outstanding.
+
+The #365 exact-head matrix reports 228 requirement rows and 38 chapter suites with no failed chapters; 9 chapters have HTTP pilot applications and 29 do not in this scope. This is automated technical evidence, not feature-by-feature owner acceptance.
+
+### Pointer 2 — reproducible fresh-clone setup
+
+On #365 head `b6ccf82...`, fresh-clone `npm run dev:verify` completed with 1,376 passed, 0 failed and 0 skipped. The script safety-checks loopback/local database identity, typechecks/builds, invokes all seven migration groups twice (payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity), then runs the full suite with live PostgreSQL tests enabled. The run reports `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+
+### Pointer 3 — PostgreSQL persistence and recovery
+
+The same fresh-clone run reports `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`, 74 source/restored base tables and 7 migration-ledger tables. The exact-head PostgreSQL lane exercises payment/receipt transactions, customer lifecycle/audit atomicity, tariff enforcement, role delegation/application scope, platform provisioning/remediation, scheduler dispatch race and idempotency. This is disposable local/CI restore proof; production backup destination, encryption/key custody, retention, RPO/RTO and an independent restore rehearsal remain open.
+
+### Pointer 4 — customer identity and provider-neutral OIDC
+
+PR #310 supplies the merged durable identity/OIDC protocol and PostgreSQL session foundation. PR #365 now passes a real Chromium customer OIDC browser journey: customer workspace/support access, protected route, logout and revocation (1/1). The browser job also passes the Product Admin application-remediation journey (1/1), but that path uses the current Product Admin credential flow; it is not Product Admin OIDC.
+
+Customer login is not the remaining blocker. Product Admin catalogue/credential access still uses a bearer credential held in page memory. Durable Product Admin browser OIDC, secure cookies, CSRF, role/assignment integration and its own browser E2E remain outstanding. In addition, `main.ts` still wires the platform-admin credential store and Product Admin provider catalogue repository to the shared payment pool; the store contract requires a separate least-privilege platform-admin pool/role with explicit grants and live privilege tests.
+
+### Pointer 5 — customer workspace and support
+
+The combined candidate's customer browser journey passes. Mainline support tests cover ticket submission, customer list/history/replies, tenant/application scoping, admin queue/triage, assignment, severity/P1 evidence rules, internal-note/customer-reply visibility separation, duplicate disposition and paginated CSV export with formula neutralization. Live PostgreSQL ticketing idempotency/tenant/audit tests are included in the suite.
+
+Service-level policy is not complete: owner-defined SLA targets, service calendars/pause rules, response/resolution timers, escalation thresholds and breach evidence are not yet demonstrated. Support-admin browser authentication/delegation and the full admin-side browser journey also remain.
+
+### Pointer 6 — scheduler, workflow operations and remaining capabilities
+
+The scheduler implementation has a continuous worker loop, durable claims/leases, renewal/fencing, idempotency, bounded retry, dead-letter handling, approved dispatch rechecks, stale-lease recovery and a dispatch-start fence. Tests cover lease loss, pause/cancel races, shutdown around the fence and PostgreSQL restart recovery. The combined candidate adds Customer Admin Workflow Studio, durable drafts, rule graph validation, publication and application-scoped execution integration.
+
+The campaign worker remains disabled until a reviewed deployment-owned adapter is supplied. The API does not start the worker; it must run as a separately supervised process. Production supervision, restricted worker identity, delivery metrics/alerts, load evidence and an independently rehearsed recovery path remain open. No real provider dispatch was run.
+
+### Pointer 7 — release and independent handover
+
+The #365 exact-head same-commit gate passes release artifact packaging/checksum and G9 traceability; its local restore smoke passes. This does not establish production recovery. The repository rulesets API returns an empty collection; the branch-protection endpoint returns HTTP 403 to the connected integration, so required protection settings cannot be certified. A second engineer has not yet demonstrated the full clean-clone/build/test/PR/release/rollback path.
+
+### Seven-checkpoint assessment
+
+| Checkpoint | Assessment | Evidence and remaining boundary |
+|---|---|---|
+| 1. Product USP and positioning | AMBER | Original v34 crosswalk preserved; additive v1.6.0 draft still needs owner disposition. |
+| 2. CI and persistence foundations | AMBER overall; candidate GREEN | Main integrated PostgreSQL check fails; #365 exact-head fresh clone, seven migration groups/repeatability, live PostgreSQL and disposable restore pass. Production DR remains open. |
+| 3. Architecture and execution boundaries | AMBER | Customer OIDC/session/tenant access browser proof passes; Product Admin OIDC and restricted platform-admin DB role/pool remain. |
+| 4. Workflow execution design and schema | GREEN candidate; AMBER operations | Workflow Studio drafts/rules/publication integrate and pass; worker adapter/supervision/metrics/recovery remain. |
+| 5. Integrated validation | RED main; GREEN candidate | Main tariff-overage assertion fails; #365 combined exact head passes same-commit validation. |
+| 6. PR consolidation and governance | AMBER | #350/#357 duplicates closed with code preserved in #365; branch protection/ruleset access and independent review remain. |
+| 7. Workflow publisher/runtime implementation | AMBER | Publisher and worker mechanics have tests; production adapter, supervised host, observability and recovery proof remain. |
+
+**Next engineering actions:** (1) implement the dedicated least-privilege platform-admin pool/role and explicit grants, with live PostgreSQL credential/catalogue transaction and privilege tests; (2) complete Product Admin OIDC/session and support SLA/admin browser work; (3) supply and supervise the scheduler adapter with metrics/recovery; (4) obtain owner-accessible branch/ruleset evidence and complete second-engineer handover; (5) only then reconcile the combined candidate to main, verify the merge SHA and rerun exact-main integrated validation.
