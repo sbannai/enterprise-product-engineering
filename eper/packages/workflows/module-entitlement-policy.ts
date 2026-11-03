@@ -109,31 +109,6 @@ export function evaluateApplicationAddonAccess(input: AddonAccessInput): AccessD
 }
 
 
-export interface CustomerTariffAccessInput {
-  assignmentStatus: string | null;
-  maxApplications: number | string | null;
-  activeApplicationCount: number | string;
-  startsAt?: string | Date | null;
-  endsAt?: string | Date | null;
-  now?: Date;
-}
-
-/** A customer tariff is a hard server-side access boundary, not a billing display field. */
-export function evaluateCustomerTariffAccess(input: CustomerTariffAccessInput): AccessDecision {
-  if (input.assignmentStatus !== "active" || input.maxApplications === null) return deny("tariff_inactive");
-  const allowance = Number(input.maxApplications);
-  const activeCount = Number(input.activeApplicationCount);
-  if (!Number.isSafeInteger(allowance) || allowance < 1 ||
-      !Number.isSafeInteger(activeCount) || activeCount < 0) return deny("tariff_inactive");
-  const now = (input.now ?? new Date()).getTime();
-  const starts = toTime(input.startsAt);
-  const ends = toTime(input.endsAt);
-  if (starts !== null && now < starts) return deny("tariff_not_started");
-  if (ends !== null && now >= ends) return deny("tariff_expired");
-  if (activeCount > allowance) return deny("tariff_overage");
-  return { allowed: true, reason: "allowed" };
-}
-
 export interface AcceptedPriceSnapshot {
   priceId: string;
   priceVersion: number;
