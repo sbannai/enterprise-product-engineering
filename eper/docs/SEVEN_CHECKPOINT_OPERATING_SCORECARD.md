@@ -675,3 +675,26 @@ The five divergent refs were reviewed at patch level against main SHA `a3635ffbb
 - `work/ch463-contract-draft-domain-reconciliation-2026-10-19` (commit `96788ab75224fd0eac540d779024ad11f556377c`): replaces the earlier unresolved domain-identity conflict narrative with the approved Option A source-correction decision, candidate source locators for REQ-46301–46306, explicit contract/event-name guardrails, and gate counts. Its source-precedence correction is reflected in current mainline; retain the branch as historical decision rationale, not as a merge candidate. It explicitly records 0/6 approved HLD→LLD pairs, 0/18 verified DATA/API/EVENT bindings, 0/6 approved acceptance oracles, SRC-003/G3 OPEN/NO-GO, Business UAT HOLD/NOT AUTHORIZED/NOT EXECUTED, and G9 NOT FROZEN.
 
 **Disposition:** no unique branch is approved for wholesale merge. Preserve all five refs until owner/reference checks and a documented keep/archive decision are complete. The RC4 packaging approach may merit a separate isolated improvement proposal after validating the current release workflow; no release artifact was produced by this review.
+
+
+## Provider delivery boundary review — 2026-11-03 15:29 UTC
+
+Reviewed the current `main` tree and implementation contracts after the exact-head PostgreSQL gate completed. The durable provider-operation queue is real and its PostgreSQL lifecycle test covers enqueue/idempotency, concurrent claim, lease renewal, fencing, retry exhaustion and explicit expired-lease recovery. The queue is **not yet an executable provider-delivery system**:
+
+- `eper/docs/PROVIDER_OPERATION_PAYLOAD_HANDOFF_CONTRACT.md` explicitly requires an approved encrypted payload store, tenant/application/capability/operation authorization on payload reads, digest verification, and retention/deletion policy. Current tree contains the handoff contract and migration `018_provider_operation_payload_reference.sql`, but no payload-store implementation or payload-store adapter/test files.
+- The provider operation repository persists an opaque reference and digest; that does not prove the referenced payload exists, is encrypted, is scoped, or can be safely reconstructed by a worker.
+- Current tree contains provider configuration resolution and connection/operation repositories, but no dedicated provider-operation worker entrypoint or adapter registry/secret-resolver implementation. The existing agent worker is a separate approval-oriented job path, not a provider delivery worker.
+- `eper/docs/WORKFLOW_OUTBOX_OPERATIONS.md` documents the continuous-process pattern and explicitly leaves host supervision, metrics/alerts, dead-letter operations and an approved dispatcher as deployment responsibilities. Those documented responsibilities are not evidence of configured production operations.
+
+### Seven-checkpoint impact
+
+| Checkpoint | Updated evidence / boundary |
+|---|---|
+| 2. CI and persistence foundations | GREEN for local/CI PostgreSQL queue lifecycle; AMBER for encrypted payload persistence, retention and production backup/recovery controls. |
+| 4. Workflow execution design | AMBER: queue leases, fencing and bounded recovery are tested; provider payload handoff and provider-specific worker execution are not implemented. |
+| 5. Integrated validation | GREEN for the exact PR #377 technical checks; this does not validate a real provider dispatch path. |
+| 7. Worker/publisher runtime | AMBER: agent worker and workflow outbox runtimes exist as separate paths; no production-ready provider-operation worker, approved adapter registry, secret resolver, independent supervision or alert integration is evidenced. |
+
+**Next implementation slice:** build the encrypted payload-store interface and local/test implementation first; bind payload reference creation to enqueue idempotency; enforce tenant/application/capability/operation authorization and digest verification on retrieval; add retention/deletion semantics and adversarial PostgreSQL tests. Only after that should the provider-operation worker, adapter registry and server-only secret resolver be connected. Keep real provider dispatch disabled, use synthetic adapters only, and provision no cloud resources.
+
+This is a code-tree and contract review, not a claim that a production payload vault, worker host, monitoring system or external provider integration exists.
