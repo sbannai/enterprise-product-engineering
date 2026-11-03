@@ -60,11 +60,13 @@ test("credential issue requires durable issuer and returns the bearer token once
 
 test("credential issue rejects privilege escalation through issuer grant ceiling", async () => {
   process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED = "true";
-  const deps = dependencies(), res = response();
+  const deps = dependencies({
+    principal: { ...issuer, permissions: ["platform_admin:credentials:manage"] },
+  }), res = response();
   await handlePlatformAdminCredentialManagementRoute(
     request("/platform/credentials", {
       platformActorId: "new-operator",
-      permissions: ["platform_admin:credentials:manage"],
+      permissions: ["provider_catalogue:manage"],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     }), res, "/platform/credentials", deps,
   );
