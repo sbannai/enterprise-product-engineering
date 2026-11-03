@@ -466,3 +466,48 @@ The available commit-workflow lookup for merge SHA `84e984718f1e4af76377ff4901c4
 | 7. Workflow publisher/runtime implementation | AMBER | No new operational evidence; supervision, observability, restricted credentials and recovery rehearsal remain. |
 
 **Next engineering action:** add durable customer actor role/delegation authorization (without trusting OIDC claims or weakening the least-privilege default), then extend the PostgreSQL Chromium browser journey to exercise the tariff-switch lifecycle as a legitimately authorized customer administrator. No chargeable cloud resources or production external actions are part of this work.
+
+
+## Current engineering snapshot — 2026-11-03 06:50 IST
+
+This dated addendum supersedes earlier open-PR counts and checkpoint claims above for the current workstream. Historical entries are retained as historical records; do not treat their PR numbers or branch states as current.
+
+### Exact main and active PR heads
+
+- Main snapshot: `51b803193c7009c1e7f8115cbb1022233285e940`.
+- PR #348 identity/platform application remediation: head `e726dca47dad27c278ad011abf59f98aff8eb8df`; open, draft, mergeable, 0 commits behind main. Eight returned PR-triggered workflows completed successfully, including PostgreSQL payment-store integration, customer OIDC browser E2E, fresh-clone setup, workflow configuration, payment gateway contracts, controlled QA/UAT simulations and the 228-requirement pilot matrix. The exact-head workflow set does not include the same-commit integrated validation, container runtime smoke or release-candidate build evidence present on #350/#355. The PostgreSQL integration job passed all listed steps, including customer lifecycle, tariff enforcement, role delegation, application remediation, tenant isolation and audit rollback.
+- PR #350 Customer Admin workflow rule engine/designer: head `1dca64617ec715de7ec90cff1bbaf57f87c3e7b7`; open, draft, mergeable, 0 behind. Fourteen returned PR-triggered workflows completed successfully. Same-commit integrated validation passed its six-job workflow: container/six-family health, release/G9, payment/PostgreSQL/receipt contracts, UAT readiness audit, and same-commit gate succeeded; the 228-requirement/38-chapter pilot matrix job was skipped in that integrated workflow. Treat the matrix as not re-proven by that workflow.
+- PR #355 provider configuration/validation foundation: head `85a16fdff22f2b6e48be2bd918134e81db6cb24f`; open, draft, mergeable, 0 behind. Fourteen returned PR-triggered workflows completed successfully. Same-commit integrated validation passed its six-job workflow: container/six-family health, release/G9, payment/PostgreSQL/receipt contracts, UAT readiness audit, and same-commit gate succeeded; the 228-requirement/38-chapter pilot matrix job was skipped in that integrated workflow. Treat the matrix as not re-proven by that workflow.
+- No reviews or inline review threads were returned for these three PRs. All remain drafts. No merge was performed.
+
+### Integration collision map
+
+The three branches are not additive independent patches. Their changed-file sets overlap in API composition and shared entitlement/persistence surfaces:
+
+- `eper/apps/api/main.ts` and `eper/apps/api/server.ts` are modified by all three PRs.
+- `eper/packages/workflows/module-entitlement-policy.ts` and `eper/packages/workflows/postgres-module-entitlement-service.ts` are modified by all three PRs.
+- #348 additionally changes identity, role delegation, customer provisioning and platform application remediation stores/routes/migrations.
+- #350 adds durable workflow-definition drafts, workflow rule-engine behavior and capability composition.
+- #355 adds provider connection authorization, durable provider configuration and validation history.
+
+### Seven-checkpoint status — current assessment
+
+| Checkpoint | Assessment | Evidence boundary / next closure condition |
+|---|---|---|
+| 1. Product USP and requirements | AMBER | Customer lifecycle, tariff enforcement, workflow designer/rules and provider foundations exist on separate draft heads. Preserve the approved 228 requirements / 38 chapters; rerun the pilot matrix after consolidation because #350/#355 integrated runs skipped that job. |
+| 2. CI and PostgreSQL | GREEN on inspected PR heads; AMBER for consolidated main | #348 PostgreSQL integration passed; #350/#355 payment/PostgreSQL contract and integrated jobs passed. No combined three-branch exact-head proof exists. No chargeable cloud provisioning. |
+| 3. Architecture and execution boundaries | AMBER | Tenant/application boundaries and provider/workflow authorization are covered in branch-level tests. Reconcile shared API composition and entitlement policy on one integration head; verify cross-feature authorization and audit semantics. |
+| 4. Workflow execution design and schema | AMBER | #350 durable workflow drafts, publication and rule engine are individually validated. Provider capability composition from #355 and identity/delegation changes from #348 must be exercised together. Operational worker supervision, restricted identity, metrics/alerts and restart/recovery remain separate requirements. |
+| 5. Integrated validation | AMBER | #350/#355 same-commit integrated gates passed, but their 228/38 matrix job was skipped. #348 has no same-commit integrated gate in its returned checks. Run one consolidated exact-head gate including pilot matrix, browser, PostgreSQL, container, release and G9 evidence. |
+| 6. PR consolidation and governance | AMBER | Three open draft PRs (#348/#350/#355), all 0 behind main, with shared-file collisions. Build a controlled integration baseline and resolve conflicts before marking ready or merging. No merge performed. |
+| 7. Workflow runtime and operational readiness | AMBER | Branch-level configuration and execution tests do not establish production operational readiness. Worker supervision, observability, restricted credentials, restart/recovery rehearsal and independent operational ownership remain. |
+
+### Required integration sequence
+
+1. Use #348 as the identity/customer lifecycle and tariff-enforcement foundation; retain its passing PostgreSQL transaction/tenant-isolation evidence.
+2. Integrate #350 workflow drafts, rule evaluation and designer onto the same API/entitlement baseline.
+3. Integrate #355 provider connections and validation history, resolving shared `main.ts`, `server.ts` and entitlement-service conflicts explicitly.
+4. Run the full exact-head integrated suite on the resulting single candidate: build, complete unit suite, PostgreSQL migrations/integration, customer OIDC/browser, workflow configuration, provider authorization/validation, payment/receipt contracts, container/six-family smoke, release artifact, G9 and 228-requirement/38-chapter pilot matrix. No skipped pilot-matrix result may be reported as a pass.
+5. Only after that evidence and review, reconsider draft status and merge sequencing. Keep production UAT authorization separate from engineering CI completion.
+
+No PR was merged, no workflow dispatch was initiated, no external provider was activated, and no chargeable AWS resource was provisioned as part of this snapshot.
