@@ -124,7 +124,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     const pageErrors=[];
     const requestFailures=[];
     const consoleErrors=[];
-    page.on("response",response=>{const url=new URL(response.url());if(url.pathname.startsWith("/customer/"))customerResponses.push(url.pathname+" "+response.status());});
+    page.on("response",async response=>{const url=new URL(response.url());if(url.pathname.startsWith("/customer/")){const body=await response.text().catch(()=>"");customerResponses.push(url.pathname+" "+response.status()+" "+body.slice(0,1000));}});
     page.on("pageerror",error=>pageErrors.push(error.message));
     page.on("requestfailed",request=>{if(request.url().includes("/customer/"))requestFailures.push(request.url()+" "+request.failure()?.errorText);});
     page.on("console",message=>{if(message.type()==="error")consoleErrors.push(message.text());});
@@ -165,10 +165,11 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
     await page.getByLabel("Business impact").fill("The customer workspace support journey must be authenticated and scoped.");
     await page.getByRole("button",{name:"Submit ticket"}).click();
-    await page.getByText(/Ticket submitted\. Reference:/).waitFor();
-    const confirmation=await page.getByText(/Ticket submitted\. Reference:/).textContent();
-    const ticketMatch=confirmation?.match(/Reference:\s*([0-9a-f-]{36})/i);
-    assert.ok(ticketMatch,"customer confirmation must include the durable ticket reference: "+confirmation);
+    await page.waitForFunction(()=>{const value=document.querySelector("#ticketResult")?.textContent||"";return value.startsWith("Ticket submitted. Reference:")||value.startsWith("Submission outcome may be unknown.")},{timeout:10000}).catch(()=>{});
+    const ticketResult=await page.locator("#ticketResult").textContent();
+    assert.match(ticketResult||"",/^Ticket submitted\. Reference:/,"customer ticket submission failed; result="+ticketResult+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
+    const ticketMatch=ticketResult?.match(/Reference:\s*([0-9a-f-]{36})/i);
+    assert.ok(ticketMatch,"customer confirmation must include the durable ticket reference: "+ticketResult);
     ticketId=ticketMatch[1];
     const persistedTicket=await pool.query("SELECT tenant_id,application_id,created_by,status FROM eper_support_tickets WHERE id=$1",[ticketId]);
     assert.equal(persistedTicket.rowCount,1);

@@ -113,6 +113,16 @@ test("permission check requires active actor, tenant, role and explicit permissi
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
 
+test("permission check accepts provider connection permission vocabulary", async () => {
+  const { calls, pool } = fixture();
+  const allowed = await new PostgresWorkflowActorRoleAssignmentStore(pool)
+    .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "provider.connection.validate");
+  assert.equal(allowed, true);
+  const query = calls.find(call => call.sql.includes("SELECT EXISTS"));
+  assert.equal(query.values[4], "provider.connection.validate");
+  assert.ok(query.sql.includes("rd.permissions ? $5"));
+});
+
 test("permission check denies absent permission and rejects unknown permission keys", async () => {
   const denied = fixture({ permissionAllowed: false });
   assert.equal(
@@ -127,4 +137,34 @@ test("permission check denies absent permission and rejects unknown permission k
     /WORKFLOW_ROLE_ASSIGNMENT_PERMISSION_INVALID/,
   );
   assert.equal(invalid.calls.length, 0);
+});
+
+
+test("role assignment directory lists tenant/application history under transaction-local RLS context", async () => {
+  const calls = [];
+  const now = "2026-11-02T05:00:00.000Z";
+  const client = {
+    async query(sql, values = []) {
+      calls.push({ sql, values });
+      if (sql.includes("SELECT r.* FROM eper_workflow_actor_role_assignment r")) {
+        return { rows: [{
+          tenant_id: input.tenantId, application_id: input.applicationId, actor_id: input.actorId,
+          role_id: input.roleId, assignment_status: "revoked", version: 4,
+          assigned_at: now, assigned_by: "admin-01", revoked_at: now, revoked_by: "admin-02",
+          updated_at: now, updated_by: "admin-02",
+        }] };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const store = new PostgresWorkflowActorRoleAssignmentStore({ async connect() { return client; } });
+  const rows = await store.listAssignments(input.tenantId, input.applicationId);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "revoked");
+  assert.equal(rows[0].version, 4);
+  assert.equal(rows[0].revokedBy, "admin-02");
+  assert.ok(calls.some(c => c.sql.includes("set_config('eper.tenant_id'")));
+  assert.ok(calls.some(c => c.sql.includes("set_config('eper.application_id'")));
+  assert.equal(calls.at(-1).sql, "COMMIT");
 });

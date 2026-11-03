@@ -27,6 +27,7 @@ import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-
 import { workflowOutboxAdminUiHtml, isWorkflowOutboxAdminUiRequest } from "./workflow-outbox-admin-ui.js";
 import { adminSupportTicketUiHtml, isAdminSupportTicketUiRequest } from "./admin-support-ticket-ui.js";
 import { adminActorApplicationAssignmentUiHtml, isAdminActorApplicationAssignmentUiRequest } from "./admin-actor-application-assignment-ui.js";
+import { customerRoleManagementUiHtml, isCustomerRoleManagementUiRequest } from "./customer-role-management-ui.js";
 import type { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import type { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import type { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
@@ -55,6 +56,15 @@ import type { PostgresActorApplicationAssignmentStore } from "../../packages/ide
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
+import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
+import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
+import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
+import { handleCustomerRoleDelegationRoute } from "./customer-role-delegation-route.js";
+import type { PostgresWorkflowRoleDelegationStore } from "../../packages/workflows/postgres-workflow-role-delegation-store.js";
+import { handlePlatformCustomerAdminProvisioningRoute } from "./platform-customer-admin-provisioning-route.js";
+import type { PostgresPlatformCustomerAdminProvisioningStore } from "../../packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
+import { handlePlatformApplicationRemediationRoute } from "./platform-application-remediation-route.js";
+import type { PostgresPlatformApplicationRemediationStore } from "../../packages/workflows/postgres-platform-application-remediation-store.js";
 
 
 function acceptsVersionedJson(request: IncomingMessage): boolean {
@@ -502,7 +512,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -599,6 +609,31 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    if (await handlePlatformCustomerAdminProvisioningRoute(request, response, requestUrl.pathname, {
+      store: options.platformCustomerAdminProvisioningStore,
+      environment: options.adminConfigEnvironment,
+      serviceVersion: options.serviceVersion,
+    })) return;
+
+    if (await handlePlatformApplicationRemediationRoute(request, response, requestUrl.pathname, {
+      store: options.platformApplicationRemediationStore,
+      environment: options.adminConfigEnvironment,
+      serviceVersion: options.serviceVersion,
+    })) return;
+
+    if (await handleCustomerRoleDelegationRoute(request, response, requestUrl.pathname, {
+      delegationStore: options.workflowRoleDelegationStore,
+      roleDefinitionStore: options.workflowRoleDefinitionStore,
+      actorRoleAssignmentStore: options.workflowActorRoleAssignmentStore,
+      customerIdentitySessionStore: options.customerIdentitySessionStore,
+      tenantApplicationAssignmentStore: options.tenantApplicationAssignmentStore,
+      actorApplicationAssignmentStore: options.actorApplicationAssignmentStore,
+      customerOidcPublicOrigin: options.customerOidcPublicOrigin,
+      customerCsrfSecret: options.customerCsrfSecret,
+      environment: options.adminConfigEnvironment,
+      serviceVersion: options.serviceVersion,
+    })) return;
 
     const oidcStore = options.customerIdentitySessionStore;
     const oidcEnabled = process.env.EPER_CUSTOMER_OIDC_ENABLED === "true";
@@ -894,24 +929,41 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         const environment = options.adminConfigEnvironment ?? "sandbox";
         const correlationId = resolveApiRequestId(request);
+        const workflowRoles = workflowRoleCollection || workflowRoleDetail
+          ? await options.workflowRoleDefinitionStore.list(identity.tenantId, applicationId)
+          : [];
+        if (workflowRoleCollection || workflowRoleDetail) {
+          const activeRoleIds = await options.workflowActorRoleAssignmentStore.listActiveRoleIds(
+            identity.tenantId, applicationId, identity.actorId,
+          );
+          const canManageRoleCatalog = workflowRoles.some(role =>
+            role.status === "active" && activeRoleIds.includes(role.roleId) &&
+            role.permissions.includes("role:assign"),
+          );
+          if (!canManageRoleCatalog) {
+            sendApiError(request, response, 403, "WORKFLOW_ROLE_CATALOG_FORBIDDEN",
+              "Explicit role-assignment authority is required to manage the role catalogue."); return;
+          }
+        }
         if (workflowRoleCollection) {
           if (request.method === "GET") {
-            const roles = await options.workflowRoleDefinitionStore.list(identity.tenantId, applicationId);
-            sendApiSuccess(request, response, 200, { roles }); return;
+            sendApiSuccess(request, response, 200, { roles: workflowRoles }); return;
           }
           sendMethodNotAllowed(request, response, "GET"); return;
         }
         if (workflowRoleDetail) {
           if (request.method !== "PUT") { sendMethodNotAllowed(request, response, "PUT"); return; }
           const body = await readJson(request);
-          if (!allowedBodyKeys(body, ["name", "description", "permissions", "status", "expectedVersion"])) {
-            sendApiError(request, response, 400, "INVALID_WORKFLOW_ROLE_BODY", "Only role definition fields are accepted."); return;
+          if (!allowedBodyKeys(body, ["name", "description", "permissions", "status", "expectedVersion", "delegable"]) ||
+              typeof body.delegable !== "boolean") {
+            sendApiError(request, response, 400, "INVALID_WORKFLOW_ROLE_BODY", "Role definition fields and an explicit delegable boolean are required."); return;
           }
           const role = await options.workflowRoleDefinitionStore.replace({
             tenantId: identity.tenantId, applicationId, roleId: workflowRoleDetail[2],
             name: body.name as string, description: body.description as string | undefined,
             permissions: body.permissions as import("../../packages/workflows/postgres-workflow-role-definition-store.js").WorkflowRolePermission[],
-            status: body.status as "active" | "disabled", expectedVersion: body.expectedVersion as number,
+            status: body.status as "active" | "disabled", delegable: body.delegable as boolean,
+            expectedVersion: body.expectedVersion as number,
             changedBy: identity.actorId, environment, correlationId, serviceVersion: options.serviceVersion,
           });
           sendApiSuccess(request, response, 200, { role }); return;
@@ -1831,6 +1883,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       response.end(aiIntegrationsAdminHtml);
       return;
     }
+    if (isCustomerRoleManagementUiRequest(request)) {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(customerRoleManagementUiHtml);
+      return;
+    }
+
     if (isCustomerPortalPreviewRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
@@ -2468,6 +2533,173 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
 
+
+    // Application-scoped provider connection read, bind and validation APIs.
+    const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/(bind|validate|rotate|revoke))?$/.exec(requestUrl.pathname);
+    if (providerConnectionsPath) {
+      if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      const connectionIdRaw = providerConnectionsPath[2];
+      const operation = providerConnectionsPath[3];
+      const isBinding = operation === "bind";
+      const isValidation = operation === "validate";
+      const isRotation = operation === "rotate";
+      const isRevocation = operation === "revoke";
+      const isCredentialMutation = isRotation || isRevocation;
+      if ((!operation && request.method !== "GET") || ((isBinding || isValidation || isCredentialMutation) && request.method !== "POST")) {
+        sendMethodNotAllowed(request, response, operation ? "POST" : "GET"); return;
+      }
+      if ((isValidation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
+          !options.providerValidationService)) || (isCredentialMutation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
+          process.env.EPER_PROVIDER_VALIDATION_MODE !== "synthetic" || process.env.NODE_ENV === "production"))) {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (!options.providerConnectionRepository || !options.customerIdentitySessionStore ||
+          !options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
+          !options.workflowActorRoleAssignmentStore) {
+        sendJson(request, response, 503, { error: "provider_connections_unavailable" }); return;
+      }
+      let applicationId: string;
+      try { applicationId = decodeURIComponent(providerConnectionsPath[1]); }
+      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
+      if (!applicationId.trim() || applicationId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" }); return;
+      }
+      let connectionId: string | undefined;
+      if (connectionIdRaw) {
+        try { connectionId = decodeURIComponent(connectionIdRaw); }
+        catch { sendJson(request, response, 400, { error: "invalid_connection_id_encoding" }); return; }
+        if (!/^[0-9a-f-]{36}$/i.test(connectionId)) {
+          sendJson(request, response, 400, { error: "invalid_connection_id" }); return;
+        }
+      }
+      const identity = await resolveCustomerBrowserIdentity({
+        cookieHeader: request.headers.cookie, applicationId,
+        sessionStore: options.customerIdentitySessionStore,
+        tenantAssignments: options.tenantApplicationAssignmentStore,
+        actorAssignments: options.actorApplicationAssignmentStore,
+      });
+      if (!identity) {
+        sendApiError(request, response, 401, "UNAUTHENTICATED",
+          "A valid browser session with active tenant and actor application assignments is required.");
+        return;
+      }
+      if (isBinding || isValidation || isCredentialMutation) {
+        const cookies = parseCookieHeader(request.headers.cookie);
+        const sessionToken = cookies.get("__Host-eper_session") ?? "";
+        const csrfHeader = request.headers["x-csrf-token"];
+        const csrfValid = verifyCustomerBrowserCsrf({
+          method: request.method,
+          origin: request.headers.origin,
+          expectedOrigin: options.customerOidcPublicOrigin ?? process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+          cookieHeader: request.headers.cookie,
+          csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
+          sessionToken,
+          secret: options.customerCsrfSecret ?? process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+        });
+        if (!csrfValid) {
+          sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",
+            "A valid same-origin CSRF token is required for this browser request.");
+          return;
+        }
+      }
+      const correlationId = resolveApiRequestId(request);
+      try {
+        await authorizeProviderConnectionRequest({
+          actor: { tenantId: identity.tenantId, actorId: identity.actorId },
+          action: isBinding ? "provider.connection.bind" : isValidation ? "provider.connection.validate" : isRotation ? "provider.connection.rotate" : isRevocation ? "provider.connection.revoke" : "provider.connection.read",
+          applicationId,
+          assignments: {
+            async isTenantApplicationActive(tenantId, appId) {
+              return (await options.tenantApplicationAssignmentStore!.listActive(tenantId)).includes(appId);
+            },
+            isActorAssigned: (tenantId, actorId, appId) =>
+              options.actorApplicationAssignmentStore!.isAssigned(tenantId, actorId, appId),
+          },
+          roles: new PostgresProviderRoleAuthorizer(options.workflowActorRoleAssignmentStore),
+        });
+        if (isValidation) {
+          const result = await options.providerValidationService!.validate({
+            tenantId: identity.tenantId,
+            applicationId,
+            connectionId: connectionId!,
+            actorId: identity.actorId,
+            correlationId,
+            auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+          });
+          sendJson(request, response, 200, { ...result });
+        } else if (isRotation || isRevocation) {
+          const body = await readJson(request);
+          const expectedVersion = body.expectedVersion;
+          if (typeof expectedVersion !== "number" || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+            sendJson(request, response, 400, { error: "PROVIDER_CONNECTION_EXPECTED_VERSION_INVALID" }); return;
+          }
+          if (isRotation) {
+            const secretReference = body.secretReference;
+            if (typeof secretReference !== "string" || !/^synthetic:\/\/[A-Za-z0-9._/-]{1,180}$/.test(secretReference)) {
+              sendJson(request, response, 400, { error: "SYNTHETIC_SECRET_REFERENCE_REQUIRED" }); return;
+            }
+            const rotated = await options.providerConnectionRepository.rotateSecretReference({
+              tenantId: identity.tenantId, applicationId, connectionId: connectionId!,
+              actorId: identity.actorId, secretReference, expectedVersion,
+              correlationId, auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+            });
+            sendJson(request, response, 200, { ...rotated });
+          } else {
+            const revoked = await options.providerConnectionRepository.revoke({
+              tenantId: identity.tenantId, applicationId, connectionId: connectionId!,
+              actorId: identity.actorId, expectedVersion, correlationId,
+              auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+            });
+            sendJson(request, response, 200, { ...revoked });
+          }
+        } else if (isBinding) {
+          const body = await readJson(request);
+          const allowedCapabilities = body.allowedCapabilities;
+          if (!Array.isArray(allowedCapabilities) || allowedCapabilities.length < 1 ||
+              allowedCapabilities.length > 32 ||
+              allowedCapabilities.some((value) => typeof value !== "string" ||
+                !value.trim() || value.length > 128)) {
+            sendJson(request, response, 400, { error: "invalid_provider_capabilities" }); return;
+          }
+          const bindingStatus = await options.providerConnectionRepository.bindApplication({
+            tenantId: identity.tenantId,
+            applicationId,
+            connectionId: connectionId!,
+            actorId: identity.actorId,
+            allowedCapabilities: allowedCapabilities as string[],
+            correlationId,
+            auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+          });
+          sendJson(request, response, 200, { applicationId, connectionId, bindingStatus });
+        } else {
+          const connections = await options.providerConnectionRepository.listForApplication(identity.tenantId, applicationId);
+          sendJson(request, response, 200, { applicationId, connections });
+        }
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "PROVIDER_CONNECTION_OPERATION_FAILED";
+        const status = code === "PROVIDER_ACTION_FORBIDDEN" || code === "PROVIDER_APPLICATION_ACCESS_DENIED" ? 403
+          : code === "PROVIDER_UNAUTHENTICATED" ? 401
+          : code === "PROVIDER_CONNECTION_NOT_FOUND" ? 404
+          : code === "PROVIDER_CONNECTION_NOT_VALIDATABLE" ||
+            code === "PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED" ||
+            code === "PROVIDER_CONNECTION_VERSION_CONFLICT" ||
+            code === "PROVIDER_CONNECTION_NOT_ACTIVE" ||
+            code === "PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED" ||
+            code === "PROVIDER_CONNECTION_REVOKED" ||
+            code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
+          : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
+            code === "REQUEST_BODY_TOO_LARGE" || code === "Unexpected end of JSON input" ? 400 : 503;
+        sendApiError(request, response, status, code, status === 503
+          ? "Provider connection operation could not be completed."
+          : status === 403 ? "You are not allowed to manage provider connections."
+          : status === 404 ? "The provider connection was not found."
+          : status === 409 ? "The provider connection is inactive, not validatable, or has changed."
+          : "The provider connection request is invalid.");
+      }
+      return;
+    }
 
     // Tenant-scoped customer ticket API. Disabled unless explicitly enabled and backed by
     // PostgreSQL plus the canonical transactional audit writer configured at startup.

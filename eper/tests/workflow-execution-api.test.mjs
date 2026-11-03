@@ -49,7 +49,7 @@ test("workflow execution API is opt-in and derives identity from trusted credent
 });
 
 
-test("workflow administration requires both tenant ownership and active administrator application assignment", async () => {
+test("workflow role catalogue requires explicit role:assign authority and explicit delegability", async () => {
   const keys = ["EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_ADMIN_CONFIG_API_ENABLED",
     "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
@@ -61,15 +61,28 @@ test("workflow administration requires both tenant ownership and active administ
     [token]: { tenantId: "tenant-a", actorId: "admin-a" },
   });
   let assigned = false;
+  let activeRoleIds = [];
   let listCalls = 0;
+  let savedRole;
   const server = createAppServer({
     tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
     actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
       assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "admin-a", "app-a"]);
       return assigned;
     } },
-    workflowRoleDefinitionStore: { async list() { listCalls++; return []; } },
-    workflowActorRoleAssignmentStore: {},
+    workflowRoleDefinitionStore: {
+      async list() {
+        listCalls++;
+        return [{ roleId: "product-admin", status: "active", permissions: ["role:assign"] }];
+      },
+      async replace(input) { savedRole = input; return { roleId: input.roleId, delegable: input.delegable }; },
+    },
+    workflowActorRoleAssignmentStore: {
+      async listActiveRoleIds(tenantId, applicationId, actorId) {
+        assert.deepEqual([tenantId, applicationId, actorId], ["tenant-a", "app-a", "admin-a"]);
+        return activeRoleIds;
+      },
+    },
     workflowDefinitionPublisher: {},
     workflowExecutionService: { async start() { return {}; }, async transition() { return {}; } },
   });
@@ -77,17 +90,35 @@ test("workflow administration requires both tenant ownership and active administ
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address(); assert.ok(address && typeof address === "object");
     const url = "http://127.0.0.1:" + address.port + "/admin/applications/app-a/workflow-roles";
-    const headers = { authorization: "Bearer " + token };
+    const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
     assert.equal((await fetch(url, { headers })).status, 403);
     assert.equal(listCalls, 0);
     assigned = true;
-    assert.equal((await fetch(url, { headers })).status, 200);
+    assert.equal((await fetch(url, { headers })).status, 403, "application assignment alone is not role-catalogue authority");
     assert.equal(listCalls, 1);
+    activeRoleIds = ["product-admin"];
+    assert.equal((await fetch(url, { headers })).status, 200);
+    assert.equal(listCalls, 2);
+    const roleUrl = url + "/finance-approver";
+    const missingDelegable = await fetch(roleUrl, { method: "PUT", headers, body: JSON.stringify({
+      name: "Finance approver", permissions: ["workflow:view"], status: "active", expectedVersion: 0,
+    }) });
+    assert.equal(missingDelegable.status, 400);
+    assert.equal(savedRole, undefined);
+    const saved = await fetch(roleUrl, { method: "PUT", headers, body: JSON.stringify({
+      name: "Finance approver", permissions: ["workflow:view"], status: "active",
+      expectedVersion: 0, delegable: true,
+    }) });
+    assert.equal(saved.status, 200);
+    assert.equal(savedRole.delegable, true);
+    assert.equal(savedRole.changedBy, "admin-a");
   } finally {
     await new Promise(resolve => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
 
 
 test("workflow execution routes are hidden when the feature flag is disabled", async () => {
