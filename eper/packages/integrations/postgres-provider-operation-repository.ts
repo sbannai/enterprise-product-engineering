@@ -281,6 +281,61 @@ export class PostgresProviderOperationRepository {
     }
   }
 
+  async renewLease(input: {
+    tenantId: string; applicationId: string; operationId: string; workerId: string;
+    fencingToken: number; leaseDurationSeconds?: number;
+    auditEnvironment: AuditEnvironment;
+  }): Promise<ProviderOperation> {
+    const tenantId = identity(input.tenantId, "TENANT");
+    const applicationId = identity(input.applicationId, "APPLICATION");
+    const operationId = identity(input.operationId, "OPERATION_ID");
+    const workerId = identity(input.workerId, "WORKER");
+    const leaseDurationSeconds = input.leaseDurationSeconds ?? 60;
+    if (!Number.isSafeInteger(input.fencingToken) || input.fencingToken < 1) {
+      throw new Error("PROVIDER_OPERATION_FENCING_TOKEN_INVALID");
+    }
+    if (!Number.isInteger(leaseDurationSeconds) || leaseDurationSeconds < 5 || leaseDurationSeconds > 3600) {
+      throw new Error("PROVIDER_OPERATION_LEASE_DURATION_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.scope(client, tenantId, applicationId);
+      const renewed = await client.query<OperationRow>(
+        `UPDATE eper_provider_operations SET
+           lease_expires_at=NOW()+($6::int * INTERVAL '1 second'),updated_at=NOW()
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
+           AND operation_status='DISPATCHING' AND lease_owner=$4
+           AND fencing_token=$5 AND lease_expires_at > NOW()
+         RETURNING operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
+           idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
+           lease_owner,lease_expires_at,fencing_token,attempt_count,available_at,last_error_code,created_at,updated_at`,
+        [tenantId,applicationId,operationId,workerId,input.fencingToken,leaseDurationSeconds],
+      );
+      const row = renewed.rows[0];
+      if (!row) {
+        const current = await client.query<{ operation_status: ProviderOperationStatus }>(
+          "SELECT operation_status FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+          [tenantId,applicationId,operationId],
+        );
+        throw new ProviderOperationStateConflictError(current.rows[0]?.operation_status ?? null);
+      }
+      await this.audit(client, {
+        tenantId, applicationId, environment: input.auditEnvironment, actorId: workerId,
+        action: "provider.operation.lease_renewed", operationId,
+        correlationId: row.correlation_id,
+        payload: { fencingToken: Number(row.fencing_token), leaseExpiresAt: iso(row.lease_expires_at!) },
+      });
+      await client.query("COMMIT");
+      return map(row);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async recordOutcome(input: {
     tenantId: string; applicationId: string; operationId: string; workerId: string;
     outcome: "SUCCEEDED" | "RETRY" | "FAILED" | "NEEDS_ATTENTION";
