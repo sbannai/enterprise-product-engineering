@@ -8,6 +8,9 @@ import { PostgresCustomerLifecycleStore } from "../../packages/identity/postgres
 import { PostgresAdminConfigurationStore } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresWorkflowRoleDefinitionStore } from "../../packages/workflows/postgres-workflow-role-definition-store.js";
 import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflows/postgres-workflow-actor-role-assignment-store.js";
+import { PostgresWorkflowRoleDelegationStore } from "../../packages/workflows/postgres-workflow-role-delegation-store.js";
+import { PostgresPlatformCustomerAdminProvisioningStore } from "../../packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
+import { PostgresPlatformApplicationRemediationStore } from "../../packages/workflows/postgres-platform-application-remediation-store.js";
 import { WorkflowDefinitionPublisher } from "../../packages/workflows/workflow-definition-publisher.js";
 import { PostgresWorkflowExecutionService } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
@@ -19,6 +22,10 @@ import { PostgresActorApplicationAssignmentStore } from "../../packages/identity
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
+import { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
+import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
+import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
+import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -32,6 +39,11 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
 const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
+const providerConnectionsEnabled = process.env.EPER_PROVIDER_CONNECTION_API_ENABLED === "true";
+const providerValidationEnabled = process.env.EPER_PROVIDER_VALIDATION_API_ENABLED === "true";
+const workflowRoleDelegationEnabled = process.env.EPER_WORKFLOW_ROLE_DELEGATION_API_ENABLED === "true";
+const platformCustomerAdminEnabled = process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED === "true";
+const platformApplicationRemediationEnabled = process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
@@ -39,7 +51,7 @@ const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSI
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || customerIdentityPersistenceMode === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || customerIdentityPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
@@ -132,6 +144,9 @@ if (auditMode === "postgres" && !paymentPool) {
 if (customerIdentityPersistenceMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_IDENTITY_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
+if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled) && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("PLATFORM_CUSTOMER_ADMIN_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
 const auditEnvironment = process.env.EPER_AUDIT_ENVIRONMENT ?? "uat";
 if (!["production", "uat", "sandbox"].includes(auditEnvironment)) {
   throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
@@ -142,6 +157,10 @@ if (actorAssignmentMode !== "environment" && actorAssignmentMode !== "postgres")
 }
 if (actorAssignmentMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_ACTOR_ASSIGNMENTS_REQUIRE_POSTGRES_AND_DURABLE_AUDIT");
+}
+if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled) && (!paymentPool || auditMode !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres")) {
+  throw new Error("PLATFORM_CUSTOMER_ADMIN_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
 }
 if (customerIdentityPersistenceMode === "postgres" && actorAssignmentMode !== "postgres") {
   throw new Error("CUSTOMER_IDENTITY_REQUIRES_DURABLE_TENANT_AND_ACTOR_APPLICATION_ASSIGNMENTS");
@@ -210,7 +229,26 @@ if (customerOidcEnabled) {
   });
 }
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled;
+if ((providerConnectionsEnabled || providerValidationEnabled) && (!paymentPool || auditMode !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres")) {
+  throw new Error("PROVIDER_CONNECTION_API_REQUIRES_POSTGRES_AUDIT_AND_DURABLE_CUSTOMER_IDENTITY_ASSIGNMENTS");
+}
+const providerConnectionRepository = providerConnectionsEnabled && paymentPool
+  ? new PostgresProviderConnectionRepository(paymentPool)
+  : undefined;
+if (providerValidationEnabled && (process.env.NODE_ENV === "production" || !providerConnectionsEnabled ||
+    process.env.EPER_PROVIDER_VALIDATION_MODE !== "synthetic")) {
+  throw new Error("PROVIDER_VALIDATION_API_REQUIRES_PROVIDER_API_AND_EXPLICIT_SYNTHETIC_MODE");
+}
+const providerValidationService = providerValidationEnabled && paymentPool
+  ? new ProviderConnectionValidationService(
+      new PostgresProviderValidationStore(paymentPool),
+      new SyntheticProviderSecretResolver(),
+      new SyntheticProviderValidationAdapterRegistry(),
+    )
+  : undefined;
+
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
@@ -223,9 +261,25 @@ const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
 const workflowExecutionService = workflowExecutionEnabled && paymentPool
   ? new PostgresWorkflowExecutionService(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
+if (workflowRoleDelegationEnabled && (!paymentPool || auditMode !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres" ||
+    !tenantApplicationAssignmentStore || !actorApplicationAssignmentStore)) {
+  throw new Error("WORKFLOW_ROLE_DELEGATION_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
+}
+const workflowRoleDelegationStore = workflowRoleDelegationEnabled && paymentPool
+  ? new PostgresWorkflowRoleDelegationStore(paymentPool)
+  : undefined;
 if (workflowRoleDefinitionStore) await workflowRoleDefinitionStore.assertReady();
 if (workflowActorRoleAssignmentStore) await workflowActorRoleAssignmentStore.assertReady();
 if (workflowExecutionService) await workflowExecutionService.assertReady();
+const platformCustomerAdminProvisioningStore = platformCustomerAdminEnabled && paymentPool
+  ? new PostgresPlatformCustomerAdminProvisioningStore(paymentPool)
+  : undefined;
+if (platformCustomerAdminProvisioningStore) await platformCustomerAdminProvisioningStore.assertReady();
+const platformApplicationRemediationStore = platformApplicationRemediationEnabled && paymentPool
+  ? new PostgresPlatformApplicationRemediationStore(paymentPool)
+  : undefined;
+if (platformApplicationRemediationStore) await platformApplicationRemediationStore.assertReady();
 
 const auditWriter = auditMode === "postgres" && paymentPool
   ? async (record: import("../../packages/agents/agent-workflows.js").AgentAuditRecord): Promise<void> => {
@@ -294,7 +348,8 @@ const server = createAppServer({
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore,
+  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore,
+  providerConnectionRepository, providerValidationService,
   workflowDefinitionPublisher, workflowExecutionService,
 });
 

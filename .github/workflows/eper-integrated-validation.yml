@@ -6,12 +6,12 @@ concurrency:
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["main", "integration/eper-348-350-355-candidate"]
     paths:
       - "eper/**"
       - ".github/workflows/eper-integrated-validation.yml"
   push:
-    branches: ["main"]
+    branches: ["main", "integration/eper-348-350-355-candidate"]
     paths:
       - "eper/**"
       - ".github/workflows/eper-integrated-validation.yml"
@@ -61,6 +61,8 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration schema to ephemeral PostgreSQL
         run: npm run migrate:audit
+      - name: Apply customer identity schema to ephemeral PostgreSQL
+        run: npm run migrate:identity
       - name: Apply capability and agent-worker schema to ephemeral PostgreSQL
         run: npm run migrate:capabilities
       - name: Apply workflow execution schema to ephemeral PostgreSQL
@@ -80,8 +82,8 @@ jobs:
         run: npm test
 
   requirement-matrix:
-    # Keep the expensive full matrix off PR fan-out; run on main or manual dispatch.
-    if: github.event_name != 'pull_request'
+    # Run the full matrix for the dedicated integration candidate PR; keep it off ordinary feature PR fan-out.
+    if: github.event_name != 'pull_request' || github.event.pull_request.base.ref == 'integration/eper-348-350-355-candidate'
     name: 228 requirements / 38 chapter pilot matrix
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -257,6 +259,7 @@ jobs:
       - name: Require every applicable technical lane to complete successfully
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
           PAYMENT: ${{ needs.payment-postgres.result }}
           MATRIX: ${{ needs.requirement-matrix.result }}
           RUNTIME: ${{ needs.runtime-six-family.result }}
@@ -265,7 +268,7 @@ jobs:
         run: |
           printf 'event=%s\npayment-postgres=%s\nrequirement-matrix=%s\nruntime-six-family=%s\nrelease-traceability=%s\nuat-readiness-evidence=%s\n' "$EVENT_NAME" "$PAYMENT" "$MATRIX" "$RUNTIME" "$RELEASE" "$READINESS"
           test "$PAYMENT" = success
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" != "integration/eper-348-350-355-candidate" ]; then
             test "$MATRIX" = skipped
           else
             test "$MATRIX" = success

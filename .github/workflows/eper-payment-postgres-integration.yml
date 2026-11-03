@@ -13,6 +13,16 @@ on:
   pull_request:
     paths:
       - ".github/workflows/eper-payment-postgres-integration.yml"
+      - ".github/workflows/eper-local-developer-setup.yml"
+      - "eper/packages/identity/**"
+      - "eper/packages/workflows/**"
+      - "eper/packages/audit/**"
+      - "eper/apps/api/platform-customer-admin-provisioning-route.ts"
+      - "eper/tests/postgres-platform-customer-admin-provisioning.integration.test.mjs"
+      - "eper/tests/postgres-platform-application-remediation.integration.test.mjs"
+      - "eper/tests/postgres-workflow-role-delegation.integration.test.mjs"
+      - "eper/tests/platform-customer-admin-provisioning-store.test.mjs"
+      - "eper/tests/platform-customer-admin-provisioning-route.test.mjs"
       - "eper/packages/payments/**"
       - "eper/packages/pricing/**"
       - "eper/packages/audit/migrations/**"
@@ -29,6 +39,8 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-payment-store.integration.test.mjs"
       - "eper/tests/customer-lifecycle-store.integration.test.mjs"
+      - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
+      - "eper/tests/postgres-module-entitlement-service.integration.test.mjs"
       - "eper/tests/postgres-payment-store.test.mjs"
       - "eper/tests/postgres-payment-api-route.test.mjs"
       - "eper/tests/postgres-legacy-order-snapshot-gate.test.mjs"
@@ -130,12 +142,26 @@ jobs:
         run: npm run migrate:payments
       - name: Apply durable audit schema migrations
         run: npm run migrate:audit
+      - name: Apply identity schema migrations
+        run: npm run migrate:identity
+      - name: Apply workflow schema migrations
+        run: npm run migrate:workflows
       - name: Apply campaign scheduler migrations
         run: npm run migrate:campaign-scheduler
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
         run: node --test tests/customer-lifecycle-store.integration.test.mjs
+      - name: Exercise PostgreSQL customer tariff enforcement at protected access checks
+        run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
+      - name: Exercise PostgreSQL module and add-on tariff lifecycle
+        run: node --test tests/postgres-module-entitlement-service.integration.test.mjs
+      - name: Exercise PostgreSQL role delegation, application scope and last-admin concurrency
+        run: node --test tests/postgres-workflow-role-delegation.integration.test.mjs
+      - name: Exercise platform Customer Admin provisioning and recovery transactions
+        run: node --test tests/postgres-platform-customer-admin-provisioning.integration.test.mjs
+      - name: Exercise platform application remediation transaction, tenant isolation and audit rollback
+        run: node --test tests/postgres-platform-application-remediation.integration.test.mjs
       - name: Exercise PostgreSQL campaign dispatch race and event idempotency
         env:
           EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}

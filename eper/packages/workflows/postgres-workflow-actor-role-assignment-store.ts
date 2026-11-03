@@ -8,6 +8,8 @@ import {
 const WORKFLOW_ROLE_PERMISSION_KEYS = [
   "workflow:view", "workflow:act", "workflow:approve",
   "workflow:admin", "role:assign", "access:manage",
+  "provider.connection.create", "provider.connection.read", "provider.connection.bind",
+  "provider.connection.validate", "provider.connection.rotate", "provider.connection.revoke",
 ] as const;
 
 export interface WorkflowActorRoleAssignment {
@@ -143,6 +145,32 @@ export class PostgresWorkflowActorRoleAssignmentStore {
     } finally {
       client.release();
     }
+  }
+
+  /** Lists assignment history for one authorized tenant/application scope. */
+  async listAssignments(tenantId: string, applicationId: string): Promise<WorkflowActorRoleAssignment[]> {
+    validateId(tenantId, "tenantId");
+    validateId(applicationId, "applicationId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+      const result = await client.query<AssignmentRow>(
+        `SELECT r.* FROM eper_workflow_actor_role_assignment r
+          JOIN eper_tenant_application_assignment ta
+            ON ta.tenant_id=r.tenant_id AND ta.application_id=r.application_id
+           AND ta.assignment_status='active'
+          WHERE r.tenant_id=$1 AND r.application_id=$2
+          ORDER BY r.actor_id, r.role_id`,
+        [tenantId, applicationId],
+      );
+      await client.query("COMMIT");
+      return result.rows.map(mapRow);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original failure */ }
+      throw error;
+    } finally { client.release(); }
   }
 
   async isAssigned(

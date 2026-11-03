@@ -8,6 +8,8 @@ import {
 export const WORKFLOW_ROLE_PERMISSIONS = [
   "workflow:view", "workflow:act", "workflow:approve",
   "workflow:admin", "role:assign", "access:manage",
+  "provider.connection.create", "provider.connection.read", "provider.connection.bind",
+  "provider.connection.validate", "provider.connection.rotate", "provider.connection.revoke",
 ] as const;
 export type WorkflowRolePermission = typeof WORKFLOW_ROLE_PERMISSIONS[number];
 
@@ -18,6 +20,8 @@ export interface WorkflowRoleDefinition {
   name: string;
   description?: string;
   permissions: WorkflowRolePermission[];
+  delegable: boolean;
+  scopeType: "application";
   status: "active" | "disabled";
   version: number;
   updatedAt: string;
@@ -31,6 +35,7 @@ export interface ReplaceWorkflowRoleDefinitionInput {
   name: string;
   description?: string;
   permissions: WorkflowRolePermission[];
+  delegable: boolean;
   status: "active" | "disabled";
   expectedVersion: number;
   changedBy: string;
@@ -47,6 +52,8 @@ type RoleRow = {
   description: string | null;
   permissions: WorkflowRolePermission[] | string;
   role_status: "active" | "disabled";
+  delegable: boolean;
+  scope_type: "application";
   version: number | string;
   updated_at: string | Date;
   updated_by: string;
@@ -62,7 +69,7 @@ function mapRole(row: RoleRow): WorkflowRoleDefinition {
   return {
     tenantId: row.tenant_id, applicationId: row.application_id, roleId: row.role_id,
     name: row.name, description: row.description ?? undefined,
-    permissions, status: row.role_status, version: Number(row.version),
+    permissions, delegable: row.delegable, scopeType: row.scope_type, status: row.role_status, version: Number(row.version),
     updatedAt: new Date(row.updated_at).toISOString(), updatedBy: row.updated_by,
   };
 }
@@ -75,7 +82,8 @@ export class PostgresWorkflowRoleDefinitionStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        role_table: string | null; row_security: boolean; force_row_security: boolean; policy_present: boolean;
+        role_table: string | null; row_security: boolean; force_row_security: boolean;
+        policy_present: boolean; delegable_column_present: boolean; scope_type_column_present: boolean;
       }>(`
         SELECT to_regclass('public.eper_workflow_role_definition')::text AS role_table,
                COALESCE(c.relrowsecurity, false) AS row_security,
@@ -83,12 +91,21 @@ export class PostgresWorkflowRoleDefinitionStore {
                EXISTS (SELECT 1 FROM pg_policies p
                         WHERE p.schemaname = 'public'
                           AND p.tablename = 'eper_workflow_role_definition'
-                          AND p.policyname = 'tenant_application_isolation') AS policy_present
+                          AND p.policyname = 'tenant_application_isolation') AS policy_present,
+               EXISTS (SELECT 1 FROM information_schema.columns col
+                        WHERE col.table_schema = 'public'
+                          AND col.table_name = 'eper_workflow_role_definition'
+                          AND col.column_name = 'delegable') AS delegable_column_present,
+               EXISTS (SELECT 1 FROM information_schema.columns col
+                        WHERE col.table_schema = 'public'
+                          AND col.table_name = 'eper_workflow_role_definition'
+                          AND col.column_name = 'scope_type') AS scope_type_column_present
           FROM (SELECT 1) seed
           LEFT JOIN pg_class c ON c.oid = to_regclass('public.eper_workflow_role_definition')
       `);
       const row = result.rows[0];
-      if (!row?.role_table || !row.row_security || !row.force_row_security || !row.policy_present) {
+      if (!row?.role_table || !row.row_security || !row.force_row_security ||
+          !row.policy_present || !row.delegable_column_present || !row.scope_type_column_present) {
         throw new Error("EPER_WORKFLOW_ROLE_DEFINITION_SCHEMA_NOT_READY");
       }
     } catch (error) {
@@ -137,6 +154,9 @@ export class PostgresWorkflowRoleDefinitionStore {
         new Set(input.permissions).size !== input.permissions.length) {
       throw new Error("WORKFLOW_ROLE_DEFINITION_PERMISSIONS_INVALID");
     }
+    if (typeof input.delegable !== "boolean") {
+      throw new Error("WORKFLOW_ROLE_DEFINITION_DELEGABLE_FLAG_INVALID");
+    }
     if (input.status !== "active" && input.status !== "disabled") {
       throw new Error("WORKFLOW_ROLE_DEFINITION_STATUS_INVALID");
     }
@@ -175,17 +195,18 @@ export class PostgresWorkflowRoleDefinitionStore {
       }
       const saved = await client.query<RoleRow>(
         `INSERT INTO eper_workflow_role_definition
-          (tenant_id, application_id, role_id, name, description, permissions, role_status,
+          (tenant_id, application_id, role_id, name, description, permissions, role_status, delegable, scope_type,
            version, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,1,$8,$8)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,'application',1,$9,$9)
          ON CONFLICT (tenant_id, application_id, role_id) DO UPDATE SET
            name = EXCLUDED.name, description = EXCLUDED.description,
            permissions = EXCLUDED.permissions, role_status = EXCLUDED.role_status,
+           delegable = EXCLUDED.delegable,
            version = eper_workflow_role_definition.version + 1,
            updated_at = NOW(), updated_by = EXCLUDED.updated_by
          RETURNING *`,
         [input.tenantId, input.applicationId, input.roleId, input.name.trim(),
-          input.description ?? null, JSON.stringify(input.permissions), input.status, input.changedBy],
+          input.description ?? null, JSON.stringify(input.permissions), input.status, input.delegable, input.changedBy],
       );
       const row = saved.rows[0];
       if (!row) throw new Error("WORKFLOW_ROLE_DEFINITION_WRITE_RETURNED_NO_ROW");
@@ -197,7 +218,7 @@ export class PostgresWorkflowRoleDefinitionStore {
         correlationId: input.correlationId, source: "api",
         operationName: "PUT /applications/:applicationId/workflow-roles/:roleId",
         serviceVersion: input.serviceVersion,
-        payload: { roleId: input.roleId, permissions: input.permissions, status: input.status, version: Number(row.version) },
+        payload: { roleId: input.roleId, permissions: input.permissions, delegable: input.delegable, status: input.status, version: Number(row.version) },
       });
       await client.query("COMMIT");
       return mapRole(row);
