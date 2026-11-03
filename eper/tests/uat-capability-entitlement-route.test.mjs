@@ -28,7 +28,7 @@ async function withUatApi({ moduleEntitlementService, configured = true, entitle
     EPER_UAT_ROLE_KEY: configured ? "customer-admin" : "",
     EPER_REQUIREMENT_MODULE_MAP_JSON: configured ? JSON.stringify({ "REQ-46301": "records" }) : "{}",
   });
-  if (entitlementRequired === undefined) delete process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED;
+  if (entitlementRequired === null) delete process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED;
   else process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED = entitlementRequired;
 
   const server = createAppServer({ moduleEntitlementService });
@@ -69,7 +69,7 @@ test("UAT capability route fails closed when entitlement configuration is missin
 
 
 test("public UAT capability route fails closed when entitlement enforcement is disabled", async () => {
-  for (const entitlementRequired of ["false", undefined]) {
+  for (const entitlementRequired of ["false", null]) {
     let calls = 0;
     await withUatApi({
       entitlementRequired,
