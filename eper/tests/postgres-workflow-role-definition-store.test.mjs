@@ -78,6 +78,7 @@ test("role definition requires an explicit boolean delegable value", async () =>
 
 test("role definition accepts provider connection permissions for application-scoped provider administration", async () => {
   const permissions = [
+    "provider.connection.create",
     "provider.connection.read",
     "provider.connection.bind",
     "provider.connection.validate",
