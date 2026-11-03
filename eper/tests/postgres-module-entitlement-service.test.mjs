@@ -142,10 +142,14 @@ test("add-on access is denied when active application assignments exceed the acc
     allowed: false,
     reason: "tariff_overage",
   });
+  const decisionQuery = calls.find((call) => call.sql.includes("eper_application_addon_entitlement"));
+  assert.ok(decisionQuery, "tariff and add-on entitlement are evaluated in one tenant-scoped query");
+  assert.match(decisionQuery.sql, /eper_customer_tariff_assignment/);
+  assert.match(decisionQuery.sql, /eper_tenant_application_assignment/);
   assert.equal(
-    calls.some((call) => call.sql.includes("eper_application_addon_entitlement")),
-    false,
-    "must deny overage before reading or granting application add-on entitlements",
+    calls.filter((call) => call.sql.includes("eper_application_addon_entitlement")).length,
+    1,
+    "tariff overage must be denied by the same access-decision query without a second entitlement read",
   );
 });
 
