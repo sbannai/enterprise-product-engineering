@@ -37,7 +37,7 @@ function fixture({ existing = null, claim = null, outcome = null } = {}) {
       if (sql.includes("WITH candidate AS")) {
         return { rows: claimed ? [claimed] : [], rowCount: claimed ? 1 : 0 };
       }
-      if (sql.includes("UPDATE eper_provider_operations SET operation_status")) {
+      if (sql.includes("UPDATE eper_provider_operations SET")) {
         return { rows: savedOutcome ? [savedOutcome] : [], rowCount: savedOutcome ? 1 : 0 };
       }
       if (sql.includes("SELECT operation_status FROM eper_provider_operations")) {
@@ -107,7 +107,7 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
   });
   assert.equal(claimed.status, "DISPATCHING");
   assert.equal(claimed.attemptCount, 1);
-  assert.ok(calls.some(call => call.sql.includes("FOR UPDATE SKIP LOCKED")));
+  assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF o SKIP LOCKED")));
   assert.ok(calls.some(call => call.sql.includes("b.binding_status='ACTIVE'") && call.sql.includes("pc.connection_status='ACTIVE'") && call.sql.includes("b.allowed_capabilities ? o.capability_key")));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'")));
   assert.ok(calls.some(call => call.sql.includes("provider.operation.dispatch_claimed")));
