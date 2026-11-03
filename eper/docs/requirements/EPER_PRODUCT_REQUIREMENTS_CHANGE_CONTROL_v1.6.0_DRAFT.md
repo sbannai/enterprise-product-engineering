@@ -130,3 +130,51 @@ See the complete 45-row source export. The source IDs are immutable and must not
 9. **Testing:** Include role/permission, draft-versus-published visibility, scheduled activation, concurrent edit conflict, immutable history, customer-consent, quote expiry, grandfathered contract, tenant-isolation and invoice/receipt snapshot tests.
 
 **Admin workspace placement:** Plans & Tariffs → Plan Catalogue → Edit Price → Preview → Submit for Approval (when required) → Publish/Schedule. Provide version history and customer impact preview before publication.
+
+
+## 10. Owner-directed customer workflow design capability — 2026-11-02
+
+**Disposition:** Added from explicit Product Owner direction as additive v1.6.0 draft scope. These requirements do not alter or renumber the approved 228 requirements, the 38 chapters, or the original v34 source export.
+
+**Ownership boundary:** The Customer Admin is the workflow-design owner within the Customer Admin's own tenant and authorized application scope. Product Admin owns platform-level product configuration, shared capability governance and platform policy; Product Admin is not the routine designer or editor of an individual customer's business workflows.
+
+| Candidate ID | Priority | Requirement | Acceptance criteria |
+|---|---|---|---|
+| EPER-CW-056 | MUST / P0 | Customer Admin shall have a tenant- and application-scoped workflow Rule Engine that simplifies workflow activity design through configurable, versioned business rules. | Authorized Customer Admin can define and maintain rules for activity entry/exit conditions, conditional routing, approvals, actor/role assignment constraints, due dates, SLA timers, escalations, notifications and exception paths using validated configuration rather than custom code; rules can be composed with AND/OR conditions and supported operators against typed workflow/application data; rule sets are versioned, testable against sample cases, explainable through evaluation traces and attached to a workflow draft/version; rules execute server-side and consistently across UI, APIs and background execution; rules are deterministic and fail closed on invalid, missing or unauthorized inputs; rule evaluation is tenant/application isolated, permission-checked and audited; no arbitrary script, dynamic code or user-supplied SQL execution is permitted. |
+| EPER-CW-057 | MUST / P0 | Customer Admin shall be able to create and modify their tenant/application workflows using a visual Workflow Designer, including editing workflows previously created or published, subject to versioning and publication controls. | Authorized Customer Admin can visually add, edit, remove and reorder activities; define transitions, dependencies, decision branches, approvals, assigned roles/actors, due dates and exception paths; attach Rule Engine rules to activities and transitions; open an existing workflow definition in the designer and modify it as a new draft version without mutating a published version or changing running instances; validate completeness, unreachable activities, invalid transitions, missing role assignments and rule references; preview and simulate representative paths before publication; compare versions and review a change summary; publish only after required permissions and configured approvals; persist immutable versions/digests, author, timestamps, reason and audit events; existing workflow instances remain pinned to their original definition version unless an explicitly authorized migration is performed. |
+
+### Customer Admin workflow design experience
+
+1. **Design entry point:** Customer Admin → Application → Workflow Studio, with separate but integrated Rule Engine and Visual Designer workspaces.
+2. **Rule Engine first:** Customer Admin can define reusable conditions and actions once, test them with sample data, and attach them to one or more activities or transitions within the authorized application.
+3. **Visual Designer:** Customer Admin can build a workflow from activities, transitions, decision branches, approvals, roles, deadlines and exception routes; can also reopen and modify an existing workflow as a new draft.
+4. **Two-way consistency:** Rules attached or changed in either workspace are reflected in the same versioned workflow draft. The designer must show rule references and the Rule Engine must show where each rule is used.
+5. **Safe lifecycle:** Draft → Validate → Simulate → Review/Approve (where configured) → Publish. Published versions are immutable; changes create a successor version.
+6. **Execution integrity:** Runtime evaluates the pinned version's rules server-side, enforces tenant/application and actor authorization, and records decisions and transitions in durable PostgreSQL state with audit evidence.
+7. **Separation of duties:** Product Admin governs platform-wide capabilities and policy boundaries. Customer Admin manages the customer's workflow definitions and rules only within authorized tenant/application scope. Neither role bypasses workflow publication, authorization or audit controls.
+8. **Testing:** Include positive and negative rule evaluation, tenant-crossing denial, unauthorized designer access, invalid graph detection, rule-to-designer consistency, version immutability, running-instance pinning, concurrent draft edits, publication approval and restart/recovery tests.
+
+**Product distinction:** EPER should let each customer shape how their own work gets done—without needing Product Admin intervention or bespoke development for ordinary workflow changes.
+
+## 11. Owner-directed customer application alert and video settings — 2026-11-02
+
+**Disposition:** Added following explicit Product Owner agreement. This is additive v1.6.0 draft scope; it does not change or renumber the approved 228 requirements, 38 chapters, or existing candidate IDs.
+
+| Candidate ID | Priority | Requirement | Acceptance criteria |
+|---|---|---|---|
+| EPER-CW-058 | MUST / P1 | EPER shall provide customer-wide default alert and video-conferencing settings that are inherited by the customer's applications, with authorized application-level overrides. | Customer Admin can configure organisation defaults for permitted alert channels, sender identity, templates/language, timezone, quiet hours, meeting provider and standard meeting preferences; each application inherits these defaults when created; authorized Customer Admin can override supported settings for an individual application without changing other applications; each setting exposes whether its effective value is inherited or customised; resetting an override restores inheritance; changes are version-checked, durably persisted and audited. |
+| EPER-CW-059 | MUST / P1 | EPER shall enforce central platform and customer policy boundaries over inherited and application-specific alert/video settings. | Product Admin platform restrictions and customer-level security, consent, privacy and provider-eligibility policies are authoritative; an application override cannot weaken or bypass them; effective settings are resolved server-side for UI, APIs, workflow execution and background dispatch; unavailable, suspended or revoked provider connections fail closed without silent fallback; settings and resolution are tenant/application isolated and auditable. |
+
+### Customer and application settings model
+
+1. **Hierarchy:** Product Admin platform policy → Customer Admin general defaults → Application-specific overrides → Workflow action parameters. More specific settings may refine defaults but never weaken a higher-level restriction.
+2. **Customer defaults:** Configure supported alert channels, sender identities, templates/locales, timezone, quiet hours, default video provider, meeting duration and reminder preferences.
+3. **Application overrides:** Allow a customer administrator to customise only the settings permitted by central policy. An override in one application must not affect another application.
+4. **Effective-value visibility:** Show each setting as Inherited, Customised or Restricted. Provide an application-by-application comparison so Customer Admin can identify deviations from customer defaults.
+5. **Provider configuration boundary:** Credentials and provider connections remain in the provider-connection management boundary; workflow definitions and settings store only safe connection references and preferences, never raw secrets.
+6. **Workflow integration:** Workflow actions consume the resolved effective configuration at execution time. Workflow JSON must not duplicate or become the source of truth for customer/application-wide preferences.
+7. **Policy enforcement:** Consent, retention, recording, security and provider availability restrictions are centrally enforced. An application override may narrow a policy but cannot broaden permissions beyond the governing policy.
+8. **Change and audit:** Record actor, scope, prior and new values, version, reason, effective time and correlation ID. Concurrent updates use optimistic version checks.
+9. **Testing:** Include inheritance, explicit override, reset-to-inherit, cross-application isolation, tenant isolation, central-policy denial, provider suspension/revocation, concurrency, audit and background-dispatch resolution tests.
+
+**Admin workspace placement:** Customer Admin → General Settings → Alerts & Video; Application → Settings → Alerts & Video. The application screen shows inherited values and permits only policy-approved overrides.

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { resolvePlatformAdminPrincipal } from "../../packages/identity/platform-admin-principal.js";
+import { resolvePlatformAdminPrincipal, resolvePlatformAdminPrincipalFromStore } from "../../packages/identity/platform-admin-principal.js";
+import type { PostgresPlatformAdminCredentialStore } from "../../packages/identity/postgres-platform-admin-credential-store.js";
 import type { PostgresPlatformCustomerAdminProvisioningStore } from "../../packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -68,6 +69,7 @@ export async function handlePlatformCustomerAdminProvisioningRoute(
   pathname: string,
   dependencies: {
     store?: PostgresPlatformCustomerAdminProvisioningStore;
+    credentialStore?: PostgresPlatformAdminCredentialStore;
     environment?: "production" | "uat" | "sandbox";
     serviceVersion?: string;
   },
@@ -97,10 +99,9 @@ export async function handlePlatformCustomerAdminProvisioningRoute(
     return true;
   }
 
-  const principal = resolvePlatformAdminPrincipal(
-    request.headers.authorization,
-    process.env.EPER_PLATFORM_ADMIN_IDENTITIES_JSON ?? "",
-  );
+  const principal = dependencies.credentialStore
+    ? await resolvePlatformAdminPrincipalFromStore(request.headers.authorization, dependencies.credentialStore)
+    : resolvePlatformAdminPrincipal(request.headers.authorization, process.env.EPER_PLATFORM_ADMIN_IDENTITIES_JSON ?? "");
   if (!principal) {
     respond(request, response, 401, { error: "unauthorized" });
     return true;

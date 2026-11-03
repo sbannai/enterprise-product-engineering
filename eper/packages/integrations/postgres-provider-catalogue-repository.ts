@@ -1,0 +1,124 @@
+import { appendAuditEventInTransaction, hashAuditEnvelope, type AuditEnvironment, type AuditSqlClient, type AuditSqlPool } from "../audit/audit-event-store.js";
+
+export type ProviderCatalogueStatus = "ACTIVE" | "SUSPENDED" | "DEPRECATED";
+export interface ProviderDefinition {
+  providerKey: string; displayName: string; adapterKey: string; adapterVersion: string;
+  capabilities: string[]; authModes: string[]; configurationSchema: Record<string, unknown>;
+  status: ProviderCatalogueStatus; version: number; createdAt: string; updatedAt: string; updatedBy: string;
+}
+export interface ProviderCatalogueRegistries { adapterKeys: readonly string[]; capabilityKeys: readonly string[]; authModes: readonly string[]; }
+export interface ProviderCatalogueAuditContext { actorId: string; correlationId: string; environment: AuditEnvironment; }
+export interface UpdateProviderDefinitionInput extends ProviderCatalogueAuditContext {
+ providerKey:string; expectedVersion:number; displayName?:string; adapterKey?:string; adapterVersion?:string;
+ capabilities?:string[]; authModes?:string[]; configurationSchema?:Record<string,unknown>;
+}
+export class ProviderCatalogueConflictError extends Error {
+  constructor(readonly currentVersion: number) { super("PROVIDER_CATALOGUE_VERSION_CONFLICT"); }
+}
+type Row = {
+  provider_key:string; display_name:string; adapter_key:string; adapter_version:string;
+  capabilities:string[]|string; auth_modes:string[]|string; configuration_schema:Record<string,unknown>|string;
+  provider_status:ProviderCatalogueStatus; version:number|string; created_at:Date|string; updated_at:Date|string; updated_by:string;
+};
+const decode=<T>(v:T|string):T=>typeof v==="string"?JSON.parse(v) as T:v;
+const iso=(v:Date|string)=>v instanceof Date?v.toISOString():new Date(v).toISOString();
+const text=(v:string,max:number)=>{if(typeof v!=="string"||!v.trim()||v.trim().length>max)throw new Error("PROVIDER_CATALOGUE_FIELD_INVALID");return v.trim();};
+function map(r:Row):ProviderDefinition{return {providerKey:r.provider_key,displayName:r.display_name,adapterKey:r.adapter_key,adapterVersion:r.adapter_version,capabilities:decode(r.capabilities),authModes:decode(r.auth_modes),configurationSchema:decode(r.configuration_schema),status:r.provider_status,version:Number(r.version),createdAt:iso(r.created_at),updatedAt:iso(r.updated_at),updatedBy:r.updated_by};}
+function validateSet(v:string[],allowed:readonly string[]){if(!Array.isArray(v)||!v.length||v.length>64)throw new Error("PROVIDER_CATALOGUE_SET_INVALID");const a=v.map(x=>text(x,128));if(new Set(a).size!==a.length||a.some(x=>!allowed.includes(x)))throw new Error("PROVIDER_CATALOGUE_VALUE_NOT_REGISTERED");return a.sort();}
+function validateSchema(v:Record<string,unknown>,depth=0):void{
+ const invalid=()=>{throw new Error("PROVIDER_CATALOGUE_SCHEMA_INVALID");};
+ if(depth>8||!v||typeof v!=="object"||Array.isArray(v))invalid();
+ let serialized:string;
+ try{serialized=JSON.stringify(v);}catch{invalid();}
+ if(serialized!.length>16384)invalid();
+ const allowed=new Set(["type","title","description","properties","required","additionalProperties","enum","items","minLength","maxLength","minimum","maximum"]);
+ if(Object.keys(v).length>64)invalid();
+ if(Object.keys(v).some(k=>!allowed.has(k)))throw new Error("PROVIDER_CATALOGUE_SCHEMA_KEYWORD_UNSUPPORTED");
+ const validTypes=["object","array","string","number","integer","boolean"];
+ if(v.type!==undefined&&(typeof v.type!=="string"||!validTypes.includes(v.type)))throw new Error("PROVIDER_CATALOGUE_SCHEMA_TYPE_INVALID");
+ if(v.title!==undefined&&(typeof v.title!=="string"||v.title.length>160))invalid();
+ if(v.description!==undefined&&(typeof v.description!=="string"||v.description.length>512))invalid();
+ if(v.properties!==undefined){
+  if(v.type!==undefined&&v.type!=="object")invalid();
+  if(!v.properties||typeof v.properties!=="object"||Array.isArray(v.properties))invalid();
+  const entries=Object.entries(v.properties as Record<string,unknown>);
+  if(entries.length>64)invalid();
+  for(const [key,child] of entries){
+   if(!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)||!child||typeof child!=="object"||Array.isArray(child))invalid();
+   validateSchema(child as Record<string,unknown>,depth+1);
+  }
+ }
+ if(v.required!==undefined){
+  const required=v.required;
+  if(!Array.isArray(required)||required.length>64)invalid();
+  const requiredKeys=required as unknown[];
+  if(new Set(requiredKeys).size!==requiredKeys.length||
+     requiredKeys.some((key:unknown)=>typeof key!=="string"||!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)))invalid();
+  const propertyNames=v.properties&&typeof v.properties==="object"&&!Array.isArray(v.properties)
+   ?new Set(Object.keys(v.properties as Record<string,unknown>)):new Set<string>();
+  if(requiredKeys.some((key:unknown)=>!propertyNames.has(key as string)))invalid();
+ }
+ if(v.additionalProperties!==undefined){
+  if(typeof v.additionalProperties==="boolean"){} 
+  else if(v.additionalProperties&&typeof v.additionalProperties==="object"&&!Array.isArray(v.additionalProperties)){
+   validateSchema(v.additionalProperties as Record<string,unknown>,depth+1);
+  }else invalid();
+ }
+ if(v.items!==undefined){
+  if(v.type!==undefined&&v.type!=="array")invalid();
+  if(!v.items||typeof v.items!=="object"||Array.isArray(v.items))invalid();
+  validateSchema(v.items as Record<string,unknown>,depth+1);
+ }
+ if(v.enum!==undefined){
+  if(!Array.isArray(v.enum)||v.enum.length<1||v.enum.length>100||
+     v.enum.some(value=>value!==null&&!["string","number","boolean"].includes(typeof value))||
+     new Set(v.enum.map(value=>JSON.stringify(value))).size!==v.enum.length)invalid();
+ }
+ const boundedInteger=(key:"minLength"|"maxLength")=>{
+  const value=v[key];if(value!==undefined&&(!Number.isInteger(value)||Number(value)<0||Number(value)>4096))invalid();
+ };
+ boundedInteger("minLength");boundedInteger("maxLength");
+ if(v.minLength!==undefined||v.maxLength!==undefined){
+  if(v.type!==undefined&&v.type!=="string")invalid();
+  if(v.minLength!==undefined&&v.maxLength!==undefined&&Number(v.minLength)>Number(v.maxLength))invalid();
+ }
+ for(const key of ["minimum","maximum"] as const){
+  const value=v[key];if(value!==undefined&&(typeof value!=="number"||!Number.isFinite(value)))invalid();
+ }
+ if(v.minimum!==undefined||v.maximum!==undefined){
+  if(v.type!==undefined&&v.type!=="number"&&v.type!=="integer")invalid();
+  if(v.minimum!==undefined&&v.maximum!==undefined&&Number(v.minimum)>Number(v.maximum))invalid();
+ }
+}
+export class PostgresProviderCatalogueRepository {
+ constructor(private readonly pool:AuditSqlPool,private readonly registries:ProviderCatalogueRegistries,private readonly serviceVersion?:string){}
+ async list(limit=50):Promise<ProviderDefinition[]>{if(!Number.isInteger(limit)||limit<1||limit>100)throw new Error("PROVIDER_CATALOGUE_LIMIT_INVALID");const c=await this.pool.connect();try{const r=await c.query<Row>("SELECT provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by FROM eper_provider_definitions ORDER BY display_name,provider_key LIMIT $1",[limit]);return r.rows.map(map);}finally{c.release();}}
+ async get(providerKey:string):Promise<ProviderDefinition|null>{const c=await this.pool.connect();try{const r=await c.query<Row>("SELECT provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by FROM eper_provider_definitions WHERE provider_key=$1",[text(providerKey,96)]);return r.rows[0]?map(r.rows[0]):null;}finally{c.release();}}
+ async create(i:ProviderCatalogueAuditContext&{providerKey:string;displayName:string;adapterKey:string;adapterVersion:string;capabilities:string[];authModes:string[];configurationSchema:Record<string,unknown>}):Promise<ProviderDefinition>{
+  text(i.actorId,128);text(i.correlationId,128);const d={providerKey:text(i.providerKey,96),displayName:text(i.displayName,160),adapterKey:text(i.adapterKey,128),adapterVersion:text(i.adapterVersion,64),capabilities:validateSet(i.capabilities,this.registries.capabilityKeys),authModes:validateSet(i.authModes,this.registries.authModes)};
+  if(!this.registries.adapterKeys.includes(d.adapterKey))throw new Error("PROVIDER_CATALOGUE_ADAPTER_NOT_REGISTERED");validateSchema(i.configurationSchema);
+  const c=await this.pool.connect();try{await c.query("BEGIN");const r=await c.query<Row>(`INSERT INTO eper_provider_definitions(provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,updated_by) VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'ACTIVE',1,$8) RETURNING provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by`,[d.providerKey,d.displayName,d.adapterKey,d.adapterVersion,JSON.stringify(d.capabilities),JSON.stringify(d.authModes),JSON.stringify(i.configurationSchema),i.actorId]);if(!r.rows[0])throw new Error("PROVIDER_CATALOGUE_CREATE_EMPTY");const saved=map(r.rows[0]);await this.audit(c,i,"provider.catalogue.create",saved.providerKey,null,saved);await c.query("COMMIT");return saved;}catch(e){try{await c.query("ROLLBACK");}catch{}throw e;}finally{c.release();}
+ }
+ async update(i:UpdateProviderDefinitionInput):Promise<ProviderDefinition>{
+  text(i.actorId,128);text(i.correlationId,128);if(!Number.isInteger(i.expectedVersion)||i.expectedVersion<1)throw new Error("PROVIDER_CATALOGUE_VERSION_INVALID");
+  const c=await this.pool.connect();try{await c.query("BEGIN");
+   const p=await c.query<Row>("SELECT provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by FROM eper_provider_definitions WHERE provider_key=$1 FOR UPDATE",[text(i.providerKey,96)]);
+   if(!p.rows[0])throw new Error("PROVIDER_CATALOGUE_NOT_FOUND");const before=map(p.rows[0]);if(before.version!==i.expectedVersion)throw new ProviderCatalogueConflictError(before.version);
+   const next={displayName:i.displayName===undefined?before.displayName:text(i.displayName,160),
+    adapterKey:i.adapterKey===undefined?before.adapterKey:text(i.adapterKey,128),
+    adapterVersion:i.adapterVersion===undefined?before.adapterVersion:text(i.adapterVersion,64),
+    capabilities:i.capabilities===undefined?before.capabilities:validateSet(i.capabilities,this.registries.capabilityKeys),
+    authModes:i.authModes===undefined?before.authModes:validateSet(i.authModes,this.registries.authModes),
+    configurationSchema:i.configurationSchema===undefined?before.configurationSchema:i.configurationSchema};
+   if(!this.registries.adapterKeys.includes(next.adapterKey))throw new Error("PROVIDER_CATALOGUE_ADAPTER_NOT_REGISTERED");
+   validateSchema(next.configurationSchema);
+   const r=await c.query<Row>(`UPDATE eper_provider_definitions SET display_name=$2,adapter_key=$3,adapter_version=$4,capabilities=$5::jsonb,auth_modes=$6::jsonb,configuration_schema=$7::jsonb,version=version+1,updated_at=NOW(),updated_by=$8 WHERE provider_key=$1 AND version=$9 RETURNING provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by`,
+   [before.providerKey,next.displayName,next.adapterKey,next.adapterVersion,JSON.stringify(next.capabilities),JSON.stringify(next.authModes),JSON.stringify(next.configurationSchema),i.actorId,i.expectedVersion]);
+   if(!r.rows[0])throw new ProviderCatalogueConflictError(before.version);const after=map(r.rows[0]);await this.audit(c,i,"provider.catalogue.update",after.providerKey,before,after);await c.query("COMMIT");return after;
+  }catch(e){try{await c.query("ROLLBACK");}catch{}throw e;}finally{c.release();}
+ }
+ async setStatus(i:ProviderCatalogueAuditContext&{providerKey:string;expectedVersion:number;status:ProviderCatalogueStatus}):Promise<ProviderDefinition>{
+  text(i.actorId,128);text(i.correlationId,128);if(!["ACTIVE","SUSPENDED","DEPRECATED"].includes(i.status))throw new Error("PROVIDER_CATALOGUE_STATUS_INVALID");const c=await this.pool.connect();try{await c.query("BEGIN");const p=await c.query<Row>("SELECT provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by FROM eper_provider_definitions WHERE provider_key=$1 FOR UPDATE",[text(i.providerKey,96)]);if(!p.rows[0])throw new Error("PROVIDER_CATALOGUE_NOT_FOUND");const before=map(p.rows[0]);if(before.version!==i.expectedVersion)throw new ProviderCatalogueConflictError(before.version);if(before.status==="DEPRECATED"&&i.status!=="DEPRECATED")throw new Error("PROVIDER_CATALOGUE_DEPRECATED_IS_TERMINAL");const r=await c.query<Row>("UPDATE eper_provider_definitions SET provider_status=$2,version=version+1,updated_at=NOW(),updated_by=$3 WHERE provider_key=$1 AND version=$4 RETURNING provider_key,display_name,adapter_key,adapter_version,capabilities,auth_modes,configuration_schema,provider_status,version,created_at,updated_at,updated_by",[before.providerKey,i.status,i.actorId,i.expectedVersion]);if(!r.rows[0])throw new ProviderCatalogueConflictError(before.version);const after=map(r.rows[0]);await this.audit(c,i,"provider.catalogue."+i.status.toLowerCase(),after.providerKey,before,after);await c.query("COMMIT");return after;}catch(e){try{await c.query("ROLLBACK");}catch{}throw e;}finally{c.release();}
+ }
+ private async audit(c:AuditSqlClient,i:ProviderCatalogueAuditContext,action:string,key:string,before:ProviderDefinition|null,after:ProviderDefinition){await appendAuditEventInTransaction(c,{tenantId:"platform",applicationId:"provider-catalogue",environment:i.environment,actorType:"human",actorId:i.actorId,action,outcome:"success",resourceType:"provider-definition",resourceId:key,correlationId:i.correlationId,source:"platform",operationName:action,serviceVersion:this.serviceVersion,beforeHash:before?hashAuditEnvelope(before as unknown as Record<string,unknown>):undefined,afterHash:hashAuditEnvelope(after as unknown as Record<string,unknown>),payload:{providerKey:key,previousVersion:before?.version??null,newVersion:after.version}});}
+}

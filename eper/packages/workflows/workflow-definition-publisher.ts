@@ -5,7 +5,7 @@ import {
   type AuditSqlClient,
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
-import { workflowPermissionGranted, type WorkflowDefinition, type WorkflowPermission } from "./workflow-configuration.js";
+import { workflowPermissionGranted, validateWorkflowRuleConfiguration, type WorkflowDefinition, type WorkflowPermission } from "./workflow-configuration.js";
 
 export interface WorkflowPublisherContext {
   tenantId: string;
@@ -104,6 +104,11 @@ function validateDefinition(value: WorkflowDefinition): void {
       throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_UNKNOWN_NEXT_ACTIVITY", 400);
     }
   }
+  try { validateWorkflowRuleConfiguration(value); }
+  catch (error) {
+    const code = error instanceof Error ? error.message : "WORKFLOW_PUBLISH_INVALID_RULE_CONFIGURATION";
+    throw new WorkflowDefinitionPublishError(code, 400);
+  }
 }
 
 type DefinitionRow = {
@@ -126,6 +131,7 @@ export class WorkflowDefinitionPublisher {
   async publish(
     context: WorkflowPublisherContext,
     definition: WorkflowDefinition,
+    options: { expectedDraftVersion?: number } = {},
   ): Promise<PublishedWorkflowDefinition> {
     validateContext(context);
     validateDefinition(definition);
@@ -186,6 +192,29 @@ export class WorkflowDefinitionPublisher {
         "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
         [JSON.stringify([context.tenantId, context.applicationId, snapshot.id])],
       );
+
+      if (options.expectedDraftVersion !== undefined) {
+        if (!Number.isSafeInteger(options.expectedDraftVersion) || options.expectedDraftVersion < 1) {
+          throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_INVALID_EXPECTED_DRAFT_VERSION", 400);
+        }
+        const draftResult = await client.query<{ draft_version: number | string; definition: WorkflowDefinition | string }>(
+          `SELECT draft_version, definition FROM eper_workflow_definition_drafts
+           WHERE tenant_id = $1 AND application_id = $2 AND workflow_id = $3
+           FOR UPDATE`,
+          [context.tenantId, context.applicationId, snapshot.id],
+        );
+        const draftRow = draftResult.rows[0];
+        if (!draftRow || Number(draftRow.draft_version) !== options.expectedDraftVersion) {
+          throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_DRAFT_VERSION_CONFLICT", 409);
+        }
+        const lockedDraft = typeof draftRow.definition === "string"
+          ? JSON.parse(draftRow.definition) as WorkflowDefinition
+          : draftRow.definition;
+        const lockedActive = { ...lockedDraft, status: "ACTIVE" as const };
+        if (lockedDraft.id !== snapshot.id || canonical(lockedActive) !== canonical(snapshot)) {
+          throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_DRAFT_CONTENT_CONFLICT", 409);
+        }
+      }
 
       const latest = await client.query<{ definition_version: number | string }>(
         `SELECT definition_version FROM eper_workflow_definition_versions

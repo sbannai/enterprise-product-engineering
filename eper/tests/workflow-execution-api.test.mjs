@@ -58,7 +58,7 @@ test("workflow role catalogue requires explicit role:assign authority and explic
   process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
   process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
   process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
-    [token]: { tenantId: "tenant-a", actorId: "admin-a" },
+    [token]: { tenantId: "tenant-a", actorId: "admin-a", roleKey: "customer_admin" },
   });
   let assigned = false;
   let activeRoleIds = [];
