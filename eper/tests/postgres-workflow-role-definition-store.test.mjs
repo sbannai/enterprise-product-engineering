@@ -9,12 +9,12 @@ const input = {
   expectedVersion: 0, changedBy: "admin-01", environment: "sandbox", correlationId: "corr-01",
 };
 
-function fixture({ tenantStatus = "active", priorVersion = null } = {}) {
+function fixture({ tenantStatus = "active", priorVersion = null, permissions = input.permissions } = {}) {
   const calls = [];
   const now = "2026-10-31T11:56:00.000Z";
   const row = {
     tenant_id: input.tenantId, application_id: input.applicationId, role_id: input.roleId,
-    name: input.name, description: input.description, permissions: input.permissions,
+    name: input.name, description: input.description, permissions,
     role_status: input.status, delegable: input.delegable, scope_type: "application", version: priorVersion ? priorVersion + 1 : 1,
     updated_at: now, updated_by: input.changedBy,
   };
@@ -77,7 +77,6 @@ test("role definition requires an explicit boolean delegable value", async () =>
 });
 
 test("role definition accepts provider connection permissions for application-scoped provider administration", async () => {
-  const { calls, pool } = fixture();
   const permissions = [
     "provider.connection.read",
     "provider.connection.bind",
@@ -85,6 +84,7 @@ test("role definition accepts provider connection permissions for application-sc
     "provider.connection.rotate",
     "provider.connection.revoke",
   ];
+  const { calls, pool } = fixture({ permissions });
   const result = await new PostgresWorkflowRoleDefinitionStore(pool).replace({
     ...input,
     permissions,
