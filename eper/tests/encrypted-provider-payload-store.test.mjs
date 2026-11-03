@@ -18,12 +18,16 @@ const payload = {
   body: "No external delivery",
 };
 
-function store(allow = true) {
+function store(allow = true, allowCreate = true) {
   const calls = [];
   const value = new InMemoryEncryptedProviderPayloadStore(key, {
     async authorize(scope) {
       calls.push(scope);
       return allow;
+    },
+    async authorizeCreate(scope) {
+      calls.push({ ...scope, action: "create" });
+      return allowCreate;
     },
   });
   return { value, calls };
@@ -35,12 +39,24 @@ test("stores encrypted payload and retrieves it only through an authorized exact
   assert.match(reference.reference, /^pp_[a-f0-9-]{36}$/);
   assert.match(reference.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(await value.get(reference), payload);
-  assert.deepEqual(calls, [base]);
+  assert.deepEqual(calls, [{ ...base, action: "create" }, base]);
+});
+
+test("fails closed when payload creation is denied or authorization is unavailable", async () => {
+  const denied = store(true, false);
+  await assert.rejects(() => denied.value.put({ ...base, payload }), error =>
+    error instanceof ProviderPayloadStoreError && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED");
+  const unavailable = new InMemoryEncryptedProviderPayloadStore(key, {
+    async authorize() { return true; }, async authorizeCreate() { throw new Error("authorization unavailable"); },
+  });
+  await assert.rejects(() => unavailable.put({ ...base, payload }), error =>
+    error instanceof ProviderPayloadStoreError && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED");
 });
 
 test("rejects cross-tenant, cross-application, cross-operation and capability substitution", async () => {
   const { value, calls } = store();
   const reference = await value.put({ ...base, payload });
+  calls.length = 0; // Ignore the expected create authorization; scope mismatches must not call read authorization.
   for (const patch of [
     { tenantId: "tenant-b" },
     { applicationId: "app-b" },
@@ -67,6 +83,7 @@ test("fails closed when the authorization service denies or fails", async () => 
 
   const unavailable = new InMemoryEncryptedProviderPayloadStore(key, {
     async authorize() { throw new Error("authorization unavailable"); },
+    async authorizeCreate() { return true; },
   });
   const second = await unavailable.put({ ...base, payload });
   await assert.rejects(
@@ -85,7 +102,7 @@ test("detects altered digest and refuses malformed key material", async () => {
       && error.code === "PROVIDER_PAYLOAD_SCOPE_MISMATCH",
   );
   assert.throws(
-    () => new InMemoryEncryptedProviderPayloadStore(Buffer.alloc(16), { async authorize() { return true; } }),
+    () => new InMemoryEncryptedProviderPayloadStore(Buffer.alloc(16), { async authorize() { return true; }, async authorizeCreate() { return true; } }),
     error => error instanceof ProviderPayloadStoreError
       && error.code === "PROVIDER_PAYLOAD_KEY_INVALID",
   );
@@ -116,6 +133,7 @@ test("requires authorization before deleting a payload", async () => {
   let permitted = true;
   const controlled = new InMemoryEncryptedProviderPayloadStore(key, {
     async authorize() { return permitted; },
+    async authorizeCreate() { return permitted; },
   });
   const reference = await controlled.put({ ...base, payload });
   permitted = false;

@@ -23,6 +23,10 @@ export interface ProviderPayloadReadAuthorization {
   authorize(input: ProviderPayloadScope): Promise<boolean>;
 }
 
+export interface ProviderPayloadAuthorization extends ProviderPayloadReadAuthorization {
+  authorizeCreate(input: ProviderPayloadScope): Promise<boolean>;
+}
+
 export interface EncryptedProviderPayloadStore {
   put<T>(input: ProviderPayloadScope & { payload: T }): Promise<ProviderPayloadReference>;
   get<T>(input: ProviderPayloadReference): Promise<T>;
@@ -113,19 +117,25 @@ export class InMemoryEncryptedProviderPayloadStore implements EncryptedProviderP
 
   constructor(
     key: Uint8Array,
-    private readonly authorization: ProviderPayloadReadAuthorization,
+    private readonly authorization: ProviderPayloadAuthorization,
   ) {
     this.key = Buffer.from(key);
     if (this.key.length !== 32) {
       throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_KEY_INVALID");
     }
-    if (!authorization || typeof authorization.authorize !== "function") {
+    if (!authorization || typeof authorization.authorize !== "function"
+      || typeof authorization.authorizeCreate !== "function") {
       throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_ACCESS_DENIED");
     }
   }
 
   async put<T>(input: ProviderPayloadScope & { payload: T }): Promise<ProviderPayloadReference> {
     const normalized = scope(input);
+    let allowed = false;
+    try { allowed = await this.authorization.authorizeCreate(normalized); } catch {
+      throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_ACCESS_DENIED");
+    }
+    if (!allowed) throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_ACCESS_DENIED");
     const plaintext = serialize(input.payload);
     const reference = "pp_" + randomUUID();
     const nonce = randomBytes(12);
