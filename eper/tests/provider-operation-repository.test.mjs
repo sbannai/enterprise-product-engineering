@@ -126,6 +126,8 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
   assert.equal(claimed.leaseExpiresAt, "2026-11-03T13:00:00.000Z");
   assert.equal(claimed.attemptCount, 1);
   assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF o SKIP LOCKED")));
+  assert.ok(calls.some(call => call.sql.includes("LIMIT 1 FOR UPDATE OF o SKIP LOCKED")));
+  assert.ok(!calls.some(call => call.sql.includes("FOR UPDATE OF o SKIP LOCKED LIMIT 1")));
   assert.ok(calls.some(call => call.sql.includes("o.lease_expires_at <= NOW()")));
   assert.ok(calls.some(call => call.sql.includes("o.attempt_count < $5") && call.values[4] === 5));
   assert.ok(calls.some(call => call.sql.includes("fencing_token=o.fencing_token+1") && call.values[2] === 90 && call.values[3] === "worker-1"));
