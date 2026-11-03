@@ -96,7 +96,8 @@ test("create-and-bind persists the customer connection and first application bin
   const binding = calls.find(call => call.sql.includes("INSERT INTO eper_provider_connection_applications"));
   assert.ok(binding);
   assert.equal(binding.values[1], "app-a");
-  assert.equal(binding.values[6], "PENDING_VALIDATION");
+  assert.ok(binding.sql.includes("'PENDING_VALIDATION'"));
+  assert.equal(binding.values[5], "admin-1");
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
   assert.equal(calls.at(-2).sql, "COMMIT");
