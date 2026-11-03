@@ -638,3 +638,14 @@ The failure is unchanged and precisely identified:
 `live PostgreSQL commercial access guard denies tariff overage, then restores only the retained application after versioned revocation` returned `{ allowed: true, reason: "allowed" }` where `{ allowed: false, reason: "tariff_overage" }` was expected, at `eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs:79`.
 
 This is the same missing tariff-enforcement behavior in the main-based candidate. PR #348 contains a PostgreSQL tariff lookup and guard implementation with a green dedicated branch workflow, but that implementation has not yet been validated in a combined #348 + #350 + #355 candidate. Do not merge any of those feature PRs based solely on their independent branch checks.
+
+
+## Tariff guard evidence clarification — 2026-11-03 01:44 UTC
+
+The earlier main-based integrated failure must be interpreted precisely: it ran against a main-based documentation commit that did not contain PR #348's tariff guard. It demonstrates that the current main baseline still lacks the guard; it does **not** demonstrate that PR #348's implementation fails.
+
+Verified PR #348 exact-head workflow run `41491401877`, job `postgres-payment-store` (`125435539918`), completed successfully. Its logs explicitly show:
+- `postgres-module-entitlement-commercial-guard.integration.test.mjs`: 1 test, 1 pass, 0 fail.
+- `postgres-module-entitlement-service.integration.test.mjs`: 1 test, 1 pass, 0 fail.
+
+PR #348, #350 and #355 each have green exact-head workflow sets. However, this is still not a combined integration proof. PR #357 remains non-mergeable; it uses #350 as its head against the #348 integration base, and GitHub reports the branch histories as divergent. The next required proof is a true combined candidate containing #348 + #350 + #355, followed by the full same-commit suite. Do not describe the main-based tariff failure as a failure of #348.
