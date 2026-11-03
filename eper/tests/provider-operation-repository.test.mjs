@@ -92,7 +92,16 @@ test("enqueue is idempotent for the same request digest and rejects key reuse fo
 });
 
 test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
-  const { repository, calls, row } = fixture({ claim: row("DISPATCHING", { attempt_count: 1 }) });
+  const { repository, calls } = fixture({ claim: {
+    operation_id: "00000000-0000-4000-8000-000000000001",
+    tenant_id: "tenant-a", application_id: "app-a",
+    connection_id: "00000000-0000-4000-8000-000000000002",
+    capability_key: "email.send", capability_version: "1",
+    idempotency_key: "mail-001", correlation_id: "corr-001",
+    operation_status: "DISPATCHING", request_digest: "a".repeat(64),
+    provider_reference: null, attempt_count: 1, available_at: stamp,
+    last_error_code: null, created_at: stamp, updated_at: stamp,
+  } });
   const claimed = await repository.claimNext({
     tenantId: "tenant-a", applicationId: "app-a", workerId: "worker-1", auditEnvironment: "sandbox",
   });
@@ -112,8 +121,17 @@ test("worker returns null when no due operation is available", async () => {
 });
 
 test("outcome transition persists safe retry metadata and audit", async () => {
-  const { repository, calls, row } = fixture({
-    savedOutcome: row("RETRYING", { attempt_count: 2, last_error_code: "UPSTREAM_TIMEOUT" }),
+  const { repository, calls } = fixture({
+    savedOutcome: {
+      operation_id: "00000000-0000-4000-8000-000000000001",
+      tenant_id: "tenant-a", application_id: "app-a",
+      connection_id: "00000000-0000-4000-8000-000000000002",
+      capability_key: "email.send", capability_version: "1",
+      idempotency_key: "mail-001", correlation_id: "corr-001",
+      operation_status: "RETRYING", request_digest: "a".repeat(64),
+      provider_reference: null, attempt_count: 2, available_at: stamp,
+      last_error_code: "UPSTREAM_TIMEOUT", created_at: stamp, updated_at: stamp,
+    },
   });
   const result = await repository.recordOutcome({
     tenantId: "tenant-a", applicationId: "app-a",
