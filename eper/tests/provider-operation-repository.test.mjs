@@ -108,6 +108,7 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
   assert.equal(claimed.status, "DISPATCHING");
   assert.equal(claimed.attemptCount, 1);
   assert.ok(calls.some(call => call.sql.includes("FOR UPDATE SKIP LOCKED")));
+  assert.ok(calls.some(call => call.sql.includes("b.binding_status='ACTIVE'") && call.sql.includes("pc.connection_status='ACTIVE'") && call.sql.includes("b.allowed_capabilities ? o.capability_key")));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'")));
   assert.ok(calls.some(call => call.sql.includes("provider.operation.dispatch_claimed")));
 });
