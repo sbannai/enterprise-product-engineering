@@ -111,3 +111,20 @@ test("rejects payload values that cannot be represented as JSON", async () => {
       && error.code === "PROVIDER_PAYLOAD_SERIALIZATION_FAILED",
   );
 });
+
+test("requires authorization before deleting a payload", async () => {
+  let permitted = true;
+  const controlled = new InMemoryEncryptedProviderPayloadStore(key, {
+    async authorize() { return permitted; },
+  });
+  const reference = await controlled.put({ ...base, payload });
+  permitted = false;
+  await assert.rejects(
+    () => controlled.delete(reference),
+    error => error instanceof ProviderPayloadStoreError
+      && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+  );
+  permitted = true;
+  assert.deepEqual(await controlled.get(reference), payload);
+  assert.equal(await controlled.delete(reference), true);
+});
