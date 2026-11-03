@@ -618,3 +618,23 @@ No dependency between these two `009_` files was identified in their SQL. Theref
 ### Current consolidation disposition
 
 PR #348, #350 and #355 remain open drafts. Their individual exact-head workflows are green, but the same-commit baseline integration run still fails the commercial tariff-overage guard. PR #357 remains a non-mergeable integration probe. No feature merge is authorized by this evidence alone.
+
+
+## Exact-head validation rerun — 2026-11-03 01:42 UTC
+
+Commit under test: `fb32abd404cffc61edca635a1898368a3d9f84df`.
+
+Eight independent workflows completed successfully: container runtime smoke, release candidate build, G9 reconciliation, 228 requirement / 38 chapter pilot matrix, controlled QA re-execution, six-family HTTP smoke, controlled technical simulation, and EPER CI.
+
+The same-commit integrated workflow completed with failure:
+- Payment API + PostgreSQL + receipt contracts: failed.
+- Same-commit integrated gate: failed.
+- UAT readiness audit + six-wave technical evidence: passed.
+- Container health + six capability families: passed.
+- Release artifact + G9 traceability: passed.
+- 228/38 matrix was skipped in this integrated workflow (its separate workflow passed).
+
+The failure is unchanged and precisely identified:
+`live PostgreSQL commercial access guard denies tariff overage, then restores only the retained application after versioned revocation` returned `{ allowed: true, reason: "allowed" }` where `{ allowed: false, reason: "tariff_overage" }` was expected, at `eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs:79`.
+
+This is the same missing tariff-enforcement behavior in the main-based candidate. PR #348 contains a PostgreSQL tariff lookup and guard implementation with a green dedicated branch workflow, but that implementation has not yet been validated in a combined #348 + #350 + #355 candidate. Do not merge any of those feature PRs based solely on their independent branch checks.
