@@ -22,6 +22,7 @@ on:
       - "eper/tests/postgres-platform-application-remediation.integration.test.mjs"
       - "eper/tests/postgres-workflow-role-delegation.integration.test.mjs"
       - "eper/tests/privileged-postgres-role-contract.integration.test.mjs"
+      - "eper/tests/privileged-postgres-role-operations.integration.test.mjs"
       - "eper/docs/PRIVILEGED_POSTGRES_ROLE_CONTRACT.md"
       - "eper/tests/platform-customer-admin-provisioning-store.test.mjs"
       - "eper/tests/platform-customer-admin-provisioning-route.test.mjs"
@@ -170,6 +171,8 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Verify dedicated PostgreSQL runtime-role privileges
         run: node --test tests/privileged-postgres-role-contract.integration.test.mjs
+      - name: Exercise privileged PostgreSQL store operations and audit rollback
+        run: node --test tests/privileged-postgres-role-operations.integration.test.mjs
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
