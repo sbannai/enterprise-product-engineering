@@ -15,7 +15,7 @@ const ENV_KEYS = [
   "EPER_REQUIREMENT_MODULE_MAP_JSON",
 ];
 
-async function withUatApi({ moduleEntitlementService, configured = true }, run) {
+async function withUatApi({ moduleEntitlementService, configured = true, entitlementRequired = "true" }, run) {
   const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_CAPABILITY_PERSISTENCE: "memory",
@@ -26,8 +26,11 @@ async function withUatApi({ moduleEntitlementService, configured = true }, run) 
     EPER_UAT_PUBLIC_ENDPOINT_ACK: "I_ACCEPT_PUBLIC_BEARER_UAT_RISK",
     EPER_UAT_APPLICATION_ID: configured ? "application-test" : "",
     EPER_UAT_ROLE_KEY: configured ? "customer-admin" : "",
-    EPER_CAPABILITY_ENTITLEMENTS_REQUIRED: "true",
     EPER_REQUIREMENT_MODULE_MAP_JSON: configured ? JSON.stringify({ "REQ-46301": "records" }) : "{}",
+  });
+  if (entitlementRequired === undefined) delete process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED;
+  else process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED = entitlementRequired;
+
   });
   const server = createAppServer({ moduleEntitlementService });
   try {
@@ -63,6 +66,31 @@ test("UAT capability route fails closed when entitlement configuration is missin
     assert.equal(response.status, 503);
     assert.equal((await response.json()).error, "capability_entitlement_enforcement_unconfigured");
   });
+});
+
+
+test("public UAT capability route fails closed when entitlement enforcement is disabled", async () => {
+  for (const entitlementRequired of ["false", undefined]) {
+    let calls = 0;
+    await withUatApi({
+      entitlementRequired,
+      moduleEntitlementService: {
+        checkModule: async () => { calls++; return { allowed: true, reason: "allowed" }; },
+      },
+    }, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/uat/requirements/REQ-46301/execute`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer uat-test-token-012345678901234567890123456789",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ payload: {} }),
+      });
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "capability_entitlement_enforcement_required" });
+      assert.equal(calls, 0, "execution must not reach authorization or capability dispatch");
+    });
+  }
 });
 
 test("UAT capability route denies execution when entitlement policy denies access", async () => {
