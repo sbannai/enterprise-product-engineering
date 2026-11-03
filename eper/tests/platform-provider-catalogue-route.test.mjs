@@ -81,6 +81,16 @@ test("catalogue lifecycle transition requires expectedVersion and uses durable a
   providerKey:"mail-primary",expectedVersion:1,status:"SUSPENDED",
  });
 });
+
+test("catalogue API requires the versioned media type",async()=>{
+ process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED="true";
+ const deps=fixture(),res=response(),req=request("GET","/platform/admin/provider-definitions");
+ req.headers.accept="application/json";
+ await handlePlatformProviderCatalogueRoute(req,res,"/platform/admin/provider-definitions",deps);
+ assert.equal(res.statusCode,406);
+ assert.equal(deps.calls.some(x=>x[0]==="list"),false);
+});
+
 test("catalogue route fails closed when feature flag is disabled",async()=>{
  delete process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED;process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";
  const deps=fixture(),res=response();
