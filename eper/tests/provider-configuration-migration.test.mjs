@@ -104,6 +104,6 @@ test("provider defaults and operation queue receive only tenant-scoped runtime g
   assert.match(dispatchAccessMigration, /GRANT UPDATE \(defaults, version, updated_at, updated_by\)/);
   assert.match(dispatchAccessMigration, /GRANT SELECT ON eper_application_provider_policies TO eper_provider_catalogue_access/);
   assert.match(dispatchAccessMigration, /GRANT SELECT, INSERT ON eper_provider_operations TO eper_provider_catalogue_access/);
-  assert.match(dispatchAccessMigration, /GRANT UPDATE \(operation_status, attempt_count, available_at/);
+  assert.match(dispatchAccessMigration, /GRANT UPDATE\s*\(\s*operation_status,\s*attempt_count,\s*available_at/);
   assert.match(dispatchAccessMigration, /eper_provider_catalogue_access/);
 });
