@@ -20,6 +20,7 @@ function fixture(overrides={}) {
  const provider={providerKey:"mail-primary",displayName:"Primary Mail",adapterKey:"synthetic",adapterVersion:"1.0.0",capabilities:["email.send"],authModes:["synthetic"],configurationSchema:{type:"object"},status:"ACTIVE",version:1};
  const repository={
   async list(limit){calls.push(["list",limit]);return [provider];},
+  async get(key){calls.push(["get",key]);return key===provider.providerKey?provider:null;},
   async create(input){calls.push(["create",input]);return {...provider,...input,version:1};},
   async update(input){calls.push(["update",input]);return {...provider,...input,version:2};},
   async setStatus(input){calls.push(["status",input]);return {...provider,status:input.status,version:2};},
@@ -39,6 +40,16 @@ test("customer-only platform credential cannot access provider catalogue",async(
  await handlePlatformProviderCatalogueRoute(request("GET","/platform/admin/provider-definitions"),res,"/platform/admin/provider-definitions",deps);
  assert.equal(res.statusCode,403);assert.equal(deps.calls.some(x=>x[0]==="list"),false);
 });
+
+test("catalogue item lookup uses exact provider key",async()=>{
+ process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED="true";
+ const deps=fixture(),res=response();
+ await handlePlatformProviderCatalogueRoute(request("GET","/platform/admin/provider-definitions/mail-primary"),res,
+  "/platform/admin/provider-definitions/mail-primary",deps);
+ assert.equal(res.statusCode,200);
+ assert.deepEqual(deps.calls.find(x=>x[0]==="get"),["get","mail-primary"]);
+});
+
 test("catalogue creation derives actor and correlation context from trusted server values",async()=>{
  process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED="true";
  const deps=fixture(),res=response();
