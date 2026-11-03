@@ -146,6 +146,29 @@ test("outcome transition persists safe retry metadata and audit", async () => {
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
 });
 
+test("retry budget exhaustion moves the operation to NEEDS_ATTENTION", async () => {
+  const { repository, calls } = fixture({
+    savedOutcome: {
+      operation_id: "00000000-0000-4000-8000-000000000001",
+      tenant_id: "tenant-a", application_id: "app-a",
+      connection_id: "00000000-0000-4000-8000-000000000002",
+      capability_key: "email.send", capability_version: "1",
+      idempotency_key: "mail-001", correlation_id: "corr-001",
+      operation_status: "NEEDS_ATTENTION", request_digest: "a".repeat(64),
+      provider_reference: null, attempt_count: 5, available_at: stamp,
+      last_error_code: "UPSTREAM_TIMEOUT", created_at: stamp, updated_at: stamp,
+    },
+  });
+  const result = await repository.recordOutcome({
+    tenantId: "tenant-a", applicationId: "app-a",
+    operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
+    outcome: "RETRY", errorCode: "UPSTREAM_TIMEOUT", maxAttempts: 5,
+    auditEnvironment: "sandbox",
+  });
+  assert.equal(result.status, "NEEDS_ATTENTION");
+  assert.ok(calls.some(call => call.sql.includes("attempt_count >= $8")));
+});
+
 test("outcome transition rejects stale or non-dispatching operations", async () => {
   const { repository } = fixture({ savedOutcome: null });
   await assert.rejects(() => repository.recordOutcome({
