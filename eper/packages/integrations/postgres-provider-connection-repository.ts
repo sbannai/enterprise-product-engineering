@@ -53,6 +53,11 @@ export interface BindProviderConnectionInput {
   auditEnvironment: AuditEnvironment;
 }
 
+export interface CreateAndBindProviderConnectionInput extends CreateProviderConnectionInput {
+  applicationId: string;
+  allowedCapabilities: string[];
+}
+
 export class ProviderConnectionConflictError extends Error {
   constructor(readonly currentVersion: number) {
     super("PROVIDER_CONNECTION_VERSION_CONFLICT");
@@ -232,6 +237,98 @@ export class PostgresProviderConnectionRepository {
         allowedCapabilities: typeof row.allowed_capabilities === "string"
           ? JSON.parse(row.allowed_capabilities) as string[] : row.allowed_capabilities,
       }));
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Creates a tenant-owned provider connection and its first application binding
+   * atomically. An application-scoped administrator may create a connection for
+   * the tenant, but no unbound/orphan connection can be committed if binding fails.
+   */
+  async createAndBindApplication(input: CreateAndBindProviderConnectionInput): Promise<{
+    connection: ProviderConnection;
+    bindingStatus: "PENDING_VALIDATION";
+  }> {
+    this.validateIdentity(input.tenantId, "TENANT");
+    this.validateIdentity(input.applicationId, "APPLICATION_ID");
+    this.validateIdentity(input.actorId, "ACTOR");
+    this.validateIdentity(input.providerKey, "PROVIDER_KEY");
+    this.validateIdentity(input.secretReference, "SECRET_REFERENCE");
+    this.validateCorrelation(input.correlationId);
+    if (!input.displayName?.trim() || input.displayName.length > 160) {
+      throw new Error("PROVIDER_CONNECTION_DISPLAY_NAME_INVALID");
+    }
+    if (!input.authMode?.trim() || input.authMode.length > 64) {
+      throw new Error("PROVIDER_CONNECTION_AUTH_MODE_INVALID");
+    }
+    const capabilities = [...new Set(input.allowedCapabilities.map(value => value.trim()))];
+    if (!capabilities.length || capabilities.some(value => !value || value.length > 128)) {
+      throw new Error("PROVIDER_BINDING_CAPABILITIES_INVALID");
+    }
+
+    const connectionId = randomUUID();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
+      await this.setApplicationContext(client, input.applicationId);
+      const definition = await client.query<{
+        provider_status: string;
+        capabilities: string[] | string;
+        auth_modes: string[] | string;
+      }>(
+        `SELECT provider_status, capabilities, auth_modes
+         FROM eper_provider_definitions WHERE provider_key = $1 FOR SHARE`,
+        [input.providerKey],
+      );
+      const provider = definition.rows[0];
+      if (!provider || provider.provider_status !== "ACTIVE") {
+        throw new Error("PROVIDER_DEFINITION_NOT_ACTIVE");
+      }
+      const supportedCapabilities = new Set(typeof provider.capabilities === "string"
+        ? JSON.parse(provider.capabilities) as string[] : provider.capabilities);
+      const supportedAuthModes = new Set(typeof provider.auth_modes === "string"
+        ? JSON.parse(provider.auth_modes) as string[] : provider.auth_modes);
+      if (capabilities.some(capability => !supportedCapabilities.has(capability))) {
+        throw new Error("PROVIDER_CAPABILITY_NOT_SUPPORTED");
+      }
+      if (!supportedAuthModes.has(input.authMode)) {
+        throw new Error("PROVIDER_AUTH_MODE_NOT_SUPPORTED");
+      }
+      const saved = await client.query<ConnectionRow>(
+        `INSERT INTO eper_provider_connections
+          (tenant_id, connection_id, provider_key, display_name, auth_mode, secret_reference,
+           connection_status, environment, safe_metadata, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,'PENDING_VALIDATION',$7,$8::jsonb,$9,$9)
+         RETURNING tenant_id, connection_id, provider_key, display_name, auth_mode,
+           connection_status, environment, safe_metadata, version, created_at, updated_at`,
+        [input.tenantId, connectionId, input.providerKey, input.displayName.trim(),
+          input.authMode, input.secretReference, input.environment,
+          JSON.stringify(input.safeMetadata ?? {}), input.actorId],
+      );
+      const row = saved.rows[0];
+      if (!row) throw new Error("PROVIDER_CONNECTION_WRITE_RETURNED_NO_ROW");
+      await client.query(
+        `INSERT INTO eper_provider_connection_applications
+          (tenant_id, application_id, connection_id, provider_key, allowed_capabilities,
+           binding_status, updated_by)
+         VALUES ($1,$2,$3,$4,$5::jsonb,'PENDING_VALIDATION',$6)`,
+        [input.tenantId, input.applicationId, connectionId, input.providerKey,
+          JSON.stringify(capabilities), input.actorId],
+      );
+      await this.audit(client, {
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        environment: input.auditEnvironment, actorId: input.actorId,
+        action: "provider.connection.create_and_bind", resourceId: connectionId,
+        correlationId: input.correlationId,
+      });
+      await client.query("COMMIT");
+      return { connection: toConnection(row), bindingStatus: "PENDING_VALIDATION" };
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
