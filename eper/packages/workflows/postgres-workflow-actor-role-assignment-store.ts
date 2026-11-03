@@ -1,14 +1,10 @@
+import { WORKFLOW_ROLE_PERMISSIONS } from "./postgres-workflow-role-definition-store.js";
 import {
   appendAuditEventInTransaction,
   type AuditEnvironment,
   type AuditSqlClient,
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
-
-const WORKFLOW_ROLE_PERMISSION_KEYS = [
-  "workflow:view", "workflow:act", "workflow:approve",
-  "workflow:admin", "role:assign", "access:manage",
-] as const;
 
 export interface WorkflowActorRoleAssignment {
   tenantId: string;
@@ -191,7 +187,7 @@ export class PostgresWorkflowActorRoleAssignmentStore {
     for (const [name, value] of Object.entries({ tenantId, applicationId, actorId, roleId })) {
       validateId(value, name);
     }
-    if (!(WORKFLOW_ROLE_PERMISSION_KEYS as readonly string[]).includes(permission)) {
+    if (!(WORKFLOW_ROLE_PERMISSIONS as readonly string[]).includes(permission)) {
       throw new Error("WORKFLOW_ROLE_ASSIGNMENT_PERMISSION_INVALID");
     }
     const client = await this.pool.connect();
