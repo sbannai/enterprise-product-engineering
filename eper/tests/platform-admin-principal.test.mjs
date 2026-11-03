@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolvePlatformAdminPrincipal } from "../dist/packages/identity/platform-admin-principal.js";
+import { resolvePlatformAdminPrincipal, resolvePlatformAdminPrincipalFromStore } from "../dist/packages/identity/platform-admin-principal.js";
 
 const provisionCredential = "provision-secret-credential-0000000001";
 const recoverCredential = "recover-secret-credential-00000000000001";
@@ -125,4 +125,27 @@ test("provider catalogue permission is independently assignable and does not imp
   assert.equal(principal?.permissions.includes("customer_admin:provision"), false);
   assert.equal(principal?.permissions.includes("customer_admin:recover"), false);
   assert.equal(principal?.permissions.includes("application:remediate"), false);
+});
+
+
+test("durable resolver derives platform principal only from PostgreSQL credential resolution", async () => {
+  const calls = [];
+  const store = { async resolve(token) {
+    calls.push(token);
+    return { credentialId: "durable-key-01", platformActorId: "durable-operator-01", permissions: ["customer_admin:provision"] };
+  } };
+  const principal = await resolvePlatformAdminPrincipalFromStore(`Bearer ${provisionCredential}`, store);
+  assert.deepEqual(principal, {
+    credentialId: "durable-key-01", platformActorId: "durable-operator-01", permissions: ["customer_admin:provision"],
+  });
+  assert.deepEqual(calls, [provisionCredential]);
+  assert.equal("tenantId" in principal, false);
+});
+
+test("durable resolver rejects malformed bearer credentials without querying the store", async () => {
+  let calls = 0;
+  const store = { async resolve() { calls += 1; return null; } };
+  assert.equal(await resolvePlatformAdminPrincipalFromStore("Basic abc", store), null);
+  assert.equal(await resolvePlatformAdminPrincipalFromStore("Bearer short", store), null);
+  assert.equal(calls, 0);
 });
