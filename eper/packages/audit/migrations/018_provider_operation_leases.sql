@@ -8,6 +8,11 @@ ALTER TABLE eper_provider_operations
   ADD COLUMN IF NOT EXISTS fencing_token BIGINT NOT NULL DEFAULT 0
     CHECK (fencing_token >= 0);
 
+-- Claims created before lease columns existed must not remain stranded forever.
+UPDATE eper_provider_operations
+SET lease_owner = 'legacy-expired', lease_expires_at = NOW()
+WHERE operation_status = 'DISPATCHING' AND lease_expires_at IS NULL;
+
 CREATE INDEX IF NOT EXISTS eper_provider_operations_expired_lease_idx
   ON eper_provider_operations (tenant_id, application_id, lease_expires_at, available_at)
   WHERE operation_status = 'DISPATCHING';
