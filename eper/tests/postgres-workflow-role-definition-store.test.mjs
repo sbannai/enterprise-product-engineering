@@ -27,7 +27,7 @@ function fixture({ tenantStatus = "active", priorVersion = null } = {}) {
       if (sql.includes("SELECT version FROM eper_workflow_role_definition")) {
         return { rows: priorVersion ? [{ version: priorVersion }] : [], rowCount: priorVersion ? 1 : 0 };
       }
-      if (sql.includes("INSERT INTO eper_workflow_role_definition")) return { rows: [row], rowCount: 1 };
+      if (sql.includes("INSERT INTO eper_workflow_role_definition")) return { rows: [{ ...row, permissions: JSON.parse(values[5]) }], rowCount: 1 };
       if (sql.includes("SELECT last_event_hash")) return { rows: [{ last_event_hash: null }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
