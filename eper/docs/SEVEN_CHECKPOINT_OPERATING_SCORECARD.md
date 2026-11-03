@@ -603,3 +603,18 @@ The workflow migration directory was enumerated on main and on the #348/#350/#35
 - The tariff defect is unchanged on this exact-head integrated run; PR #348's isolated branch validation does not fix main or the combined candidate.
 - Keep #348/#350/#355 and #357 unmerged. Resolve the shared API/entitlement patches and the duplicate migration ordinal in a real Git workspace, then rerun the full PostgreSQL-enabled suite and a non-skipped 228/38 matrix on one exact candidate.
 - All seven checkpoints remain AMBER. No application source code was changed by this validation/documentation cycle. No chargeable cloud resources or provider activations.
+
+
+## Migration runner semantics correction — 2026-11-03
+
+The duplicate `009_` ordinal is a naming/sequence hygiene issue, **not a demonstrated runtime collision**. Inspection of `eper/scripts/migrate-workflows.mjs` and its shared `runMigrations` implementation confirms that migration filenames are sorted lexicographically, each complete filename is the primary key in `eper_workflow_schema_migrations`, and the runner verifies a SHA-256 checksum before skipping an already-applied migration. Consequently, both distinct `009_` files are discoverable and are deterministically ordered by their full filenames. The workflow-drafts migration sorts before the role-delegation-provenance migration.
+
+The two migration bodies inspected are independent against the existing schema:
+- workflow drafts creates `eper_workflow_definition_drafts` and references the existing tenant/application assignment table;
+- delegation provenance adds `grantor_actor_id` to the existing actor-role assignment table.
+
+No dependency between these two `009_` files was identified in their SQL. Therefore, do not describe this as a migration-runner collision or assume it blocks execution. It remains advisable to assign unique sequential ordinals in the eventual combined branch for unambiguous human sequencing, but only after confirming the full migration set and preserving migration checksums for any already-applied environment. Never rename an applied migration in place.
+
+### Current consolidation disposition
+
+PR #348, #350 and #355 remain open drafts. Their individual exact-head workflows are green, but the same-commit baseline integration run still fails the commercial tariff-overage guard. PR #357 remains a non-mergeable integration probe. No feature merge is authorized by this evidence alone.
