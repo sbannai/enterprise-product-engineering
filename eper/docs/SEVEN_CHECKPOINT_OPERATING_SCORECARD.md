@@ -515,3 +515,50 @@ PR #348 contains current main as an ancestor and the corrected shared tariff pol
 5. Finish restricted worker identity, independent supervision, alerts, backup/recovery runbooks and second-engineer release demonstration.
 
 No approved requirement or chapter was edited. No branch was deleted, no merge was performed, no chargeable cloud resource was provisioned, and no real external/provider action was triggered.
+
+
+## Dated operating update — 2026-11-03 (mainline validation and PR/branch consolidation)
+
+**Assessment baseline:** main `a3635ffbb522488163904c1236fed294b0a2af17`.  
+**Repository inventory snapshot:** 345 pull-request records returned across the four queried pages (256 merged; 89 closed without merge); 363 branch refs (362 non-main); zero open PRs observed. This is an inventory snapshot, not a completed content audit of every closed PR or branch.
+
+### Exact-main technical evidence
+
+- Main integrated gate [run 41657986233](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986233) passed, including payment API/PostgreSQL/receipt contracts, G9 traceability, the 228-requirement / 38-chapter matrix, six capability-family HTTP/container checks, UAT readiness technical evidence and the same-commit integrated gate.
+- Main CI [run 41657986202](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986202) passed, including ephemeral PostgreSQL migrations, live PostgreSQL workflow tests and scheduler/capability/ticketing migration coverage.
+- Provider worker lifecycle [run 41657986283](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986283) passed.
+- Fresh-clone verification [run 41657363742](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657363742) passed on candidate commit `2c426de8b63e437ffb186ed4887da76b4b704719`: 1,422 passed, 0 failed, 4 skipped. Its Git tree SHA `0c01985a303e9348e728acd04b0a55a80020f9a9` matches the current main tree exactly. This is exact-tree evidence, not a run whose commit SHA is the main merge commit.
+
+### PR and branch governance findings
+
+- PR #376 merged on 2026-11-03 and consolidated Customer Admin, workflow and provider-connection foundations. PR #362 merged the provider permission vocabulary into durable application roles.
+- A sampled compare of closed-unmerged PR heads against current main found nine distinct branch heads with zero unique commits relative to main; these are cleanup candidates only after branch-owner and reference checks. No branch was deleted.
+- Seven sampled branch heads remained divergent at commit ancestry level (#361, #360, #356, #355, #349, #327 and #325). File-level inspection refines that result:
+  - #361: both actor-role implementation/test and role-definition implementation are now on main; its role-definition test has subsequently evolved on main. The provider permission vocabulary is covered by merged #362. Candidate for closure/archive after final reference check.
+  - #360: the atomic tariff/entitlement access query is present on main; current main's entitlement tests are more extensive. Candidate for closure/archive after final reference check.
+  - #355: provider validation store, authorization boundary, validation service, provider API contract and customer provider-connection wireframe match main in inspected files. Main's provider repository additionally contains `createAndBindApplication`. No missing implementation was identified in the inspected subset; complete changed-file audit remains before archive.
+  - #325: worker entrypoint and adapter match main; current main's worker entrypoint test and package manifest have evolved beyond the branch. Operations documentation still needs final comparison before archive.
+  - #356 and #327: scorecard-only historical branches; reconcile their documentation against this current scorecard before archive.
+  - #349: documentation-only requirements/USP changes; preserve the approved 228/38 baseline and reconcile the draft additions before archive.
+- The sampled findings do not justify deleting branches automatically. Unique ancestry alone is not proof of missing code, and matching selected files is not a substitute for checking every changed path.
+
+### Seven-checkpoint assessment
+
+| Checkpoint | Status | Evidence and remaining boundary |
+|---|---|---|
+| 1. Product USP and positioning | AMBER | Customer Admin, workflow and provider foundations are integrated. Commercial billing/invoice reconciliation, requirement-candidate owner disposition and full customer journeys remain. Approved 228 requirements / 38 chapters remain unchanged. |
+| 2. CI and persistence foundations | GREEN local/CI; AMBER operations | Current-main CI and PostgreSQL migration/workflow lanes pass; fresh-clone verification passes against the exact current main tree. Production backup destination, encryption/key custody, retention, RPO/RTO and independent recovery rehearsal remain. |
+| 3. Architecture and execution boundaries | AMBER | Tenant-scoped persistence and provider permission vocabulary are integrated. Full delegation/threshold/separation-of-duties coverage, production identity lifecycle and operational controls remain. |
+| 4. Workflow execution design and schema | AMBER | Workflow design/persistence and worker foundations are present. Complete event delivery/replay, approved production adapter, restricted worker identity and independent supervision remain. |
+| 5. Integrated validation | GREEN for inspected technical lanes; AMBER for end-to-end product journey | Current-main integrated gate, CI, provider worker lifecycle and exact-tree fresh-clone evidence pass. This does not establish complete business acceptance or production readiness. |
+| 6. PR consolidation and governance | RED | No open PRs were observed, but 89 closed-unmerged PR records and 362 non-main branches require systematic disposition. Main branch reports `protected=false`; repository rulesets collection is empty. Branch protection must be enabled by a repository administrator; no settings change was made. |
+| 7. Workflow publisher/runtime implementation | AMBER | Worker lifecycle technical checks pass. Restricted credentials, independent host supervision, operational metrics/alerts, load/recovery rehearsal and operator handover remain. |
+
+### Next controlled actions
+
+1. Complete changed-file reconciliation for the sampled provider, scheduler and documentation branches; then extend the same classification to the remaining closed-unmerged inventory.
+2. Produce one branch disposition register with evidence, owner/reference checks and explicit keep/archive recommendations. Do not delete unique or unreviewed branches.
+3. Ask a repository administrator to enable main-branch protection and required status checks; verify the resulting ruleset and required contexts.
+4. Keep Business UAT unauthorized until all existing entry gates are evidenced and the owner explicitly authorizes it.
+
+No code merge, branch deletion, branch-protection change, chargeable cloud provisioning or real external/provider action was performed in this update.
