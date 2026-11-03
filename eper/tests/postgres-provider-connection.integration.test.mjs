@@ -169,6 +169,27 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(appBConnections[0].displayName, "Tenant A calendar");
       assert.deepEqual(appBConnections[0].allowedCapabilities, ["meeting.create"]);
 
+      // An audit constraint failure must roll back both the connection and its
+      // first application binding; no orphan may survive the failed transaction.
+      const beforeRollbackProbe = await pool.query(
+        "SELECT (SELECT COUNT(*) FROM eper_provider_connections WHERE tenant_id=$1)::int AS connections, (SELECT COUNT(*) FROM eper_provider_connection_applications WHERE tenant_id=$1)::int AS bindings",
+        [tenantA],
+      );
+      await assert.rejects(() => repository.createAndBindApplication({
+        tenantId: tenantA, applicationId: appB, actorId, providerKey,
+        displayName: "Audit rollback probe", authMode: "oauth",
+        secretReference: "synthetic://tenant-a/rollback-probe",
+        environment: "sandbox", allowedCapabilities: ["meeting.create"],
+        correlationId: "rollback-probe-" + suffix,
+        auditEnvironment: "invalid-environment",
+      }));
+      const afterRollbackProbe = await pool.query(
+        "SELECT (SELECT COUNT(*) FROM eper_provider_connections WHERE tenant_id=$1)::int AS connections, (SELECT COUNT(*) FROM eper_provider_connection_applications WHERE tenant_id=$1)::int AS bindings",
+        [tenantA],
+      );
+      assert.deepEqual(afterRollbackProbe.rows[0], beforeRollbackProbe.rows[0],
+        "failed audit append must leave neither a connection nor an application binding");
+
       const failedValidation = new ProviderConnectionValidationService(
         validationStore,
         { async resolve() { return { token: "synthetic-only" }; } },
