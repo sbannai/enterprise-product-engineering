@@ -67,7 +67,7 @@ export function resolvePlatformAdminPrincipal(
   authorizationHeader: string | undefined,
   mappingJson: string,
 ): TrustedPlatformAdminPrincipal | null {
-  const match = /^Bearer ([^\\s]+)$/i.exec(authorizationHeader ?? "");
+  const match = /^Bearer ([^\s]+)$/i.exec(authorizationHeader ?? "");
   if (!match || match[1].length < 32 || match[1].length > 4096) return null;
 
   const mapping = parseMapping(mappingJson);
