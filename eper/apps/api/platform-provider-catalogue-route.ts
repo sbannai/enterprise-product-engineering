@@ -51,6 +51,15 @@ export async function handlePlatformProviderCatalogueRoute(
   },
 ): Promise<boolean> {
   if (pathname !== ROOT && !pathname.startsWith(ROOT + "/")) return false;
+  const acceptsVersioned = (request.headers.accept ?? "").split(",").some(value => {
+    const [mediaType, ...parameters] = value.split(";");
+    if (mediaType.trim().toLowerCase() !== VERSIONED_JSON) return false;
+    const quality = parameters.map(parameter => parameter.trim()).find(parameter => /^q\\s*=/i.test(parameter));
+    if (!quality) return true;
+    const parsed = Number(quality.split("=")[1]?.trim());
+    return Number.isFinite(parsed) && parsed > 0 && parsed <= 1;
+  });
+  if (!acceptsVersioned) { respond(request,response,406,{error:"versioned_api_accept_required"}); return true; }
   const suffix = pathname.slice(ROOT.length);
   const lifecycle = /^\/([^/]+)\/(suspend|activate|deprecate)$/.exec(suffix);
   const item = /^\/([^/]+)$/.exec(suffix);
