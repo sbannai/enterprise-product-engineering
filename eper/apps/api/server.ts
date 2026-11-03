@@ -15,6 +15,7 @@ import { PostgresWorkflowActorRoleAssignmentStore } from "../../packages/workflo
 import { WorkflowDefinitionPublisher, WorkflowDefinitionPublishError } from "../../packages/workflows/workflow-definition-publisher.js";
 import { PostgresWorkflowExecutionService, WorkflowExecutionError } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresWorkflowOutboxStore } from "../../packages/workflows/postgres-workflow-outbox-store.js";
+import { PostgresWorkflowDefinitionDraftStore } from "../../packages/workflows/postgres-workflow-definition-draft-store.js";
 import { replayWorkflowOutboxDeadLetter, type WorkflowOutboxReplayContext } from "../../packages/workflows/workflow-outbox-dead-letter-replay.js";
 import { AdminConfigurationConflictError, PostgresAdminConfigurationStore, type AdminConfigurationResource } from "../../packages/workflows/postgres-admin-configuration-store.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
@@ -518,7 +519,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -719,6 +720,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const workflowRoleCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-roles$/.exec(requestUrl.pathname);
     const workflowRoleDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-roles\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(requestUrl.pathname);
     const workflowRoleAssignments = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-role-assignments$/.exec(requestUrl.pathname);
+    const workflowDraftCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-definitions$/.exec(requestUrl.pathname);
+    const workflowDraftDetail = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-definitions\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/draft$/.exec(requestUrl.pathname);
+    const workflowDraftPublish = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-definitions\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/publish$/.exec(requestUrl.pathname);
     const workflowPublishRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/publish$/.exec(requestUrl.pathname);
     const workflowStartRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/instances$/.exec(requestUrl.pathname);
     const workflowTransitionRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-instances\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/transitions$/i.exec(requestUrl.pathname);
@@ -735,6 +739,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       if (message === "REQUEST_BODY_TOO_LARGE") {
         sendApiError(request, response, 413, "REQUEST_BODY_TOO_LARGE", "The request body is too large."); return;
+      }
+      if (error instanceof WorkflowConfigurationError) {
+        const code = message.toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "INVALID_WORKFLOW_CONFIGURATION";
+        sendApiError(request, response, error.statusCode, code, "The workflow configuration is invalid."); return;
       }
       if (error instanceof WorkflowExecutionError || error instanceof WorkflowDefinitionPublishError) {
         sendApiError(request, response, error.statusCode, error.code, "The workflow operation could not be completed.");
@@ -926,7 +934,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
     }
 
-    if (workflowRoleCollection || workflowRoleDetail || workflowRoleAssignments || workflowPublishRoute) {
+    if (workflowRoleCollection || workflowRoleDetail || workflowRoleAssignments || workflowPublishRoute || workflowDraftCollection || workflowDraftDetail || workflowDraftPublish) {
       if (process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
           process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres") {
@@ -934,12 +942,17 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const identity = resolveAdminConfigIdentity(request);
       if (!identity) { sendApiError(request, response, 401, "UNAUTHENTICATED", "Authentication is required."); return; }
+      if (identity.roleKey !== "customer_admin") {
+        sendApiError(request, response, 403, "CUSTOMER_ADMIN_ROLE_REQUIRED",
+          "Workflow authoring and publication are reserved for an authorized Customer Admin.");
+        return;
+      }
       if (!options.tenantApplicationAssignmentStore || !options.actorApplicationAssignmentStore ||
           !options.workflowRoleDefinitionStore || !options.workflowActorRoleAssignmentStore ||
-          !options.workflowDefinitionPublisher) {
+          !options.workflowDefinitionPublisher || ((workflowDraftCollection || workflowDraftDetail || workflowDraftPublish) && !options.workflowDefinitionDraftStore)) {
         sendApiError(request, response, 503, "WORKFLOW_ADMIN_UNAVAILABLE", "Workflow administration is not configured."); return;
       }
-      const applicationId = (workflowRoleCollection ?? workflowRoleDetail ?? workflowRoleAssignments ?? workflowPublishRoute)![1];
+      const applicationId = (workflowRoleCollection ?? workflowRoleDetail ?? workflowRoleAssignments ?? workflowPublishRoute ?? workflowDraftCollection ?? workflowDraftDetail ?? workflowDraftPublish)![1];
       try {
         const tenantApplications = await options.tenantApplicationAssignmentStore.listActive(identity.tenantId);
         if (!tenantApplications.includes(applicationId)) {
@@ -1015,6 +1028,53 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             ? await options.workflowActorRoleAssignmentStore.assign(input)
             : await options.workflowActorRoleAssignmentStore.revoke(input);
           sendApiSuccess(request, response, request.method === "POST" ? 201 : 200, { assignment }); return;
+        }
+        if (workflowDraftCollection) {
+          if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+          const drafts = await options.workflowDefinitionDraftStore!.list(identity.tenantId, applicationId);
+          sendApiSuccess(request, response, 200, { drafts, applicationId }); return;
+        }
+        if (workflowDraftDetail) {
+          const workflowId = workflowDraftDetail[2];
+          if (request.method === "GET") {
+            const draft = await options.workflowDefinitionDraftStore!.get(identity.tenantId, applicationId, workflowId);
+            if (!draft) { sendApiError(request, response, 404, "WORKFLOW_DRAFT_NOT_FOUND", "The workflow draft was not found."); return; }
+            sendApiSuccess(request, response, 200, { draft }); return;
+          }
+          if (request.method !== "PUT") { sendMethodNotAllowed(request, response, "GET, PUT"); return; }
+          const body = await readJson(request);
+          if (!allowedBodyKeys(body, ["definition", "expectedVersion", "changeReason"]) ||
+              !body.definition || typeof body.definition !== "object" || Array.isArray(body.definition) ||
+              !Number.isSafeInteger(body.expectedVersion)) {
+            sendApiError(request, response, 400, "INVALID_WORKFLOW_DRAFT_BODY", "A definition object and expectedVersion are required."); return;
+          }
+          const roles = await options.workflowRoleDefinitionStore!.list(identity.tenantId, applicationId);
+          const validator = new WorkflowConfigurationService();
+          validator.replaceRoles(roles.filter(role => role.status === "active").map(role => ({
+            id: role.roleId, name: role.name, description: role.description, members: [],
+            permissions: role.permissions,
+          })));
+          validator.replaceWorkflows([body.definition as import("../../packages/workflows/workflow-configuration.js").WorkflowDefinition]);
+          const draft = await options.workflowDefinitionDraftStore!.replace({
+            tenantId: identity.tenantId, applicationId, workflowId,
+            definition: body.definition as import("../../packages/workflows/workflow-configuration.js").WorkflowDefinition,
+            expectedVersion: body.expectedVersion as number,
+            changeReason: typeof body.changeReason === "string" ? body.changeReason : undefined,
+            changedBy: identity.actorId, environment, correlationId, serviceVersion: options.serviceVersion,
+          });
+          sendApiSuccess(request, response, 200, { draft }); return;
+        }
+        if (workflowDraftPublish) {
+          if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+          const workflowId = workflowDraftPublish[2];
+          const draft = await options.workflowDefinitionDraftStore!.get(identity.tenantId, applicationId, workflowId);
+          if (!draft) { sendApiError(request, response, 404, "WORKFLOW_DRAFT_NOT_FOUND", "The workflow draft was not found."); return; }
+          const definition = { ...draft.definition, status: "ACTIVE" as const };
+          const published = await options.workflowDefinitionPublisher!.publish({
+            tenantId: identity.tenantId, applicationId, principalId: identity.actorId,
+            correlationId, environment, serviceVersion: options.serviceVersion,
+          }, definition, { expectedDraftVersion: draft.draftVersion });
+          sendApiSuccess(request, response, 201, { published, draftVersion: draft.draftVersion }); return;
         }
         if (workflowPublishRoute) {
           if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
@@ -2210,6 +2270,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         adminIdentity = resolveAdminConfigIdentity(request);
         if (!adminIdentity) {
           sendJson(request, response, 401, { error: "unauthorized_or_unmapped_admin_identity" });
+          return;
+        }
+        if (["/admin/config/workflows", "/admin/config/roles-access", "/admin/config/access-check"].includes(adminConfigPath) &&
+            adminIdentity.roleKey !== "customer_admin") {
+          sendApiError(request, response, 403, "CUSTOMER_ADMIN_ROLE_REQUIRED",
+            "Workflow design and rule configuration are reserved for an authorized Customer Admin.");
           return;
         }
       } else {

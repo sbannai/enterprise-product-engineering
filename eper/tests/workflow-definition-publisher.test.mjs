@@ -17,7 +17,7 @@ const definition = {
   }],
 };
 
-function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus = "active", rolePermissions = ["workflow:approve"], failTenantLookup = false } = {}) {
+function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus = "active", rolePermissions = ["workflow:approve"], failTenantLookup = false, draftVersion = 1, draftDefinition = { ...definition, status: "DRAFT" } } = {}) {
   const calls = [];
   const client = {
     async query(sql, values = []) {
@@ -31,6 +31,9 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleStatus =
       }
       if (sql.includes("eper_workflow_role_definition")) {
         return { rows: roleStatus ? [{ role_status: roleStatus, permissions: rolePermissions }] : [], rowCount: roleStatus ? 1 : 0 };
+      }
+      if (sql.includes("eper_workflow_definition_drafts")) {
+        return { rows: [{ draft_version: draftVersion, definition: draftDefinition }], rowCount: 1 };
       }
       if (sql.includes("ORDER BY definition_version DESC")) return { rows: [{ definition_version: 3 }], rowCount: 1 };
       if (sql.includes("INSERT INTO eper_workflow_definition_versions")) {
@@ -159,4 +162,69 @@ test("publisher rejects malformed form fields before persistence", async () => {
     error => error.code === "WORKFLOW_PUBLISH_INVALID_FIELD",
   );
   assert.equal(calls.length, 0);
+});
+
+
+test("publisher rejects dangling and unsafe workflow rule configuration before database access", async () => {
+  const { calls, pool } = fixture();
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{ ...definition.activities[0], routingRuleIds: ["missing-rule"] }],
+      rules: [],
+    }),
+    error => error.code === "invalid_workflow_activity_rule_reference:review" && error.statusCode === 400,
+  );
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(context, {
+      ...definition,
+      activities: [{ ...definition.activities[0], nextActivityIds: ["review"], routingRuleIds: ["unsafe-rule"] }],
+      rules: [{
+        id: "unsafe-rule", name: "Unsafe", priority: 1, targetActivityId: "review",
+        condition: { kind: "condition", field: "__proto__.constructor", operator: "exists" },
+      }],
+    }),
+    error => error.code.startsWith("invalid_workflow_rule:") && error.statusCode === 400,
+  );
+  assert.equal(calls.length, 0);
+});
+
+
+test("publisher publishes only the exact locked draft revision", async () => {
+  const { calls, pool } = fixture({ draftVersion: 7 });
+  const result = await new WorkflowDefinitionPublisher(pool).publish(
+    context, definition, { expectedDraftVersion: 7 },
+  );
+  assert.equal(result.definitionVersion, 4);
+  const draftLock = calls.find(call => call.sql.includes("eper_workflow_definition_drafts"));
+  assert.ok(draftLock?.sql.includes("FOR UPDATE"));
+  assert.deepEqual(draftLock.values, [context.tenantId, context.applicationId, definition.id]);
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")));
+});
+
+test("publisher rejects a stale draft revision before creating an immutable version", async () => {
+  const { calls, pool } = fixture({ draftVersion: 7 });
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(
+      context, definition, { expectedDraftVersion: 6 },
+    ),
+    error => error.code === "WORKFLOW_PUBLISH_DRAFT_VERSION_CONFLICT" && error.statusCode === 409,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")), false);
+});
+
+test("publisher rejects draft content that differs from the locked revision", async () => {
+  const { calls, pool } = fixture({
+    draftVersion: 7,
+    draftDefinition: { ...definition, name: "A newer, different draft", status: "DRAFT" },
+  });
+  await assert.rejects(
+    new WorkflowDefinitionPublisher(pool).publish(
+      context, definition, { expectedDraftVersion: 7 },
+    ),
+    error => error.code === "WORKFLOW_PUBLISH_DRAFT_CONTENT_CONFLICT" && error.statusCode === 409,
+  );
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.equal(calls.some(call => call.sql.includes("INSERT INTO eper_workflow_definition_versions")), false);
 });

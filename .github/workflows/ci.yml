@@ -58,6 +58,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Workflow rules, capability composition and tariff entitlement unit regressions
+        run: node --test tests/workflow-rule-engine.test.mjs tests/capability-composition.test.mjs tests/postgres-module-entitlement-service.test.mjs
       - name: Apply payment schema migrations to ephemeral CI database
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
@@ -72,6 +74,8 @@ jobs:
         env:
           EPER_IDENTITY_ASSIGNMENT_LIVE_TESTS: "1"
         run: node --test tests/postgres-application-assignment-live.integration.test.mjs
+      - name: Live PostgreSQL commercial tariff access guard integration
+        run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
       - name: Apply campaign scheduler migrations to ephemeral CI database
         run: npm run migrate:campaign-scheduler
       - name: Apply capability persistence migrations to ephemeral CI database

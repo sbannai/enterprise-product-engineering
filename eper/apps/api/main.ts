@@ -12,6 +12,7 @@ import { PostgresWorkflowRoleDelegationStore } from "../../packages/workflows/po
 import { PostgresPlatformCustomerAdminProvisioningStore } from "../../packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
 import { PostgresPlatformApplicationRemediationStore } from "../../packages/workflows/postgres-platform-application-remediation-store.js";
 import { WorkflowDefinitionPublisher } from "../../packages/workflows/workflow-definition-publisher.js";
+import { PostgresWorkflowDefinitionDraftStore } from "../../packages/workflows/postgres-workflow-definition-draft-store.js";
 import { PostgresWorkflowExecutionService } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
@@ -297,6 +298,9 @@ const workflowActorRoleAssignmentStore = workflowAuthorizationStoresEnabled && p
 const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
   ? new WorkflowDefinitionPublisher(paymentPool)
   : undefined;
+const workflowDefinitionDraftStore = workflowExecutionEnabled && paymentPool
+  ? new PostgresWorkflowDefinitionDraftStore(paymentPool)
+  : undefined;
 const workflowExecutionService = workflowExecutionEnabled && paymentPool
   ? new PostgresWorkflowExecutionService(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
@@ -310,6 +314,7 @@ const workflowRoleDelegationStore = workflowRoleDelegationEnabled && paymentPool
   : undefined;
 if (workflowRoleDefinitionStore) await workflowRoleDefinitionStore.assertReady();
 if (workflowActorRoleAssignmentStore) await workflowActorRoleAssignmentStore.assertReady();
+if (workflowDefinitionDraftStore) await workflowDefinitionDraftStore.assertReady();
 if (workflowExecutionService) await workflowExecutionService.assertReady();
 const platformCustomerAdminProvisioningStore = platformCustomerAdminEnabled && paymentPool
   ? new PostgresPlatformCustomerAdminProvisioningStore(paymentPool)
@@ -394,7 +399,7 @@ const server = createAppServer({
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore, platformAdminCredentialStore,
   providerConnectionRepository, providerValidationService, providerCatalogueRepository,
-  workflowDefinitionPublisher, workflowExecutionService,
+  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService,
 });
 
 server.listen(port, host, () => {

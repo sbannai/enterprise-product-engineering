@@ -5,7 +5,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 
 const TOKEN = "eper-workflow-config-test-token-more-than-32-characters";
 
-test("workflow studio, role permissions, access checks and shared toast UI are integrated", async () => {
+test("Customer Admin workflow studio, application roles, draft publishing and shared toast UI are integrated", async () => {
   const keys = ["EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_API_TOKEN"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, { EPER_ADMIN_CONFIG_API_ENABLED: "true", EPER_ADMIN_CONFIG_API_TOKEN: TOKEN });
@@ -34,7 +34,18 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.match(html, /@media\s*\(max-width:\s*850px\)/i, "workflow layout must collapse at tablet widths");
     assert.match(html, /@media\s*\(max-width:\s*540px\)/i, "workflow forms must stack on narrow phones");
     assert.match(html, /Workflow designer/);
-    assert.match(html, /Roles &amp; access|Roles & access/);
+    assert.match(html, /Customer Admin/);
+    assert.match(html, /Business Rule Engine/);
+    assert.match(html, /Visual workflow map/);
+    assert.match(html, /Routing rule IDs/);
+    assert.match(html, /data-k="routingRuleIds"/);
+    assert.match(html, /Application roles/);
+    assert.match(html, /Application ID/);
+    assert.match(html, /workflow-definitions/);
+    assert.match(html, /publishWorkflow/);
+    assert.match(html, /Publish workflow/);
+    assert.doesNotMatch(html, /draft v|published v|Publish version/i, "workflow definition history must remain internal to Customer Admin");
+    assert.match(html, /roleIds\.includes\(role\.id\)/);
     assert.match(html, /Generated activities/);
     assert.match(html, /requiredPermission==='workflow:act'.*assignedRolePermissions\.includes\('workflow:admin'\)/);
     assert.match(html, /assignedRolePermissions\.includes\(requiredPermission\)/, "preview must honor permissions on the activity's assigned role");
@@ -43,6 +54,9 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     const scripts = html.split("<script>").slice(1).map((chunk) => chunk.split("</script>")[0]);
     assert.ok(scripts.length >= 2, "shared toast and workflow scripts should be present");
     for (const script of scripts) assert.doesNotThrow(() => new vm.Script(script), "embedded UI JavaScript must parse");
+
+    const customerUiResponse = await fetch(`${base}/customer/workflow-studio`);
+    assert.equal(customerUiResponse.status, 200, "Customer Admin route should serve the shared workflow studio");
 
     const noAuth = await fetch(`${base}/admin/config/workflows`);
     assert.equal(noAuth.status, 401);
@@ -98,6 +112,53 @@ test("workflow studio, role permissions, access checks and shared toast UI are i
     assert.equal(invalid.status, 400);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+
+test("durable workflow configuration is reserved for mapped Customer Admin identities", async () => {
+  const keys = [
+    "EPER_ADMIN_CONFIG_API_ENABLED", "EPER_ADMIN_CONFIG_PERSISTENCE",
+    "EPER_ADMIN_CONFIG_IDENTITIES_JSON", "EPER_ADMIN_CONFIG_API_TOKEN",
+  ];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "customer-admin-workflow-test-token-with-more-than-32-chars";
+  Object.assign(process.env, {
+    EPER_ADMIN_CONFIG_API_ENABLED: "true",
+    EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
+    EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({
+      [token]: { tenantId: "tenant-workflow-01", actorId: "actor-workflow-01", roleKey: "product_admin" },
+    }),
+  });
+  const adminConfigurationStore = {
+    async get() { return null; },
+    async replace() { throw new Error("write_not_expected"); },
+  };
+  const server = createAppServer({ adminConfigurationStore });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    const base = `http://127.0.0.1:${address.port}`;
+    const headers = { authorization: `Bearer ${token}` };
+    const productAdmin = await fetch(`${base}/admin/config/workflows`, { headers });
+    assert.equal(productAdmin.status, 403);
+    assert.equal((await productAdmin.json()).error.code, "CUSTOMER_ADMIN_ROLE_REQUIRED");
+
+    process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
+      [token]: { tenantId: "tenant-workflow-01", actorId: "actor-workflow-01", roleKey: "customer_admin" },
+    });
+    const customerAdmin = await fetch(`${base}/admin/config/workflows`, { headers });
+    assert.equal(customerAdmin.status, 200);
+    assert.deepEqual((await customerAdmin.json()).workflows, []);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
