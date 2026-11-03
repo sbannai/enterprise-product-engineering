@@ -254,7 +254,7 @@ export class PostgresProviderOperationRepository {
              AND b.binding_status='ACTIVE' AND pc.connection_status='ACTIVE'
              AND b.allowed_capabilities ? o.capability_key
            ORDER BY o.available_at,o.created_at,o.operation_id
-           FOR UPDATE OF o SKIP LOCKED LIMIT 1
+           LIMIT 1 FOR UPDATE OF o SKIP LOCKED
          )
          UPDATE eper_provider_operations o
          SET operation_status='DISPATCHING',attempt_count=o.attempt_count+1,
@@ -311,7 +311,7 @@ export class PostgresProviderOperationRepository {
              AND operation_status='DISPATCHING'
              AND lease_expires_at <= NOW() AND attempt_count >= $3
            ORDER BY lease_expires_at,created_at,operation_id
-           FOR UPDATE SKIP LOCKED LIMIT $4
+           LIMIT $4 FOR UPDATE SKIP LOCKED
          )
          UPDATE eper_provider_operations o
          SET operation_status='NEEDS_ATTENTION',lease_owner=NULL,lease_expires_at=NULL,
