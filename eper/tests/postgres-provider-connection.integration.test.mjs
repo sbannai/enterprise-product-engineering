@@ -332,6 +332,16 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       });
       assert.deepEqual(hiddenFromOtherApplication, [0, 0, 0]);
 
+      // The credential-rotation API is intentionally application-admin-only.
+      // Remove appB's shared binding after verifying customer-default fallback and
+      // application override behavior, so the following rotation has one owner.
+      await withScope(scopedPool, tenantA, appB, async (client) => {
+        await client.query(
+          "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2 AND connection_id=$3",
+          [tenantA, appB, connectionId],
+        );
+      });
+
       const rotations = await Promise.allSettled([
         repository.rotateSecretReference({
           tenantId: tenantA, applicationId: appA, connectionId, actorId,
@@ -345,7 +355,7 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         }),
       ]);
       assert.equal(rotations.filter(result => result.status === "fulfilled").length, 1,
-        "only one secret rotation against a version may commit");
+        "only one secret rotation against a version may commit; outcomes: " + rotations.map(result => result.status === "rejected" ? String(result.reason) : "fulfilled").join(" | "));
       assert.equal(rotations.filter(result => result.status === "rejected").length, 1,
         "the competing rotation must be rejected as stale");
       const rotationConflict = rotations.find(result => result.status === "rejected");
