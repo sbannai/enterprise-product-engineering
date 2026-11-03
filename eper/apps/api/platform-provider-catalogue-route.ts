@@ -33,6 +33,17 @@ async function readBody(request: IncomingMessage): Promise<Record<string, unknow
 function exactKeys(body: Record<string, unknown>, allowed: string[]): boolean {
   return Object.keys(body).every(key => allowed.includes(key));
 }
+function rejectCrossOriginMutation(request: IncomingMessage): boolean {
+  if (!["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "")) return false;
+  const origin = request.headers.origin;
+  if (origin === undefined) return false; // Non-browser bearer clients do not send Origin.
+  const host = request.headers.host;
+  if (typeof origin !== "string" || typeof host !== "string") return true;
+  try {
+    const parsed = new URL(origin);
+    return !["http:", "https:"].includes(parsed.protocol) || parsed.host.toLowerCase() !== host.toLowerCase();
+  } catch { return true; }
+}
 function correlationId(request: IncomingMessage): string {
   const value = request.headers["x-correlation-id"];
   return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value) ? value : randomUUID();
@@ -72,6 +83,7 @@ export async function handlePlatformProviderCatalogueRoute(
   const expectedMethod = !suffix ? (request.method === "GET" ? "GET" : "POST") :
     lifecycle ? "POST" : (request.method === "GET" ? "GET" : "PATCH");
   if (request.method !== expectedMethod) { respond(request,response,405,{error:"method_not_allowed"}); return true; }
+  if (rejectCrossOriginMutation(request)) { respond(request,response,403,{error:"cross_origin_mutation_forbidden"}); return true; }
   try {
     const principal = await resolvePlatformAdminPrincipalFromStore(request.headers.authorization, dependencies.credentialStore);
     if (!principal) { respond(request,response,401,{error:"unauthorized"}); return true; }
@@ -138,7 +150,8 @@ export async function handlePlatformProviderCatalogueRoute(
     respond(request,response,200,{provider}); return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "PROVIDER_CATALOGUE_OPERATION_FAILED";
-    const status = error instanceof ProviderCatalogueConflictError ? 409 :
+    const databaseCode = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
+    const status = error instanceof ProviderCatalogueConflictError || databaseCode === "23505" ? 409 :
       message.includes("NOT_FOUND") ? 404 :
       message.includes("INVALID") || message.includes("UNSUPPORTED") || message.includes("REGISTERED") ||
       message.includes("SCHEMA") || message.includes("SET_") || message.includes("FIELD_") ? 400 : 503;
