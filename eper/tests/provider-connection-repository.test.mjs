@@ -6,7 +6,7 @@ import {
 } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
 
 const stamp = "2026-11-02T15:00:00.000Z";
-function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "meeting.create"], bindingApps = ["app-a"] } = {}) {
+function fixture({ status = "ACTIVE", providerStatus = "ACTIVE", version = 1, supported = ["email.send", "meeting.create"], bindingApps = ["app-a"] } = {}) {
   const calls = [];
   let currentStatus = status;
   let currentVersion = version;
@@ -33,7 +33,7 @@ function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "m
         return { rows: [row()], rowCount: 1 };
       }
       if (sql.includes("SELECT c.provider_key, c.connection_status, d.capabilities")) {
-        return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, capabilities: supported }], rowCount: 1 };
+        return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, provider_status: providerStatus, capabilities: supported }], rowCount: 1 };
       }
       if (sql.includes("SELECT application_id FROM eper_provider_connection_applications")) {
         return { rows: bindingApps.map((application_id) => ({ application_id })), rowCount: bindingApps.length };
@@ -86,6 +86,18 @@ test("application binding rejects a capability not declared by the provider", as
   }), /PROVIDER_CAPABILITY_NOT_SUPPORTED/);
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
   assert.ok(!calls.some((call) => call.sql.includes("INSERT INTO eper_provider_connection_applications")));
+});
+
+test("application binding rejects suspended and deprecated provider definitions", async () => {
+  for (const providerStatus of ["SUSPENDED", "DEPRECATED"]) {
+    const { repository, calls } = fixture({ status: "ACTIVE", providerStatus });
+    await assert.rejects(() => repository.bindApplication({
+      ...audit, applicationId: "app-a", connectionId: "connection-a",
+      allowedCapabilities: ["email.send"],
+    }), /PROVIDER_DEFINITION_NOT_ACTIVE/);
+    assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+    assert.ok(!calls.some((call) => call.sql.includes("INSERT INTO eper_provider_connection_applications")));
+  }
 });
 
 test("secret rotation preserves connection identity and forces revalidation", async () => {
