@@ -7,7 +7,6 @@ import { ProviderCatalogueConflictError, type PostgresProviderCatalogueRepositor
 const ROOT = "/platform/admin/provider-definitions";
 const MAX_BODY_BYTES = 24 * 1024;
 const VERSIONED_JSON = "application/vnd.eper.v1+json";
-const statuses = new Set<ProviderCatalogueStatus>(["ACTIVE", "SUSPENDED", "DEPRECATED"]);
 
 function respond(request: IncomingMessage, response: ServerResponse, status: number, body: Record<string, unknown>): void {
   const accept = request.headers.accept ?? "";
@@ -99,8 +98,7 @@ export async function handlePlatformProviderCatalogueRoute(
       respond(request,response,400,{error:"provider_key_invalid"}); return true;
     }
     if (item && request.method === "GET") {
-      const providers = await dependencies.repository.list(100);
-      const provider = providers.find(value => value.providerKey === providerKey);
+      const provider = await dependencies.repository.get(providerKey);
       respond(request,response,provider ? 200 : 404,provider ? {provider} : {error:"provider_catalogue_not_found"}); return true;
     }
     const body = await readBody(request);
