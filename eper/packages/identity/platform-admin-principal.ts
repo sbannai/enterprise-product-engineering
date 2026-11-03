@@ -93,7 +93,7 @@ export async function resolvePlatformAdminPrincipalFromStore(
   authorizationHeader: string | undefined,
   store: PostgresPlatformAdminCredentialStore,
 ): Promise<TrustedPlatformAdminPrincipal | null> {
-  const match = /^Bearer ([^\\s]+)$/i.exec(authorizationHeader ?? "");
+  const match = /^Bearer ([^\s]+)$/i.exec(authorizationHeader ?? "");
   if (!match || match[1].length < 32 || match[1].length > 256) return null;
   const credential = await store.resolve(match[1]);
   if (!credential) return null;
