@@ -1,6 +1,6 @@
 # Product Admin Provider Catalogue — API and Governance Contract
 
-**Status:** Product Admin catalogue API and same-origin console are implemented on PR #365. Customer-side application-authorized create-and-bind API is now implemented with atomic PostgreSQL persistence; Customer Admin UI, tenant-wide administrator grants, and dispatch enforcement remain follow-on slices.
+**Status:** Product Admin catalogue API and same-origin console are implemented on PR #365. Customer-side application-authorized catalogue projection, atomic create-and-bind API, and Customer Admin connection workspace are implemented on the feature branch and undergoing exact-commit validation. Tenant-wide administrator grants, automated defaults, and dispatch enforcement remain follow-on slices.
 
 ## 1. Ownership and boundary
 
@@ -43,7 +43,12 @@ No hard delete. Provider keys and adapter identities remain referentially stable
 
 ## 4.1 Customer Admin connection API
 
-The customer-facing API remains separate from the Product Admin catalogue surface and resolves identity from the durable customer OIDC browser session. Every mutation requires same-origin CSRF validation, current tenant/application assignment checks, and the durable application-role permission for the requested action.
+The customer-facing API remains separate from the Product Admin catalogue surface and resolves identity from the durable customer OIDC browser session.
+
+Customer Admin workspace: `GET /customer/provider-connections/ui`. It loads the approved provider projection from `GET /customer/applications/{applicationId}/provider-catalogue`, displays the application's existing connections, and supports application-authorized create-and-bind, binding an existing tenant connection to the current application, and synthetic validation. The catalogue projection returns only ACTIVE provider keys, display names, capabilities and authentication modes; it omits adapter internals and configuration schemas.
+
+A shared tenant connection can be reused across applications by supplying its connection ID to the target application's bind operation. Each application binding is separately authorized and audited. This is explicit sharing, not automatic inherited configuration; automated customer-wide default selection and override precedence remain future work.
+ Every mutation requires same-origin CSRF validation, current tenant/application assignment checks, and the durable application-role permission for the requested action.
 
 - `GET /customer/applications/{applicationId}/provider-connections` — list safe connection metadata and bindings for the selected application.
 - `POST /customer/applications/{applicationId}/provider-connections` — create a tenant-owned connection and its first application binding in one PostgreSQL transaction. Requires `provider.connection.create` on the selected application.
@@ -100,7 +105,7 @@ The catalogue table currently has a global provider-definition row and the provi
 4. Add migration only if the existing table needs additional constraints/indexes; avoid duplicate catalogue tables.
 5. Add API, PostgreSQL, authorization and migration tests.
 6. Add Product Admin UI only after the API contract and server enforcement are tested.
-7. Add Customer Admin UI for application-scoped connection creation, explicit bindings, customer-wide defaults and application overrides; tenant-wide admin grants must be designed and authorized separately.
+7. Extend the Customer Admin workspace with governed customer-wide default selection and application override precedence; tenant-wide admin grants must be designed and authorized separately.
 
 ## 8. Explicitly out of scope for this slice
 
