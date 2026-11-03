@@ -134,7 +134,7 @@ test("dedicated provider-catalogue role performs audited create and rolls back c
       assert.equal(results.filter(x => x.status === "fulfilled").length, 1);
       assert.equal(results.filter(x => x.status === "rejected").length, 1);
       const rejected = results.find(x => x.status === "rejected");
-      assert.equal(rejected.reason?.name, "ProviderCatalogueConflictError");
+      assert.equal(rejected.reason?.message, "PROVIDER_CATALOGUE_VERSION_CONFLICT");
       assert.equal(rejected.reason?.currentVersion, 4);
       const current = await repository.get(providerKey);
       assert.equal(current?.version, 4);
@@ -142,7 +142,7 @@ test("dedicated provider-catalogue role performs audited create and rolls back c
       await assert.rejects(
         repository.update({ ...context, providerKey, expectedVersion: 3,
           displayName: "Stale update", environment: "sandbox" }),
-        error => error?.name === "ProviderCatalogueConflictError" && error.currentVersion === 4,
+        error => error?.message === "PROVIDER_CATALOGUE_VERSION_CONFLICT" && error.currentVersion === 4,
       );
 
       const audit = await ownerPool.query(
