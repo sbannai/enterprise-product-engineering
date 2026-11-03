@@ -2701,7 +2701,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           "A valid browser session with active tenant and actor application assignments is required.");
         return;
       }
-      if (isBinding || isValidation || isCredentialMutation) {
+      if (isCreate || isBinding || isValidation || isCredentialMutation) {
         const cookies = parseCookieHeader(request.headers.cookie);
         const sessionToken = cookies.get("__Host-eper_session") ?? "";
         const csrfHeader = request.headers["x-csrf-token"];
