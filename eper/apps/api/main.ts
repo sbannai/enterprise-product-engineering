@@ -261,10 +261,15 @@ const providerCatalogueRepository = providerCatalogueAdminEnabled && paymentPool
     }, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
 if (providerCatalogueRepository) {
-  const readiness = await paymentPool!.query<{ table_name: string | null }>(
-    "SELECT to_regclass('public.eper_provider_definitions')::text AS table_name",
-  );
-  if (!readiness.rows[0]?.table_name) throw new Error("PROVIDER_CATALOGUE_SCHEMA_NOT_APPLIED");
+  const readinessClient = await paymentPool!.connect();
+  try {
+    const readiness = await readinessClient.query<{ table_name: string | null }>(
+      "SELECT to_regclass('public.eper_provider_definitions')::text AS table_name",
+    );
+    if (!readiness.rows[0]?.table_name) throw new Error("PROVIDER_CATALOGUE_SCHEMA_NOT_APPLIED");
+  } finally {
+    readinessClient.release();
+  }
 }
 
 const providerConnectionRepository = providerConnectionsEnabled && paymentPool
