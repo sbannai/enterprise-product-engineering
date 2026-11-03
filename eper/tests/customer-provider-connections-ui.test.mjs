@@ -97,6 +97,7 @@ test("Customer Admin sees only active provider metadata and can create an applic
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address(); assert.ok(address && typeof address === "object");
     const base = "http://127.0.0.1:" + address.port;
+    dependencies.customerOidcPublicOrigin = base;
     const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
     const read = await fetch(base + "/customer/applications/app-a/provider-catalogue", {
       headers: { cookie, accept: "application/vnd.eper.v1+json" },
@@ -108,13 +109,21 @@ test("Customer Admin sees only active provider metadata and can create an applic
     assert.ok(!JSON.stringify(catalogue).includes("configurationSchema"));
     assert.ok(!JSON.stringify(catalogue).includes("SUSPENDED"));
 
+    const mutationBody = JSON.stringify({ providerKey: "mail-primary", displayName: "App Mail",
+      authMode: "synthetic", secretReference: "synthetic://customer/test",
+      environment: "sandbox", allowedCapabilities: ["email.send"] });
+    const noCsrf = await fetch(base + "/customer/applications/app-a/provider-connections", {
+      method: "POST", headers: { cookie, origin: base,
+        accept: "application/vnd.eper.v1+json", "content-type": "application/json" },
+      body: mutationBody,
+    });
+    assert.equal(noCsrf.status, 403);
+    assert.equal(calls.some(entry => entry[0] === "create-and-bind"), false);
     const created = await fetch(base + "/customer/applications/app-a/provider-connections", {
       method: "POST",
       headers: { cookie, origin: base, "x-csrf-token": csrfToken,
         accept: "application/vnd.eper.v1+json", "content-type": "application/json" },
-      body: JSON.stringify({ providerKey: "mail-primary", displayName: "App Mail",
-        authMode: "synthetic", secretReference: "synthetic://customer/test",
-        environment: "sandbox", allowedCapabilities: ["email.send"] }),
+      body: mutationBody,
     });
     assert.equal(created.status, 201);
     const call = calls.find(entry => entry[0] === "create-and-bind")[1];
