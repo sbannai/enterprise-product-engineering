@@ -26,12 +26,69 @@ const text=(v:string,max:number)=>{if(typeof v!=="string"||!v.trim()||v.trim().l
 function map(r:Row):ProviderDefinition{return {providerKey:r.provider_key,displayName:r.display_name,adapterKey:r.adapter_key,adapterVersion:r.adapter_version,capabilities:decode(r.capabilities),authModes:decode(r.auth_modes),configurationSchema:decode(r.configuration_schema),status:r.provider_status,version:Number(r.version),createdAt:iso(r.created_at),updatedAt:iso(r.updated_at),updatedBy:r.updated_by};}
 function validateSet(v:string[],allowed:readonly string[]){if(!Array.isArray(v)||!v.length||v.length>64)throw new Error("PROVIDER_CATALOGUE_SET_INVALID");const a=v.map(x=>text(x,128));if(new Set(a).size!==a.length||a.some(x=>!allowed.includes(x)))throw new Error("PROVIDER_CATALOGUE_VALUE_NOT_REGISTERED");return a.sort();}
 function validateSchema(v:Record<string,unknown>,depth=0):void{
- if(depth>8||!v||typeof v!=="object"||Array.isArray(v)||JSON.stringify(v).length>16384)throw new Error("PROVIDER_CATALOGUE_SCHEMA_INVALID");
+ const invalid=()=>{throw new Error("PROVIDER_CATALOGUE_SCHEMA_INVALID");};
+ if(depth>8||!v||typeof v!=="object"||Array.isArray(v))invalid();
+ let serialized:string;
+ try{serialized=JSON.stringify(v);}catch{invalid();}
+ if(serialized!.length>16384)invalid();
  const allowed=new Set(["type","title","description","properties","required","additionalProperties","enum","items","minLength","maxLength","minimum","maximum"]);
+ if(Object.keys(v).length>64)invalid();
  if(Object.keys(v).some(k=>!allowed.has(k)))throw new Error("PROVIDER_CATALOGUE_SCHEMA_KEYWORD_UNSUPPORTED");
- if(v.type!==undefined&&!["object","array","string","number","integer","boolean"].includes(String(v.type)))throw new Error("PROVIDER_CATALOGUE_SCHEMA_TYPE_INVALID");
- if(v.properties!==undefined){if(!v.properties||typeof v.properties!=="object"||Array.isArray(v.properties))throw new Error("PROVIDER_CATALOGUE_SCHEMA_INVALID");for(const child of Object.values(v.properties as Record<string,unknown>))validateSchema(child as Record<string,unknown>,depth+1);}
- if(v.items!==undefined)validateSchema(v.items as Record<string,unknown>,depth+1);
+ const validTypes=["object","array","string","number","integer","boolean"];
+ if(v.type!==undefined&&(typeof v.type!=="string"||!validTypes.includes(v.type)))throw new Error("PROVIDER_CATALOGUE_SCHEMA_TYPE_INVALID");
+ if(v.title!==undefined&&(typeof v.title!=="string"||v.title.length>160))invalid();
+ if(v.description!==undefined&&(typeof v.description!=="string"||v.description.length>512))invalid();
+ if(v.properties!==undefined){
+  if(v.type!==undefined&&v.type!=="object")invalid();
+  if(!v.properties||typeof v.properties!=="object"||Array.isArray(v.properties))invalid();
+  const entries=Object.entries(v.properties as Record<string,unknown>);
+  if(entries.length>64)invalid();
+  for(const [key,child] of entries){
+   if(!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)||!child||typeof child!=="object"||Array.isArray(child))invalid();
+   validateSchema(child as Record<string,unknown>,depth+1);
+  }
+ }
+ if(v.required!==undefined){
+  const required=v.required;
+  if(!Array.isArray(required)||required.length>64)invalid();
+  const requiredKeys=required as unknown[];
+  if(new Set(requiredKeys).size!==requiredKeys.length||
+     requiredKeys.some((key:unknown)=>typeof key!=="string"||!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)))invalid();
+  const propertyNames=v.properties&&typeof v.properties==="object"&&!Array.isArray(v.properties)
+   ?new Set(Object.keys(v.properties as Record<string,unknown>)):new Set<string>();
+  if(requiredKeys.some((key:unknown)=>!propertyNames.has(key as string)))invalid();
+ }
+ if(v.additionalProperties!==undefined){
+  if(typeof v.additionalProperties==="boolean"){} 
+  else if(v.additionalProperties&&typeof v.additionalProperties==="object"&&!Array.isArray(v.additionalProperties)){
+   validateSchema(v.additionalProperties as Record<string,unknown>,depth+1);
+  }else invalid();
+ }
+ if(v.items!==undefined){
+  if(v.type!==undefined&&v.type!=="array")invalid();
+  if(!v.items||typeof v.items!=="object"||Array.isArray(v.items))invalid();
+  validateSchema(v.items as Record<string,unknown>,depth+1);
+ }
+ if(v.enum!==undefined){
+  if(!Array.isArray(v.enum)||v.enum.length<1||v.enum.length>100||
+     v.enum.some(value=>value!==null&&!["string","number","boolean"].includes(typeof value))||
+     new Set(v.enum.map(value=>JSON.stringify(value))).size!==v.enum.length)invalid();
+ }
+ const boundedInteger=(key:"minLength"|"maxLength")=>{
+  const value=v[key];if(value!==undefined&&(!Number.isInteger(value)||Number(value)<0||Number(value)>4096))invalid();
+ };
+ boundedInteger("minLength");boundedInteger("maxLength");
+ if(v.minLength!==undefined||v.maxLength!==undefined){
+  if(v.type!==undefined&&v.type!=="string")invalid();
+  if(v.minLength!==undefined&&v.maxLength!==undefined&&Number(v.minLength)>Number(v.maxLength))invalid();
+ }
+ for(const key of ["minimum","maximum"] as const){
+  const value=v[key];if(value!==undefined&&(typeof value!=="number"||!Number.isFinite(value)))invalid();
+ }
+ if(v.minimum!==undefined||v.maximum!==undefined){
+  if(v.type!==undefined&&v.type!=="number"&&v.type!=="integer")invalid();
+  if(v.minimum!==undefined&&v.maximum!==undefined&&Number(v.minimum)>Number(v.maximum))invalid();
+ }
 }
 export class PostgresProviderCatalogueRepository {
  constructor(private readonly pool:AuditSqlPool,private readonly registries:ProviderCatalogueRegistries,private readonly serviceVersion?:string){}
