@@ -21,6 +21,7 @@ import { PostgresModuleEntitlementService } from "../../packages/workflows/postg
 import { PostgresCommercialTariffAdminStore, CommercialTariffAdminError } from "../../packages/pricing/postgres-commercial-tariff-admin-store.js";
 import { PostgresCustomerLifecycleStore, CustomerLifecycleStoreError, CustomerLifecycleVersionConflictError } from "../../packages/identity/postgres-customer-lifecycle-store.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
+import { isProviderCatalogueUiRequest, providerCatalogueUiHtml } from "./provider-catalogue-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
@@ -1973,6 +1974,28 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
       });
       response.end(workflowOutboxAdminUiHtml);
+      return;
+    }
+
+    if (isProviderCatalogueUiRequest(request)) {
+      if (process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" ||
+          process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED !== "true" ||
+          process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "cross-origin-resource-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(providerCatalogueUiHtml);
       return;
     }
 
