@@ -90,6 +90,8 @@ test("enqueue is idempotent for the same request digest and rejects key reuse fo
   assert.equal(duplicate.operation.operationId, "00000000-0000-4000-8000-000000000001");
   await assert.rejects(() => repository.enqueue({ ...base, requestDigest: "b".repeat(64) }),
     error => error instanceof ProviderOperationIdempotencyConflictError);
+  await assert.rejects(() => repository.enqueue({ ...base, payloadReference: "payload-ref-0002" }),
+    error => error instanceof ProviderOperationIdempotencyConflictError);
 });
 
 test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
@@ -99,7 +101,7 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
     connection_id: "00000000-0000-4000-8000-000000000002",
     capability_key: "email.send", capability_version: "1",
     idempotency_key: "mail-001", correlation_id: "corr-001",
-    operation_status: "DISPATCHING", request_digest: "a".repeat(64),
+    operation_status: "DISPATCHING", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
     provider_reference: null, attempt_count: 1, available_at: stamp,
     last_error_code: null, created_at: stamp, updated_at: stamp,
   } });
@@ -130,7 +132,7 @@ test("outcome transition persists safe retry metadata and audit", async () => {
       connection_id: "00000000-0000-4000-8000-000000000002",
       capability_key: "email.send", capability_version: "1",
       idempotency_key: "mail-001", correlation_id: "corr-001",
-      operation_status: "RETRYING", request_digest: "a".repeat(64),
+      operation_status: "RETRYING", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
       provider_reference: null, attempt_count: 2, available_at: stamp,
       last_error_code: "UPSTREAM_TIMEOUT", created_at: stamp, updated_at: stamp,
     },
@@ -155,7 +157,7 @@ test("retry budget exhaustion moves the operation to NEEDS_ATTENTION", async () 
       connection_id: "00000000-0000-4000-8000-000000000002",
       capability_key: "email.send", capability_version: "1",
       idempotency_key: "mail-001", correlation_id: "corr-001",
-      operation_status: "NEEDS_ATTENTION", request_digest: "a".repeat(64),
+      operation_status: "NEEDS_ATTENTION", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
       provider_reference: null, attempt_count: 5, available_at: stamp,
       last_error_code: "UPSTREAM_TIMEOUT", created_at: stamp, updated_at: stamp,
     },
