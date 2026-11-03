@@ -23,8 +23,19 @@ export interface ProviderPayloadReadAuthorization {
   authorize(input: ProviderPayloadScope): Promise<boolean>;
 }
 
+export interface ProviderPayloadDeletionDecision {
+  actorType: "human" | "service" | "system";
+  actorId: string;
+  source: "api" | "ui" | "job" | "integration" | "platform";
+  environment: "production" | "uat" | "sandbox";
+  reasonCode: string;
+  policyDecisionReference: string;
+  correlationId?: string;
+}
+
 export interface ProviderPayloadAuthorization extends ProviderPayloadReadAuthorization {
   authorizeCreate(input: ProviderPayloadScope): Promise<boolean>;
+  authorizeDelete?(input: ProviderPayloadScope): Promise<ProviderPayloadDeletionDecision | null>;
 }
 
 export interface EncryptedProviderPayloadStore {
@@ -51,7 +62,10 @@ export class ProviderPayloadStoreError extends Error {
     | "PROVIDER_PAYLOAD_SCOPE_MISMATCH"
     | "PROVIDER_PAYLOAD_ACCESS_DENIED"
     | "PROVIDER_PAYLOAD_DIGEST_MISMATCH"
-    | "PROVIDER_PAYLOAD_DECRYPTION_FAILED") {
+    | "PROVIDER_PAYLOAD_DECRYPTION_FAILED"
+    | "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE"
+    | "PROVIDER_PAYLOAD_LEGAL_HOLD_ACTIVE"
+    | "PROVIDER_PAYLOAD_DELETE_AUDIT_CONTEXT_REQUIRED") {
     super(code);
     this.name = "ProviderPayloadStoreError";
   }
