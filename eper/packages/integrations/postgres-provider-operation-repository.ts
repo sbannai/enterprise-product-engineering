@@ -21,6 +21,7 @@ export interface ProviderOperation {
   correlationId: string;
   status: ProviderOperationStatus;
   requestDigest: string;
+  payloadReference: string;
   providerReference: string | null;
   attemptCount: number;
   availableAt: string;
@@ -40,6 +41,7 @@ type OperationRow = {
   correlation_id: string;
   operation_status: ProviderOperationStatus;
   request_digest: string;
+  payload_reference: string;
   provider_reference: string | null;
   attempt_count: number | string;
   available_at: Date | string;
@@ -64,6 +66,7 @@ function map(row: OperationRow): ProviderOperation {
     correlationId: row.correlation_id,
     status: row.operation_status,
     requestDigest: row.request_digest,
+    payloadReference: row.payload_reference,
     providerReference: row.provider_reference,
     attemptCount: Number(row.attempt_count),
     availableAt: iso(row.available_at),
@@ -139,7 +142,7 @@ export class PostgresProviderOperationRepository {
   async enqueue(input: {
     tenantId: string; applicationId: string; connectionId: string;
     capabilityKey: string; capabilityVersion: string; idempotencyKey: string;
-    correlationId: string; requestDigest: string; actorId: string;
+    correlationId: string; requestDigest: string; payloadReference: string; actorId: string;
     auditEnvironment: AuditEnvironment;
   }): Promise<{ operation: ProviderOperation; created: boolean }> {
     const tenantId = identity(input.tenantId, "TENANT");
@@ -151,6 +154,10 @@ export class PostgresProviderOperationRepository {
     const correlationId = identity(input.correlationId, "CORRELATION_ID");
     const actorId = identity(input.actorId, "ACTOR");
     const requestDigest = digest(input.requestDigest);
+    const payloadReference = identity(input.payloadReference, "PAYLOAD_REFERENCE", 256);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/.test(payloadReference)) {
+      throw new Error("PROVIDER_OPERATION_PAYLOAD_REFERENCE_INVALID");
+    }
     const operationId = randomUUID();
     const client = await this.pool.connect();
     try {
@@ -159,21 +166,21 @@ export class PostgresProviderOperationRepository {
       const inserted = await client.query<OperationRow>(
         `INSERT INTO eper_provider_operations
           (operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
-           idempotency_key,correlation_id,operation_status,request_digest)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'QUEUED',$9)
+           idempotency_key,correlation_id,operation_status,request_digest,payload_reference)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'QUEUED',$9,$10)
          ON CONFLICT (tenant_id,application_id,connection_id,idempotency_key) DO NOTHING
          RETURNING operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
-           idempotency_key,correlation_id,operation_status,request_digest,provider_reference,
+           idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
            attempt_count,available_at,last_error_code,created_at,updated_at`,
         [operationId,tenantId,applicationId,connectionId,capabilityKey,capabilityVersion,
-          idempotencyKey,correlationId,requestDigest],
+          idempotencyKey,correlationId,requestDigest,payloadReference],
       );
       let row = inserted.rows[0];
       const created = Boolean(row);
       if (!row) {
         const existing = await client.query<OperationRow>(
           `SELECT operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
-            idempotency_key,correlation_id,operation_status,request_digest,provider_reference,
+            idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
             attempt_count,available_at,last_error_code,created_at,updated_at
            FROM eper_provider_operations
            WHERE tenant_id=$1 AND application_id=$2 AND connection_id=$3 AND idempotency_key=$4
@@ -182,8 +189,8 @@ export class PostgresProviderOperationRepository {
         );
         row = existing.rows[0];
         if (!row) throw new Error("PROVIDER_OPERATION_IDEMPOTENCY_LOOKUP_EMPTY");
-        if (row.request_digest !== requestDigest || row.capability_key !== capabilityKey
-          || row.capability_version !== capabilityVersion) {
+        if (row.request_digest !== requestDigest || row.payload_reference !== payloadReference
+          || row.capability_key !== capabilityKey || row.capability_version !== capabilityVersion) {
           throw new ProviderOperationIdempotencyConflictError();
         }
       } else {
@@ -235,7 +242,7 @@ export class PostgresProviderOperationRepository {
          FROM candidate c WHERE o.operation_id=c.operation_id
          RETURNING o.operation_id,o.tenant_id,o.application_id,o.connection_id,o.capability_key,
            o.capability_version,o.idempotency_key,o.correlation_id,o.operation_status,o.request_digest,
-           o.provider_reference,o.attempt_count,o.available_at,o.last_error_code,o.created_at,o.updated_at`,
+           o.payload_reference,o.provider_reference,o.attempt_count,o.available_at,o.last_error_code,o.created_at,o.updated_at`,
         [tenantId,applicationId],
       );
       const row = claimed.rows[0];
