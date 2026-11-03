@@ -82,7 +82,7 @@ test("provider operation payload reference migration keeps legacy rows nullable 
   const source = await readFile(new URL("../packages/audit/migrations/017_provider_operation_payload_reference.sql", import.meta.url), "utf8");
   assert.match(source, /ADD COLUMN IF NOT EXISTS payload_reference TEXT/);
   assert.match(source, /payload_reference IS NULL/);
-  assert.match(source, /payload_reference ~ '\\^\[A-Za-z0-9\]/);
+  assert.ok(source.includes("payload_reference ~ '^[A-Za-z0-9]"));
   assert.match(source, /tenant_id, application_id, payload_reference/);
   assert.match(source, /independently authorized tenant\/application-scoped payload store/);
 });
