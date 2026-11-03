@@ -19,7 +19,10 @@ export const customerProviderConnectionsUiHtml = String.raw`<!doctype html>
 <div class="field"><label for="authMode">Authentication mode</label><select id="authMode"><option value="">Choose provider first</option></select></div>
 <div class="field"><label for="environment">Environment</label><select id="environment"><option value="development">Development</option><option value="sandbox">Sandbox</option></select></div>
 </div><div class="help" style="margin-top:10px">This pilot creates synthetic credential references only. No real secrets are entered, stored in the browser, or dispatched to external providers.</div>
-<div id="capabilities" class="caps"></div><div class="actions"><button id="create">Create &amp; bind to application</button></div></section>
+<div id="capabilities" class="caps"></div><div class="actions"><button id="create">Create &amp; bind to application</button></div>
+<div style="height:1px;background:var(--line);margin:18px 0"></div><h3>Reuse a tenant connection</h3><p class="help">Paste a connection ID created in another application in this same tenant. The connection is shared only after this application's bind permission and provider capability checks pass.</p>
+<div class="grid"><div class="field"><label for="existingConnection">Existing connection ID</label><input id="existingConnection" placeholder="UUID from another application"></div></div>
+<div class="actions"><button id="bindExisting" class="secondary">Bind existing connection here</button></div></section>
 <section class="panel"><div class="topline"><div><h2>Application connections</h2><p class="help">Connection metadata only. Secret references and credential material are never returned.</p></div><button id="refresh" class="secondary">Refresh</button></div>
 <div id="connections"><div class="empty">No connections loaded.</div></div></section>
 </main>
@@ -49,7 +52,7 @@ export const customerProviderConnectionsUiHtml = String.raw`<!doctype html>
    const caps=document.createElement("div");caps.className="help";caps.textContent="Capabilities: "+p.capabilities.join(", ");card.append(caps);rootNode.append(card);
   });
   if(!providers.length){const empty=document.createElement("div");empty.className="empty";empty.textContent="No active providers are currently available.";rootNode.append(empty);const option=document.createElement("option");option.value="";option.textContent="No active providers";select.append(option);}
-  select.addEventListener("change",renderAuthModes);renderAuthModes();
+  renderAuthModes();
  }
  function renderAuthModes(){
   const p=providers.find(x=>x.providerKey===$("provider").value);const select=$("authMode");select.replaceChildren();
@@ -62,9 +65,10 @@ export const customerProviderConnectionsUiHtml = String.raw`<!doctype html>
   const rootNode=$("connections");rootNode.replaceChildren();
   if(!connections.length){const empty=document.createElement("div");empty.className="empty";empty.textContent="No connections are bound to this application.";rootNode.append(empty);return;}
   const table=document.createElement("table"),head=document.createElement("thead"),tr=document.createElement("tr");
-  ["Connection","Provider","Environment","Status","Capabilities"].forEach(x=>{const th=document.createElement("th");th.textContent=x;tr.append(th);});head.append(tr);table.append(head);
+  ["Connection","Connection ID","Provider","Environment","Status","Capabilities","Action"].forEach(x=>{const th=document.createElement("th");th.textContent=x;tr.append(th);});head.append(tr);table.append(head);
   const body=document.createElement("tbody");
-  connections.forEach(c=>{const row=document.createElement("tr");[c.displayName,c.providerKey,c.environment,c.status+" / "+c.bindingStatus,(c.allowedCapabilities||[]).join(", ")].forEach((v,i)=>{const td=document.createElement("td");if(i===3){const pill=document.createElement("span");pill.className="pill"+(String(v).includes("PENDING")?" pending":"");pill.textContent=v;td.append(pill);}else td.textContent=v;row.append(td);});body.append(row);});
+  connections.forEach(c=>{const row=document.createElement("tr");[c.displayName,c.connectionId,c.providerKey,c.environment,c.status+" / "+c.bindingStatus,(c.allowedCapabilities||[]).join(", ")].forEach((v,i)=>{const td=document.createElement("td");if(i===4){const pill=document.createElement("span");pill.className="pill"+(String(v).includes("PENDING")||String(v).includes("DEGRADED")?" pending":"");pill.textContent=v;td.append(pill);}else td.textContent=v;row.append(td);});
+  const action=document.createElement("td");if(c.status==="PENDING_VALIDATION"||c.status==="DEGRADED"){const button=document.createElement("button");button.className="secondary";button.textContent="Validate";button.addEventListener("click",()=>validate(c));action.append(button);}row.append(action);body.append(row);});
   table.append(body);const wrap=document.createElement("div");wrap.className="tablewrap";wrap.append(table);rootNode.append(wrap);
  }
  async function load(){
@@ -72,6 +76,18 @@ export const customerProviderConnectionsUiHtml = String.raw`<!doctype html>
   const [catalogue,connectionData]=await Promise.all([api(root()+"/provider-catalogue"),api(root()+"/provider-connections")]);
   providers=catalogue.providers||[];connections=connectionData.connections||[];
   renderCatalogue();renderConnections();status("Loaded "+providers.length+" active provider(s) and "+connections.length+" application connection(s).","ok");
+ }
+ async function validate(connection){
+  try{const result=await api(root()+"/provider-connections/"+encodeURIComponent(connection.connectionId)+"/validate","POST",{});status("Validation "+result.outcome.toLowerCase()+". Connection status: "+result.status+".","ok");await load();}
+  catch(e){status(e.message,"error");}
+ }
+ async function bindExisting(){
+  const p=providers.find(x=>x.providerKey===$("provider").value);
+  const connectionId=$("existingConnection").value.trim();
+  const allowedCapabilities=[...$("capabilities").querySelectorAll("input:checked")].map(x=>x.value);
+  if(!p||!connectionId||!allowedCapabilities.length)throw new Error("Choose a provider, enter a connection ID and select at least one capability.");
+  await api(root()+"/provider-connections/"+encodeURIComponent(connectionId)+"/bind","POST",{allowedCapabilities});
+  $("existingConnection").value="";status("Existing tenant connection bound to this application.","ok");await load();
  }
  async function create(){
   const p=providers.find(x=>x.providerKey===$("provider").value);
@@ -84,6 +100,8 @@ export const customerProviderConnectionsUiHtml = String.raw`<!doctype html>
  $("load").addEventListener("click",async()=>{try{await load();}catch(e){status(e.message,"error");}});
  $("refresh").addEventListener("click",async()=>{try{await load();}catch(e){status(e.message,"error");}});
  $("create").addEventListener("click",async()=>{try{await create();}catch(e){status(e.message,"error");}});
+ $("bindExisting").addEventListener("click",async()=>{try{await bindExisting();}catch(e){status(e.message,"error");}});
+ $("provider").addEventListener("change",renderAuthModes);
 })();
 </script></body></html>`;
 
