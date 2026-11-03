@@ -25,6 +25,10 @@ test("API runtime opts into JSON persistence and retains authoritative records a
     tenant: process.env.EPER_UAT_TENANT_ID,
     principal: process.env.EPER_UAT_PRINCIPAL_ID,
     acknowledgement: process.env.EPER_UAT_PUBLIC_ENDPOINT_ACK,
+    applicationId: process.env.EPER_UAT_APPLICATION_ID,
+    roleKey: process.env.EPER_UAT_ROLE_KEY,
+    entitlementsRequired: process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED,
+    moduleMap: process.env.EPER_REQUIREMENT_MODULE_MAP_JSON,
     buildId: process.env.EPER_BUILD_ID,
   };
   Object.assign(process.env, {
@@ -35,6 +39,10 @@ test("API runtime opts into JSON persistence and retains authoritative records a
     EPER_UAT_TENANT_ID: "runtime-persistence-tenant",
     EPER_UAT_PRINCIPAL_ID: "runtime-persistence-user",
     EPER_UAT_PUBLIC_ENDPOINT_ACK: "I_ACCEPT_PUBLIC_BEARER_UAT_RISK",
+    EPER_UAT_APPLICATION_ID: "runtime-persistence-application",
+    EPER_UAT_ROLE_KEY: "customer-admin",
+    EPER_CAPABILITY_ENTITLEMENTS_REQUIRED: "true",
+    EPER_REQUIREMENT_MODULE_MAP_JSON: JSON.stringify({ "REQ-46301": "records" }),
     EPER_BUILD_ID: "92dabf1d9d9f24b3a8e9f320143de7ca2449bcc2",
   });
   const request = async (base, operation) => {
@@ -46,7 +54,8 @@ test("API runtime opts into JSON persistence and retains authoritative records a
     return { status: response.status, body: await response.json() };
   };
   try {
-    const server1 = createAppServer();
+    const moduleEntitlementService = { checkModule: async () => ({ allowed: true, reason: "allowed" }) };
+    const server1 = createAppServer({ moduleEntitlementService });
     const created = await withServer(server1, async base => {
       const health = await fetch(`${base}/health`);
       assert.equal(health.status, 200);
@@ -57,7 +66,7 @@ test("API runtime opts into JSON persistence and retains authoritative records a
     assert.equal(created.status, 200);
     assert.equal(created.body.result.data.payload.record.id, "persisted-record");
 
-    const server2 = createAppServer();
+    const server2 = createAppServer({ moduleEntitlementService });
     const fetched = await withServer(server2, base => request(base, { operation: "get", id: "persisted-record" }));
     assert.equal(fetched.status, 200);
     assert.equal(fetched.body.result.data.payload.record.state, "OPEN");
@@ -71,6 +80,10 @@ test("API runtime opts into JSON persistence and retains authoritative records a
     restore("EPER_UAT_TENANT_ID", previous.tenant);
     restore("EPER_UAT_PRINCIPAL_ID", previous.principal);
     restore("EPER_UAT_PUBLIC_ENDPOINT_ACK", previous.acknowledgement);
+    restore("EPER_UAT_APPLICATION_ID", previous.applicationId);
+    restore("EPER_UAT_ROLE_KEY", previous.roleKey);
+    restore("EPER_CAPABILITY_ENTITLEMENTS_REQUIRED", previous.entitlementsRequired);
+    restore("EPER_REQUIREMENT_MODULE_MAP_JSON", previous.moduleMap);
     restore("EPER_BUILD_ID", previous.buildId);
     rmSync(directory, { recursive: true, force: true });
   }
