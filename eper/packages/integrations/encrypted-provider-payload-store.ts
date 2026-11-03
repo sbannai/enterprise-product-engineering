@@ -215,6 +215,18 @@ export class InMemoryEncryptedProviderPayloadStore implements EncryptedProviderP
       || record.digest !== requested.digest) {
       throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_SCOPE_MISMATCH");
     }
+    let authorized = false;
+    try {
+      authorized = await this.authorization.authorize({
+        tenantId: requested.tenantId,
+        applicationId: requested.applicationId,
+        operationId: requested.operationId,
+        capabilityKey: requested.capabilityKey,
+      });
+    } catch {
+      throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_ACCESS_DENIED");
+    }
+    if (!authorized) throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_ACCESS_DENIED");
     this.records.delete(requested.reference);
     return true;
   }
