@@ -744,3 +744,38 @@ The #365 exact-head same-commit gate passes release artifact packaging/checksum 
 | 7. Workflow publisher/runtime implementation | AMBER | Publisher and worker mechanics have tests; production adapter, supervised host, observability and recovery proof remain. |
 
 **Next engineering actions:** (1) implement the dedicated least-privilege platform-admin pool/role and explicit grants, with live PostgreSQL credential/catalogue transaction and privilege tests; (2) complete Product Admin OIDC/session and support SLA/admin browser work; (3) supply and supervise the scheduler adapter with metrics/recovery; (4) obtain owner-accessible branch/ruleset evidence and complete second-engineer handover; (5) only then reconcile the combined candidate to main, verify the merge SHA and rerun exact-main integrated validation.
+
+## Exact-head follow-up — 2026-11-03 15:26 IST
+
+This follow-up supersedes the PR inventory and #365 candidate-head references in the 15:20 record above.
+
+### Consolidated candidate refresh
+
+PR #365 is now at exact head `f53b58afe7727965540a74e828ecaea4fe8da11c`, base `integration/eper-348-350-355-candidate` at `bd93fc6ccb17aa6a472ae4756bf6e1bbd7b8b7a5`. It remains draft and is mergeable against that integration base, not main.
+
+PR #368's exact head `25f546591e2e4dfcd3a428018a6785886ff0be9c` was integrated as the second parent of `f53b58afe7727965540a74e828ecaea4fe8da11c`. Its migration 014 and checksum-ledger test are preserved. The duplicate `009_workflow_definition_drafts.sql` from the earlier Workflow Studio branch was removed; `014_workflow_definition_drafts.sql` is the single appended draft-table migration after the existing workflow migration sequence 001–013. PR #368 was closed as superseded after the combined candidate passed. PR #350 and #357 remain closed as superseded; their Workflow Studio implementation is retained in the #365 merge ancestry.
+
+All nine returned workflows for exact head `f53b58a...` completed successfully:
+- Fresh clone [41616442181](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442181): `npm run dev:verify`, 1,378 passed / 0 failed / 0 skipped. It invokes all seven migration groups twice (payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity); workflow migration 014 is applied. `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- Disposable PostgreSQL backup/restore in the same fresh-clone job: `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`, 74 source/restored base tables and 7 migration-ledger tables.
+- Live PostgreSQL lane [41616442009](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442009): 1,362 tests, 1,360 passed / 0 failed / 2 skipped. Migration 014 applied; workflow and ticketing repeatability checks pass. Payment/receipt, tariff, customer lifecycle/audit, role/application scope, provisioning/remediation and scheduler dispatch/idempotency steps pass.
+- Customer browser E2E [41616442274](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442274): 1,378 passed / 0 failed / 0 skipped; customer OIDC workspace/support journey 1/1 and Product Admin application-remediation browser journey 1/1. The Product Admin journey uses the current bearer-credential flow, not Product Admin OIDC.
+- 228/38 matrix [41616441975](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616441975): 228 requirements, 38 chapters, 0 failed chapters; 9 chapters have HTTP pilot applications and 29 do not in this scope.
+- Same-commit integrated validation [41616442115](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442115): PASS, including release artifact/G9 traceability and container health/six-family HTTP checks.
+- Workflow YAML [41616442084](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442084), payment contracts [41616442049](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442049), controlled QA [41616441949](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616441949), and technical simulation [41616442056](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442056) all pass.
+
+### Current open PR inventory
+
+The current open PRs are #348, #356 and #365. #350, #357 and #368 are closed as superseded with their code/tests retained in #365. #348 remains the focused main-based identity/tariff source PR; its eight exact-head workflows pass, but its own branch does not carry the combined same-commit release/integration gate. #356 is this documentation-only scorecard PR. #365 is the combined integration candidate and remains draft.
+
+### Documentation PR exact-head boundary
+
+PR #356 current head is `71d38343dd766b335bfd4afe6c51605dbde80fb1`. Its CI, G9, 228/38 matrix, six-family HTTP, release-candidate build, container smoke and controlled QA pass. Its same-commit integrated validation [41616217592](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616217592) fails in the payment/PostgreSQL job [125850214139](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616217592/job/125850214139) with the same mainline tariff-overage mismatch: expected deny `tariff_overage`, actual `allowed`. Test summary: 1,183 total, 1,180 passed, 1 failed, 2 skipped. This documentation branch does not contain the tariff correction.
+
+### Mainline remains unchanged
+
+The main ref was re-resolved and remains `51b803193c7009c1e7f8115cbb1022233285e940`. The main integrated failure is still present; the corrected tariff policy has not been merged to main. Do not use green candidate runs as mainline evidence.
+
+The repository rulesets API returned an empty collection, while the branch-protection read returned HTTP 403 to the connected integration. This does not prove that branch protection is disabled; it means required settings cannot be independently certified through the current permission boundary. A second-engineer release/rollback demonstration remains absent.
+
+**Next actions:** retain #365 as the single combined candidate; implement a dedicated least-privilege platform-admin database pool/role and explicit grants with live PostgreSQL privilege/transaction/audit tests; complete Product Admin OIDC, support SLA/admin browser evidence and supervised scheduler metrics/recovery; obtain owner-accessible ruleset evidence and a second-engineer handover; then reconcile to main and require a new exact-main integrated pass.
