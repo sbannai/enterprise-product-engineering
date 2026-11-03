@@ -19,7 +19,9 @@ function fixture({ existing = null, claim = null, outcome = null } = {}) {
     capability_key: "email.send", capability_version: "1",
     idempotency_key: "mail-001", correlation_id: "corr-001",
     operation_status: status, request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
-    provider_reference: null, attempt_count: status === "DISPATCHING" ? 1 : 0,
+    provider_reference: null, lease_owner: status === "DISPATCHING" ? "worker-1" : null,
+    lease_expires_at: status === "DISPATCHING" ? "2026-11-03T13:00:00.000Z" : null,
+    fencing_token: status === "DISPATCHING" ? 1 : 0, attempt_count: status === "DISPATCHING" ? 1 : 0,
     available_at: stamp, last_error_code: null, created_at: stamp, updated_at: stamp,
     ...overrides,
   });
@@ -83,6 +85,7 @@ test("enqueue is idempotent for the same request digest and rejects key reuse fo
     connection_id: base.connectionId, capability_key: "email.send", capability_version: "1",
     idempotency_key: "mail-001", correlation_id: "corr-001",
     operation_status: "QUEUED", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001", provider_reference: null,
+    lease_owner: null, lease_expires_at: null, fencing_token: 0,
     attempt_count: 0, available_at: stamp, last_error_code: null, created_at: stamp, updated_at: stamp,
   } });
   const duplicate = await repository.enqueue(base);
@@ -102,15 +105,21 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
     capability_key: "email.send", capability_version: "1",
     idempotency_key: "mail-001", correlation_id: "corr-001",
     operation_status: "DISPATCHING", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
-    provider_reference: null, attempt_count: 1, available_at: stamp,
+    provider_reference: null, lease_owner: "worker-1", lease_expires_at: "2026-11-03T13:00:00.000Z",
+    fencing_token: 1, attempt_count: 1, available_at: stamp,
     last_error_code: null, created_at: stamp, updated_at: stamp,
   } });
   const claimed = await repository.claimNext({
-    tenantId: "tenant-a", applicationId: "app-a", workerId: "worker-1", auditEnvironment: "sandbox",
+    tenantId: "tenant-a", applicationId: "app-a", workerId: "worker-1", leaseDurationSeconds: 90, auditEnvironment: "sandbox",
   });
   assert.equal(claimed.status, "DISPATCHING");
+  assert.equal(claimed.leaseOwner, "worker-1");
+  assert.equal(claimed.fencingToken, 1);
+  assert.equal(claimed.leaseExpiresAt, "2026-11-03T13:00:00.000Z");
   assert.equal(claimed.attemptCount, 1);
   assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF o SKIP LOCKED")));
+  assert.ok(calls.some(call => call.sql.includes("o.lease_expires_at <= NOW()")));
+  assert.ok(calls.some(call => call.sql.includes("fencing_token=o.fencing_token+1") && call.values[2] === 90 && call.values[3] === "worker-1"));
   assert.ok(calls.some(call => call.sql.includes("b.binding_status='ACTIVE'") && call.sql.includes("pc.connection_status='ACTIVE'") && call.sql.includes("b.allowed_capabilities ? o.capability_key")));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events") && call.values.includes("provider.operation.dispatch_claimed")));
@@ -133,19 +142,22 @@ test("outcome transition persists safe retry metadata and audit", async () => {
       capability_key: "email.send", capability_version: "1",
       idempotency_key: "mail-001", correlation_id: "corr-001",
       operation_status: "RETRYING", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
-      provider_reference: null, attempt_count: 2, available_at: stamp,
+      provider_reference: null, lease_owner: "worker-1", lease_expires_at: "2026-11-03T13:00:00.000Z",
+      fencing_token: 1, attempt_count: 2, available_at: stamp,
       last_error_code: "UPSTREAM_TIMEOUT", created_at: stamp, updated_at: stamp,
     },
   });
   const result = await repository.recordOutcome({
     tenantId: "tenant-a", applicationId: "app-a",
     operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
-    outcome: "RETRY", errorCode: "UPSTREAM_TIMEOUT", retryAfterSeconds: 30,
+    outcome: "RETRY", errorCode: "UPSTREAM_TIMEOUT", retryAfterSeconds: 30, fencingToken: 1,
     auditEnvironment: "sandbox",
   });
   assert.equal(result.status, "RETRYING");
   assert.equal(result.lastErrorCode, "UPSTREAM_TIMEOUT");
   assert.ok(calls.some(call => call.sql.includes("NOW()+($7::int * INTERVAL '1 second')")));
+  assert.ok(calls.some(call => call.sql.includes("lease_owner=$9") && call.sql.includes("fencing_token=$10")
+    && call.sql.includes("lease_expires_at > NOW()") && call.sql.includes("lease_owner=NULL,lease_expires_at=NULL")));
   assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
 });
 
@@ -158,14 +170,15 @@ test("retry budget exhaustion moves the operation to NEEDS_ATTENTION", async () 
       capability_key: "email.send", capability_version: "1",
       idempotency_key: "mail-001", correlation_id: "corr-001",
       operation_status: "NEEDS_ATTENTION", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
-      provider_reference: null, attempt_count: 5, available_at: stamp,
+      provider_reference: null, lease_owner: "worker-1", lease_expires_at: "2026-11-03T13:00:00.000Z",
+      fencing_token: 1, attempt_count: 5, available_at: stamp,
       last_error_code: "UPSTREAM_TIMEOUT", created_at: stamp, updated_at: stamp,
     },
   });
   const result = await repository.recordOutcome({
     tenantId: "tenant-a", applicationId: "app-a",
     operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
-    outcome: "RETRY", errorCode: "UPSTREAM_TIMEOUT", maxAttempts: 5,
+    outcome: "RETRY", errorCode: "UPSTREAM_TIMEOUT", maxAttempts: 5, fencingToken: 1,
     auditEnvironment: "sandbox",
   });
   assert.equal(result.status, "NEEDS_ATTENTION");
@@ -177,8 +190,27 @@ test("outcome transition rejects stale or non-dispatching operations", async () 
   await assert.rejects(() => repository.recordOutcome({
     tenantId: "tenant-a", applicationId: "app-a",
     operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
-    outcome: "SUCCEEDED", providerReference: "provider-ref-1", auditEnvironment: "sandbox",
+    outcome: "SUCCEEDED", providerReference: "provider-ref-1", fencingToken: 1, auditEnvironment: "sandbox",
   }), error => error instanceof ProviderOperationStateConflictError && error.currentStatus === null);
+});
+
+test("claim lease duration is bounded before database access", async () => {
+  const { repository, calls } = fixture();
+  await assert.rejects(() => repository.claimNext({
+    tenantId: "tenant-a", applicationId: "app-a", workerId: "worker-1",
+    leaseDurationSeconds: 2, auditEnvironment: "sandbox",
+  }), /PROVIDER_OPERATION_LEASE_DURATION_INVALID/);
+  assert.equal(calls.length, 0);
+});
+
+test("outcome requires a positive fencing generation", async () => {
+  const { repository, calls } = fixture();
+  await assert.rejects(() => repository.recordOutcome({
+    tenantId: "tenant-a", applicationId: "app-a",
+    operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
+    outcome: "SUCCEEDED", fencingToken: 0, auditEnvironment: "sandbox",
+  }), /PROVIDER_OPERATION_FENCING_TOKEN_INVALID/);
+  assert.equal(calls.length, 0);
 });
 
 test("enqueue requires a well-formed opaque payload reference", async () => {
@@ -196,6 +228,6 @@ test("operation metadata rejects unsafe provider error text and invalid digests"
   await assert.rejects(() => repository.recordOutcome({
     tenantId: "tenant-a", applicationId: "app-a",
     operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
-    outcome: "FAILED", errorCode: "Provider returned raw token=secret", auditEnvironment: "sandbox",
+    outcome: "FAILED", errorCode: "Provider returned raw token=secret", fencingToken: 1, auditEnvironment: "sandbox",
   }), /PROVIDER_OPERATION_ERROR_CODE_INVALID/);
 });
