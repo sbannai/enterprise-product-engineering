@@ -248,13 +248,33 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       });
       assert.deepEqual(hiddenFromOtherApplication, [0, 0, 0]);
 
-      const rotated = await repository.rotateSecretReference({
-        tenantId: tenantA, applicationId: appA, connectionId, actorId,
-        secretReference: "vault://tenant-a/provider/credential-v2",
-        expectedVersion: 4, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
-      });
+      const rotations = await Promise.allSettled([
+        repository.rotateSecretReference({
+          tenantId: tenantA, applicationId: appA, connectionId, actorId,
+          secretReference: "vault://tenant-a/provider/credential-v2-a",
+          expectedVersion: 4, correlationId: "rotate-a-" + suffix, auditEnvironment: "sandbox",
+        }),
+        repository.rotateSecretReference({
+          tenantId: tenantA, applicationId: appA, connectionId, actorId,
+          secretReference: "vault://tenant-a/provider/credential-v2-b",
+          expectedVersion: 4, correlationId: "rotate-b-" + suffix, auditEnvironment: "sandbox",
+        }),
+      ]);
+      assert.equal(rotations.filter(result => result.status === "fulfilled").length, 1,
+        "only one secret rotation against a version may commit");
+      assert.equal(rotations.filter(result => result.status === "rejected").length, 1,
+        "the competing rotation must be rejected as stale");
+      const rotationConflict = rotations.find(result => result.status === "rejected");
+      assert.ok(rotationConflict.reason instanceof Error);
+      assert.equal(rotationConflict.reason.currentVersion, 5);
+      const rotated = rotations.find(result => result.status === "fulfilled").value;
       assert.equal(rotated.version, 5);
       assert.equal(rotated.status, "PENDING_VALIDATION");
+      const rotationAudit = await pool.query(
+        "SELECT action FROM eper_audit_events WHERE resource_id=$1 AND action='provider.connection.rotate_secret_reference'",
+        [connectionId],
+      );
+      assert.equal(rotationAudit.rowCount, 1, "only the committed rotation may append an audit event");
       const suspended = await withScope(scopedPool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
         [tenantA, connectionId],
