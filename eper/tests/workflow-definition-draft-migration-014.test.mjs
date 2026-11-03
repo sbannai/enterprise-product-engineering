@@ -25,5 +25,5 @@ test("workflow migration runner retains its dedicated ordered checksum ledger", 
   const sharedRunner = await readFile(new URL("../scripts/migrate-payments.mjs", import.meta.url), "utf8");
   assert.match(sharedRunner, /\.sort\(\)/);
   assert.match(sharedRunner, /createHash\("sha256"\)/);
-  assert.match(sharedRunner, /EPER_MIGRATION_CHECKSUM_MISMATCH/);
+  assert.match(sharedRunner, /EPER_PAYMENT_MIGRATION_CHECKSUM_MISMATCH/);
 });
