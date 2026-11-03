@@ -130,7 +130,7 @@ export class PostgresProviderOperationRepository {
       resourceType: "provider-operation",
       resourceId: input.operationId,
       correlationId: input.correlationId,
-      source: "worker",
+      source: "job",
       operationName: input.action,
       payload: input.payload ?? {},
     });
