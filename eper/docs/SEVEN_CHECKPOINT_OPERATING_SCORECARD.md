@@ -930,3 +930,50 @@ No PR was merged, no approved requirement/chapter was changed, and no chargeable
 - The stacked provider PRs target `feat/provider-payload-encryption-boundary` (#379), `feat/durable-encrypted-provider-payload-store` (#381) and `test/provider-payload-rls-role-proof` (#382). Those base branches are excluded by both filters. This explains why their exact-head runs include provider lifecycle/fresh-clone/matrix evidence but no same-head EPER CI or integrated gate; it is a trigger-coverage gap, not a failed run.
 - The provider lifecycle workflow has no restrictive base-branch filter and did run successfully on each provider PR head.
 - Next action: deliberately extend the CI/integrated pull-request base-branch filters for the approved stack, or consolidate the complete provider stack onto one main-targeted validation candidate. Do not interpret a missing integrated run as a green result.
+
+
+
+### Operating update — 2026-11-04 03:32 IST
+
+**Dynamically resolved current main:** `2c380d79c55c9183a42ed534ffd1a504f7d41316`  
+**Latest main commit:** `revert: remove unintended provider payload test commit from main`. Its diff deletes `eper/tests/postgres-encrypted-provider-payload-store.integration.test.mjs`; the provider-candidate branches retain the test and its exact-head evidence. Do not attribute that test coverage to current main.
+
+#### Mainline evidence boundary
+
+- The combined commit-status lookup for current main returned no status contexts.
+- The available commit-workflow lookup is PR-triggered only; it did not establish push-triggered checks for this latest main SHA.
+- Therefore post-merge mainline CI/integrated status is **NOT ASSESSED** for `2c380d79...`. Do not infer green main from prior main or PR runs.
+- Merged PR #306 (`6e8dd438e5091b1802d65e4f29951389fe077859`) and PR #310 (`88b9708d748c19dc80a1a2d7ad4960914451db7e`) were both verified as ancestors of current main. #306 remains merged, not open.
+
+#### Live open-PR inventory and current-head comparison
+
+The live open list is #377–#382. Each current head contains current main as an ancestor (compare result: zero commits behind). These are the current exact heads, not historical PR-body snapshots:
+
+| PR | Current exact head | Current base | Exact-head Actions evidence |
+|---|---|---|---|
+| #377 | `c958a228d0b33a8ef99962fe356f571711933c7f` | `main` | EPER CI [41724362477], integrated [41724362386], separate chapter matrix [41724362463], G9 [41724362287]; all returned runs succeeded. Integrated matrix subjob was skipped for this documentation-only change; separate matrix passed 38 chapters / 259 tests / 28 checks / zero failed chapters. Integrated PostgreSQL suite: 1,404 passed, 0 failed, 6 skipped. |
+| #378 | `32bd57301846e20cd9b492374061dd0b19f08884` | `main` | Fresh clone [41711723463], PostgreSQL [41711723482], provider lifecycle [41711723440], integrated [41711723459], EPER CI [41711723639], matrix [41711723413]; all returned workflows succeeded. Fresh clone: 1,429 passed, 0 failed, 4 skipped; `dev:verify`, seven migration groups including identity, repeatability and disposable restore passed (75/75 base tables). PostgreSQL payload tests 2/2; queue lifecycle 1/1. |
+| #379 | `6f9cb0deb0c4bf9bd34bad88a2c7c4fc59c71c02` | #378 branch | Fresh clone [41711764471], PostgreSQL [41711764430], provider lifecycle [41711764871], matrix [41711764431] and QA [41711764653] succeeded. Fresh clone: 1,434 passed, 0 failed, 4 skipped; `dev:verify`, seven migration groups including identity, repeatability and restore passed (76/76 base tables). PostgreSQL payload tests 2/2; queue lifecycle 1/1. No same-head EPER CI or integrated run was returned. |
+| #380 | `55b13f9f07d7a594e21f07b68962149272572135` | `main` | EPER CI [41711737227], integrated [41711736892], separate matrix [41711736902], G9 [41711736772], release [41711736765] and remaining returned lanes succeeded. Matrix: 38 chapters, 259 tests passed, 28 checks, no failed chapters. Integrated PostgreSQL suite: 1,404 passed, 0 failed, 6 skipped. CW-060/061 remain additive draft requirements, not upload/workspace runtime delivery. |
+| #381 | `963c45324b44489ba42ae3bf28b8295b13254af9` | #379 branch | Fresh clone [41711790741], provider lifecycle [41711790735], matrix [41711790734], workflow config [41711790731] and QA [41711790875] succeeded. Fresh clone: 1,434 passed, 0 failed, 4 skipped; `dev:verify` and restore passed (76/76 base tables). The PostgreSQL encrypted-payload test passed and explicitly exercised `SET LOCAL ROLE eper_provider_catalogue_access`, tenant/application RLS reads, cross-scope denial and RLS write rejection. No same-head EPER CI or integrated run was returned. |
+| #382 | `d799884f5b3459641f008d992a2875450eccd43b` | #381 branch | Fresh clone [41711798935], PostgreSQL [41711798767], provider lifecycle [41711798766], matrix [41711798907], workflow config [41711798774] and QA [41711798919] succeeded. Fresh clone: 1,446 passed, 0 failed, 4 skipped; seven migration groups including identity repeated, provider migrations 021–023 applied, restore passed (76/76 base tables). Provider queue lifecycle 1/1, worker 5/5, keyring 6/6, encrypted-payload PostgreSQL tests 2/2. No same-head EPER CI or integrated run was returned. |
+
+#### Trigger-coverage blocker
+
+The current `.github/workflows/ci.yml` PR filter allows only `main` and `reconcile/payment-153-168-integration`. The integrated workflow allows only `main` and `integration/eper-348-350-355-candidate`.
+
+Consequently, #379 (base #378 branch), #381 (base #379 branch) and #382 (base #381 branch) receive component/fresh-clone/provider lifecycle/matrix evidence but no same-head EPER CI or integrated gate. This is a workflow-trigger coverage gap, not a failed run and not a pass. Resolve it by deliberately extending the base-branch filters through the dependent stack or consolidating onto a main-targeted candidate; then rerun against each new exact head.
+
+#### Capability and continuity boundaries unchanged
+
+- The v34 crosswalk preserves 45 source rows, records no exact full-coverage matches and 45 partial shared-control links / additive draft candidates; approved 228 IDs and 38 chapters remain unchanged. This is classification, not owner approval or feature acceptance.
+- Fresh-clone PostgreSQL verification is proven on the provider candidate heads, including all seven migration groups, identity migration, repeatability, live PostgreSQL tests and disposable backup/restore. Current main post-merge validation remains not assessed as stated above.
+- #310 and successor identity/browser work remain merged ancestors. The browser journey uses a synthetic IdP; production IdP onboarding/JWKS rotation and a complete Product Admin OIDC login remain unproven.
+- Support ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note separation and export are tested. Owner-defined SLA targets, timers, escalation and breach evidence remain absent.
+- Customer asset metadata listing, audited short-lived download grants and inventory export exist. No upload endpoint or durable blob-upload lifecycle is evidenced. CW-060 remains incomplete. Customer Admin workflow studio/rule evaluation/publication exist; CW-061's complete customer-facing journey remains incomplete.
+- Campaign/agent workers have independent entrypoints. Workflow outbox lacks a dedicated independently startable worker app. Provider worker is bounded `runOnce()`, not a continuously supervised process; production worker identity, approved dispatcher wiring, supervision and metrics/alerts remain.
+- #379's public PostgreSQL payload-store `put()` commits its own transaction and can persist a payload independently of an operation row; `enqueueWithPayload()` uses `putInTransaction()` for atomic enqueue. The standalone API does not technically enforce the operation-row invariant.
+- #382 adds key rotation and actor-attributed deletion with expiry/legal-hold checks, but no versioned retention-policy resolver or bounded purge worker.
+- Repository rulesets remain empty; branch-protection state remains not assessed through the connected integration. Production backup destination, RPO/RTO, independent restore rehearsal and second-engineer release/rollback are not demonstrated.
+
+No PR was merged, no approved requirement/chapter was changed, no branch was deleted, and no chargeable cloud resource or real external/provider action was used.
