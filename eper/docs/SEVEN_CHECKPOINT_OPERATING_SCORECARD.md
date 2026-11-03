@@ -662,3 +662,16 @@ The first 22-branch comparison has been completed against main SHA `a3635ffbb522
 The other 17 branches are zero-ahead against main by Git ancestry. This is a strong candidate classification only, not permission to delete: refs may still be used by tags, workflow triggers, deployment/release records, or external collaborators. Preserve them pending reference and owner checks.
 
 This correction supersedes the previous sentence stating 18 zero-ahead and four exceptions. The inventory covers 22 unreferenced branch refs found in the four-page branch listing, not every branch in the repository.
+
+
+## Unique-branch patch review — 2026-11-03 15:22 UTC
+
+The five divergent refs were reviewed at patch level against main SHA `a3635ffbb522488163904c1236fed294b0a2af17`. Their unique changes are narrow and do not justify merging the stale branches wholesale:
+
+- `fix/b01-lld-evidence-intermediate-state` (commit `0fa98f3807e7630f08d3b18208e64c2e02dc53c8`): changes one assertion in `eper/tests/b01-case-readiness-integrity.test.mjs`, allowing both `NOT_VERIFIED` and `LLD_EVIDENCE_RECEIVED_APPROVAL_PENDING`. Mainline has evolved the test's accepted baseline states; retain as a historical test-intent delta, not a transplant candidate without reviewing the current gate contract.
+- `fix/eper-ci-node-types` (commit `b48c814c50714bd307f989f5b06096710390519f`): adds `@types/node@20.14.15` to `eper/package.json`. The branch package manifest is stale relative to main; verify current type-check/build need before selectively adopting the dependency.
+- `release/eper-0.1.0-rc2` (commit `31f8f8056176562005369dbaf3cacfb391deee52`): changes packaged archive, checksum and artifact label from RC1 to RC2. Historical release metadata only; do not merge its old workflow.
+- `release/eper-0.1.0-rc4` (commit `13dc7fa94a4c0998d94e22a361d6e5790eee1183`): stages a temporary package directory, rewrites package and lockfile versions to `0.1.0-rc4`, validates the embedded versions, then packages and removes the temporary directory. This is a potentially reusable release-packaging technique, but the branch workflow is stale; compare against current release safeguards before any selective port.
+- `work/ch463-contract-draft-domain-reconciliation-2026-10-19` (commit `96788ab75224fd0eac540d779024ad11f556377c`): replaces the earlier unresolved domain-identity conflict narrative with the approved Option A source-correction decision, candidate source locators for REQ-46301–46306, explicit contract/event-name guardrails, and gate counts. Its source-precedence correction is reflected in current mainline; retain the branch as historical decision rationale, not as a merge candidate. It explicitly records 0/6 approved HLD→LLD pairs, 0/18 verified DATA/API/EVENT bindings, 0/6 approved acceptance oracles, SRC-003/G3 OPEN/NO-GO, Business UAT HOLD/NOT AUTHORIZED/NOT EXECUTED, and G9 NOT FROZEN.
+
+**Disposition:** no unique branch is approved for wholesale merge. Preserve all five refs until owner/reference checks and a documented keep/archive decision are complete. The RC4 packaging approach may merit a separate isolated improvement proposal after validating the current release workflow; no release artifact was produced by this review.
