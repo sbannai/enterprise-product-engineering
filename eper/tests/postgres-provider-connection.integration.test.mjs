@@ -242,12 +242,15 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
            VALUES ($1,$2,'{"retryLimit":3,"deliveryWindow":"business-hours"}'::jsonb,$3)`,
           [tenantA, connectionId, actorId],
         );
+        await client.query("SAVEPOINT reject_secret_default");
         await assert.rejects(() => client.query(
           `INSERT INTO eper_tenant_provider_defaults
             (tenant_id, connection_id, defaults, updated_by)
            VALUES ($1,$2,'{"nested":{"client_secret":"must-not-persist"}}'::jsonb,$3)`,
           [tenantA, connectionId, actorId],
         ));
+        await client.query("ROLLBACK TO SAVEPOINT reject_secret_default");
+        await client.query("RELEASE SAVEPOINT reject_secret_default");
         const changed = await client.query(
           `UPDATE eper_tenant_provider_defaults SET defaults='{"retryLimit":4}'::jsonb,
              version=version+1, updated_at=NOW(), updated_by=$3
