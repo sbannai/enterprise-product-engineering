@@ -2674,7 +2674,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               (body.environment !== "development" && body.environment !== "sandbox") ||
               !Array.isArray(body.allowedCapabilities) || body.allowedCapabilities.length < 1 ||
               body.allowedCapabilities.length > 32 ||
-              body.allowedCapabilities.some(value => typeof value !== "string" || !value.trim() || value.length > 128) ||
+              body.allowedCapabilities.some(value => typeof value !== "string" || !value.trim() || value.length > 128)
               ) {
             sendJson(request, response, 400, { error: "PROVIDER_CONNECTION_CREATE_INPUT_INVALID" }); return;
           }
