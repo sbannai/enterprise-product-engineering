@@ -401,6 +401,10 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         }).catch(() => undefined);
         await withScope(scopedPool, tenantA, null, async (client) => {
           await client.query(
+            "DELETE FROM eper_tenant_provider_defaults WHERE tenant_id=$1",
+            [tenantA],
+          );
+          await client.query(
             "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2",
             [tenantA, appA],
           );
