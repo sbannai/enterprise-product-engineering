@@ -292,7 +292,7 @@ export class PostgresAgentStore {
       const delay = Math.min(300, baseDelaySeconds * (2 ** Math.max(0, attempt - 1)));
       const result = await client.query<Record<string, unknown>>(
         `UPDATE eper_agent_jobs
-            SET status=$4, failure_code=$5, available_at=CASE WHEN $4='queued' THEN NOW()+($6::text || ' seconds')::interval ELSE available_at END,
+            SET status=$4::varchar, failure_code=$5, available_at=CASE WHEN $4::varchar='queued' THEN NOW()+($6::text || ' seconds')::interval ELSE available_at END,
                 lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW(), version=version+1
           WHERE tenant_id=$1 AND application_id=$2 AND job_id=$3
           RETURNING status,available_at`,
