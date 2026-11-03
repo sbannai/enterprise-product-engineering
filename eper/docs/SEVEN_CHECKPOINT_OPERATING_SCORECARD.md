@@ -626,3 +626,24 @@ The all-PR inventory returned 346 PRs: 256 merged, 89 closed unmerged, and one o
 ### Exact-head validation status for this scorecard revision
 
 For commit `4852fd6d0063fe13c5c77baa74c24136aa7be46c`, the latest poll returned 10 successful checks, 2 still in progress, 1 skipped, and 0 failures. The skipped 228/38 integrated subjob is complemented by a separate chapter-pilot-matrix workflow that passed. The remaining in-progress checks are the full PostgreSQL-enabled test suite and the overall CI build-and-test job. Do not report this revision as fully green until both finish successfully.
+
+
+## Correction — exact-head validation for PR #377 (2026-11-03)
+
+This section supersedes the preceding “Exact-head validation status for this scorecard revision” snapshot for commit `4852fd6d0063fe13c5c77baa74c24136aa7be46c`. That earlier poll was incomplete and is not the status of the current PR head.
+
+- Current PR head at the time of this validation: `4f7d5eba641d74b4fa78073feaeb6c44936991a7`.
+- Base: `main` at `a3635ffbb522488163904c1236fed294b0a2af17`.
+- GitHub reports the PR open, draft, and mergeable; it changes only this scorecard file.
+- All nine PR-triggered workflow runs for the exact head completed successfully: EPER CI [41662136763](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136763), same-commit integrated validation [41662136751](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136751), controlled QA [41662136701](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136701), controlled technical simulation [41662136693](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136693), G9 [41662136791](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136791), separate 228/38 chapter matrix [41662136660](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136660), six-family HTTP [41662136616](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136616), container runtime [41662136601](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136601), and release candidate [41662136617](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41662136617).
+- The integrated workflow’s separate 228/38 subjob was skipped because this documentation-only PR does not change requirement or chapter inputs; the standalone chapter matrix workflow passed on the exact same head.
+- The integrated gate log confirms payment/PostgreSQL, runtime, release/traceability and readiness technical lanes completed on the same source commit. The full PostgreSQL job and EPER CI both completed successfully; no failed exact-head checks remain.
+
+### Current main evidence (same assessment window)
+
+- Main SHA: `a3635ffbb522488163904c1236fed294b0a2af17`.
+- Main integrated validation [41657986233](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986233), EPER CI [41657986202](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986202), provider-operation live PostgreSQL lifecycle [41657986283](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986283), G9 [41657987071](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657987071), six-family HTTP [41657986237](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986237), container [41657986238](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986238), controlled technical simulation [41657986197](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986197), controlled QA [41657986265](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986265), and 228/38 matrix [41657986248](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657986248) all completed successfully on the exact main SHA.
+- The provider-operation PostgreSQL lifecycle test passed claim, renewal, fencing, retry exhaustion and expired-lease recovery against PostgreSQL (1 passed, 0 failed).
+- Fresh-clone verification [41657363742](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657363742) ran `npm run dev:verify` on candidate `2c426de8b63e437ffb186ed4887da76b4b704719`, with 1,422 passed, 0 failed and 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS` and `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`. Its Git tree SHA `0c01985a303e9348e728acd04b0a55a80020f9a9` matches main's tree. This is exact-tree evidence, not a run whose commit SHA is the main merge commit.
+
+These are technical validation results only. They do not establish production readiness, business acceptance, or authorize UAT. Branch protection remains disabled and requires repository-administrator action. No chargeable cloud resources or real external/provider actions were used.
