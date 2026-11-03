@@ -15,7 +15,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{t
 .pill{display:inline-flex;border-radius:99px;padding:4px 8px;background:#e9f7f0;color:#13795b;font-size:11px;font-weight:750}.pill.revoked{background:#f1f3f6;color:#68778d}.empty{padding:24px;text-align:center;color:#68778d}
 @media(max-width:700px){.grid{grid-template-columns:1fr}.panel{padding:15px}table{display:block;overflow-x:auto;white-space:nowrap}}
 </style></head><body>
-<header><h1>Customer Admin · Role management</h1><p>Application-scoped access · Durable assignments · Audited changes</p></header>
+<header><h1>Customer Admin · Role management</h1><p>Application-scoped access · Durable assignments · Audited changes · <a href="/customer/provider-connections/ui" style="color:#fff;text-underline-offset:3px">Provider connections</a></p></header>
 <main>
 <section class="panel"><h2>Connect your customer session</h2><p class="help">Sign in with your organization. Only an active Customer Admin with the durable access:manage permission can view or change role assignments.</p>
 <div class="grid"><div class="field"><label for="application">Application ID</label><input id="application" placeholder="Your application ID" autocomplete="off"></div></div>
