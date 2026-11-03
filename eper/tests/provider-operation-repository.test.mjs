@@ -7,11 +7,12 @@ import {
 } from "../dist/packages/integrations/postgres-provider-operation-repository.js";
 
 const stamp = "2026-11-03T12:00:00.000Z";
-function fixture({ existing = null, claim = null, outcome = null } = {}) {
+function fixture({ existing = null, claim = null, outcome = null, renewed = null } = {}) {
   const calls = [];
   let stored = existing;
   let claimed = claim;
   let savedOutcome = outcome;
+  let savedRenewal = renewed;
   const row = (status = "QUEUED", overrides = {}) => ({
     operation_id: "00000000-0000-4000-8000-000000000001",
     tenant_id: "tenant-a", application_id: "app-a",
@@ -38,6 +39,9 @@ function fixture({ existing = null, claim = null, outcome = null } = {}) {
       }
       if (sql.includes("WITH candidate AS")) {
         return { rows: claimed ? [claimed] : [], rowCount: claimed ? 1 : 0 };
+      }
+      if (sql.includes("SET lease_expires_at=NOW()")) {
+        return { rows: savedRenewal ? [savedRenewal] : [], rowCount: savedRenewal ? 1 : 0 };
       }
       if (sql.includes("UPDATE eper_provider_operations SET")) {
         return { rows: savedOutcome ? [savedOutcome] : [], rowCount: savedOutcome ? 1 : 0 };
@@ -131,6 +135,42 @@ test("worker returns null when no due operation is available", async () => {
     tenantId: "tenant-a", applicationId: "app-a", workerId: "worker-1", auditEnvironment: "sandbox",
   });
   assert.equal(claimed, null);
+});
+
+test("worker can renew only its live lease generation", async () => {
+  const renewed = {
+    operation_id: "00000000-0000-4000-8000-000000000001",
+    tenant_id: "tenant-a", application_id: "app-a",
+    connection_id: "00000000-0000-4000-8000-000000000002",
+    capability_key: "email.send", capability_version: "1",
+    idempotency_key: "mail-001", correlation_id: "corr-001",
+    operation_status: "DISPATCHING", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
+    provider_reference: null, lease_owner: "worker-1", lease_expires_at: "2026-11-03T13:05:00.000Z",
+    fencing_token: 4, attempt_count: 4, available_at: stamp,
+    last_error_code: null, created_at: stamp, updated_at: stamp,
+  };
+  const { repository, calls } = fixture({ renewed });
+  const result = await repository.renewLease({
+    tenantId: "tenant-a", applicationId: "app-a",
+    operationId: renewed.operation_id, workerId: "worker-1",
+    fencingToken: 4, leaseDurationSeconds: 300, auditEnvironment: "sandbox",
+  });
+  assert.equal(result.fencingToken, 4);
+  assert.equal(result.leaseOwner, "worker-1");
+  assert.equal(result.leaseExpiresAt, "2026-11-03T13:05:00.000Z");
+  assert.ok(calls.some(call => call.sql.includes("fencing_token=$5") && call.sql.includes("lease_expires_at > NOW()")
+    && call.values[3] === "worker-1" && call.values[4] === 4 && call.values[5] === 300));
+  assert.ok(calls.some(call => call.values.includes("provider.operation.lease_renewed")));
+});
+
+test("expired or stale worker cannot renew a lease", async () => {
+  const { repository, calls } = fixture({ renewed: null });
+  await assert.rejects(() => repository.renewLease({
+    tenantId: "tenant-a", applicationId: "app-a",
+    operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
+    fencingToken: 3, auditEnvironment: "sandbox",
+  }), error => error instanceof ProviderOperationStateConflictError);
+  assert.ok(calls.some(call => call.sql.includes("lease_expires_at > NOW()")));
 });
 
 test("outcome transition persists safe retry metadata and audit", async () => {
