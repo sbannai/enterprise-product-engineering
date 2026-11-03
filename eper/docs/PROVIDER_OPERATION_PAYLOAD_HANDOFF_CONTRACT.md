@@ -13,12 +13,15 @@ Do not work around this by placing raw request bodies, credentials, access token
 1. The caller canonicalizes the operation request and computes the existing SHA-256 digest.
 2. The caller stores the request body in an approved encrypted payload store. The store returns an opaque payload reference; the reference is not a credential and must not encode the payload.
 3. The enqueue transaction stores the payload reference alongside the digest and idempotency tuple. Reusing an idempotency key with a different digest **or payload reference** must fail closed. A retry with the same digest and same reference returns the original operation.
-4. The worker claims the operation using the existing tenant/application RLS scope and `FOR UPDATE SKIP LOCKED` queue behavior.
-5. Before reading the payload, the worker authorizes access to the opaque reference for the operation's tenant, application, capability, and operation ID. The payload store must return the canonical payload whose digest matches the persisted digest.
-6. The worker resolves effective provider configuration immediately before dispatch (application override → tenant default → explicit NONE), rechecks active binding/connection/capability, and resolves the connection's secret reference through a server-only secret resolver.
-7. Only the selected adapter receives the payload, safe policy, and credential material. No credential material or raw payload is returned to API callers or written to audit.
-8. The worker maps adapter results to the existing bounded operation outcomes. Error metadata is a stable safe code only; provider response bodies and exception text are discarded.
-9. Payload retention/deletion is explicit. Terminal operations must not leave payloads available indefinitely; retention and legal/audit holds are governed separately from the operation row.
+4. The worker claims the operation using the existing tenant/application RLS scope and `FOR UPDATE SKIP LOCKED` queue behavior. Each claim assigns a database-time lease owner and expiry and increments a monotonic fencing token.
+5. A live owner may renew only with its current fencing token before expiry. Expired `DISPATCHING` operations may be reclaimed only while their attempt count is below the configured maximum; the next claim increments the fencing token. Claims and renewals are audited transactionally.
+6. The recovery worker must call `recoverExpiredLeases` for the tenant/application scope. Expired operations already at the attempt limit transition to `NEEDS_ATTENTION`, clear their lease and append an audit event in the same transaction. Recovery is bounded with `SKIP LOCKED` and a maximum batch size.
+7. Outcome writes must present the current worker identity and fencing token while the lease is still live. Stale, expired or superseded workers are rejected; accepted outcomes clear the lease.
+8. Before reading the payload, the worker authorizes access to the opaque reference for the operation's tenant, application, capability, and operation ID. The payload store must return the canonical payload whose digest matches the persisted digest.
+9. The worker resolves effective provider configuration immediately before dispatch (application override → tenant default → explicit NONE), rechecks active binding/connection/capability, and resolves the connection's secret reference through a server-only secret resolver.
+10. Only the selected adapter receives the payload, safe policy, and credential material. No credential material or raw payload is returned to API callers or written to audit.
+11. The worker maps adapter results to the existing bounded operation outcomes. Error metadata is a stable safe code only; provider response bodies and exception text are discarded.
+12. Payload retention/deletion is explicit. Terminal operations must not leave payloads available indefinitely; retention and legal/audit holds are governed separately from the operation row.
 
 ## Persistence change
 
@@ -39,7 +42,10 @@ The payload reference must be tenant/application scoped at the payload-store bou
 - Secret resolver failure invokes no adapter and exposes no secret or exception text.
 - Adapter success/retry/permanent failure map to SUCCEEDED/RETRYING/FAILED; exhausted retry maps to NEEDS_ATTENTION.
 - Audit failure rolls back state transitions; audit contains identifiers and safe codes only, never payload or credential values.
-- Worker concurrency cannot dispatch the same claimed operation twice.
+- Concurrent claimers cannot claim one live lease; expired leases can be reclaimed with a higher fencing token.
+- Old worker identities/tokens and expired leases cannot renew or record outcomes.
+- Expired leases at the configured attempt limit are moved to `NEEDS_ATTENTION` by a bounded recovery pass; the worker runtime must schedule this pass.
+- Adapter dispatch must use the stable operation idempotency key. A database fencing token cannot cancel a remote request already accepted by a provider.
 
 ## Release guard
 
