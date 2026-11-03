@@ -44,7 +44,7 @@ function fixture({ existing = null, claim = null, outcome = null, renewed = null
       if (sql.includes("WITH candidate AS")) {
         return { rows: claimed ? [claimed] : [], rowCount: claimed ? 1 : 0 };
       }
-      if (sql.includes("SET lease_expires_at=NOW()")) {
+      if (sql.includes("lease_expires_at=NOW()+")) {
         return { rows: savedRenewal ? [savedRenewal] : [], rowCount: savedRenewal ? 1 : 0 };
       }
       if (sql.includes("UPDATE eper_provider_operations SET")) {
