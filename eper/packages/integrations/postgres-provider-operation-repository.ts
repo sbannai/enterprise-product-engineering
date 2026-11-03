@@ -301,7 +301,7 @@ export class PostgresProviderOperationRepository {
          WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
            AND operation_status='DISPATCHING'
          RETURNING operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
-           idempotency_key,correlation_id,operation_status,request_digest,provider_reference,
+           idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
            attempt_count,available_at,last_error_code,created_at,updated_at`,
         [tenantId,applicationId,operationId,status,input.providerReference ?? null,
           input.outcome === "SUCCEEDED" ? null : input.errorCode ?? "PROVIDER_OPERATION_FAILED",
