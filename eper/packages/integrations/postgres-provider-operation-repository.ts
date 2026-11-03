@@ -23,6 +23,9 @@ export interface ProviderOperation {
   requestDigest: string;
   payloadReference: string;
   providerReference: string | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+  fencingToken: number;
   attemptCount: number;
   availableAt: string;
   lastErrorCode: string | null;
@@ -43,6 +46,9 @@ type OperationRow = {
   request_digest: string;
   payload_reference: string;
   provider_reference: string | null;
+  lease_owner: string | null;
+  lease_expires_at: Date | string | null;
+  fencing_token: number | string;
   attempt_count: number | string;
   available_at: Date | string;
   last_error_code: string | null;
@@ -68,6 +74,9 @@ function map(row: OperationRow): ProviderOperation {
     requestDigest: row.request_digest,
     payloadReference: row.payload_reference,
     providerReference: row.provider_reference,
+    leaseOwner: row.lease_owner,
+    leaseExpiresAt: row.lease_expires_at === null ? null : iso(row.lease_expires_at),
+    fencingToken: Number(row.fencing_token),
     attemptCount: Number(row.attempt_count),
     availableAt: iso(row.available_at),
     lastErrorCode: row.last_error_code,
@@ -171,7 +180,7 @@ export class PostgresProviderOperationRepository {
          ON CONFLICT (tenant_id,application_id,connection_id,idempotency_key) DO NOTHING
          RETURNING operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
            idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
-           attempt_count,available_at,last_error_code,created_at,updated_at`,
+           lease_owner,lease_expires_at,fencing_token,attempt_count,available_at,last_error_code,created_at,updated_at`,
         [operationId,tenantId,applicationId,connectionId,capabilityKey,capabilityVersion,
           idempotencyKey,correlationId,requestDigest,payloadReference],
       );
@@ -181,7 +190,7 @@ export class PostgresProviderOperationRepository {
         const existing = await client.query<OperationRow>(
           `SELECT operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
             idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
-            attempt_count,available_at,last_error_code,created_at,updated_at
+            lease_owner,lease_expires_at,fencing_token,attempt_count,available_at,last_error_code,created_at,updated_at
            FROM eper_provider_operations
            WHERE tenant_id=$1 AND application_id=$2 AND connection_id=$3 AND idempotency_key=$4
            FOR SHARE`,
@@ -212,11 +221,16 @@ export class PostgresProviderOperationRepository {
 
   async claimNext(input: {
     tenantId: string; applicationId: string; workerId: string;
+    leaseDurationSeconds?: number;
     auditEnvironment: AuditEnvironment;
   }): Promise<ProviderOperation | null> {
     const tenantId = identity(input.tenantId, "TENANT");
     const applicationId = identity(input.applicationId, "APPLICATION");
     const workerId = identity(input.workerId, "WORKER");
+    const leaseDurationSeconds = input.leaseDurationSeconds ?? 60;
+    if (!Number.isInteger(leaseDurationSeconds) || leaseDurationSeconds < 5 || leaseDurationSeconds > 3600) {
+      throw new Error("PROVIDER_OPERATION_LEASE_DURATION_INVALID");
+    }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -230,7 +244,8 @@ export class PostgresProviderOperationRepository {
            JOIN eper_provider_connections pc
              ON pc.tenant_id=o.tenant_id AND pc.connection_id=o.connection_id
            WHERE o.tenant_id=$1 AND o.application_id=$2
-             AND o.operation_status IN ('QUEUED','RETRYING') AND o.available_at <= NOW()
+             AND ((o.operation_status IN ('QUEUED','RETRYING') AND o.available_at <= NOW())
+               OR (o.operation_status='DISPATCHING' AND o.lease_expires_at <= NOW()))
              AND b.binding_status='ACTIVE' AND pc.connection_status='ACTIVE'
              AND b.allowed_capabilities ? o.capability_key
            ORDER BY o.available_at,o.created_at,o.operation_id
@@ -238,19 +253,22 @@ export class PostgresProviderOperationRepository {
          )
          UPDATE eper_provider_operations o
          SET operation_status='DISPATCHING',attempt_count=o.attempt_count+1,
-             updated_at=NOW(),last_error_code=NULL
+             lease_owner=$4,lease_expires_at=NOW()+($3::int * INTERVAL '1 second'),
+             fencing_token=o.fencing_token+1,updated_at=NOW(),last_error_code=NULL
          FROM candidate c WHERE o.operation_id=c.operation_id
          RETURNING o.operation_id,o.tenant_id,o.application_id,o.connection_id,o.capability_key,
            o.capability_version,o.idempotency_key,o.correlation_id,o.operation_status,o.request_digest,
-           o.payload_reference,o.provider_reference,o.attempt_count,o.available_at,o.last_error_code,o.created_at,o.updated_at`,
-        [tenantId,applicationId],
+           o.payload_reference,o.provider_reference,o.lease_owner,o.lease_expires_at,o.fencing_token,
+           o.attempt_count,o.available_at,o.last_error_code,o.created_at,o.updated_at`,
+        [tenantId,applicationId,leaseDurationSeconds,workerId],
       );
       const row = claimed.rows[0];
       if (row) {
         await this.audit(client, {
           tenantId, applicationId, environment: input.auditEnvironment, actorId: workerId,
           action: "provider.operation.dispatch_claimed", operationId: row.operation_id,
-          correlationId: row.correlation_id, payload: { attemptCount: Number(row.attempt_count) },
+          correlationId: row.correlation_id,
+          payload: { attemptCount: Number(row.attempt_count), fencingToken: Number(row.fencing_token), leaseExpiresAt: iso(row.lease_expires_at!) },
         });
       }
       await client.query("COMMIT");
@@ -267,12 +285,16 @@ export class PostgresProviderOperationRepository {
     tenantId: string; applicationId: string; operationId: string; workerId: string;
     outcome: "SUCCEEDED" | "RETRY" | "FAILED" | "NEEDS_ATTENTION";
     providerReference?: string; errorCode?: string; retryAfterSeconds?: number; maxAttempts?: number;
+    fencingToken: number;
     auditEnvironment: AuditEnvironment;
   }): Promise<ProviderOperation> {
     const tenantId = identity(input.tenantId, "TENANT");
     const applicationId = identity(input.applicationId, "APPLICATION");
     const operationId = identity(input.operationId, "OPERATION_ID");
     const workerId = identity(input.workerId, "WORKER");
+    if (!Number.isSafeInteger(input.fencingToken) || input.fencingToken < 1) {
+      throw new Error("PROVIDER_OPERATION_FENCING_TOKEN_INVALID");
+    }
     if (input.providerReference !== undefined) identity(input.providerReference, "PROVIDER_REFERENCE", 256);
     if (input.errorCode !== undefined && !/^[A-Z0-9_]{1,96}$/.test(input.errorCode)) {
       throw new Error("PROVIDER_OPERATION_ERROR_CODE_INVALID");
@@ -297,15 +319,16 @@ export class PostgresProviderOperationRepository {
            provider_reference=COALESCE($5,provider_reference),last_error_code=$6,
            available_at=CASE WHEN $4='RETRYING' AND attempt_count < $8
              THEN NOW()+($7::int * INTERVAL '1 second') ELSE available_at END,
-           updated_at=NOW()
+           lease_owner=NULL,lease_expires_at=NULL,updated_at=NOW()
          WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
-           AND operation_status='DISPATCHING'
+           AND operation_status='DISPATCHING' AND lease_owner=$9
+           AND fencing_token=$10 AND lease_expires_at > NOW()
          RETURNING operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
            idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
-           attempt_count,available_at,last_error_code,created_at,updated_at`,
+           lease_owner,lease_expires_at,fencing_token,attempt_count,available_at,last_error_code,created_at,updated_at`,
         [tenantId,applicationId,operationId,status,input.providerReference ?? null,
           input.outcome === "SUCCEEDED" ? null : input.errorCode ?? "PROVIDER_OPERATION_FAILED",
-          retryAfterSeconds,maxAttempts],
+          retryAfterSeconds,maxAttempts,workerId,input.fencingToken],
       );
       const row = saved.rows[0];
       if (!row) {
