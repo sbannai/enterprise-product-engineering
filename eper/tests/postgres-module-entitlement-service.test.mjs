@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PostgresModuleEntitlementService } from "../dist/packages/workflows/postgres-module-entitlement-service.js";
 
-function makePool(row) {
+function makePool(row, schemaOverrides = {}) {
   const calls = [];
   const client = {
     async query(sql, values = []) {
@@ -15,6 +15,8 @@ function makePool(row) {
         module_permission: "eper_customer_module_permission",
         addon_entitlement: "eper_application_addon_entitlement",
         customer_tariff_assignment: "eper_customer_tariff_assignment",
+        tenant_application_assignment: "eper_tenant_application_assignment",
+        ...schemaOverrides,
       }], rowCount: 1 };
       return { rows: [{
         tariff_assignment_status: "active",
@@ -143,6 +145,16 @@ test("service readiness requires every entitlement schema table", async () => {
   await assert.doesNotReject(() => new PostgresModuleEntitlementService(pool, {
     async isAssignedToTenant() { return true; },
   }).assertReady());
+});
+
+test("service readiness fails closed when tenant application assignments are missing", async () => {
+  const { pool } = makePool({}, { tenant_application_assignment: null });
+  await assert.rejects(
+    () => new PostgresModuleEntitlementService(pool, {
+      async isAssignedToTenant() { return true; },
+    }).assertReady(),
+    /EPER_MODULE_ENTITLEMENT_SCHEMA_NOT_APPLIED/,
+  );
 });
 
 
