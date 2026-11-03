@@ -580,3 +580,26 @@ Additional migration-ordering issue to validate: #348 adds `eper/packages/workfl
 The patches show material changes, not just import overlap: #348 adds tariff guard evaluation to both module and add-on access; #350 changes entitlement query behavior while adding workflow draft/rule execution; #355 adds provider role authorization and provider connection APIs. The overlapping patches must be composed semantically, not resolved by choosing one branch's file wholesale.
 
 **Disposition:** integration work is now scoped to ten shared paths plus migration ordering. This is a more precise reconciliation checklist, not a completed merge or a claim that all ten files have textual conflicts. Keep source PRs unchanged and unmerged until a full combined candidate passes. No chargeable resources or external provider activation.
+
+
+## Latest exact-head validation and migration inventory — 2026-11-03 07:10 IST
+
+Documentation head `4102d2f059ad7023c82d978ea422d150700e19db` now has these exact-head outcomes:
+
+- EPER CI [41561074085](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074085): passed.
+- 228 requirement pilot matrix [41561074043](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074043): passed as a separate run.
+- G9 reconciliation [41561074011](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074011): passed.
+- Release candidate build [41561074004](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074004): passed.
+- Container runtime smoke [41561074005](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074005): passed.
+- Six-family HTTP smoke [41561074026](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074026): passed.
+- Same-commit integrated validation [41561074033](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41561074033): **failed**. PostgreSQL job 125671547583 completed with 1,180 passing, 1 failing, 2 skipped. The exact failure is still test 614, `eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs:11`: expected tariff-overage denial, actual allowed. The same-commit gate failed accordingly. The integrated run's 228/38 matrix job was skipped; only the separate matrix run is passing evidence.
+
+### Migration sequence check
+
+The workflow migration directory was enumerated on main and on the #348/#350/#355 branch heads. Main contains migrations 001–008. #348 adds 009–013; #350 adds a distinct `009_workflow_definition_drafts.sql`; #355 does not add a workflow migration. Therefore the combined #348+#350 candidate contains two distinct files with the same `009_` ordinal. This is a confirmed branch-composition collision. The migration runner's exact ordering and applied-migration tracking behavior still needs source inspection in a local checkout; the GitHub code search did not surface the runner. Do not renumber either migration blindly: first establish dependencies, transaction boundaries, and how the migration runner records applied files.
+
+### Disposition
+
+- The tariff defect is unchanged on this exact-head integrated run; PR #348's isolated branch validation does not fix main or the combined candidate.
+- Keep #348/#350/#355 and #357 unmerged. Resolve the shared API/entitlement patches and the duplicate migration ordinal in a real Git workspace, then rerun the full PostgreSQL-enabled suite and a non-skipped 228/38 matrix on one exact candidate.
+- All seven checkpoints remain AMBER. No application source code was changed by this validation/documentation cycle. No chargeable cloud resources or provider activations.
