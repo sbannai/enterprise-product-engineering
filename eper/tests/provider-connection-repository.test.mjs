@@ -6,7 +6,7 @@ import {
 } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
 
 const stamp = "2026-11-02T15:00:00.000Z";
-function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "meeting.create"], bindingApps = ["app-a"] } = {}) {
+function fixture({ status = "ACTIVE", providerStatus = "ACTIVE", providerAuthModes = ["oauth"], version = 1, supported = ["email.send", "meeting.create"], bindingApps = ["app-a"] } = {}) {
   const calls = [];
   let currentStatus = status;
   let currentVersion = version;
@@ -26,14 +26,17 @@ function fixture({ status = "ACTIVE", version = 1, supported = ["email.send", "m
         }], rowCount: 1 };
       }
       if (sql.includes("SELECT provider_status FROM eper_provider_definitions")) {
-        return { rows: [{ provider_status: "ACTIVE" }], rowCount: 1 };
+        return { rows: [{ provider_status: providerStatus }], rowCount: 1 };
+      }
+      if (sql.includes("SELECT provider_status, capabilities, auth_modes")) {
+        return { rows: [{ provider_status: providerStatus, capabilities: supported, auth_modes: providerAuthModes }], rowCount: 1 };
       }
       if (sql.includes("INSERT INTO eper_provider_connections")) {
         id = values[1]; currentStatus = "PENDING_VALIDATION"; currentVersion = 1;
         return { rows: [row()], rowCount: 1 };
       }
-      if (sql.includes("SELECT c.provider_key, c.connection_status, d.capabilities")) {
-        return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, capabilities: supported }], rowCount: 1 };
+      if (sql.includes("SELECT c.provider_key, c.connection_status, d.provider_status, d.capabilities")) {
+        return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, provider_status: providerStatus, capabilities: supported }], rowCount: 1 };
       }
       if (sql.includes("SELECT application_id FROM eper_provider_connection_applications")) {
         return { rows: bindingApps.map((application_id) => ({ application_id })), rowCount: bindingApps.length };
@@ -78,6 +81,53 @@ test("create persists a secret reference but returns a masked connection view", 
   assert.equal(calls.at(-1).sql, "RELEASE");
 });
 
+test("create-and-bind persists the customer connection and first application binding atomically", async () => {
+  const { repository, calls } = fixture({ status: "ACTIVE" });
+  const result = await repository.createAndBindApplication({
+    ...audit, applicationId: "app-a", providerKey: "mail-provider",
+    displayName: "Customer mail", authMode: "oauth",
+    secretReference: "synthetic://customer/mail-secret", environment: "sandbox",
+    allowedCapabilities: ["email.send"],
+  });
+  assert.equal(result.connection.status, "PENDING_VALIDATION");
+  assert.equal("secretReference" in result.connection, false);
+  assert.equal(result.bindingStatus, "PENDING_VALIDATION");
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_provider_connections")));
+  const binding = calls.find(call => call.sql.includes("INSERT INTO eper_provider_connection_applications"));
+  assert.ok(binding);
+  assert.equal(binding.values[1], "app-a");
+  assert.ok(binding.sql.includes("'PENDING_VALIDATION'"));
+  assert.equal(binding.values[5], "admin-1");
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("create-and-bind rolls back when the catalogue provider is suspended", async () => {
+  const { repository, calls } = fixture({ providerStatus: "SUSPENDED" });
+  await assert.rejects(() => repository.createAndBindApplication({
+    ...audit, applicationId: "app-a", providerKey: "mail-provider",
+    displayName: "Customer mail", authMode: "oauth",
+    secretReference: "synthetic://customer/mail-secret", environment: "sandbox",
+    allowedCapabilities: ["email.send"],
+  }), /PROVIDER_DEFINITION_NOT_ACTIVE/);
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some(call => call.sql.includes("INSERT INTO eper_provider_connections")));
+  assert.ok(!calls.some(call => call.sql.includes("INSERT INTO eper_provider_connection_applications")));
+});
+
+test("create-and-bind rejects auth modes not declared by the provider", async () => {
+  const { repository, calls } = fixture({ providerAuthModes: ["api_key"] });
+  await assert.rejects(() => repository.createAndBindApplication({
+    ...audit, applicationId: "app-a", providerKey: "mail-provider",
+    displayName: "Customer mail", authMode: "oauth",
+    secretReference: "synthetic://customer/mail-secret", environment: "sandbox",
+    allowedCapabilities: ["email.send"],
+  }), /PROVIDER_AUTH_MODE_NOT_SUPPORTED/);
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some(call => call.sql.includes("INSERT INTO eper_provider_connections")));
+});
+
 test("application binding rejects a capability not declared by the provider", async () => {
   const { repository, calls } = fixture();
   await assert.rejects(() => repository.bindApplication({
@@ -86,6 +136,18 @@ test("application binding rejects a capability not declared by the provider", as
   }), /PROVIDER_CAPABILITY_NOT_SUPPORTED/);
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
   assert.ok(!calls.some((call) => call.sql.includes("INSERT INTO eper_provider_connection_applications")));
+});
+
+test("application binding rejects suspended and deprecated provider definitions", async () => {
+  for (const providerStatus of ["SUSPENDED", "DEPRECATED"]) {
+    const { repository, calls } = fixture({ status: "ACTIVE", providerStatus });
+    await assert.rejects(() => repository.bindApplication({
+      ...audit, applicationId: "app-a", connectionId: "connection-a",
+      allowedCapabilities: ["email.send"],
+    }), /PROVIDER_DEFINITION_NOT_ACTIVE/);
+    assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+    assert.ok(!calls.some((call) => call.sql.includes("INSERT INTO eper_provider_connection_applications")));
+  }
 });
 
 test("secret rotation preserves connection identity and forces revalidation", async () => {

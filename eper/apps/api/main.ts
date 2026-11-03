@@ -12,6 +12,7 @@ import { PostgresWorkflowRoleDelegationStore } from "../../packages/workflows/po
 import { PostgresPlatformCustomerAdminProvisioningStore } from "../../packages/workflows/postgres-platform-customer-admin-provisioning-store.js";
 import { PostgresPlatformApplicationRemediationStore } from "../../packages/workflows/postgres-platform-application-remediation-store.js";
 import { WorkflowDefinitionPublisher } from "../../packages/workflows/workflow-definition-publisher.js";
+import { PostgresWorkflowDefinitionDraftStore } from "../../packages/workflows/postgres-workflow-definition-draft-store.js";
 import { PostgresWorkflowExecutionService } from "../../packages/workflows/postgres-workflow-execution-service.js";
 import { PostgresModuleEntitlementService } from "../../packages/workflows/postgres-module-entitlement-service.js";
 import { appendAuditEvent, appendAuditEventInTransaction, assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
@@ -21,11 +22,13 @@ import { PostgresCampaignSchedulerStore } from "../../packages/campaign-schedule
 import { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
+import { PostgresPlatformAdminCredentialStore } from "../../packages/identity/postgres-platform-admin-credential-store.js";
 import { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
 import { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
 import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
 import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
+import { PostgresProviderCatalogueRepository } from "../../packages/integrations/postgres-provider-catalogue-repository.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -44,6 +47,8 @@ const providerValidationEnabled = process.env.EPER_PROVIDER_VALIDATION_API_ENABL
 const workflowRoleDelegationEnabled = process.env.EPER_WORKFLOW_ROLE_DELEGATION_API_ENABLED === "true";
 const platformCustomerAdminEnabled = process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED === "true";
 const platformApplicationRemediationEnabled = process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED === "true";
+const platformAdminCredentialsEnabled = process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED === "true";
+const providerCatalogueAdminEnabled = process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED === "true";
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
@@ -51,8 +56,87 @@ const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSI
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || customerIdentityPersistenceMode === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
+
+// Privileged control-plane stores use independent PostgreSQL credentials and pools.
+// Configure these URLs with separate least-privilege roles and explicit table grants;
+// they must not silently fall back to the general payment/database credential.
+const platformAdminPool = platformAdminCredentialsEnabled ? (() => {
+  const connectionString = process.env.EPER_PLATFORM_ADMIN_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_PLATFORM_ADMIN_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
+const providerCataloguePool = (providerCatalogueAdminEnabled || providerConnectionsEnabled) ? (() => {
+  const connectionString = process.env.EPER_PROVIDER_CATALOGUE_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_PROVIDER_CATALOGUE_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
+
+async function assertPrivilegedPoolRole(
+  pool: ReturnType<typeof createPostgresPaymentPool> | null,
+  expectedRole: string,
+  protectedTables: string[],
+  failureCode: string,
+): Promise<void> {
+  if (!pool) return;
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      is_member: boolean;
+      can_login: boolean;
+      is_superuser: boolean;
+      bypass_rls: boolean;
+      owns_protected_tables: boolean;
+    }>(`
+      SELECT
+        COALESCE((SELECT pg_has_role(current_user, r.oid, 'member')
+                    FROM pg_roles r WHERE r.rolname = $1), FALSE) AS is_member,
+        current_role.rolcanlogin AS can_login,
+        current_role.rolsuper AS is_superuser,
+        current_role.rolbypassrls AS bypass_rls,
+        EXISTS (
+          SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public'
+             AND c.relname = ANY($2::text[])
+             AND pg_has_role(current_user, c.relowner, 'member')
+        ) AS owns_protected_tables
+      FROM pg_roles current_role
+      WHERE current_role.rolname = current_user
+    `, [expectedRole, protectedTables]);
+    const role = result.rows[0];
+    if (!role || role.is_member !== true || role.can_login !== true ||
+        role.is_superuser !== false || role.bypass_rls !== false ||
+        role.owns_protected_tables === true) {
+      throw new Error(failureCode);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+if (platformAdminPool) {
+  await assertPrivilegedPoolRole(
+    platformAdminPool,
+    "eper_platform_admin_access",
+    ["eper_platform_admin_credentials", "eper_audit_events", "eper_audit_chain_head"],
+    "EPER_PLATFORM_ADMIN_DATABASE_ROLE_INVALID",
+  );
+}
+if (providerCataloguePool) {
+  await assertPrivilegedPoolRole(
+    providerCataloguePool,
+    "eper_provider_catalogue_access",
+    [
+      "eper_provider_definitions", "eper_provider_connections",
+      "eper_provider_connection_applications", "eper_provider_validation_events",
+      "eper_audit_events", "eper_audit_chain_head",
+    ],
+    "EPER_PROVIDER_CATALOGUE_DATABASE_ROLE_INVALID",
+  );
+}
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres")) {
@@ -144,7 +228,7 @@ if (auditMode === "postgres" && !paymentPool) {
 if (customerIdentityPersistenceMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_IDENTITY_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
-if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled) && (!paymentPool || auditMode !== "postgres")) {
+if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled) && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("PLATFORM_CUSTOMER_ADMIN_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
 const auditEnvironment = process.env.EPER_AUDIT_ENVIRONMENT ?? "uat";
@@ -158,7 +242,7 @@ if (actorAssignmentMode !== "environment" && actorAssignmentMode !== "postgres")
 if (actorAssignmentMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_ACTOR_ASSIGNMENTS_REQUIRE_POSTGRES_AND_DURABLE_AUDIT");
 }
-if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled) && (!paymentPool || auditMode !== "postgres" ||
+if ((platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled) && (!paymentPool || auditMode !== "postgres" ||
     customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres")) {
   throw new Error("PLATFORM_CUSTOMER_ADMIN_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
 }
@@ -233,6 +317,41 @@ if ((providerConnectionsEnabled || providerValidationEnabled) && (!paymentPool |
     customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres")) {
   throw new Error("PROVIDER_CONNECTION_API_REQUIRES_POSTGRES_AUDIT_AND_DURABLE_CUSTOMER_IDENTITY_ASSIGNMENTS");
 }
+
+if (providerCatalogueAdminEnabled && (!paymentPool || auditMode !== "postgres" ||
+    !platformAdminCredentialsEnabled || process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED !== "true")) {
+  throw new Error("PROVIDER_CATALOGUE_ADMIN_REQUIRES_POSTGRES_DURABLE_AUDIT_AND_PLATFORM_CREDENTIALS");
+}
+function readProviderCatalogueRegistry(name: string): string[] {
+  let value: unknown;
+  try { value = JSON.parse(process.env[name] ?? ""); }
+  catch { throw new Error(`${name}_INVALID_JSON`); }
+  if (!Array.isArray(value) || value.length < 1 || value.length > 128 ||
+      value.some(item => typeof item !== "string" || !/^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(item)) ||
+      new Set(value).size !== value.length) {
+    throw new Error(`${name}_INVALID_REGISTRY`);
+  }
+  return value as string[];
+}
+const providerCatalogueRepository = (providerCatalogueAdminEnabled || providerConnectionsEnabled) && providerCataloguePool
+  ? new PostgresProviderCatalogueRepository(providerCataloguePool, {
+      adapterKeys: readProviderCatalogueRegistry("EPER_PROVIDER_CATALOGUE_ADAPTER_KEYS_JSON"),
+      capabilityKeys: readProviderCatalogueRegistry("EPER_PROVIDER_CATALOGUE_CAPABILITY_KEYS_JSON"),
+      authModes: readProviderCatalogueRegistry("EPER_PROVIDER_CATALOGUE_AUTH_MODES_JSON"),
+    }, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (providerCatalogueRepository) {
+  const readinessClient = await providerCataloguePool!.connect();
+  try {
+    const readiness = await readinessClient.query<{ table_name: string | null }>(
+      "SELECT to_regclass('public.eper_provider_definitions')::text AS table_name",
+    );
+    if (!readiness.rows[0]?.table_name) throw new Error("PROVIDER_CATALOGUE_SCHEMA_NOT_APPLIED");
+  } finally {
+    readinessClient.release();
+  }
+}
+
 const providerConnectionRepository = providerConnectionsEnabled && paymentPool
   ? new PostgresProviderConnectionRepository(paymentPool)
   : undefined;
@@ -258,6 +377,9 @@ const workflowActorRoleAssignmentStore = workflowAuthorizationStoresEnabled && p
 const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
   ? new WorkflowDefinitionPublisher(paymentPool)
   : undefined;
+const workflowDefinitionDraftStore = workflowExecutionEnabled && paymentPool
+  ? new PostgresWorkflowDefinitionDraftStore(paymentPool)
+  : undefined;
 const workflowExecutionService = workflowExecutionEnabled && paymentPool
   ? new PostgresWorkflowExecutionService(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
@@ -271,6 +393,7 @@ const workflowRoleDelegationStore = workflowRoleDelegationEnabled && paymentPool
   : undefined;
 if (workflowRoleDefinitionStore) await workflowRoleDefinitionStore.assertReady();
 if (workflowActorRoleAssignmentStore) await workflowActorRoleAssignmentStore.assertReady();
+if (workflowDefinitionDraftStore) await workflowDefinitionDraftStore.assertReady();
 if (workflowExecutionService) await workflowExecutionService.assertReady();
 const platformCustomerAdminProvisioningStore = platformCustomerAdminEnabled && paymentPool
   ? new PostgresPlatformCustomerAdminProvisioningStore(paymentPool)
@@ -341,6 +464,11 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
+const platformAdminCredentialStore = platformAdminCredentialsEnabled && platformAdminPool
+  ? new PostgresPlatformAdminCredentialStore(platformAdminPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
+
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
@@ -348,9 +476,9 @@ const server = createAppServer({
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
-  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore,
-  providerConnectionRepository, providerValidationService,
-  workflowDefinitionPublisher, workflowExecutionService,
+  workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore, platformAdminCredentialStore,
+  providerConnectionRepository, providerValidationService, providerCatalogueRepository,
+  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService,
 });
 
 server.listen(port, host, () => {
@@ -364,6 +492,8 @@ async function shutdown(signal: string): Promise<void> {
       server.closeIdleConnections?.();
     });
     if (paymentPool) await paymentPool.end();
+    if (platformAdminPool) await platformAdminPool.end();
+    if (providerCataloguePool) await providerCataloguePool.end();
   } catch (error) {
     console.error(`EPER API shutdown failed after ${signal}`, error);
     process.exitCode = 1;

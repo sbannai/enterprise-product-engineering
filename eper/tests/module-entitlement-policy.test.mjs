@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateModuleAccess,
   evaluateApplicationAddonAccess,
+  evaluateCustomerTariffAccess,
   validateAcceptedPriceSnapshot,
 } from "../dist/packages/workflows/module-entitlement-policy.js";
 
@@ -58,6 +59,22 @@ test("application add-ons are independent and default to denied until explicitly
   assert.equal(evaluateApplicationAddonAccess({ ...base, rolePermissionAllowed: false }).reason, "role_permission_denied");
   assert.equal(evaluateApplicationAddonAccess({ ...base, effectiveFrom: "2026-10-27T00:00:00Z" }).reason, "not_started");
   assert.equal(evaluateApplicationAddonAccess({ ...base, effectiveTo: "2026-10-25T00:00:00Z" }).reason, "expired");
+});
+
+test("customer tariff access fails closed for missing, inactive, not-yet-effective, expired and over-limit assignments", () => {
+  const base = {
+    assignmentStatus: "active",
+    maxApplications: 1,
+    activeApplicationCount: 1,
+    now,
+  };
+  assert.deepEqual(evaluateCustomerTariffAccess(base), { allowed: true, reason: "allowed" });
+  assert.equal(evaluateCustomerTariffAccess({ ...base, assignmentStatus: null }).reason, "tariff_inactive");
+  assert.equal(evaluateCustomerTariffAccess({ ...base, assignmentStatus: "suspended" }).reason, "tariff_inactive");
+  assert.equal(evaluateCustomerTariffAccess({ ...base, maxApplications: null }).reason, "tariff_inactive");
+  assert.equal(evaluateCustomerTariffAccess({ ...base, startsAt: "2026-10-27T00:00:00Z" }).reason, "tariff_not_started");
+  assert.equal(evaluateCustomerTariffAccess({ ...base, endsAt: "2026-10-25T00:00:00Z" }).reason, "tariff_expired");
+  assert.equal(evaluateCustomerTariffAccess({ ...base, activeApplicationCount: 2 }).reason, "tariff_overage");
 });
 
 test("accepted price snapshots validate without floating-point conversion", () => {

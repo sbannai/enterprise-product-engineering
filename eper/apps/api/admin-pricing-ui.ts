@@ -13,7 +13,7 @@ export const adminPricingUiHtml = String.raw`<!doctype html>
 *{box-sizing:border-box}body{margin:0;background:var(--bg);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink)}
 header{background:var(--navy);color:white;padding:22px clamp(16px,4vw,44px);display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
 .brand{display:flex;gap:12px;align-items:center}.logo{width:38px;height:38px;border-radius:12px;background:#315ff4;display:grid;place-items:center;font-weight:800}.brand h1{font-size:18px;margin:0}.brand p{margin:2px 0 0;color:#c3cce0;font-size:12px}
-.header-note{font-size:12px;color:#d1d9e8}.shell{max-width:1240px;margin:auto;padding:24px clamp(14px,3vw,32px) 60px}
+.header-note{font-size:12px;color:#d1d9e8;display:flex;gap:14px;align-items:center;flex-wrap:wrap}.header-note a{color:#fff;text-decoration:underline;text-underline-offset:3px;font-weight:750}.shell{max-width:1240px;margin:auto;padding:24px clamp(14px,3vw,32px) 60px}
 .notice{padding:12px 14px;border:1px solid #e6c98e;background:#fff8e7;border-radius:12px;color:#65450d;margin-bottom:18px}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:var(--card);border:1px solid var(--line);padding:14px;border-radius:14px;margin-bottom:18px}
 .field{display:flex;flex-direction:column;gap:5px;min-width:140px;flex:1}.field label{font-size:12px;color:var(--muted);font-weight:650}
@@ -35,7 +35,7 @@ ${enterpriseDesignSystemCss}
 </style>
 </head>
 <body>
-<header><div class="brand"><div class="logo">E</div><div><h1>EPER Pricing & Payments</h1><p>Product Admin · Localized pricing · Plans · Vendor controls</p></div></div><div class="header-note">Admin console · API-backed · Production charging disabled by default</div></header>
+<header><div class="brand"><div class="logo">E</div><div><h1>EPER Pricing & Payments</h1><p>Product Admin · Localized pricing · Plans · Vendor controls</p></div></div><div class="header-note"><a href="/admin/provider-catalogue-ui">Provider Catalogue</a><span>Admin console · API-backed · Production charging disabled by default</span></div></header>
 <main class="shell">
 <div class="notice"><strong>Controlled configuration:</strong> price-book changes are currently held in API process memory unless your deployment supplies a durable configuration adapter. Vendor credentials are read from server environment/secrets and are never displayed or saved in this browser. Do not enable production charging from this console.</div>
 <section class="toolbar">

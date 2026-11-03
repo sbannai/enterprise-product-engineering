@@ -27,14 +27,152 @@ export interface WorkflowActivity {
   permission: "workflow:act" | "workflow:approve";
   nextActivityIds: string[];
   fields: WorkflowField[];
+  /** Rule IDs evaluated in priority order to choose a permitted outgoing transition. */
+  routingRuleIds?: string[];
 }
+export type WorkflowRuleOperator = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "contains" | "exists";
+export type WorkflowRuleExpression =
+  | { kind: "condition"; field: string; operator: WorkflowRuleOperator; value?: string | number | boolean | null | Array<string | number | boolean | null> }
+  | { kind: "all" | "any"; conditions: WorkflowRuleExpression[] }
+  | { kind: "not"; condition: WorkflowRuleExpression };
+
+export interface WorkflowRule {
+  id: string;
+  name: string;
+  priority: number;
+  targetActivityId: string;
+  condition: WorkflowRuleExpression;
+}
+
 export interface WorkflowDefinition {
   id: string;
   name: string;
   description?: string;
   status: "DRAFT" | "ACTIVE";
   activities: WorkflowActivity[];
+  rules?: WorkflowRule[];
 }
+
+const RULE_FIELD_PATH = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*){0,7}$/;
+const RULE_OPERATORS: readonly WorkflowRuleOperator[] = ["eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "exists"];
+
+function validRuleValue(value: unknown): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  return Array.isArray(value) && value.length <= 100 &&
+    value.every(item => item === null || typeof item === "string" || typeof item === "boolean" ||
+      (typeof item === "number" && Number.isFinite(item)));
+}
+
+function validateExpression(expression: unknown, depth = 0): expression is WorkflowRuleExpression {
+  if (!expression || typeof expression !== "object" || Array.isArray(expression) || depth > 8) return false;
+  const item = expression as Record<string, unknown>;
+  if (item.kind === "condition") {
+    if (typeof item.field !== "string" || !RULE_FIELD_PATH.test(item.field) ||
+        typeof item.operator !== "string" || !RULE_OPERATORS.includes(item.operator as WorkflowRuleOperator)) return false;
+    if (item.operator === "exists") return item.value === undefined;
+    return item.value !== undefined && validRuleValue(item.value);
+  }
+  if (item.kind === "not") return validateExpression(item.condition, depth + 1);
+  return (item.kind === "all" || item.kind === "any") && Array.isArray(item.conditions) &&
+    item.conditions.length > 0 && item.conditions.length <= 20 &&
+    item.conditions.every(child => validateExpression(child, depth + 1));
+}
+
+/** Validate the rule graph independently so both draft validation and publication use identical rules. */
+export function validateWorkflowRuleConfiguration(definition: WorkflowDefinition): void {
+  const rules = definition.rules ?? [];
+  if (!Array.isArray(rules) || rules.length > 200) {
+    throw new WorkflowConfigurationError("invalid_workflow_rules", 400);
+  }
+  const ruleIds = new Set<string>();
+  const activityIds = new Set(definition.activities.map(activity => activity.id));
+  for (const rule of rules) {
+    if (!rule || !/^[a-zA-Z0-9._-]{1,128}$/.test(rule.id) || ruleIds.has(rule.id) ||
+        typeof rule.name !== "string" || !rule.name.trim() || rule.name.length > 200 ||
+        !Number.isSafeInteger(rule.priority) || rule.priority < 0 || rule.priority > 1_000_000 ||
+        !activityIds.has(rule.targetActivityId) || !validateExpression(rule.condition)) {
+      throw new WorkflowConfigurationError("invalid_workflow_rule:" + (rule?.id ?? "unknown"), 400);
+    }
+    ruleIds.add(rule.id);
+  }
+  for (const activity of definition.activities) {
+    const refs = activity.routingRuleIds ?? [];
+    if (!Array.isArray(refs) || refs.length > 100 || new Set(refs).size !== refs.length ||
+        refs.some(id => typeof id !== "string" || !ruleIds.has(id))) {
+      throw new WorkflowConfigurationError("invalid_workflow_activity_rule_reference:" + activity.id, 400);
+    }
+    for (const ruleId of refs) {
+      const rule = rules.find(candidate => candidate.id === ruleId)!;
+      if (!activity.nextActivityIds.includes(rule.targetActivityId)) {
+        throw new WorkflowConfigurationError("workflow_rule_target_not_allowed:" + ruleId, 422);
+      }
+    }
+  }
+}
+
+function readRuleField(data: Record<string, unknown>, path: string): { exists: boolean; value: unknown } {
+  let current: unknown = data;
+  for (const segment of path.split(".")) {
+    if (!current || typeof current !== "object" || Array.isArray(current) ||
+        !Object.prototype.hasOwnProperty.call(current, segment)) return { exists: false, value: undefined };
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return { exists: true, value: current };
+}
+
+export function evaluateWorkflowRuleExpression(
+  expression: WorkflowRuleExpression,
+  data: Record<string, unknown>,
+): boolean {
+  if (expression.kind === "all") return expression.conditions.every(child => evaluateWorkflowRuleExpression(child, data));
+  if (expression.kind === "any") return expression.conditions.some(child => evaluateWorkflowRuleExpression(child, data));
+  if (expression.kind === "not") return !evaluateWorkflowRuleExpression(expression.condition, data);
+  if (expression.kind !== "condition") return false;
+  const field = readRuleField(data, expression.field);
+  if (expression.operator === "exists") return field.exists;
+  if (!field.exists) return false;
+  const expected = expression.value;
+  switch (expression.operator) {
+    case "eq": return field.value === expected;
+    case "neq": return field.value !== expected;
+    case "gt": return typeof field.value === "number" && typeof expected === "number" && field.value > expected;
+    case "gte": return typeof field.value === "number" && typeof expected === "number" && field.value >= expected;
+    case "lt": return typeof field.value === "number" && typeof expected === "number" && field.value < expected;
+    case "lte": return typeof field.value === "number" && typeof expected === "number" && field.value <= expected;
+    case "in": return Array.isArray(expected) && expected.includes(field.value as never);
+    case "contains": return typeof field.value === "string" && typeof expected === "string"
+      ? field.value.includes(expected)
+      : Array.isArray(field.value) && field.value.includes(expected as never);
+    default: return false;
+  }
+}
+
+export interface WorkflowRuleEvaluation {
+  targetActivityId: string;
+  matchedRuleId: string;
+  evaluated: Array<{ ruleId: string; matched: boolean }>;
+}
+
+/** Highest priority wins; equal-priority matches are rejected rather than guessed. */
+export function evaluateWorkflowRoutingRules(
+  definition: WorkflowDefinition,
+  activity: WorkflowActivity,
+  data: Record<string, unknown>,
+): WorkflowRuleEvaluation {
+  const rules = definition.rules ?? [];
+  const selected = (activity.routingRuleIds ?? []).map(id => rules.find(rule => rule.id === id))
+    .filter((rule): rule is WorkflowRule => Boolean(rule))
+    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id));
+  const evaluated = selected.map(rule => ({ ruleId: rule.id, matched: evaluateWorkflowRuleExpression(rule.condition, data) }));
+  const matches = selected.filter(rule => evaluateWorkflowRuleExpression(rule.condition, data));
+  if (matches.length === 0) throw new WorkflowConfigurationError("workflow_rule_no_route_matched", 422);
+  if (matches.length > 1 && matches[0].priority === matches[1].priority) {
+    throw new WorkflowConfigurationError("workflow_rule_route_ambiguous", 422);
+  }
+  return { targetActivityId: matches[0].targetActivityId, matchedRuleId: matches[0].id, evaluated };
+}
+
 export interface WorkflowRole {
   id: string;
   name: string;
@@ -128,6 +266,7 @@ export class WorkflowConfigurationService {
           throw new WorkflowConfigurationError("invalid_workflow_form_field:" + activity.id);
         }
       }
+      validateWorkflowRuleConfiguration(workflow);
     }
     this.workflows = structuredClone(candidate);
     return this.listWorkflows();

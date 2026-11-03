@@ -154,6 +154,21 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal("secretReference" in appAConnections[0], false);
       assert.deepEqual(await repository.listForApplication(tenantA, appB), []);
 
+      const secondConnection = await repository.createAndBindApplication({
+        tenantId: tenantA, applicationId: appB, actorId, providerKey,
+        displayName: "Tenant A calendar", authMode: "oauth",
+        secretReference: "synthetic://tenant-a/calendar-v1",
+        environment: "sandbox", allowedCapabilities: ["meeting.create"],
+        correlationId: "create-bind-" + suffix, auditEnvironment: "sandbox",
+      });
+      assert.equal(secondConnection.connection.status, "PENDING_VALIDATION");
+      assert.equal(secondConnection.bindingStatus, "PENDING_VALIDATION");
+      assert.equal("secretReference" in secondConnection.connection, false);
+      const appBConnections = await repository.listForApplication(tenantA, appB);
+      assert.equal(appBConnections.length, 1);
+      assert.equal(appBConnections[0].displayName, "Tenant A calendar");
+      assert.deepEqual(appBConnections[0].allowedCapabilities, ["meeting.create"]);
+
       const failedValidation = new ProviderConnectionValidationService(
         validationStore,
         { async resolve() { return { token: "synthetic-only" }; } },
@@ -275,6 +290,12 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
           await client.query(
             "DELETE FROM eper_application_provider_policies WHERE tenant_id=$1 AND application_id=$2",
             [tenantA, appA],
+          );
+        }).catch(() => undefined);
+        await withScope(scopedPool, tenantA, appB, async (client) => {
+          await client.query(
+            "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2",
+            [tenantA, appB],
           );
         }).catch(() => undefined);
         await withScope(scopedPool, tenantA, null, async (client) => {
