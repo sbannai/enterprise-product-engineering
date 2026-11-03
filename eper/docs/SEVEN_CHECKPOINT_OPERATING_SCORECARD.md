@@ -649,3 +649,27 @@ Verified PR #348 exact-head workflow run `41491401877`, job `postgres-payment-st
 - `postgres-module-entitlement-service.integration.test.mjs`: 1 test, 1 pass, 0 fail.
 
 PR #348, #350 and #355 each have green exact-head workflow sets. However, this is still not a combined integration proof. PR #357 remains non-mergeable; it uses #350 as its head against the #348 integration base, and GitHub reports the branch histories as divergent. The next required proof is a true combined candidate containing #348 + #350 + #355, followed by the full same-commit suite. Do not describe the main-based tariff failure as a failure of #348.
+
+
+## Three-branch integration conflict inventory — 2026-11-03 01:45 UTC
+
+Changed-file intersections were enumerated from the exact current PR file lists:
+- #348 ∩ #350: 6 shared files.
+- #348 ∩ #355: 8 shared files.
+- #350 ∩ #355: 6 shared files.
+- All three touch the same 5 files: `eper/apps/api/main.ts`, `eper/apps/api/server.ts`, `eper/packages/workflows/module-entitlement-policy.ts`, `eper/packages/workflows/postgres-module-entitlement-service.ts`, and `eper/tests/postgres-module-entitlement-service.test.mjs`.
+
+Additional shared files:
+- #348/#350: `eper/tests/workflow-execution-api.test.mjs`.
+- #348/#355: `.github/workflows/eper-payment-postgres-integration.yml`, `eper/packages/workflows/postgres-workflow-actor-role-assignment-store.ts`, and `eper/packages/workflows/postgres-workflow-role-definition-store.ts`.
+- #350/#355: `eper/tests/module-entitlement-policy.test.mjs`.
+
+### Canonical tariff guard decision for integration
+The branches implement tariff enforcement differently:
+- #348: one entitlement SQL statement joins tariff assignment and counts active tenant application assignments; readiness checks both required tables.
+- #350: one entitlement SQL statement uses a LATERAL count for active assignments and joins the tariff assignment; this is the cleanest query shape, but its readiness check must also require the tenant-application assignment table as #348 does.
+- #355: runs a separate tariff query before the entitlement query in each access method.
+
+For the combined candidate, retain a **single-statement** access decision (prefer #350's LATERAL count query shape), add #348's explicit readiness check for both tariff and tenant-application tables, and preserve the shared policy evaluator. This avoids a two-statement read window in #355 where tariff/application state could change between the guard query and the entitlement query. Merge #355's provider-specific role permissions and stores separately into the role-definition/assignment code, preserving existing delegation behavior from #348.
+
+No source files were changed in this analysis step. This is an integration resolution instruction, not a claim that the branches have been merged or tested together.
