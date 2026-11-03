@@ -76,6 +76,26 @@ test("role definition requires an explicit boolean delegable value", async () =>
   assert.equal(calls.length, 0);
 });
 
+test("role definition accepts provider connection permissions for application-scoped provider administration", async () => {
+  const { calls, pool } = fixture();
+  const permissions = [
+    "provider.connection.read",
+    "provider.connection.bind",
+    "provider.connection.validate",
+    "provider.connection.rotate",
+    "provider.connection.revoke",
+  ];
+  const result = await new PostgresWorkflowRoleDefinitionStore(pool).replace({
+    ...input,
+    permissions,
+  });
+  assert.deepEqual(result.permissions, permissions);
+  assert.ok(calls.some(call =>
+    call.sql.includes("INSERT INTO eper_workflow_role_definition") &&
+    JSON.stringify(call.values).includes("provider.connection.validate"),
+  ));
+});
+
 test("role definition rejects unknown or duplicate permissions before database access", async () => {
   const { calls, pool } = fixture();
   await assert.rejects(
