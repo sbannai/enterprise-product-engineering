@@ -58,6 +58,85 @@ if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenc
 }
 const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
+
+// Privileged control-plane stores use independent PostgreSQL credentials and pools.
+// Configure these URLs with separate least-privilege roles and explicit table grants;
+// they must not silently fall back to the general payment/database credential.
+const platformAdminPool = platformAdminCredentialsEnabled ? (() => {
+  const connectionString = process.env.EPER_PLATFORM_ADMIN_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_PLATFORM_ADMIN_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
+const providerCataloguePool = (providerCatalogueAdminEnabled || providerConnectionsEnabled) ? (() => {
+  const connectionString = process.env.EPER_PROVIDER_CATALOGUE_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("EPER_PROVIDER_CATALOGUE_DATABASE_URL_REQUIRED");
+  return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
+})() : null;
+
+async function assertPrivilegedPoolRole(
+  pool: ReturnType<typeof createPostgresPaymentPool> | null,
+  expectedRole: string,
+  protectedTables: string[],
+  failureCode: string,
+): Promise<void> {
+  if (!pool) return;
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      is_member: boolean;
+      can_login: boolean;
+      is_superuser: boolean;
+      bypass_rls: boolean;
+      owns_protected_tables: boolean;
+    }>(`
+      SELECT
+        COALESCE((SELECT pg_has_role(current_user, r.oid, 'member')
+                    FROM pg_roles r WHERE r.rolname = $1), FALSE) AS is_member,
+        current_role.rolcanlogin AS can_login,
+        current_role.rolsuper AS is_superuser,
+        current_role.rolbypassrls AS bypass_rls,
+        EXISTS (
+          SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public'
+             AND c.relname = ANY($2::text[])
+             AND pg_has_role(current_user, c.relowner, 'member')
+        ) AS owns_protected_tables
+      FROM pg_roles current_role
+      WHERE current_role.rolname = current_user
+    `, [expectedRole, protectedTables]);
+    const role = result.rows[0];
+    if (!role || role.is_member !== true || role.can_login !== true ||
+        role.is_superuser !== false || role.bypass_rls !== false ||
+        role.owns_protected_tables === true) {
+      throw new Error(failureCode);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+if (platformAdminPool) {
+  await assertPrivilegedPoolRole(
+    platformAdminPool,
+    "eper_platform_admin_access",
+    ["eper_platform_admin_credentials", "eper_audit_events", "eper_audit_chain_head"],
+    "EPER_PLATFORM_ADMIN_DATABASE_ROLE_INVALID",
+  );
+}
+if (providerCataloguePool) {
+  await assertPrivilegedPoolRole(
+    providerCataloguePool,
+    "eper_provider_catalogue_access",
+    [
+      "eper_provider_definitions", "eper_provider_connections",
+      "eper_provider_connection_applications", "eper_provider_validation_events",
+      "eper_audit_events", "eper_audit_chain_head",
+    ],
+    "EPER_PROVIDER_CATALOGUE_DATABASE_ROLE_INVALID",
+  );
+}
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres")) {
@@ -254,15 +333,15 @@ function readProviderCatalogueRegistry(name: string): string[] {
   }
   return value as string[];
 }
-const providerCatalogueRepository = (providerCatalogueAdminEnabled || providerConnectionsEnabled) && paymentPool
-  ? new PostgresProviderCatalogueRepository(paymentPool, {
+const providerCatalogueRepository = (providerCatalogueAdminEnabled || providerConnectionsEnabled) && providerCataloguePool
+  ? new PostgresProviderCatalogueRepository(providerCataloguePool, {
       adapterKeys: readProviderCatalogueRegistry("EPER_PROVIDER_CATALOGUE_ADAPTER_KEYS_JSON"),
       capabilityKeys: readProviderCatalogueRegistry("EPER_PROVIDER_CATALOGUE_CAPABILITY_KEYS_JSON"),
       authModes: readProviderCatalogueRegistry("EPER_PROVIDER_CATALOGUE_AUTH_MODES_JSON"),
     }, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
 if (providerCatalogueRepository) {
-  const readinessClient = await paymentPool!.connect();
+  const readinessClient = await providerCataloguePool!.connect();
   try {
     const readiness = await readinessClient.query<{ table_name: string | null }>(
       "SELECT to_regclass('public.eper_provider_definitions')::text AS table_name",
@@ -385,8 +464,8 @@ if (adminConfigMode === "postgres" && adminConfigurationStore) {
   await adminConfigurationStore.assertReady();
 }
 
-const platformAdminCredentialStore = platformAdminCredentialsEnabled && paymentPool
-  ? new PostgresPlatformAdminCredentialStore(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+const platformAdminCredentialStore = platformAdminCredentialsEnabled && platformAdminPool
+  ? new PostgresPlatformAdminCredentialStore(platformAdminPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
   : undefined;
 if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
 
@@ -413,6 +492,8 @@ async function shutdown(signal: string): Promise<void> {
       server.closeIdleConnections?.();
     });
     if (paymentPool) await paymentPool.end();
+    if (platformAdminPool) await platformAdminPool.end();
+    if (providerCataloguePool) await providerCataloguePool.end();
   } catch (error) {
     console.error(`EPER API shutdown failed after ${signal}`, error);
     process.exitCode = 1;
