@@ -10,8 +10,8 @@ afterEach(async () => {
   })));
 });
 
-async function startServer() {
-  const server = createAppServer();
+async function startServer(options = {}) {
+  const server = createAppServer(options);
   servers.push(server);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -177,7 +177,7 @@ test("local capability API rejects unknown requirement IDs", async () => {
 
 
 test("public UAT capability API stays disabled unless explicitly acknowledged", async () => {
-  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK"];
+  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK", "EPER_UAT_APPLICATION_ID", "EPER_UAT_ROLE_KEY", "EPER_CAPABILITY_ENTITLEMENTS_REQUIRED", "EPER_REQUIREMENT_MODULE_MAP_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   for (const key of keys) delete process.env[key];
   try {
@@ -196,7 +196,7 @@ test("public UAT capability API stays disabled unless explicitly acknowledged", 
 });
 
 test("public UAT capability API requires bearer token and explicit public-endpoint acknowledgement", async () => {
-  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK"];
+  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK", "EPER_UAT_APPLICATION_ID", "EPER_UAT_ROLE_KEY", "EPER_CAPABILITY_ENTITLEMENTS_REQUIRED", "EPER_REQUIREMENT_MODULE_MAP_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_UAT_API_ENABLED: "true",
@@ -204,9 +204,13 @@ test("public UAT capability API requires bearer token and explicit public-endpoi
     EPER_UAT_TENANT_ID: "uat-test-tenant",
     EPER_UAT_PRINCIPAL_ID: "uat-test-operator",
     EPER_UAT_PUBLIC_ENDPOINT_ACK: "I_ACCEPT_PUBLIC_BEARER_UAT_RISK",
+    EPER_UAT_APPLICATION_ID: "uat-test-application",
+    EPER_UAT_ROLE_KEY: "customer-admin",
+    EPER_CAPABILITY_ENTITLEMENTS_REQUIRED: "true",
+    EPER_REQUIREMENT_MODULE_MAP_JSON: JSON.stringify({ "REQ-46303": "records" }),
   });
   try {
-    const base = await startServer();
+    const base = await startServer({ moduleEntitlementService: { checkModule: async () => ({ allowed: true, reason: "allowed" }) } });
     const denied = await fetch(`${base}/uat/requirements/REQ-46303/execute`, {
       method: "POST",
       headers: { "content-type": "application/json" },
