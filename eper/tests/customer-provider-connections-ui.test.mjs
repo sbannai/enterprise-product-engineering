@@ -7,6 +7,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 const sessionToken = "a".repeat(43);
 const csrfSecret = "customer-provider-test-secret-with-more-than-32-bytes";
 const csrfToken = createCustomerCsrfToken(sessionToken, csrfSecret);
+const previousConnectionFlag = process.env.EPER_PROVIDER_CONNECTION_API_ENABLED;
 const session = {
   tenantId: "tenant-customer-a", actorId: "customer-admin-a",
   issuer: "https://identity.example.test", subject: "customer-admin-subject",
@@ -79,13 +80,16 @@ test("Customer Admin provider connection UI is served with restrictive headers",
     const html = await response.text();
     assert.match(html, /Customer Admin · Provider connections/);
     assert.match(html, /Create &amp; bind to application/);
+    assert.match(html, /Bind existing connection here/);
+    assert.match(html, /Validate/);
     assert.match(html, /synthetic credential references only/);
     const scripts = html.split("<script>").slice(1).map(chunk => chunk.split("</script>")[0]);
     assert.equal(scripts.length, 1);
     assert.doesNotThrow(() => new vm.Script(scripts[0]));
   } finally {
     await new Promise(resolve => server.close(resolve));
-    delete process.env.EPER_PROVIDER_CONNECTION_API_ENABLED;
+    if (previousConnectionFlag === undefined) delete process.env.EPER_PROVIDER_CONNECTION_API_ENABLED;
+    else process.env.EPER_PROVIDER_CONNECTION_API_ENABLED = previousConnectionFlag;
   }
 });
 
@@ -99,6 +103,10 @@ test("Customer Admin sees only active provider metadata and can create an applic
     const base = "http://127.0.0.1:" + address.port;
     dependencies.customerOidcPublicOrigin = base;
     const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
+    const unauthenticated = await fetch(base + "/customer/applications/app-a/provider-catalogue", {
+      headers: { accept: "application/vnd.eper.v1+json" },
+    });
+    assert.equal(unauthenticated.status, 401);
     const read = await fetch(base + "/customer/applications/app-a/provider-catalogue", {
       headers: { cookie, accept: "application/vnd.eper.v1+json" },
     });
