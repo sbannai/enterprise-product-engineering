@@ -7,6 +7,7 @@ import test from "node:test";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const migration = await readFile(resolve(root, "packages/audit/migrations/012_provider_configuration_foundation.sql"), "utf8");
 const pendingBindingMigration = await readFile(resolve(root, "packages/audit/migrations/014_provider_pending_validation_binding.sql"), "utf8");
+const tenantDefaultsMigration = await readFile(resolve(root, "packages/audit/migrations/016_tenant_provider_defaults.sql"), "utf8");
 
 test("provider foundation separates platform catalogue, tenant connections and application bindings", () => {
   for (const table of [
@@ -57,4 +58,21 @@ test("provider tenant tables force RLS and application tables require both scope
 
 test("provider connections can be application-bound while pending validation", () => {
   assert.match(pendingBindingMigration, /binding_status IN \('PENDING_VALIDATION', 'ACTIVE', 'SUSPENDED', 'REVOKED'\)/);
+});
+
+
+test("provider defaults are tenant-wide, versioned, RLS-isolated and reject nested credential keys", () => {
+  assert.match(tenantDefaultsMigration, /CREATE TABLE IF NOT EXISTS eper_tenant_provider_defaults/);
+  assert.match(tenantDefaultsMigration, /PRIMARY KEY \(tenant_id, connection_id\)/);
+  assert.match(tenantDefaultsMigration, /FOREIGN KEY \(tenant_id, connection_id\)[\s\S]*REFERENCES eper_provider_connections/);
+  assert.match(tenantDefaultsMigration, /version BIGINT NOT NULL DEFAULT 1 CHECK \(version > 0\)/);
+  assert.match(tenantDefaultsMigration, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(tenantDefaultsMigration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(tenantDefaultsMigration, /current_setting\('eper\.tenant_id', true\)/);
+  assert.match(tenantDefaultsMigration, /eper_provider_policy_contains_secret_key/);
+  for (const key of ["password", "clientsecret", "accesstoken", "refreshtoken", "apikey", "authorization", "token"]) {
+    assert.ok(tenantDefaultsMigration.includes("'" + key + "'"), "secret key rejected: " + key);
+  }
+  assert.match(tenantDefaultsMigration, /jsonb_array_elements/);
+  assert.match(tenantDefaultsMigration, /jsonb_each/);
 });
