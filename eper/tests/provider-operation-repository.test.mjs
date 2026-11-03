@@ -18,7 +18,7 @@ function fixture({ existing = null, claim = null, outcome = null } = {}) {
     connection_id: "00000000-0000-4000-8000-000000000002",
     capability_key: "email.send", capability_version: "1",
     idempotency_key: "mail-001", correlation_id: "corr-001",
-    operation_status: status, request_digest: "a".repeat(64),
+    operation_status: status, request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
     provider_reference: null, attempt_count: status === "DISPATCHING" ? 1 : 0,
     available_at: stamp, last_error_code: null, created_at: stamp, updated_at: stamp,
     ...overrides,
@@ -59,7 +59,7 @@ const base = {
   connectionId: "00000000-0000-4000-8000-000000000002",
   capabilityKey: "email.send", capabilityVersion: "1",
   idempotencyKey: "mail-001", correlationId: "corr-001",
-  requestDigest: "a".repeat(64), actorId: "customer-admin",
+  requestDigest: "a".repeat(64), payloadReference: "payload-ref-0001", actorId: "customer-admin",
   auditEnvironment: "sandbox",
 };
 
@@ -68,6 +68,7 @@ test("enqueue creates a durable queued operation with tenant and application sco
   const result = await repository.enqueue(base);
   assert.equal(result.created, true);
   assert.equal(result.operation.status, "QUEUED");
+  assert.equal(result.operation.payloadReference, "payload-ref-0001");
   assert.equal(result.operation.attemptCount, 0);
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
@@ -81,7 +82,7 @@ test("enqueue is idempotent for the same request digest and rejects key reuse fo
     tenant_id: "tenant-a", application_id: "app-a",
     connection_id: base.connectionId, capability_key: "email.send", capability_version: "1",
     idempotency_key: "mail-001", correlation_id: "corr-001",
-    operation_status: "QUEUED", request_digest: "a".repeat(64), provider_reference: null,
+    operation_status: "QUEUED", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001", provider_reference: null,
     attempt_count: 0, available_at: stamp, last_error_code: null, created_at: stamp, updated_at: stamp,
   } });
   const duplicate = await repository.enqueue(base);
@@ -176,6 +177,13 @@ test("outcome transition rejects stale or non-dispatching operations", async () 
     operationId: "00000000-0000-4000-8000-000000000001", workerId: "worker-1",
     outcome: "SUCCEEDED", providerReference: "provider-ref-1", auditEnvironment: "sandbox",
   }), error => error instanceof ProviderOperationStateConflictError && error.currentStatus === null);
+});
+
+test("enqueue requires a well-formed opaque payload reference", async () => {
+  const { repository, calls } = fixture();
+  await assert.rejects(() => repository.enqueue({ ...base, payloadReference: "secret token" }),
+    /PROVIDER_OPERATION_PAYLOAD_REFERENCE_INVALID/);
+  assert.equal(calls.length, 0);
 });
 
 test("operation metadata rejects unsafe provider error text and invalid digests", async () => {
