@@ -95,6 +95,35 @@ export class PostgresModuleEntitlementService {
 
     const client = await this.pool.connect();
     try {
+      // Enforce the accepted customer tariff against the live active-application
+      // assignments before granting any application-scoped module access. The
+      // tenant-wide count intentionally denies every application while the
+      // customer is over allowance; revoking an excess assignment restores only
+      // the retained application(s) without changing module entitlements.
+      const commercial = await client.query<{
+        max_applications: number | string;
+        active_application_count: number | string;
+      }>(
+        `SELECT tariff.max_applications,
+                COUNT(assignment.application_id)::int AS active_application_count
+           FROM eper_customer_tariff_assignment tariff
+           LEFT JOIN eper_tenant_application_assignment assignment
+             ON assignment.tenant_id = tariff.tenant_id
+            AND assignment.assignment_status = 'active'
+          WHERE tariff.tenant_id = $1
+            AND tariff.assignment_status = 'active'
+            AND tariff.starts_at <= $2
+            AND (tariff.ends_at IS NULL OR tariff.ends_at > $2)
+          GROUP BY tariff.max_applications
+          LIMIT 1`,
+        [context.tenantId, context.now ?? new Date()],
+      );
+      const acceptedTariff = commercial.rows[0];
+      if (acceptedTariff &&
+          Number(acceptedTariff.active_application_count) > Number(acceptedTariff.max_applications)) {
+        return { allowed: false, reason: "tariff_overage" };
+      }
+
       const result = await client.query<ModuleAccessRow>(
         `SELECT ca.customer_status, c.status AS module_status, e.entitlement_status, e.starts_at, e.ends_at,
                 e.grace_until, p.allowed AS permission_allowed
