@@ -18,6 +18,7 @@ function makePool(row) {
         addon_entitlement: "eper_application_addon_entitlement",
       }], rowCount: 1 };
       return { rows: [{
+        customer_status: "active",
         tariff_assignment_status: "active",
         tariff_starts_at: "2026-10-01T00:00:00Z",
         tariff_ends_at: null,
