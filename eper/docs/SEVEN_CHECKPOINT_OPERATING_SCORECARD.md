@@ -829,3 +829,40 @@ Exact-head #370 results:
 | 7. Workflow publisher/runtime implementation | AMBER | Worker/dispatch primitives and provider operation persistence exist with unit and partial live-store proof. Production dispatcher approval, restricted worker identity, supervision, metrics, alerts, load and recovery evidence remain. |
 
 **Next actions:** (1) obtain a same-commit integrated/release gate on the latest #370 head and reconcile the #365 → #369 → #370 chain to current main without losing the candidate evidence; (2) add live PostgreSQL tests for provider-operation queue claim concurrency, lease/fencing, retry/dead-letter and restart recovery; (3) complete Product Admin OIDC and support SLA/admin journey; (4) finish worker supervision/observability and independent recovery; (5) obtain owner-accessible ruleset and second-engineer handover evidence. Do not carry forward green runs from superseded heads.
+
+
+## Exact-head follow-up — 2026-11-03 (provider payload migration 017)
+
+**Current main SHA:** `51b803193c7009c1e7f8115cbb1022233285e940`. No mainline merge occurred after the preceding update.
+
+### Latest #370 head and exact-head evidence
+
+PR #370 advanced from `93371b5...` through the opaque payload-reference changes and is now at exact head `fe2d8bb80467b6322df863a09eb9f37a71d5b50e`, based on #369 head `c7128d2247b7aa45a58acdb98d548768372d15f8`.
+
+All returned exact-head workflows pass:
+- PostgreSQL integration [41634287213](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41634287213): 102 tests across separate Node test invocations, 102 passed / 0 failed / 0 skipped. The platform-admin and provider-catalogue role contract tests both execute; credential lifecycle and provider-catalogue store/audit-rollback tests both execute.
+- Fresh clone [41634287266](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41634287266): `npm run dev:verify` passes; 1,407 tests, 1,403 passed / 0 failed / 4 skipped. All seven migration groups are applied and repeated, including identity. Audit migrations 016 and 017 are applied. Disposable backup/restore passes with 75 source/restored base tables and 7 migration-ledger tables.
+- Controlled QA [41634287274](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41634287274): 1,383 tests, 1,350 passed / 0 failed / 33 skipped. Provider-operation payload-reference and tenant-default tests pass.
+- 228/38 matrix [41634287221](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41634287221) and workflow configuration validation [41634287260](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41634287260) pass.
+
+Migration 017 adds a bounded opaque `payload_reference` to provider operations while leaving historical rows nullable. New enqueue calls require a reference, and idempotency now compares both the request digest and payload reference. The handoff contract explicitly prohibits raw payloads or credentials in the queue/audit and requires an independently authorized encrypted payload store before real dispatch.
+
+### Remaining provider-operation boundary
+
+The provider-operation queue is not yet an operational worker:
+- `claimNext` uses tenant/application scope and `FOR UPDATE SKIP LOCKED`, but currently changes status to `DISPATCHING` without a renewable lease or fencing token.
+- The repository tests are fixture-backed; there is no live PostgreSQL queue claim/concurrency/retry/dead-letter/restart suite.
+- The payload store, reference authorization/resolution, digest verification, expiry/revocation and retention are not implemented.
+- A historical row with NULL payload reference must never be dispatched; claim-time behavior needs an explicit fail-closed test.
+- Production roles/credentials, role memberships, ownership and PUBLIC/default grants remain unprovisioned/unreviewed. The passing role tests use temporary roles inside disposable CI PostgreSQL only.
+- No real provider dispatch is performed.
+
+The PR #370 title/body have been corrected to describe the wider provider-default, durable-operation, payload-reference and privileged-role scope. It remains stacked on #369.
+
+### Mainline and documentation boundary
+
+The main integrated run [41436998876](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41436998876) remains a failure on current main: the live tariff-overage assertion expects deny `tariff_overage` but receives `allowed`. The same failure is reproduced by the scorecard PR's prior exact head `95298ce6cf3a32a51bf13f0ab553cdc4aca5eaac` in integrated run [41633835634](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41633835634), payment/PostgreSQL job [125909862804](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41633835634/job/125909862804). Its other returned exact-head jobs pass.
+
+The integrated-validation workflow's automatic PR trigger is restricted to PRs targeting `main`. #369 and #370 target stacked feature branches, so their lack of an automatic integrated run is not a pass. #365 has a same-commit integrated pass [41616442115](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41616442115); the newer #369/#370 heads still require a same-commit integrated/release gate through an approved manual dispatch or later main-base consolidation.
+
+**Checkpoint disposition remains:** 1 AMBER; 2 AMBER overall (candidate fresh-clone/PostgreSQL proof GREEN, mainline regression remains); 3 AMBER; 4 AMBER; 5 RED on main / GREEN only for the #365 integrated candidate; 6 AMBER; 7 AMBER. Product Admin OIDC, support SLA, production worker supervision/metrics/recovery, production backup governance, repository ruleset evidence and second-engineer handover remain open.
