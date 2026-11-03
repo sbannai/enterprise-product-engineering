@@ -55,6 +55,11 @@ const auditDenied = {
   eper_payment_orders: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   eper_payment_receipts: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   eper_payment_webhook_events: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  eper_provider_connections: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  eper_provider_connection_applications: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  eper_application_provider_policies: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  eper_provider_operations: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  eper_provider_webhook_receipts: ["SELECT", "INSERT", "UPDATE", "DELETE"],
 };
 
 test("platform-admin database role is limited to credentials and append-only audit writes",
