@@ -84,7 +84,8 @@ export async function handlePlatformAdminCredentialManagementRoute(
         respond(response, 400, { error: "platform_admin_credential_issue_fields_invalid" }); return true;
       }
       const issued = await service.issue(issuer, {
-        // Until a governed platform-operator directory exists, credentials may only be rotated for the authenticated actor.\n        platformActorId: issuer.platformActorId,
+        // Until a governed platform-operator directory exists, credentials may only be rotated for the authenticated actor.
+        platformActorId: issuer.platformActorId,
         permissions: body.permissions as PlatformAdminCredentialPermission[],
         expiresAt: body.expiresAt,
       }, context);
