@@ -562,3 +562,46 @@ No approved requirement or chapter was edited. No branch was deleted, no merge w
 4. Keep Business UAT unauthorized until all existing entry gates are evidenced and the owner explicitly authorizes it.
 
 No code merge, branch deletion, branch-protection change, chargeable cloud provisioning or real external/provider action was performed in this update.
+
+
+## Dated operating update — 2026-11-03 15:12 UTC (PR lineage reconciliation)
+
+**Current main SHA:** `a3635ffbb522488163904c1236fed294b0a2af17`. The main branch API confirms `protected=false`; required status checks are not enforced. Repository administrator action is still required.
+
+### Consolidation since the previous snapshot
+
+- PR #376 merged the Customer Admin, workflow and provider-connection integration (70 changed files; merge SHA `9749701bfed527b906183192ca06cc1998e70166`).
+- PR #365 merged the Product Admin provider-catalogue persistence foundation.
+- PR #369 merged the isolated privileged PostgreSQL pool changes.
+- PR #370 merged the provider defaults, durable provider-operation lifecycle and privileged-role CI proof as the current main commit `a3635ffbb522488163904c1236fed294b0a2af17`.
+- PR #355 is superseded by the integrated provider implementation in #376/#365/#369/#370. Its old branch is historical; do not reopen or merge it.
+- PR #325 is superseded by clean-mainline worker PR #326, which is merged. Its old branch is historical; do not reopen or merge it.
+- PR #349's CW-056 and CW-057 draft additions are present in both the mainline v1.6.0 draft change-control register and USP/completeness register. They remain draft candidates; their presence does not amend the approved 228-requirement / 38-chapter baseline.
+- PR #356 is closed unmerged and is an obsolete scorecard snapshot. PR #327 is closed unmerged and explicitly superseded by #323. Their historical branches are not active work.
+- PR #377 is the sole open PR returned by the current open-PR query. It is documentation-only, draft, and based on the exact current main SHA above. Its nine applicable PR workflows all completed successfully, including same-commit integrated validation. The 228/38 matrix workflow was skipped within that integrated matrix by design, but the separate 228/38 workflow passed.
+
+### Governance disposition
+
+The current PR queue is no longer a multi-PR dependency stack: only #377 is open. This is a meaningful improvement, but it does not mean the closed-unmerged branch inventory is clean. Branch deletion remains blocked on a complete owner/reference audit and an available authorized deletion path. Main branch protection remains disabled; no settings mutation was performed.
+
+### Seven-checkpoint delta
+
+| Checkpoint | Status | Delta / remaining boundary |
+|---|---|---|
+| 1. Product USP and positioning | AMBER | Provider defaults and durable operation lifecycle are integrated. CW-056/057 remain draft; full customer-facing workflow and provider journeys still need end-to-end proof. |
+| 2. CI and persistence foundations | GREEN local/CI; AMBER operations | #370 exact-head evidence passed fresh-clone, live PostgreSQL and integrated checks as recorded in its PR. Production role provisioning, secret custody, backup retention and independent restore remain. |
+| 3. Architecture and execution boundaries | AMBER | Separate privileged pools and disposable CI role-contract tests exist. Production role ownership, memberships, grants and independent least-privilege review remain. |
+| 4. Workflow execution design and schema | AMBER | Provider defaults, operation queue, leases and fencing are durable. Encrypted payload storage and authorized reference resolution remain. |
+| 5. Integrated validation | GREEN for exact technical lanes; AMBER for product/operations | #377's nine applicable workflows passed. This is not business acceptance, production-readiness evidence or UAT authorization. |
+| 6. PR consolidation and governance | AMBER for open-PR queue; RED for branch controls | One open PR (#377); closed branch inventory still needs full disposition. Main protection is explicitly disabled. |
+| 7. Workflow publisher/runtime | AMBER | Provider-operation lease/recovery lifecycle is tested in PostgreSQL. A supervised provider-operation worker, recovery scheduler, approved adapter, payload store, metrics and alerting remain. |
+
+### Next controlled actions
+
+1. Review #377 and merge only after human review; do not auto-merge merely because checks pass.
+2. Complete the full closed-unmerged PR/branch owner and reference audit before branch deletion.
+3. Have a repository administrator enable branch protection and required checks, then verify the actual resulting configuration.
+4. Keep real provider dispatch disabled until payload storage, reviewed adapters, secret resolution, production roles, recovery scheduling and independent supervision are proven.
+5. Preserve the existing Business UAT prohibition until every entry gate is evidenced and the owner explicitly authorizes it.
+
+No branch was deleted, no protection setting was changed, no chargeable cloud resource was provisioned, and no Business UAT or external provider action was authorized.
