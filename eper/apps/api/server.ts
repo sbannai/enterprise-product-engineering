@@ -66,6 +66,7 @@ import type { PostgresPlatformCustomerAdminProvisioningStore } from "../../packa
 import { handlePlatformApplicationRemediationRoute } from "./platform-application-remediation-route.js";
 import type { PostgresPlatformApplicationRemediationStore } from "../../packages/workflows/postgres-platform-application-remediation-store.js";
 import type { PostgresPlatformAdminCredentialStore } from "../../packages/identity/postgres-platform-admin-credential-store.js";
+import { handlePlatformAdminCredentialManagementRoute } from "./platform-admin-credential-management-route.js";
 
 
 function acceptsVersionedJson(request: IncomingMessage): boolean {
@@ -610,6 +611,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
   return createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
+
+    if (await handlePlatformAdminCredentialManagementRoute(request, response, requestUrl.pathname, {
+      store: options.platformAdminCredentialStore,
+      environment: options.adminConfigEnvironment,
+      serviceVersion: options.serviceVersion,
+    })) return;
 
     if (await handlePlatformCustomerAdminProvisioningRoute(request, response, requestUrl.pathname, {
       store: options.platformCustomerAdminProvisioningStore,
