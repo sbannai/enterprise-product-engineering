@@ -58,3 +58,13 @@ test("agent worker rejects unsupported audit environments before opening a pool"
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /EPER_AUDIT_ENVIRONMENT_INVALID/);
 });
+
+test("agent worker rejects lease bounds outside the PostgreSQL store contract", () => {
+  const result = runWorker({
+    EPER_AGENT_WORKER_ENABLED: "true", EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_AGENT_WORKER_ID: "worker-test", EPER_AGENT_WORKER_TENANT_ID: "tenant-test",
+    EPER_AGENT_WORKER_APPLICATION_ID: "application-test", EPER_AGENT_WORKER_LEASE_SECONDS: "901",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /EPER_AGENT_WORKER_LEASE_SECONDS_OUT_OF_RANGE/);
+});
