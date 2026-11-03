@@ -51,9 +51,14 @@ export class ProviderDispatchConfigurationService {
     applicationId: string;
     capabilityKey: string;
   }): Promise<ProviderDispatchSelection> {
-    for (const [key, value] of Object.entries(input)) {
+    const identifiers = [
+      ["TENANT", input.tenantId],
+      ["APPLICATION", input.applicationId],
+      ["CAPABILITY", input.capabilityKey],
+    ] as const;
+    for (const [label, value] of identifiers) {
       if (typeof value !== "string" || !value.trim() || value.length > 128) {
-        throw new Error("PROVIDER_DISPATCH_" + key.toUpperCase() + "_INVALID");
+        throw new Error("PROVIDER_DISPATCH_" + label + "_INVALID");
       }
     }
 
