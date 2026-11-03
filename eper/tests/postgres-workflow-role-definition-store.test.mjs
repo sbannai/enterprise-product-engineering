@@ -118,3 +118,23 @@ test("schema readiness requires the explicit role scope metadata column", async 
     /EPER_WORKFLOW_ROLE_DEFINITION_SCHEMA_NOT_READY/,
   );
 });
+
+
+test("role definition accepts explicit provider connection permissions", async () => {
+  const { calls, pool } = fixture();
+  const permissions = [
+    "provider.connection.read",
+    "provider.connection.bind",
+    "provider.connection.validate",
+    "provider.connection.rotate",
+    "provider.connection.revoke",
+  ];
+  const result = await new PostgresWorkflowRoleDefinitionStore(pool).replace({
+    ...input, permissions,
+  });
+  assert.deepEqual(result.permissions, permissions);
+  assert.deepEqual(
+    calls.find(call => call.sql.includes("INSERT INTO eper_workflow_role_definition")).values[5],
+    JSON.stringify(permissions),
+  );
+});
