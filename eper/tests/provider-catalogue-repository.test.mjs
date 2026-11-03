@@ -26,3 +26,45 @@ test("metadata update validates and persists adapter, capability, auth mode and 
 test("invalid metadata changes are rejected and rolled back",async()=>{const {repository,calls}=fixture({existing:true});await assert.rejects(()=>repository.update({...context,providerKey:"mail-primary",expectedVersion:2,configurationSchema:{$ref:"https://invalid.example"}}),/PROVIDER_CATALOGUE_SCHEMA_KEYWORD_UNSUPPORTED/);assert.ok(calls.some(x=>x.sql==="ROLLBACK"));assert.ok(!calls.some(x=>x.sql.includes("INSERT INTO eper_audit_events")));});
 test("deprecation is terminal and lifecycle changes are audited",async()=>{const {repository,calls}=fixture({existing:true});const v=await repository.setStatus({...context,providerKey:"mail-primary",expectedVersion:2,status:"DEPRECATED"});assert.equal(v.status,"DEPRECATED");await assert.rejects(()=>repository.setStatus({...context,providerKey:"mail-primary",expectedVersion:3,status:"ACTIVE"}),/PROVIDER_CATALOGUE_DEPRECATED_IS_TERMINAL/);assert.ok(calls.some(x=>x.sql.includes("INSERT INTO eper_audit_events")));});
 test("audit failure rolls back catalogue mutation",async()=>{const {repository,calls,rows}=fixture({failAudit:true});await assert.rejects(()=>repository.create(definition),/AUDIT_WRITE_FAILED/);assert.ok(calls.some(x=>x.sql==="ROLLBACK"));assert.ok(!calls.some(x=>x.sql==="COMMIT"));});
+
+test("schema validator accepts bounded nested object, array and scalar constraints",async()=>{
+ const {repository}=fixture();
+ const configurationSchema={type:"object",required:["region"],properties:{
+  region:{type:"string",minLength:2,maxLength:8,enum:["us","eu"]},
+  retries:{type:"integer",minimum:0,maximum:5},
+  labels:{type:"array",items:{type:"string",maxLength:32}},
+  metadata:{type:"object",additionalProperties:false},
+ },additionalProperties:{type:"string"}};
+ const saved=await repository.create({...definition,configurationSchema});
+ assert.deepEqual(saved.configurationSchema,configurationSchema);
+});
+test("schema validator rejects malformed required, enum and numeric constraints before database access",async()=>{
+ const invalidSchemas=[
+  {type:"object",properties:{region:{type:"string"}},required:["missing"]},
+  {type:"object",properties:{region:{type:"string"}},required:["region","region"]},
+  {type:"string",enum:[]},
+  {type:"string",enum:[{unsafe:"object"}]},
+  {type:"string",minLength:9,maxLength:2},
+  {type:"string",minLength:-1},
+  {type:"number",minimum:10,maximum:1},
+  {type:"object",additionalProperties:"yes"},
+  {type:"array",items:"string"},
+  {type:"array",properties:{region:{type:"string"}}},
+ ];
+ for(const configurationSchema of invalidSchemas){
+  const {repository,calls}=fixture();
+  await assert.rejects(()=>repository.create({...definition,configurationSchema}));
+  assert.equal(calls.length,0);
+ }
+});
+test("schema validator rejects excessive nesting and oversized definitions",async()=>{
+ const nested={type:"object"};
+ let cursor=nested;
+ for(let i=0;i<10;i++){cursor.properties={child:{type:"object"}};cursor=cursor.properties.child;}
+ const oversized={type:"object",description:"x".repeat(17000)};
+ for(const configurationSchema of [nested,oversized]){
+  const {repository,calls}=fixture();
+  await assert.rejects(()=>repository.create({...definition,configurationSchema}));
+  assert.equal(calls.length,0);
+ }
+});
