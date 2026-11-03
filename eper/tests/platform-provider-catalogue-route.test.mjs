@@ -25,7 +25,7 @@ function fixture(overrides={}) {
   async update(input){calls.push(["update",input]);return {...provider,...input,version:2};},
   async setStatus(input){calls.push(["status",input]);return {...provider,status:input.status,version:2};},
  };
- return {calls,store,repository,environment:"sandbox",serviceVersion:"test-build"};
+ return {calls,store,credentialStore:store,repository,environment:"sandbox",serviceVersion:"test-build"};
 }
 test("Product Admin catalogue list requires durable catalogue permission",async()=>{
  process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED="true";process.env.EPER_PROVIDER_CATALOGUE_ADMIN_API_ENABLED="true";
