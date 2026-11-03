@@ -44,7 +44,6 @@ test("credential issue requires durable issuer and returns the bearer token once
   const deps = dependencies(), res = response();
   const handled = await handlePlatformAdminCredentialManagementRoute(
     request("/platform/credentials", {
-      platformActorId: "catalogue-operator",
       permissions: ["provider_catalogue:manage"],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     }), res, "/platform/credentials", deps,
@@ -54,6 +53,7 @@ test("credential issue requires durable issuer and returns the bearer token once
   assert.equal(JSON.parse(res.body).result.bearerToken, "one-time-secret");
   const issued = deps.calls.find(([kind]) => kind === "issue")[1];
   assert.equal(issued.actorId, "root-operator");
+  assert.equal(issued.platformActorId, "root-operator");
   assert.deepEqual(issued.permissions, ["provider_catalogue:manage"]);
   assert.equal(issued.environment, "sandbox");
 });
@@ -65,12 +65,26 @@ test("credential issue rejects privilege escalation through issuer grant ceiling
   }), res = response();
   await handlePlatformAdminCredentialManagementRoute(
     request("/platform/credentials", {
-      platformActorId: "new-operator",
       permissions: ["provider_catalogue:manage"],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     }), res, "/platform/credentials", deps,
   );
   assert.equal(res.statusCode, 403);
+  assert.equal(deps.calls.some(([kind]) => kind === "issue"), false);
+});
+
+
+test("credential issue rejects caller-selected platform identity", async () => {
+  process.env.EPER_PLATFORM_ADMIN_CREDENTIALS_ENABLED = "true";
+  const deps = dependencies(), res = response();
+  await handlePlatformAdminCredentialManagementRoute(
+    request("/platform/credentials", {
+      platformActorId: "another-operator",
+      permissions: ["provider_catalogue:manage"],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    }), res, "/platform/credentials", deps,
+  );
+  assert.equal(res.statusCode, 400);
   assert.equal(deps.calls.some(([kind]) => kind === "issue"), false);
 });
 
