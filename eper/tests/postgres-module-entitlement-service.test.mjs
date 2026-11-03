@@ -112,6 +112,25 @@ test("add-on access is application-scoped and pending payment is denied", async 
   assert.deepEqual(query.values, ["marketing", "tenant-a", "app-a", "customer-admin", "module.use"]);
 });
 
+test("add-on access is denied when active application assignments exceed the accepted tariff", async () => {
+  const { pool, calls } = makePool({
+    max_applications: 1,
+    active_application_count: 2,
+  });
+  const service = new PostgresModuleEntitlementService(pool, {
+    async isAssignedToTenant() { return true; },
+  });
+  assert.deepEqual(await service.checkApplicationAddon(context, "marketing"), {
+    allowed: false,
+    reason: "tariff_overage",
+  });
+  assert.equal(
+    calls.some((call) => call.sql.includes("eper_application_addon_entitlement")),
+    false,
+    "must deny overage before reading or granting application add-on entitlements",
+  );
+});
+
 test("add-on access fails closed when no entitlement row exists", async () => {
   const { pool } = makePool({
     customer_status: "active",

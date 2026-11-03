@@ -166,6 +166,33 @@ export class PostgresModuleEntitlementService {
 
     const client = await this.pool.connect();
     try {
+      // Apply the same tenant-wide accepted-tariff guard to add-on access;
+      // otherwise an over-limit application could still use separately
+      // entitled add-ons after module access has been blocked.
+      const commercial = await client.query<{
+        max_applications: number | string;
+        active_application_count: number | string;
+      }>(
+        `SELECT tariff.max_applications,
+                COUNT(assignment.application_id)::int AS active_application_count
+           FROM eper_customer_tariff_assignment tariff
+           LEFT JOIN eper_tenant_application_assignment assignment
+             ON assignment.tenant_id = tariff.tenant_id
+            AND assignment.assignment_status = 'active'
+          WHERE tariff.tenant_id = $1
+            AND tariff.assignment_status = 'active'
+            AND tariff.starts_at <= $2
+            AND (tariff.ends_at IS NULL OR tariff.ends_at > $2)
+          GROUP BY tariff.max_applications
+          LIMIT 1`,
+        [context.tenantId, context.now ?? new Date()],
+      );
+      const acceptedTariff = commercial.rows[0];
+      if (acceptedTariff &&
+          Number(acceptedTariff.active_application_count) > Number(acceptedTariff.max_applications)) {
+        return { allowed: false, reason: "tariff_overage" };
+      }
+
       const result = await client.query<AddonAccessRow>(
         `SELECT ca.customer_status, c.status AS addon_status, e.entitlement_status, e.effective_from, e.effective_to,
                 p.allowed AS permission_allowed
