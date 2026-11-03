@@ -151,10 +151,14 @@ export async function handlePlatformProviderCatalogueRoute(
   } catch (error) {
     const message = error instanceof Error ? error.message : "PROVIDER_CATALOGUE_OPERATION_FAILED";
     const databaseCode = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
-    const status = error instanceof ProviderCatalogueConflictError || databaseCode === "23505" ? 409 :
-      message.includes("NOT_FOUND") ? 404 :
-      message.includes("INVALID") || message.includes("UNSUPPORTED") || message.includes("REGISTERED") ||
-      message.includes("SCHEMA") || message.includes("SET_") || message.includes("FIELD_") ? 400 : 503;
-    respond(request,response,status,{error:message}); return true;
+    const conflict = error instanceof ProviderCatalogueConflictError || databaseCode === "23505";
+    const notFound = message.includes("NOT_FOUND");
+    const invalid = message.includes("INVALID") || message.includes("UNSUPPORTED") ||
+      message.includes("REGISTERED") || message.includes("SCHEMA") || message.includes("SET_") ||
+      message.includes("FIELD_") || message.includes("VERSION_");
+    const status = conflict ? 409 : notFound ? 404 : invalid ? 400 : 503;
+    const code = conflict ? "provider_catalogue_conflict" : notFound ? "provider_catalogue_not_found" :
+      invalid ? "provider_catalogue_input_invalid" : "provider_catalogue_operation_failed";
+    respond(request,response,status,{error:code}); return true;
   }
 }
