@@ -49,11 +49,14 @@ function validateSchema(v:Record<string,unknown>,depth=0):void{
   }
  }
  if(v.required!==undefined){
-  if(!Array.isArray(v.required)||v.required.length>64||new Set(v.required).size!==v.required.length||
-     v.required.some(key=>typeof key!=="string"||!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)))invalid();
+  const required=v.required;
+  if(!Array.isArray(required)||required.length>64)invalid();
+  const requiredKeys=required as unknown[];
+  if(new Set(requiredKeys).size!==requiredKeys.length||
+     requiredKeys.some((key:unknown)=>typeof key!=="string"||!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key)))invalid();
   const propertyNames=v.properties&&typeof v.properties==="object"&&!Array.isArray(v.properties)
    ?new Set(Object.keys(v.properties as Record<string,unknown>)):new Set<string>();
-  if(v.required.some(key=>!propertyNames.has(key as string)))invalid();
+  if(requiredKeys.some((key:unknown)=>!propertyNames.has(key as string)))invalid();
  }
  if(v.additionalProperties!==undefined){
   if(typeof v.additionalProperties==="boolean"){} 
