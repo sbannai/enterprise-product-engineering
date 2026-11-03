@@ -536,3 +536,23 @@ A separate integration branch `integration/eper-348-350-355-candidate` was creat
 - The not-mergeable result is recorded as an integration blocker; it is not yet attributed to specific textual conflict hunks because the connector's PR metadata does not expose GitHub's conflict paths.
 
 **Disposition:** keep #348/#350/#355 and integration PR #357 unmerged. Do not use a blind PR merge or rewrite any source branch. A real Git merge/rebase workspace is required to resolve and test the shared files against a single candidate. Once conflict resolution is committed on the integration branch, run the full exact-head suite before considering any mainline merge. No source application files were changed in this probe.
+
+
+## Integrated validation refresh — 2026-11-03 07:06 IST
+
+**Documentation branch head:** `0417f63e4962d3b9e0c6fc92bf05759a1339ede1` (PR #356). The exact-head workflow set has now completed.
+
+- Separate 228 requirements / 38 chapter pilot matrix: **passed**, run [41560649042](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649042).
+- G9 reconciliation [41560649084](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649084), container runtime smoke [41560649060](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649060), six-family HTTP smoke [41560649128](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649128), release-candidate build [41560649200](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649200) and EPER CI [41560649126](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649126) passed.
+- Same-commit integrated validation [41560649153](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41560649153) **failed**. The 228/38 pilot-matrix job inside this integrated workflow was skipped; the separate pilot-matrix run above is the passing evidence.
+- Payment API + PostgreSQL + receipt-contract lane ran 1,183 tests: 1,180 passed, 1 failed, 2 skipped. Failure remains test 614, `live PostgreSQL commercial access guard denies tariff overage...`, at `eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs:79`: expected `{allowed:false, reason:"tariff_overage"}`, actual `{allowed:true, reason:"allowed"}`.
+- This reproduces the same tariff enforcement defect already diagnosed on main. The implementation and dedicated passing PostgreSQL test are on PR #348, but not yet integrated with #350/#355. It is not a new unrelated failure.
+
+### Integration disposition
+
+- PR #357 remains open/draft and GitHub reports `mergeable=false`; it is a controlled integration probe, not a candidate that has passed combined validation.
+- #348/#350/#355 continue to modify the same API composition and entitlement files. No conflict resolution, merge, or source-code modification has been performed by this refresh.
+- Keep all feature PRs and the integration probe unmerged. The next engineering action is to resolve the shared-file integration in a real Git workspace, preserve tariff enforcement + workflow rule/designer + provider configuration behavior, and rerun the complete same-commit suite plus the separate 228/38 matrix on one exact candidate.
+- No chargeable cloud resources were provisioned and no external provider was activated.
+
+**Seven-checkpoint consequence:** all seven checkpoints remain AMBER pending consolidation. Checkpoint 5 is specifically blocked by the reproduced PostgreSQL tariff-overage failure on the main-based integrated run; the separate pilot matrix pass does not override it. Checkpoint 6 remains blocked by the non-mergeable integration probe and shared-file reconciliation.
