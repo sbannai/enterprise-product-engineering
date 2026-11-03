@@ -23,6 +23,7 @@ async function createRuntimePool(pool) {
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connections TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_connection_applications TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_application_provider_policies TO eper_provider_test_runtime");
+  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_tenant_provider_defaults TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_operations TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON eper_provider_webhook_receipts TO eper_provider_test_runtime");
   await pool.query("GRANT SELECT, INSERT ON eper_provider_validation_events TO eper_provider_test_runtime");
@@ -169,6 +170,27 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(appBConnections[0].displayName, "Tenant A calendar");
       assert.deepEqual(appBConnections[0].allowedCapabilities, ["meeting.create"]);
 
+      // An audit constraint failure must roll back both the connection and its
+      // first application binding; no orphan may survive the failed transaction.
+      const beforeRollbackProbe = await pool.query(
+        "SELECT (SELECT COUNT(*) FROM eper_provider_connections WHERE tenant_id=$1)::int AS connections, (SELECT COUNT(*) FROM eper_provider_connection_applications WHERE tenant_id=$1)::int AS bindings",
+        [tenantA],
+      );
+      await assert.rejects(() => repository.createAndBindApplication({
+        tenantId: tenantA, applicationId: appB, actorId, providerKey,
+        displayName: "Audit rollback probe", authMode: "oauth",
+        secretReference: "synthetic://tenant-a/rollback-probe",
+        environment: "sandbox", allowedCapabilities: ["meeting.create"],
+        correlationId: "rollback-probe-" + suffix,
+        auditEnvironment: "invalid-environment",
+      }));
+      const afterRollbackProbe = await pool.query(
+        "SELECT (SELECT COUNT(*) FROM eper_provider_connections WHERE tenant_id=$1)::int AS connections, (SELECT COUNT(*) FROM eper_provider_connection_applications WHERE tenant_id=$1)::int AS bindings",
+        [tenantA],
+      );
+      assert.deepEqual(afterRollbackProbe.rows[0], beforeRollbackProbe.rows[0],
+        "failed audit append must leave neither a connection nor an application binding");
+
       const failedValidation = new ProviderConnectionValidationService(
         validationStore,
         { async resolve() { return { token: "synthetic-only" }; } },
@@ -207,6 +229,57 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       ));
       assert.deepEqual(historyAfterRetry.rows.map(row => row.validation_outcome), ["SUCCEEDED", "FAILED", "SUCCEEDED"]);
 
+      // Tenant defaults are shared by the customer, while app policy wins locally.
+      await repository.bindApplication({
+        tenantId: tenantA, applicationId: appB, connectionId, actorId,
+        allowedCapabilities: ["email.send"], correlationId: "bind-shared-" + suffix,
+        auditEnvironment: "sandbox",
+      });
+      await withScope(scopedPool, tenantA, null, async (client) => {
+        await client.query(
+          `INSERT INTO eper_tenant_provider_defaults
+            (tenant_id, connection_id, defaults, updated_by)
+           VALUES ($1,$2,'{"retryLimit":3,"deliveryWindow":"business-hours"}'::jsonb,$3)`,
+          [tenantA, connectionId, actorId],
+        );
+        await client.query("SAVEPOINT reject_secret_default");
+        await assert.rejects(() => client.query(
+          `INSERT INTO eper_tenant_provider_defaults
+            (tenant_id, connection_id, defaults, updated_by)
+           VALUES ($1,$2,'{"nested":{"client_secret":"must-not-persist"}}'::jsonb,$3)`,
+          [tenantA, connectionId, actorId],
+        ));
+        await client.query("ROLLBACK TO SAVEPOINT reject_secret_default");
+        await client.query("RELEASE SAVEPOINT reject_secret_default");
+        const changed = await client.query(
+          `UPDATE eper_tenant_provider_defaults SET defaults='{"retryLimit":4}'::jsonb,
+             version=version+1, updated_at=NOW(), updated_by=$3
+           WHERE tenant_id=$1 AND connection_id=$2 AND version=1 RETURNING version`,
+          [tenantA, connectionId, actorId],
+        );
+        assert.equal(Number(changed.rows[0]?.version), 2);
+        const stale = await client.query(
+          `UPDATE eper_tenant_provider_defaults SET version=version+1
+           WHERE tenant_id=$1 AND connection_id=$2 AND version=1 RETURNING version`,
+          [tenantA, connectionId],
+        );
+        assert.equal(stale.rowCount, 0, "stale optimistic update must not modify tenant defaults");
+      });
+      const tenantFallback = await withScope(scopedPool, tenantA, appB, async (client) => {
+        const result = await client.query(
+          `SELECT d.defaults FROM eper_tenant_provider_defaults d
+           JOIN eper_provider_connection_applications b
+             ON b.tenant_id=d.tenant_id AND b.connection_id=d.connection_id
+           WHERE d.tenant_id=$1 AND b.application_id=$2 AND b.binding_status='ACTIVE'`,
+          [tenantA, appB],
+        );
+        return result.rows[0]?.defaults;
+      });
+      assert.deepEqual(tenantFallback, { retryLimit: 4 });
+      const tenantHidden = await withScope(scopedPool, tenantB, null, async (client) =>
+        client.query("SELECT connection_id FROM eper_tenant_provider_defaults WHERE tenant_id=$1", [tenantA]));
+      assert.equal(tenantHidden.rowCount, 0, "tenant defaults must be invisible outside their tenant");
+
       await withScope(scopedPool, tenantA, appA, async (client) => {
         await client.query(
           `INSERT INTO eper_application_provider_policies
@@ -214,6 +287,17 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
            VALUES ($1,$2,$3,'{"approvalRequired":true}'::jsonb,$4)`,
           [tenantA, appA, connectionId, actorId],
         );
+        const effective = await client.query(
+          `SELECT COALESCE(p.policy, d.defaults) AS effective_policy
+           FROM eper_tenant_provider_defaults d
+           LEFT JOIN eper_application_provider_policies p
+             ON p.tenant_id=d.tenant_id AND p.connection_id=d.connection_id
+            AND p.application_id=$2
+           WHERE d.tenant_id=$1 AND d.connection_id=$3`,
+          [tenantA, appA, connectionId],
+        );
+        assert.deepEqual(effective.rows[0]?.effective_policy, { approvalRequired: true });
+
         await client.query(
           `INSERT INTO eper_provider_operations
             (operation_id, tenant_id, application_id, connection_id, capability_key,
@@ -248,13 +332,43 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       });
       assert.deepEqual(hiddenFromOtherApplication, [0, 0, 0]);
 
-      const rotated = await repository.rotateSecretReference({
-        tenantId: tenantA, applicationId: appA, connectionId, actorId,
-        secretReference: "vault://tenant-a/provider/credential-v2",
-        expectedVersion: 4, correlationId: "rotate-" + suffix, auditEnvironment: "sandbox",
+      // The credential-rotation API is intentionally application-admin-only.
+      // Remove appB's shared binding after verifying customer-default fallback and
+      // application override behavior, so the following rotation has one owner.
+      await withScope(scopedPool, tenantA, appB, async (client) => {
+        await client.query(
+          "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2 AND connection_id=$3",
+          [tenantA, appB, connectionId],
+        );
       });
+
+      const rotations = await Promise.allSettled([
+        repository.rotateSecretReference({
+          tenantId: tenantA, applicationId: appA, connectionId, actorId,
+          secretReference: "vault://tenant-a/provider/credential-v2-a",
+          expectedVersion: 4, correlationId: "rotate-a-" + suffix, auditEnvironment: "sandbox",
+        }),
+        repository.rotateSecretReference({
+          tenantId: tenantA, applicationId: appA, connectionId, actorId,
+          secretReference: "vault://tenant-a/provider/credential-v2-b",
+          expectedVersion: 4, correlationId: "rotate-b-" + suffix, auditEnvironment: "sandbox",
+        }),
+      ]);
+      assert.equal(rotations.filter(result => result.status === "fulfilled").length, 1,
+        "only one secret rotation against a version may commit; outcomes: " + rotations.map(result => result.status === "rejected" ? String(result.reason) : "fulfilled").join(" | "));
+      assert.equal(rotations.filter(result => result.status === "rejected").length, 1,
+        "the competing rotation must be rejected as stale");
+      const rotationConflict = rotations.find(result => result.status === "rejected");
+      assert.ok(rotationConflict.reason instanceof Error);
+      assert.equal(rotationConflict.reason.currentVersion, 5);
+      const rotated = rotations.find(result => result.status === "fulfilled").value;
       assert.equal(rotated.version, 5);
       assert.equal(rotated.status, "PENDING_VALIDATION");
+      const rotationAudit = await pool.query(
+        "SELECT action FROM eper_audit_events WHERE resource_id=$1 AND action='provider.connection.rotate_secret_reference'",
+        [connectionId],
+      );
+      assert.equal(rotationAudit.rowCount, 1, "only the committed rotation may append an audit event");
       const suspended = await withScope(scopedPool, tenantA, null, async (client) => client.query(
         "SELECT binding_status FROM eper_provider_connection_applications WHERE tenant_id=$1 AND connection_id=$2",
         [tenantA, connectionId],
@@ -299,6 +413,10 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
           );
         }).catch(() => undefined);
         await withScope(scopedPool, tenantA, null, async (client) => {
+          await client.query(
+            "DELETE FROM eper_tenant_provider_defaults WHERE tenant_id=$1",
+            [tenantA],
+          );
           await client.query(
             "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2",
             [tenantA, appA],

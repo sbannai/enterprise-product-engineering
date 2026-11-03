@@ -15,12 +15,19 @@ on:
       - ".github/workflows/eper-payment-postgres-integration.yml"
       - ".github/workflows/eper-local-developer-setup.yml"
       - "eper/packages/identity/**"
+      - "eper/packages/integrations/**"
+      - "eper/tests/provider-*-*.test.mjs"
+      - "eper/tests/tenant-provider-defaults-repository.test.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/packages/workflows/**"
       - "eper/packages/audit/**"
       - "eper/apps/api/platform-customer-admin-provisioning-route.ts"
       - "eper/tests/postgres-platform-customer-admin-provisioning.integration.test.mjs"
       - "eper/tests/postgres-platform-application-remediation.integration.test.mjs"
       - "eper/tests/postgres-workflow-role-delegation.integration.test.mjs"
+      - "eper/tests/privileged-postgres-role-contract.integration.test.mjs"
+      - "eper/tests/privileged-postgres-role-operations.integration.test.mjs"
+      - "eper/docs/PRIVILEGED_POSTGRES_ROLE_CONTRACT.md"
       - "eper/tests/platform-customer-admin-provisioning-store.test.mjs"
       - "eper/tests/platform-customer-admin-provisioning-route.test.mjs"
       - "eper/packages/payments/**"
@@ -148,6 +155,26 @@ jobs:
         run: npm run migrate:workflows
       - name: Apply campaign scheduler migrations
         run: npm run migrate:campaign-scheduler
+      - name: Provision isolated least-privilege runtime roles for contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform_password="$(openssl rand -hex 32)"
+          catalogue_password="$(openssl rand -hex 32)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_platform_admin_runtime WITH LOGIN PASSWORD '${platform_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_provider_catalogue_runtime WITH LOGIN PASSWORD '${catalogue_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "REVOKE ALL ON TABLE public.eper_audit_events, public.eper_audit_chain_head, public.eper_platform_admin_credentials, public.eper_provider_definitions, public.eper_payment_orders, public.eper_payment_receipts, public.eper_payment_webhook_events, public.eper_provider_connections, public.eper_provider_connection_applications, public.eper_provider_validation_events, public.eper_tenant_provider_defaults, public.eper_application_provider_policies, public.eper_provider_operations, public.eper_provider_webhook_receipts FROM PUBLIC"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_platform_admin_runtime, eper_provider_catalogue_runtime"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_platform_admin_access TO eper_platform_admin_runtime"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_provider_catalogue_access TO eper_provider_catalogue_runtime"
+          {
+            echo "EPER_PLATFORM_ADMIN_TEST_DATABASE_URL=postgres://eper_platform_admin_runtime:${platform_password}@localhost:5432/eper_test"
+            echo "EPER_PROVIDER_CATALOGUE_TEST_DATABASE_URL=postgres://eper_provider_catalogue_runtime:${catalogue_password}@localhost:5432/eper_test"
+          } >> "$GITHUB_ENV"
+      - name: Verify dedicated PostgreSQL runtime-role privileges
+        run: node --test tests/privileged-postgres-role-contract.integration.test.mjs
+      - name: Exercise privileged PostgreSQL store operations and audit rollback
+        run: node --test tests/privileged-postgres-role-operations.integration.test.mjs
       - name: Exercise real PostgreSQL transactions and constraints
         run: node --test tests/postgres-payment-store.integration.test.mjs
       - name: Exercise PostgreSQL customer lifecycle and audit atomicity
