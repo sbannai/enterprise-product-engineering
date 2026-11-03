@@ -72,6 +72,71 @@ const providerCataloguePool = (providerCatalogueAdminEnabled || providerConnecti
   if (!connectionString) throw new Error("EPER_PROVIDER_CATALOGUE_DATABASE_URL_REQUIRED");
   return createPostgresPaymentPool({ ...process.env, EPER_PAYMENT_DATABASE_URL: connectionString, DATABASE_URL: undefined });
 })() : null;
+
+async function assertPrivilegedPoolRole(
+  pool: ReturnType<typeof createPostgresPaymentPool> | null,
+  expectedRole: string,
+  protectedTables: string[],
+  failureCode: string,
+): Promise<void> {
+  if (!pool) return;
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      is_member: boolean;
+      can_login: boolean;
+      is_superuser: boolean;
+      bypass_rls: boolean;
+      owns_protected_tables: boolean;
+    }>(`
+      SELECT
+        COALESCE((SELECT pg_has_role(current_user, r.oid, 'member')
+                    FROM pg_roles r WHERE r.rolname = $1), FALSE) AS is_member,
+        current_role.rolcanlogin AS can_login,
+        current_role.rolsuper AS is_superuser,
+        current_role.rolbypassrls AS bypass_rls,
+        EXISTS (
+          SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public'
+             AND c.relname = ANY($2::text[])
+             AND pg_has_role(current_user, c.relowner, 'member')
+        ) AS owns_protected_tables
+      FROM pg_roles current_role
+      WHERE current_role.rolname = current_user
+    `, [expectedRole, protectedTables]);
+    const role = result.rows[0];
+    if (!role || role.is_member !== true || role.can_login !== true ||
+        role.is_superuser !== false || role.bypass_rls !== false ||
+        role.owns_protected_tables === true) {
+      throw new Error(failureCode);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+if (platformAdminPool) {
+  await assertPrivilegedPoolRole(
+    platformAdminPool,
+    "eper_platform_admin_access",
+    ["eper_platform_admin_credentials", "eper_audit_events", "eper_audit_chain_head"],
+    "EPER_PLATFORM_ADMIN_DATABASE_ROLE_INVALID",
+  );
+}
+if (providerCataloguePool) {
+  await assertPrivilegedPoolRole(
+    providerCataloguePool,
+    "eper_provider_catalogue_access",
+    [
+      "eper_provider_definitions", "eper_provider_connections",
+      "eper_provider_connection_applications", "eper_provider_validation_events",
+      "eper_audit_events", "eper_audit_chain_head",
+    ],
+    "EPER_PROVIDER_CATALOGUE_DATABASE_ROLE_INVALID",
+  );
+}
 const paymentStore = postgresPaymentMode && paymentPool ? new PostgresPaymentStore(paymentPool, true) : undefined;
 if (commercialTariffAdminEnabled && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
     process.env.EPER_ADMIN_CONFIG_API_ENABLED !== "true" || process.env.EPER_ADMIN_CONFIG_PERSISTENCE !== "postgres")) {
