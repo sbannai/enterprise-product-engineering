@@ -556,3 +556,27 @@ A separate integration branch `integration/eper-348-350-355-candidate` was creat
 - No chargeable cloud resources were provisioned and no external provider was activated.
 
 **Seven-checkpoint consequence:** all seven checkpoints remain AMBER pending consolidation. Checkpoint 5 is specifically blocked by the reproduced PostgreSQL tariff-overage failure on the main-based integrated run; the separate pilot matrix pass does not override it. Checkpoint 6 remains blocked by the non-mergeable integration probe and shared-file reconciliation.
+
+
+## Three-branch file-level integration inventory — 2026-11-03 07:08 IST
+
+A fresh changed-file inventory was taken from PRs #348, #350 and #355 (50, 25 and 28 changed files respectively). Ten paths are changed by more than one PR:
+
+| Shared path | Branch overlap | Integration concern |
+|---|---|---|
+| `.github/workflows/eper-payment-postgres-integration.yml` | #348, #355 | Reconcile triggers/job steps without dropping either test lane. |
+| `eper/apps/api/main.ts` | #348, #350, #355 | Compose feature flags, PostgreSQL readiness and store construction once. |
+| `eper/apps/api/server.ts` | #348, #350, #355 | Compose route registration and server options; preserve fail-closed identity, workflow and provider authorization. |
+| `eper/packages/workflows/module-entitlement-policy.ts` | #348, #350, #355 | Merge the distinct tariff and add-on denial reasons/evaluators without losing policy semantics. |
+| `eper/packages/workflows/postgres-module-entitlement-service.ts` | #348, #350, #355 | Combine tariff lookup/enforcement with workflow entitlement and add-on checks; avoid duplicate or bypassable checks. |
+| `eper/packages/workflows/postgres-workflow-actor-role-assignment-store.ts` | #348, #355 | Integrate delegation/role assignment behavior with provider-role authorization. |
+| `eper/packages/workflows/postgres-workflow-role-definition-store.ts` | #348, #355 | Preserve delegability metadata and provider role authorization compatibility. |
+| `eper/tests/postgres-module-entitlement-service.test.mjs` | #348, #350, #355 | Consolidate overlapping mock/query expectations and regression cases. |
+| `eper/tests/workflow-execution-api.test.mjs` | #348, #350 | Retain both delegation and workflow administration authorization assertions. |
+| `eper/tests/module-entitlement-policy.test.mjs` | #350, #355 | Deduplicate and preserve the add-on policy cases. |
+
+Additional migration-ordering issue to validate: #348 adds `eper/packages/workflows/migrations/009_workflow_role_delegation_provenance.sql`, while #350 adds `eper/packages/workflows/migrations/009_workflow_definition_drafts.sql`. These are distinct files in the same migration directory but share the `009_` ordinal. The combined migration loader and ordering rules must be inspected; do not assume that distinct filenames make duplicate ordinals safe. #348 also adds migrations 010–013 in that directory.
+
+The patches show material changes, not just import overlap: #348 adds tariff guard evaluation to both module and add-on access; #350 changes entitlement query behavior while adding workflow draft/rule execution; #355 adds provider role authorization and provider connection APIs. The overlapping patches must be composed semantically, not resolved by choosing one branch's file wholesale.
+
+**Disposition:** integration work is now scoped to ten shared paths plus migration ordering. This is a more precise reconciliation checklist, not a completed merge or a claim that all ten files have textual conflicts. Keep source PRs unchanged and unmerged until a full combined candidate passes. No chargeable resources or external provider activation.
