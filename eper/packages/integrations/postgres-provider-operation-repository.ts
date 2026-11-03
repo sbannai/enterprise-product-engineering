@@ -259,7 +259,7 @@ export class PostgresProviderOperationRepository {
   async recordOutcome(input: {
     tenantId: string; applicationId: string; operationId: string; workerId: string;
     outcome: "SUCCEEDED" | "RETRY" | "FAILED" | "NEEDS_ATTENTION";
-    providerReference?: string; errorCode?: string; retryAfterSeconds?: number;
+    providerReference?: string; errorCode?: string; retryAfterSeconds?: number; maxAttempts?: number;
     auditEnvironment: AuditEnvironment;
   }): Promise<ProviderOperation> {
     const tenantId = identity(input.tenantId, "TENANT");
@@ -274,15 +274,22 @@ export class PostgresProviderOperationRepository {
     if (!Number.isInteger(retryAfterSeconds) || retryAfterSeconds < 1 || retryAfterSeconds > 86400) {
       throw new Error("PROVIDER_OPERATION_RETRY_DELAY_INVALID");
     }
+    const maxAttempts = input.maxAttempts ?? 5;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
+      throw new Error("PROVIDER_OPERATION_MAX_ATTEMPTS_INVALID");
+    }
     const status: ProviderOperationStatus = input.outcome === "RETRY" ? "RETRYING" : input.outcome;
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.scope(client, tenantId, applicationId);
       const saved = await client.query<OperationRow>(
-        `UPDATE eper_provider_operations SET operation_status=$4,
+        `UPDATE eper_provider_operations SET
+           operation_status=CASE WHEN $4='RETRYING' AND attempt_count >= $8
+             THEN 'NEEDS_ATTENTION' ELSE $4 END,
            provider_reference=COALESCE($5,provider_reference),last_error_code=$6,
-           available_at=CASE WHEN $4='RETRYING' THEN NOW()+($7::int * INTERVAL '1 second') ELSE available_at END,
+           available_at=CASE WHEN $4='RETRYING' AND attempt_count < $8
+             THEN NOW()+($7::int * INTERVAL '1 second') ELSE available_at END,
            updated_at=NOW()
          WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
            AND operation_status='DISPATCHING'
@@ -291,7 +298,7 @@ export class PostgresProviderOperationRepository {
            attempt_count,available_at,last_error_code,created_at,updated_at`,
         [tenantId,applicationId,operationId,status,input.providerReference ?? null,
           input.outcome === "SUCCEEDED" ? null : input.errorCode ?? "PROVIDER_OPERATION_FAILED",
-          retryAfterSeconds],
+          retryAfterSeconds,maxAttempts],
       );
       const row = saved.rows[0];
       if (!row) {
