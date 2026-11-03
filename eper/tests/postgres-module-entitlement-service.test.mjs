@@ -61,6 +61,12 @@ test("module access queries tenant entitlement and role permission using bound p
   assert.deepEqual(query.values, ["billing", "tenant-a", "customer-admin", "module.use"]);
   assert.match(query.sql, /eper_customer_tariff_assignment/);
   assert.match(query.sql, /eper_tenant_application_assignment/);
+  assert.match(query.sql, /LEFT JOIN LATERAL/);
+  assert.equal(
+    calls.filter((call) => call.sql.includes("eper_customer_module_entitlement")).length,
+    1,
+    "tariff, active-application count and entitlement must share one access-decision statement",
+  );
 });
 
 test("module access blocks existing application when customer is inactive", async () => {
