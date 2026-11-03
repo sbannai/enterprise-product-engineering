@@ -1,6 +1,6 @@
 # Product Admin Provider Catalogue — API and Governance Contract
 
-**Status:** Initial Product Admin catalogue API and same-origin administration console are implemented on PR #365 and undergoing exact-commit validation. Customer Admin connection/binding UI and dispatch enforcement remain separate follow-on slices.
+**Status:** Product Admin catalogue API and same-origin console are implemented on PR #365. Customer-side application-authorized create-and-bind API is now implemented with atomic PostgreSQL persistence; Customer Admin UI, tenant-wide administrator grants, and dispatch enforcement remain follow-on slices.
 
 ## 1. Ownership and boundary
 
@@ -40,6 +40,20 @@ All routes are platform-admin-only and require the versioned API media type, a d
 - `POST /platform/admin/provider-definitions/{providerKey}/deprecate` — prevent new bindings while preserving existing connection history and explicit migration path.
 
 No hard delete. Provider keys and adapter identities remain referentially stable for audit, historical operations and existing connections.
+
+## 4.1 Customer Admin connection API
+
+The customer-facing API remains separate from the Product Admin catalogue surface and resolves identity from the durable customer OIDC browser session. Every mutation requires same-origin CSRF validation, current tenant/application assignment checks, and the durable application-role permission for the requested action.
+
+- `GET /customer/applications/{applicationId}/provider-connections` — list safe connection metadata and bindings for the selected application.
+- `POST /customer/applications/{applicationId}/provider-connections` — create a tenant-owned connection and its first application binding in one PostgreSQL transaction. Requires `provider.connection.create` on the selected application.
+- `POST /customer/applications/{applicationId}/provider-connections/{connectionId}/bind` — add or update an explicit application binding.
+- `POST /customer/applications/{applicationId}/provider-connections/{connectionId}/validate` — validate only in the approved synthetic development/sandbox boundary.
+- `POST /customer/applications/{applicationId}/provider-connections/{connectionId}/rotate` and `/revoke` — controlled synthetic credential lifecycle operations.
+
+Create-and-bind rejects inactive catalogue definitions, unsupported auth modes, and capabilities not declared by the provider. The connection and first binding plus audit event commit together; any failure rolls the transaction back. The route accepts only synthetic secret references and development/sandbox environments. Secret material is never returned to the browser.
+
+A tenant-wide default is represented by a customer-owned connection explicitly bound to each application that should inherit it. An application-specific override is a separate connection/binding for that application. The current authorization model does not grant tenant-wide administration implicitly; a customer administrator must be authorized in each application before binding there. A governed tenant-level admin grant and UI for managing these defaults remain follow-on work.
 
 ## 4. Lifecycle and enforcement
 
@@ -86,7 +100,7 @@ The catalogue table currently has a global provider-definition row and the provi
 4. Add migration only if the existing table needs additional constraints/indexes; avoid duplicate catalogue tables.
 5. Add API, PostgreSQL, authorization and migration tests.
 6. Add Product Admin UI only after the API contract and server enforcement are tested.
-7. Wire Customer Admin connection creation to the existing tenant connection repository, separately from application-scoped bind permissions.
+7. Add Customer Admin UI for application-scoped connection creation, explicit bindings, customer-wide defaults and application overrides; tenant-wide admin grants must be designed and authorized separately.
 
 ## 8. Explicitly out of scope for this slice
 
