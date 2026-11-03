@@ -2665,7 +2665,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         });
         if (isCreate) {
           const body = await readJson(request);
-          const allowedFields = ["providerKey", "displayName", "authMode", "secretReference", "environment", "safeMetadata", "allowedCapabilities"];
+          const allowedFields = ["providerKey", "displayName", "authMode", "secretReference", "environment", "allowedCapabilities"];
           if (Object.keys(body).some(key => !allowedFields.includes(key)) ||
               typeof body.providerKey !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(body.providerKey) ||
               typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.length > 160 ||
@@ -2675,14 +2675,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               !Array.isArray(body.allowedCapabilities) || body.allowedCapabilities.length < 1 ||
               body.allowedCapabilities.length > 32 ||
               body.allowedCapabilities.some(value => typeof value !== "string" || !value.trim() || value.length > 128) ||
-              (body.safeMetadata !== undefined && (!body.safeMetadata || typeof body.safeMetadata !== "object" || Array.isArray(body.safeMetadata)))) {
+              false) {
             sendJson(request, response, 400, { error: "PROVIDER_CONNECTION_CREATE_INPUT_INVALID" }); return;
           }
           const created = await options.providerConnectionRepository.createAndBindApplication({
             tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
             providerKey: body.providerKey, displayName: body.displayName, authMode: body.authMode,
             secretReference: body.secretReference, environment: body.environment,
-            safeMetadata: (body.safeMetadata ?? {}) as Record<string, unknown>,
+            safeMetadata: {},
             allowedCapabilities: body.allowedCapabilities as string[], correlationId,
             auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
           });
