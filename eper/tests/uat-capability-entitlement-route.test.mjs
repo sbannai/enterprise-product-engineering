@@ -85,8 +85,9 @@ test("public UAT capability route fails closed when entitlement enforcement is d
         },
         body: JSON.stringify({ payload: {} }),
       });
-      assert.equal(response.status, 503);
-      assert.deepEqual(await response.json(), { error: "capability_entitlement_enforcement_required" });
+      const responseBody = await response.json();
+      assert.equal(response.status, 503, JSON.stringify({ entitlementRequired, responseBody }));
+      assert.deepEqual(responseBody, { error: "capability_entitlement_enforcement_required" });
       assert.equal(calls, 0, "execution must not reach authorization or capability dispatch");
     });
   }
