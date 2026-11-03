@@ -2584,13 +2584,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
       const connectionIdRaw = providerConnectionsPath[2];
       const operation = providerConnectionsPath[3];
+      const isCreate = !operation && request.method === "POST";
       const isBinding = operation === "bind";
       const isValidation = operation === "validate";
       const isRotation = operation === "rotate";
       const isRevocation = operation === "revoke";
       const isCredentialMutation = isRotation || isRevocation;
-      if ((!operation && request.method !== "GET") || ((isBinding || isValidation || isCredentialMutation) && request.method !== "POST")) {
-        sendMethodNotAllowed(request, response, operation ? "POST" : "GET"); return;
+      if ((!operation && request.method !== "GET" && request.method !== "POST") ||
+          ((isBinding || isValidation || isCredentialMutation) && request.method !== "POST")) {
+        sendMethodNotAllowed(request, response, operation ? "POST" : "GET, POST"); return;
       }
       if ((isValidation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
           !options.providerValidationService)) || (isCredentialMutation && (process.env.EPER_PROVIDER_VALIDATION_API_ENABLED !== "true" ||
@@ -2650,7 +2652,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       try {
         await authorizeProviderConnectionRequest({
           actor: { tenantId: identity.tenantId, actorId: identity.actorId },
-          action: isBinding ? "provider.connection.bind" : isValidation ? "provider.connection.validate" : isRotation ? "provider.connection.rotate" : isRevocation ? "provider.connection.revoke" : "provider.connection.read",
+          action: isCreate ? "provider.connection.create" : isBinding ? "provider.connection.bind" : isValidation ? "provider.connection.validate" : isRotation ? "provider.connection.rotate" : isRevocation ? "provider.connection.revoke" : "provider.connection.read",
           applicationId,
           assignments: {
             async isTenantApplicationActive(tenantId, appId) {
@@ -2661,7 +2663,31 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           },
           roles: new PostgresProviderRoleAuthorizer(options.workflowActorRoleAssignmentStore),
         });
-        if (isValidation) {
+        if (isCreate) {
+          const body = await readJson(request);
+          const allowedFields = ["providerKey", "displayName", "authMode", "secretReference", "environment", "safeMetadata", "allowedCapabilities"];
+          if (Object.keys(body).some(key => !allowedFields.includes(key)) ||
+              typeof body.providerKey !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(body.providerKey) ||
+              typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.length > 160 ||
+              typeof body.authMode !== "string" || !body.authMode.trim() || body.authMode.length > 64 ||
+              typeof body.secretReference !== "string" || !/^synthetic:\/\/[A-Za-z0-9._/-]{1,180}$/.test(body.secretReference) ||
+              (body.environment !== "development" && body.environment !== "sandbox") ||
+              !Array.isArray(body.allowedCapabilities) || body.allowedCapabilities.length < 1 ||
+              body.allowedCapabilities.length > 32 ||
+              body.allowedCapabilities.some(value => typeof value !== "string" || !value.trim() || value.length > 128) ||
+              (body.safeMetadata !== undefined && (!body.safeMetadata || typeof body.safeMetadata !== "object" || Array.isArray(body.safeMetadata)))) {
+            sendJson(request, response, 400, { error: "PROVIDER_CONNECTION_CREATE_INPUT_INVALID" }); return;
+          }
+          const created = await options.providerConnectionRepository.createAndBindApplication({
+            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+            providerKey: body.providerKey, displayName: body.displayName, authMode: body.authMode,
+            secretReference: body.secretReference, environment: body.environment,
+            safeMetadata: (body.safeMetadata ?? {}) as Record<string, unknown>,
+            allowedCapabilities: body.allowedCapabilities as string[], correlationId,
+            auditEnvironment: options.adminConfigEnvironment ?? "sandbox",
+          });
+          sendJson(request, response, 201, { applicationId, ...created });
+        } else if (isValidation) {
           const result = await options.providerValidationService!.validate({
             tenantId: identity.tenantId,
             applicationId,
@@ -2728,10 +2754,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             code === "PROVIDER_VALIDATION_ENVIRONMENT_NOT_ALLOWED" ||
             code === "PROVIDER_CONNECTION_VERSION_CONFLICT" ||
             code === "PROVIDER_CONNECTION_NOT_ACTIVE" ||
+            code === "PROVIDER_DEFINITION_NOT_ACTIVE" ||
             code === "PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED" ||
             code === "PROVIDER_CONNECTION_REVOKED" ||
-            code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ? 409
-          : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
+            code === "PROVIDER_CAPABILITY_NOT_SUPPORTED" ||
+            code === "PROVIDER_AUTH_MODE_NOT_SUPPORTED" ? 409
+          : code === "PROVIDER_BINDING_CAPABILITIES_INVALID" || code === "PROVIDER_CONNECTION_CREATE_INPUT_INVALID" || code === "JSON_OBJECT_REQUIRED" ||
             code === "REQUEST_BODY_TOO_LARGE" || code === "Unexpected end of JSON input" ? 400 : 503;
         sendApiError(request, response, status, code, status === 503
           ? "Provider connection operation could not be completed."
