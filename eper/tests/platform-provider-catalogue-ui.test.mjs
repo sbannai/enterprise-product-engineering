@@ -19,7 +19,7 @@ function dependencies(){
   async update(input){calls.push(["update",input]);return {...definition,...input,version:2};},
   async setStatus(input){calls.push(["setStatus",input]);return {...definition,status:input.status,version:2};},
  };
- return {calls,credentialStore,platformAdminCredentialStore:credentialStore,repository,adminConfigEnvironment:"sandbox"};
+ return {calls,credentialStore,platformAdminCredentialStore:credentialStore,providerCatalogueRepository:repository,adminConfigEnvironment:"sandbox"};
 }
 test("Product Admin provider catalogue UI and API are served with fail-closed feature flags",async()=>{
  const deps=dependencies(),server=createAppServer(deps);
