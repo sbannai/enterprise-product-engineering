@@ -94,4 +94,6 @@ test("provider operation leases support expiry recovery and fencing generations"
   assert.match(source, /ADD COLUMN IF NOT EXISTS fencing_token BIGINT NOT NULL DEFAULT 0/);
   assert.match(source, /fencing_token >= 0/);
   assert.match(source, /operation_status = 'DISPATCHING'/);
+  assert.match(source, /legacy-expired/);
+  assert.match(source, /lease_expires_at IS NULL/);
 });
