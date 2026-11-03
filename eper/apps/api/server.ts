@@ -2592,7 +2592,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
 
     // Customer-safe provider catalogue projection. Product Admin-only fields and schemas are omitted.
-    const customerProviderCataloguePath = /^\\/customer\\/applications\\/([^/]+)\\/provider-catalogue$/.exec(requestUrl.pathname);
+    const customerProviderCataloguePath = /^\/customer\/applications\/([^/]+)\/provider-catalogue$/.exec(requestUrl.pathname);
     if (customerProviderCataloguePath) {
       if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true" || !options.providerCatalogueRepository ||
           !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
