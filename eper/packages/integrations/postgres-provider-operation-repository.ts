@@ -221,7 +221,7 @@ export class PostgresProviderOperationRepository {
 
   async claimNext(input: {
     tenantId: string; applicationId: string; workerId: string;
-    leaseDurationSeconds?: number;
+    leaseDurationSeconds?: number; maxAttempts?: number;
     auditEnvironment: AuditEnvironment;
   }): Promise<ProviderOperation | null> {
     const tenantId = identity(input.tenantId, "TENANT");
@@ -230,6 +230,10 @@ export class PostgresProviderOperationRepository {
     const leaseDurationSeconds = input.leaseDurationSeconds ?? 60;
     if (!Number.isInteger(leaseDurationSeconds) || leaseDurationSeconds < 5 || leaseDurationSeconds > 3600) {
       throw new Error("PROVIDER_OPERATION_LEASE_DURATION_INVALID");
+    }
+    const maxAttempts = input.maxAttempts ?? 5;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
+      throw new Error("PROVIDER_OPERATION_MAX_ATTEMPTS_INVALID");
     }
     const client = await this.pool.connect();
     try {
@@ -245,7 +249,8 @@ export class PostgresProviderOperationRepository {
              ON pc.tenant_id=o.tenant_id AND pc.connection_id=o.connection_id
            WHERE o.tenant_id=$1 AND o.application_id=$2
              AND ((o.operation_status IN ('QUEUED','RETRYING') AND o.available_at <= NOW())
-               OR (o.operation_status='DISPATCHING' AND o.lease_expires_at <= NOW()))
+               OR (o.operation_status='DISPATCHING' AND o.lease_expires_at <= NOW()
+                 AND o.attempt_count < $5))
              AND b.binding_status='ACTIVE' AND pc.connection_status='ACTIVE'
              AND b.allowed_capabilities ? o.capability_key
            ORDER BY o.available_at,o.created_at,o.operation_id
@@ -260,7 +265,7 @@ export class PostgresProviderOperationRepository {
            o.capability_version,o.idempotency_key,o.correlation_id,o.operation_status,o.request_digest,
            o.payload_reference,o.provider_reference,o.lease_owner,o.lease_expires_at,o.fencing_token,
            o.attempt_count,o.available_at,o.last_error_code,o.created_at,o.updated_at`,
-        [tenantId,applicationId,leaseDurationSeconds,workerId],
+        [tenantId,applicationId,leaseDurationSeconds,workerId,maxAttempts],
       );
       const row = claimed.rows[0];
       if (row) {
@@ -273,6 +278,62 @@ export class PostgresProviderOperationRepository {
       }
       await client.query("COMMIT");
       return row ? map(row) : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async recoverExpiredLeases(input: {
+    tenantId: string; applicationId: string; maxAttempts?: number; batchSize?: number;
+    auditEnvironment: AuditEnvironment;
+  }): Promise<ProviderOperation[]> {
+    const tenantId = identity(input.tenantId, "TENANT");
+    const applicationId = identity(input.applicationId, "APPLICATION");
+    const maxAttempts = input.maxAttempts ?? 5;
+    const batchSize = input.batchSize ?? 50;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
+      throw new Error("PROVIDER_OPERATION_MAX_ATTEMPTS_INVALID");
+    }
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) {
+      throw new Error("PROVIDER_OPERATION_RECOVERY_BATCH_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.scope(client, tenantId, applicationId);
+      const recovered = await client.query<OperationRow>(
+        `WITH exhausted_lease AS (
+           SELECT operation_id FROM eper_provider_operations
+           WHERE tenant_id=$1 AND application_id=$2
+             AND operation_status='DISPATCHING'
+             AND lease_expires_at <= NOW() AND attempt_count >= $3
+           ORDER BY lease_expires_at,created_at,operation_id
+           FOR UPDATE SKIP LOCKED LIMIT $4
+         )
+         UPDATE eper_provider_operations o
+         SET operation_status='NEEDS_ATTENTION',lease_owner=NULL,lease_expires_at=NULL,
+             last_error_code='PROVIDER_OPERATION_LEASE_ATTEMPTS_EXHAUSTED',updated_at=NOW()
+         FROM exhausted_lease e
+         WHERE o.tenant_id=$1 AND o.application_id=$2 AND o.operation_id=e.operation_id
+         RETURNING o.operation_id,o.tenant_id,o.application_id,o.connection_id,o.capability_key,o.capability_version,
+           o.idempotency_key,o.correlation_id,o.operation_status,o.request_digest,o.payload_reference,o.provider_reference,
+           o.lease_owner,o.lease_expires_at,o.fencing_token,o.attempt_count,o.available_at,o.last_error_code,o.created_at,o.updated_at`,
+        [tenantId,applicationId,maxAttempts,batchSize],
+      );
+      for (const row of recovered.rows) {
+        await this.audit(client, {
+          tenantId, applicationId, environment: input.auditEnvironment,
+          actorId: "provider-operation-recovery",
+          action: "provider.operation.needs_attention", operationId: row.operation_id,
+          correlationId: row.correlation_id,
+          payload: { attemptCount: Number(row.attempt_count), errorCode: row.last_error_code },
+        });
+      }
+      await client.query("COMMIT");
+      return recovered.rows.map(map);
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
