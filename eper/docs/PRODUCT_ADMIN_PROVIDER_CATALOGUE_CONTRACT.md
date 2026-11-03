@@ -91,3 +91,8 @@ The catalogue table currently has a global provider-definition row and the provi
 ## 8. Explicitly out of scope for this slice
 
 Real provider network adapters, secret-manager writes/resolution, webhook signature verification, outbox dispatch, SMS/email/WhatsApp delivery, video meeting creation, and Customer Admin frontend wiring. Those remain separate tested vertical slices. No cloud resources are required for local PostgreSQL development.
+
+
+## Platform credential permission
+
+The trusted platform credential resolver allowlists the independent `provider_catalogue:manage` permission. This permission is not implied by customer-admin provisioning/recovery or application-remediation permissions. Credentials remain server-mapped; callers cannot supply platform identity or permissions in request data. The catalogue API must still enforce this permission on every request.
