@@ -605,3 +605,24 @@ The current PR queue is no longer a multi-PR dependency stack: only #377 is open
 5. Preserve the existing Business UAT prohibition until every entry gate is evidenced and the owner explicitly authorizes it.
 
 No branch was deleted, no protection setting was changed, no chargeable cloud resource was provisioned, and no Business UAT or external provider action was authorized.
+
+
+## Correction — historical evidence disposition for PR #356 (2026-11-03 15:16 UTC)
+
+A deeper content comparison supersedes the earlier shorthand that described PR #356 as an obsolete scorecard snapshot.
+
+PR #356 is closed unmerged, but its branch contains 13 dated engineering/evidence sections absent from the current main scorecard. The branch is therefore a **historical evidence-recovery candidate**, not an archive/delete candidate. Its contents include exact-head validation records, migration-runner semantics corrections, tariff-guard evidence clarification, branch integration inventories, and provider payload migration 017. Several entries also contain stale main SHAs, superseded PR states and historical failures. Do not merge the branch wholesale and do not delete it.
+
+**Required handling:**
+1. Preserve the branch and patch as an evidence source.
+2. Reconcile each dated section against current GitHub commit/run/PR evidence and current main before carrying forward any statement.
+3. Copy only still-relevant historical facts into a new dated addendum, explicitly labeling superseded snapshots and resolved failures.
+4. Keep current-main status authoritative; do not allow stale historical claims to overwrite current checkpoint status.
+
+PR #327 remains a different case: its patch is limited to scorecard baseline/header corrections and its work is represented by the merged #323 successor. It is a candidate for historical branch archival only after owner/reference checks.
+
+The all-PR inventory returned 346 PRs: 256 merged, 89 closed unmerged, and one open (#377). This is the PR inventory, not a branch inventory; it does not establish that all 89 historical branch refs have been reviewed.
+
+### Exact-head validation status for this scorecard revision
+
+For commit `4852fd6d0063fe13c5c77baa74c24136aa7be46c`, the latest poll returned 10 successful checks, 2 still in progress, 1 skipped, and 0 failures. The skipped 228/38 integrated subjob is complemented by a separate chapter-pilot-matrix workflow that passed. The remaining in-progress checks are the full PostgreSQL-enabled test suite and the overall CI build-and-test job. Do not report this revision as fully green until both finish successfully.
