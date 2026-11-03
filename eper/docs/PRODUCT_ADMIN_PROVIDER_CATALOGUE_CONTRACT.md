@@ -1,6 +1,6 @@
 # Product Admin Provider Catalogue — API and Governance Contract
 
-**Status:** Engineering contract for the next implementation slice. This document is not evidence that catalogue administration endpoints or screens are implemented.
+**Status:** Initial Product Admin catalogue API and same-origin administration console are implemented on PR #365 and undergoing exact-commit validation. Customer Admin connection/binding UI and dispatch enforcement remain separate follow-on slices.
 
 ## 1. Ownership and boundary
 
@@ -29,9 +29,9 @@ Never store provider credentials, access tokens, secret values or tenant-specifi
 
 ## 3. Proposed Product Admin API
 
-All routes are platform-admin-only and require the versioned API media type, authenticated Product Admin session, CSRF protection for mutations, server-generated correlation ID and durable audit.
+All routes are platform-admin-only and require the versioned API media type, a durable bearer credential resolved by the server to a Product Admin principal with `provider_catalogue:manage`, same-origin validation when a browser Origin header is present, server-generated correlation ID and durable audit. The console does not use ambient cookies or browser storage for credentials; it holds the bearer token in page memory only. Cross-origin browser mutations are rejected. Non-browser bearer clients may omit Origin.
 
-- `GET /platform/admin/provider-definitions` — list with status/search filters and bounded pagination.
+- `GET /platform/admin/provider-definitions` — list with bounded `limit` (1–100); status/search filters and cursor pagination remain follow-up work.
 - `POST /platform/admin/provider-definitions` — create a definition; server validates adapter, capabilities, auth modes and schema against registries.
 - `GET /platform/admin/provider-definitions/{providerKey}` — read one definition.
 - `PATCH /platform/admin/provider-definitions/{providerKey}` — update mutable metadata/policy using `expectedVersion`.
