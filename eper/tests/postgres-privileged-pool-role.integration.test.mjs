@@ -1,17 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Pool } from "pg";
+import pg from "pg";
 import { appendAuditEventInTransaction } from "../dist/packages/audit/audit-event-store.js";
 
-const databaseUrl = process.env.DATABASE_URL
-  ?? process.env.EPER_PAYMENT_DATABASE_URL
-  ?? process.env.EPER_AUDIT_DATABASE_URL;
+const databaseUrl = process.env.EPER_PRIVILEGED_ROLE_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+let safeDatabase = false;
+if (databaseUrl) {
+  try {
+    const databaseName = decodeURIComponent(new URL(databaseUrl).pathname.slice(1));
+    safeDatabase = /(^|[_-])(test|ci|sandbox)([_-]|$)/i.test(databaseName);
+  } catch {
+    safeDatabase = false;
+  }
+}
 
 test("privileged PostgreSQL roles enforce isolated least-privilege grants and tenant RLS", {
-  skip: !databaseUrl,
+  skip: !safeDatabase ? "Requires an isolated test/CI/sandbox PostgreSQL database with audit migrations applied" : false,
 }, async () => {
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 4, connectionTimeoutMillis: 5000 });
   try {
     const roles = await pool.query(`
       SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
@@ -20,7 +27,7 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
     `, [["eper_platform_admin_access", "eper_provider_catalogue_access"]]);
     assert.equal(roles.rows.length, 2);
     for (const role of roles.rows) {
-      assert.equal(role.rolcanlogin, false, role.rolname + " must be a group role, not a login");
+      assert.equal(role.rolcanlogin, false, role.rolname + " must be a NOLOGIN group role");
       assert.equal(role.rolsuper, false, role.rolname + " must not be superuser");
       assert.equal(role.rolcreatedb, false);
       assert.equal(role.rolcreaterole, false);
@@ -35,14 +42,17 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
         has_column_privilege('eper_platform_admin_access', 'public.eper_platform_admin_credentials', 'last_used_at', 'UPDATE') AS platform_last_used_update,
         has_column_privilege('eper_platform_admin_access', 'public.eper_platform_admin_credentials', 'revoked_at', 'UPDATE') AS platform_revoked_update,
         has_column_privilege('eper_platform_admin_access', 'public.eper_platform_admin_credentials', 'permissions', 'UPDATE') AS platform_permissions_update,
+        has_table_privilege('eper_platform_admin_access', 'public.eper_platform_admin_credentials', 'DELETE') AS platform_credential_delete,
         has_table_privilege('eper_platform_admin_access', 'public.eper_provider_definitions', 'SELECT') AS platform_provider_read,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_definitions', 'SELECT') AS provider_definition_select,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_definitions', 'INSERT') AS provider_definition_insert,
         has_column_privilege('eper_provider_catalogue_access', 'public.eper_provider_definitions', 'provider_status', 'UPDATE') AS provider_status_update,
         has_column_privilege('eper_provider_catalogue_access', 'public.eper_provider_definitions', 'provider_key', 'UPDATE') AS provider_key_update,
+        has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_definitions', 'DELETE') AS provider_definition_delete,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_connections', 'INSERT') AS provider_connection_insert,
         has_column_privilege('eper_provider_catalogue_access', 'public.eper_provider_connections', 'connection_status', 'UPDATE') AS provider_connection_status_update,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_validation_events', 'INSERT') AS provider_validation_insert,
+        has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_validation_events', 'SELECT') AS provider_validation_select,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_platform_admin_credentials', 'SELECT') AS provider_credential_read,
         has_table_privilege('eper_platform_admin_access', 'public.eper_audit_events', 'INSERT') AS platform_audit_insert,
         has_table_privilege('eper_platform_admin_access', 'public.eper_audit_events', 'UPDATE') AS platform_audit_update,
@@ -55,12 +65,13 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       "platform_credential_select", "platform_credential_insert", "platform_last_used_update",
       "platform_revoked_update", "provider_definition_select", "provider_definition_insert",
       "provider_status_update", "provider_connection_insert", "provider_connection_status_update",
-      "provider_validation_insert", "platform_audit_insert", "provider_audit_insert",
-      "provider_chain_head_update",
+      "provider_validation_insert", "provider_validation_select", "platform_audit_insert",
+      "provider_audit_insert", "provider_chain_head_update",
     ]) assert.equal(g[key], true, key);
     for (const key of [
-      "platform_permissions_update", "platform_provider_read", "provider_key_update",
-      "provider_credential_read", "platform_audit_update", "provider_chain_singleton_update",
+      "platform_permissions_update", "platform_credential_delete", "platform_provider_read",
+      "provider_key_update", "provider_definition_delete", "provider_credential_read",
+      "platform_audit_update", "provider_chain_singleton_update",
     ]) assert.equal(g[key], false, key);
 
     const rls = await pool.query(`
@@ -86,7 +97,8 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       await client.query(`
         INSERT INTO eper_platform_admin_credentials
           (credential_id, platform_actor_id, token_hash, permissions, expires_at, created_by)
-        VALUES ($1, 'platform-test-actor', $2, '["provider_catalogue:manage"]'::jsonb, NOW() + INTERVAL '1 day', 'role-test')
+        VALUES ($1, 'platform-test-actor', $2, '["provider_catalogue:manage"]'::jsonb,
+                NOW() + INTERVAL '1 day', 'role-test')
       `, [credentialId, Buffer.alloc(32, 7)]);
       const credential = await client.query(
         "SELECT credential_id FROM eper_platform_admin_credentials WHERE credential_id = $1",
