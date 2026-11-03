@@ -52,6 +52,61 @@ test("PostgreSQL encrypted provider payloads persist ciphertext and enforce exac
       assert.equal(JSON.stringify(persisted.rows[0]).includes(secretText), false,
         "database envelope must not contain plaintext payload values");
 
+      // Exercise PostgreSQL RLS and the actual restricted service role, not only
+      // the application authorization callback above. The CI migration user is
+      // privileged and can SET ROLE to the NOLOGIN group role.
+      const roleClient = await pool.connect();
+      try {
+        await roleClient.query("BEGIN");
+        await roleClient.query("SET LOCAL ROLE eper_provider_catalogue_access");
+        await roleClient.query("SELECT set_config('eper.tenant_id',$1,true)", [scope.tenantId]);
+        await roleClient.query("SELECT set_config('eper.application_id',$1,true)", [scope.applicationId]);
+        const allowedRow = await roleClient.query(
+          "SELECT payload_reference FROM eper_provider_payloads WHERE payload_reference=$1",
+          [reference.reference],
+        );
+        assert.equal(allowedRow.rowCount, 1,
+          "restricted provider role must read payloads in the active tenant/application scope");
+
+        await roleClient.query("SELECT set_config('eper.tenant_id',$1,true)", ["other-tenant-" + suffix]);
+        const crossTenantRead = await roleClient.query(
+          "SELECT payload_reference FROM eper_provider_payloads WHERE payload_reference=$1",
+          [reference.reference],
+        );
+        assert.equal(crossTenantRead.rowCount, 0,
+          "RLS must hide payload rows outside the active tenant");
+
+        await roleClient.query("SELECT set_config('eper.tenant_id',$1,true)", [scope.tenantId]);
+        await roleClient.query("SELECT set_config('eper.application_id',$1,true)", ["other-application-" + suffix]);
+        const crossApplicationRead = await roleClient.query(
+          "SELECT payload_reference FROM eper_provider_payloads WHERE payload_reference=$1",
+          [reference.reference],
+        );
+        assert.equal(crossApplicationRead.rowCount, 0,
+          "RLS must hide payload rows outside the active application");
+
+        await roleClient.query("SELECT set_config('eper.tenant_id',$1,true)", ["other-tenant-" + suffix]);
+        await assert.rejects(
+          () => roleClient.query(
+            `INSERT INTO eper_provider_payloads
+              (payload_reference,tenant_id,application_id,operation_id,capability_key,
+               payload_digest,envelope_version,nonce,auth_tag,ciphertext)
+             VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9)`,
+            ["pp_" + randomUUID(), "other-tenant-" + suffix, scope.applicationId,
+              "unauthorized-" + suffix, scope.capabilityKey, "a".repeat(64),
+              "AAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBB", "YQ=="],
+          ),
+          error => error && error.code === "42501",
+          "RLS WITH CHECK must reject writes under an unauthorized tenant context",
+        );
+        await roleClient.query("ROLLBACK");
+      } catch (error) {
+        await roleClient.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        roleClient.release();
+      }
+
       assert.deepEqual(await store.get(reference), {
         to: ["synthetic@example.invalid"], body: secretText,
       });
