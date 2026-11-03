@@ -47,7 +47,7 @@ test("admin UI, price-book management, resolver and vendor configuration are API
     assert.match(html, /Price Book/);
     assert.match(html, /Market Resolver/);
     assert.match(html, /Payment Vendor/);
-    assert.match(html, /href="\\/admin\\/provider-catalogue-ui">Provider Catalogue/);
+    assert.match(html, /href="\/admin\/provider-catalogue-ui">Provider Catalogue/);
     assert.match(html, /Tariff catalogue editor/);
     assert.match(html, /Create tariff draft/);
     assert.match(html, /Server-enforced commercial access/);
