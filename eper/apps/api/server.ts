@@ -22,6 +22,7 @@ import { PostgresCommercialTariffAdminStore, CommercialTariffAdminError } from "
 import { PostgresCustomerLifecycleStore, CustomerLifecycleStoreError, CustomerLifecycleVersionConflictError } from "../../packages/identity/postgres-customer-lifecycle-store.js";
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { isProviderCatalogueUiRequest, providerCatalogueUiHtml } from "./provider-catalogue-ui.js";
+import { isCustomerProviderConnectionsUiRequest, customerProviderConnectionsUiHtml } from "./customer-provider-connections-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
@@ -1903,6 +1904,20 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       response.end(aiIntegrationsAdminHtml);
       return;
     }
+    if (isCustomerProviderConnectionsUiRequest(request)) {
+      if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" }); response.end(); return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+        "x-content-type-options": "nosniff", "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(customerProviderConnectionsUiHtml);
+      return;
+    }
+
     if (isCustomerRoleManagementUiRequest(request)) {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
@@ -2575,6 +2590,63 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
 
+
+    // Customer-safe provider catalogue projection. Product Admin-only fields and schemas are omitted.
+    const customerProviderCataloguePath = /^\\/customer\\/applications\\/([^/]+)\\/provider-catalogue$/.exec(requestUrl.pathname);
+    if (customerProviderCataloguePath) {
+      if (process.env.EPER_PROVIDER_CONNECTION_API_ENABLED !== "true" || !options.providerCatalogueRepository ||
+          !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+          !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore) {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      let applicationId: string;
+      try { applicationId = decodeURIComponent(customerProviderCataloguePath[1]); }
+      catch { sendJson(request, response, 400, { error: "invalid_path_encoding" }); return; }
+      if (!applicationId.trim() || applicationId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(applicationId)) {
+        sendJson(request, response, 400, { error: "invalid_application_id" }); return;
+      }
+      const identity = await resolveCustomerBrowserIdentity({
+        cookieHeader: request.headers.cookie, applicationId,
+        sessionStore: options.customerIdentitySessionStore,
+        tenantAssignments: options.tenantApplicationAssignmentStore,
+        actorAssignments: options.actorApplicationAssignmentStore,
+      });
+      if (!identity) {
+        sendApiError(request, response, 401, "UNAUTHENTICATED",
+          "A valid browser session with active tenant and actor application assignments is required.");
+        return;
+      }
+      try {
+        await authorizeProviderConnectionRequest({
+          actor: { tenantId: identity.tenantId, actorId: identity.actorId },
+          action: "provider.connection.read", applicationId,
+          assignments: {
+            async isTenantApplicationActive(tenantId, appId) {
+              return (await options.tenantApplicationAssignmentStore!.listActive(tenantId)).includes(appId);
+            },
+            isActorAssigned: (tenantId, actorId, appId) =>
+              options.actorApplicationAssignmentStore!.isAssigned(tenantId, actorId, appId),
+          },
+          roles: new PostgresProviderRoleAuthorizer(options.workflowActorRoleAssignmentStore),
+        });
+        const definitions = await options.providerCatalogueRepository.list(100);
+        const providers = definitions.filter(definition => definition.status === "ACTIVE").map(definition => ({
+          providerKey: definition.providerKey, displayName: definition.displayName,
+          capabilities: definition.capabilities, authModes: definition.authModes,
+        }));
+        sendJson(request, response, 200, { providers });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "PROVIDER_CATALOGUE_READ_UNAVAILABLE";
+        const status = code === "PROVIDER_ACTION_FORBIDDEN" || code === "PROVIDER_APPLICATION_ACCESS_DENIED" ? 403
+          : code === "PROVIDER_UNAUTHENTICATED" ? 401 : 503;
+        sendApiError(request, response, status, code,
+          status === 403 ? "You are not allowed to view provider definitions for this application."
+            : status === 401 ? "A valid customer session is required."
+            : "The provider catalogue could not be loaded.");
+      }
+      return;
+    }
 
     // Application-scoped provider connection read, bind and validation APIs.
     const providerConnectionsPath = /^\/customer\/applications\/([^/]+)\/provider-connections(?:\/([^/]+)\/(bind|validate|rotate|revoke))?$/.exec(requestUrl.pathname);
