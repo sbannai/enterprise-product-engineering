@@ -30,7 +30,7 @@ const applicationId = required("EPER_AGENT_WORKER_APPLICATION_ID");
 const environment = (process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox") as AuditEnvironment;
 if (!["production", "uat", "sandbox"].includes(environment)) throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
 const pollIntervalMs = boundedInteger("EPER_AGENT_WORKER_POLL_INTERVAL_MS", 1000, 100, 60000);
-const leaseSeconds = boundedInteger("EPER_AGENT_WORKER_LEASE_SECONDS", 300, 30, 3600);
+const leaseSeconds = boundedInteger("EPER_AGENT_WORKER_LEASE_SECONDS", 300, 5, 900);
 const maxAttempts = boundedInteger("EPER_AGENT_WORKER_MAX_ATTEMPTS", 5, 1, 20);
 const controller = new AbortController();
 let shuttingDown = false;
