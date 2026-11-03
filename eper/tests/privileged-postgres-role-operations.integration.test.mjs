@@ -125,13 +125,33 @@ test("dedicated provider-catalogue role performs audited create and rolls back c
       assert.equal(suspended.status, "SUSPENDED");
       assert.equal(suspended.version, 3);
 
+      const results = await Promise.allSettled([
+        repository.update({ ...context, providerKey, expectedVersion: 3,
+          displayName: "Concurrent A", environment: "sandbox" }),
+        repository.update({ ...context, providerKey, expectedVersion: 3,
+          displayName: "Concurrent B", environment: "sandbox" }),
+      ]);
+      assert.equal(results.filter(x => x.status === "fulfilled").length, 1);
+      assert.equal(results.filter(x => x.status === "rejected").length, 1);
+      const rejected = results.find(x => x.status === "rejected");
+      assert.equal(rejected.reason?.name, "ProviderCatalogueConflictError");
+      assert.equal(rejected.reason?.currentVersion, 4);
+      const current = await repository.get(providerKey);
+      assert.equal(current?.version, 4);
+      assert.ok(["Concurrent A", "Concurrent B"].includes(current?.displayName));
+      await assert.rejects(
+        repository.update({ ...context, providerKey, expectedVersion: 3,
+          displayName: "Stale update", environment: "sandbox" }),
+        error => error?.name === "ProviderCatalogueConflictError" && error.currentVersion === 4,
+      );
+
       const audit = await ownerPool.query(
         "SELECT action FROM eper_audit_events WHERE resource_id=$1 ORDER BY occurred_at, action",
         [providerKey],
       );
       assert.deepEqual(audit.rows.map(row => row.action).sort(), [
         "provider.catalogue.create", "provider.catalogue.update",
-        "provider.catalogue.suspended",
+        "provider.catalogue.update", "provider.catalogue.suspended",
       ].sort());
     } finally {
       await runtimePool.end();
