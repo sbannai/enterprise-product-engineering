@@ -74,6 +74,7 @@ export class PostgresModuleEntitlementService {
         addon_entitlement: string | null;
         customer_account: string | null;
         customer_tariff_assignment: string | null;
+        tenant_application_assignment: string | null;
       }>(`
         SELECT
           to_regclass('public.eper_module_catalog')::text AS module_catalog,
@@ -82,12 +83,13 @@ export class PostgresModuleEntitlementService {
           to_regclass('public.eper_customer_module_permission')::text AS module_permission,
           to_regclass('public.eper_application_addon_entitlement')::text AS addon_entitlement,
           to_regclass('public.eper_customer_account')::text AS customer_account,
-          to_regclass('public.eper_customer_tariff_assignment')::text AS customer_tariff_assignment
+          to_regclass('public.eper_customer_tariff_assignment')::text AS customer_tariff_assignment,
+          to_regclass('public.eper_tenant_application_assignment')::text AS tenant_application_assignment
       `);
       const row = result.rows[0];
       if (!row || !row.module_catalog || !row.module_price || !row.module_entitlement ||
           !row.module_permission || !row.addon_entitlement || !row.customer_account ||
-          !row.customer_tariff_assignment) {
+          !row.customer_tariff_assignment || !row.tenant_application_assignment) {
         throw new Error("EPER_MODULE_ENTITLEMENT_SCHEMA_NOT_APPLIED");
       }
     } catch (error) {
