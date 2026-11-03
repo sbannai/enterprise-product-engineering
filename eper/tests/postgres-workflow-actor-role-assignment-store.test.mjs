@@ -113,6 +113,16 @@ test("permission check requires active actor, tenant, role and explicit permissi
   assert.equal(calls.at(-2).sql, "COMMIT");
 });
 
+test("permission check accepts provider connection permission vocabulary", async () => {
+  const { calls, pool } = fixture();
+  const allowed = await new PostgresWorkflowActorRoleAssignmentStore(pool)
+    .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "provider.connection.validate");
+  assert.equal(allowed, true);
+  const query = calls.find(call => call.sql.includes("SELECT EXISTS"));
+  assert.equal(query.values[4], "provider.connection.validate");
+  assert.ok(query.sql.includes("rd.permissions ? $5"));
+});
+
 test("permission check denies absent permission and rejects unknown permission keys", async () => {
   const denied = fixture({ permissionAllowed: false });
   assert.equal(
