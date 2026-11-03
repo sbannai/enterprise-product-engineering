@@ -18,6 +18,7 @@ on:
       - "eper/packages/integrations/**"
       - "eper/tests/provider-*-*.test.mjs"
       - "eper/tests/tenant-provider-defaults-repository.test.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/packages/workflows/**"
       - "eper/packages/audit/**"
       - "eper/apps/api/platform-customer-admin-provisioning-route.ts"
