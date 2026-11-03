@@ -22,6 +22,10 @@ import { PostgresActorApplicationAssignmentStore } from "../../packages/identity
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
+import { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
+import { PostgresProviderValidationStore } from "../../packages/integrations/postgres-provider-validation-store.js";
+import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
+import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -35,6 +39,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const postgresPaymentMode = process.env.EPER_PAYMENT_PERSISTENCE === "postgres";
 const postgresCapabilityMode = process.env.EPER_CAPABILITY_PERSISTENCE === "postgres";
 const workflowExecutionEnabled = process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true";
+const providerConnectionsEnabled = process.env.EPER_PROVIDER_CONNECTION_API_ENABLED === "true";
+const providerValidationEnabled = process.env.EPER_PROVIDER_VALIDATION_API_ENABLED === "true";
 const workflowRoleDelegationEnabled = process.env.EPER_WORKFLOW_ROLE_DELEGATION_API_ENABLED === "true";
 const platformCustomerAdminEnabled = process.env.EPER_PLATFORM_CUSTOMER_ADMIN_API_ENABLED === "true";
 const platformApplicationRemediationEnabled = process.env.EPER_PLATFORM_APPLICATION_REMEDIATION_API_ENABLED === "true";
@@ -223,7 +229,26 @@ if (customerOidcEnabled) {
   });
 }
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled;
+if ((providerConnectionsEnabled || providerValidationEnabled) && (!paymentPool || auditMode !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres")) {
+  throw new Error("PROVIDER_CONNECTION_API_REQUIRES_POSTGRES_AUDIT_AND_DURABLE_CUSTOMER_IDENTITY_ASSIGNMENTS");
+}
+const providerConnectionRepository = providerConnectionsEnabled && paymentPool
+  ? new PostgresProviderConnectionRepository(paymentPool)
+  : undefined;
+if (providerValidationEnabled && (process.env.NODE_ENV === "production" || !providerConnectionsEnabled ||
+    process.env.EPER_PROVIDER_VALIDATION_MODE !== "synthetic")) {
+  throw new Error("PROVIDER_VALIDATION_API_REQUIRES_PROVIDER_API_AND_EXPLICIT_SYNTHETIC_MODE");
+}
+const providerValidationService = providerValidationEnabled && paymentPool
+  ? new ProviderConnectionValidationService(
+      new PostgresProviderValidationStore(paymentPool),
+      new SyntheticProviderSecretResolver(),
+      new SyntheticProviderValidationAdapterRegistry(),
+    )
+  : undefined;
+
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
@@ -324,6 +349,7 @@ const server = createAppServer({
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore,
+  providerConnectionRepository, providerValidationService,
   workflowDefinitionPublisher, workflowExecutionService,
 });
 
