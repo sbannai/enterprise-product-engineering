@@ -48,3 +48,9 @@ test("rejects invalid permissions and expired credentials before persistence",as
  await assert.rejects(()=>store.issue({...ctx,credentialId:"cred-006",platformActorId:"operator-06",permissions:["provider_catalogue:manage"],expiresAt:new Date(Date.now()-1000).toISOString()}),/EXPIRY_INVALID/);
  assert.equal(calls.length,0);
 });
+
+test("rejects credential lifetimes beyond the persistence-layer maximum",async()=>{
+ const {store,calls}=fixture();
+ await assert.rejects(()=>store.issue({...ctx,credentialId:"cred-007",platformActorId:"operator-07",permissions:["provider_catalogue:manage"],expiresAt:new Date(Date.now()+31*24*60*60*1000).toISOString()}),/EXPIRY_INVALID/);
+ assert.equal(calls.length,0);
+});
