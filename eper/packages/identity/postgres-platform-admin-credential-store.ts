@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendAuditEventInTransaction, assertAuditStoreReady, type AuditEnvironment, type AuditSqlClient, type AuditSqlPool } from "../audit/audit-event-store.js";
 
 export const PLATFORM_ADMIN_CREDENTIAL_PERMISSIONS = [
-  "customer_admin:provision", "customer_admin:recover", "application:remediate", "provider_catalogue:manage",
+  "customer_admin:provision", "customer_admin:recover", "application:remediate", "provider_catalogue:manage", "platform_admin:credentials:manage",
 ] as const;
 export type PlatformAdminCredentialPermission = typeof PLATFORM_ADMIN_CREDENTIAL_PERMISSIONS[number];
 export interface PlatformAdminCredentialContext {
@@ -45,7 +45,7 @@ export class PostgresPlatformAdminCredentialStore {
    throw new Error("PLATFORM_ADMIN_CREDENTIAL_INPUT_INVALID");
   if(!validPermissions(input.permissions))throw new Error("PLATFORM_ADMIN_CREDENTIAL_PERMISSIONS_INVALID");
   const expiry=Date.parse(input.expiresAt);
-  if(!Number.isFinite(expiry)||expiry<=Date.now())throw new Error("PLATFORM_ADMIN_CREDENTIAL_EXPIRY_INVALID");
+  if(!Number.isFinite(expiry)||expiry<=Date.now()||expiry>Date.now()+30*24*60*60*1000)throw new Error("PLATFORM_ADMIN_CREDENTIAL_EXPIRY_INVALID");
   const bearerToken=randomBytes(32).toString("base64url"),hash=tokenHash(bearerToken),c=await this.pool.connect();
   try{
    await c.query("BEGIN");
