@@ -49,7 +49,9 @@ function validateIdentity(value: string, label: string): void {
 type PolicyRow = { policy: ProviderPolicy | string; version?: number | string };
 
 function parsePolicy(value: ProviderPolicy | string): ProviderPolicy {
-  return typeof value === "string" ? JSON.parse(value) as ProviderPolicy : value;
+  const policy = typeof value === "string" ? JSON.parse(value) as ProviderPolicy : value;
+  validatePolicy(policy);
+  return policy;
 }
 
 /**
