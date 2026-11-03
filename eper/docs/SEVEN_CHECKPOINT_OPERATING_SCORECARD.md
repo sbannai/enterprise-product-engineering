@@ -921,3 +921,12 @@ PR #379 fresh clone: 1,438 tests, 1,434 passed, 0 failed, 4 skipped; `dev:verify
 - Repository rulesets endpoint returns an empty list. Main branch-protection endpoint returns HTTP 403 to this integration and remains NOT ASSESSED. Production backup destination, RPO/RTO, independent restore rehearsal and second-engineer release/rollback are not demonstrated.
 
 No PR was merged, no approved requirement/chapter was changed, and no chargeable cloud resource or real external/provider action was used.
+
+
+### Validation trigger coverage correction — 2026-11-04
+
+- `.github/workflows/ci.yml` currently limits pull-request base branches to `main` and `reconcile/payment-153-168-integration`.
+- `.github/workflows/eper-integrated-validation.yml` currently limits pull-request base branches to `main` and `integration/eper-348-350-355-candidate`.
+- The stacked provider PRs target `feat/provider-payload-encryption-boundary` (#379), `feat/durable-encrypted-provider-payload-store` (#381) and `test/provider-payload-rls-role-proof` (#382). Those base branches are excluded by both filters. This explains why their exact-head runs include provider lifecycle/fresh-clone/matrix evidence but no same-head EPER CI or integrated gate; it is a trigger-coverage gap, not a failed run.
+- The provider lifecycle workflow has no restrictive base-branch filter and did run successfully on each provider PR head.
+- Next action: deliberately extend the CI/integrated pull-request base-branch filters for the approved stack, or consolidate the complete provider stack onto one main-targeted validation candidate. Do not interpret a missing integrated run as a green result.
