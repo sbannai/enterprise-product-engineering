@@ -32,7 +32,7 @@ function fixture({ status = "ACTIVE", providerStatus = "ACTIVE", version = 1, su
         id = values[1]; currentStatus = "PENDING_VALIDATION"; currentVersion = 1;
         return { rows: [row()], rowCount: 1 };
       }
-      if (sql.includes("SELECT c.provider_key, c.connection_status, d.capabilities")) {
+      if (sql.includes("SELECT c.provider_key, c.connection_status, d.provider_status, d.capabilities")) {
         return { rows: [{ provider_key: "mail-provider", connection_status: currentStatus, provider_status: providerStatus, capabilities: supported }], rowCount: 1 };
       }
       if (sql.includes("SELECT application_id FROM eper_provider_connection_applications")) {
