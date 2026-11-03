@@ -257,9 +257,9 @@ export class PostgresProviderConnectionRepository {
       await this.setApplicationContext(client, input.applicationId);
       const connection = await client.query<{
         provider_key: string; connection_status: ProviderConnectionStatus;
-        capabilities: string[] | string;
+        provider_status: string; capabilities: string[] | string;
       }>(
-        `SELECT c.provider_key, c.connection_status, d.capabilities
+        `SELECT c.provider_key, c.connection_status, d.provider_status, d.capabilities
          FROM eper_provider_connections c
          JOIN eper_provider_definitions d ON d.provider_key = c.provider_key
          WHERE c.tenant_id = $1 AND c.connection_id = $2
@@ -268,6 +268,7 @@ export class PostgresProviderConnectionRepository {
       );
       const row = connection.rows[0];
       if (!row) throw new ProviderConnectionNotFoundError();
+      if (row.provider_status !== "ACTIVE") throw new Error("PROVIDER_DEFINITION_NOT_ACTIVE");
       if (row.connection_status !== "ACTIVE" && row.connection_status !== "PENDING_VALIDATION" && row.connection_status !== "DEGRADED") throw new Error("PROVIDER_CONNECTION_NOT_ACTIVE");
       const supported = new Set(typeof row.capabilities === "string"
         ? JSON.parse(row.capabilities) as string[] : row.capabilities);
