@@ -196,7 +196,7 @@ test("public UAT capability API stays disabled unless explicitly acknowledged", 
 });
 
 test("public UAT capability API requires bearer token and explicit public-endpoint acknowledgement", async () => {
-  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK"];
+  const keys = ["EPER_UAT_API_ENABLED", "EPER_UAT_API_TOKEN", "EPER_UAT_TENANT_ID", "EPER_UAT_PRINCIPAL_ID", "EPER_UAT_PUBLIC_ENDPOINT_ACK", "EPER_UAT_APPLICATION_ID", "EPER_UAT_ROLE_KEY", "EPER_CAPABILITY_ENTITLEMENTS_REQUIRED", "EPER_REQUIREMENT_MODULE_MAP_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   Object.assign(process.env, {
     EPER_UAT_API_ENABLED: "true",
