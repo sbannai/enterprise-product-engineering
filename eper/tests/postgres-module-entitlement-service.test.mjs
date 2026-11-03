@@ -21,7 +21,7 @@ function makePool(row) {
         tariff_assignment_status: "active",
         tariff_starts_at: "2026-10-01T00:00:00Z",
         tariff_ends_at: null,
-        max_applications: 1,
+        tariff_max_applications: 1,
         active_application_count: 1,
         ...row,
       }], rowCount: 1 };
