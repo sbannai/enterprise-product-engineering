@@ -7,12 +7,13 @@ import {
 } from "../dist/packages/integrations/postgres-provider-operation-repository.js";
 
 const stamp = "2026-11-03T12:00:00.000Z";
-function fixture({ existing = null, claim = null, outcome = null, renewed = null } = {}) {
+function fixture({ existing = null, claim = null, outcome = null, renewed = null, recovered = [] } = {}) {
   const calls = [];
   let stored = existing;
   let claimed = claim;
   let savedOutcome = outcome;
   let savedRenewal = renewed;
+  let savedRecovered = recovered;
   const row = (status = "QUEUED", overrides = {}) => ({
     operation_id: "00000000-0000-4000-8000-000000000001",
     tenant_id: "tenant-a", application_id: "app-a",
@@ -36,6 +37,9 @@ function fixture({ existing = null, claim = null, outcome = null, renewed = null
       }
       if (sql.includes("FROM eper_provider_operations") && sql.includes("FOR SHARE")) {
         return { rows: stored ? [stored] : [], rowCount: stored ? 1 : 0 };
+      }
+      if (sql.includes("WITH exhausted_lease AS")) {
+        return { rows: savedRecovered, rowCount: savedRecovered.length };
       }
       if (sql.includes("WITH candidate AS")) {
         return { rows: claimed ? [claimed] : [], rowCount: claimed ? 1 : 0 };
@@ -123,6 +127,7 @@ test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
   assert.equal(claimed.attemptCount, 1);
   assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF o SKIP LOCKED")));
   assert.ok(calls.some(call => call.sql.includes("o.lease_expires_at <= NOW()")));
+  assert.ok(calls.some(call => call.sql.includes("o.attempt_count < $5") && call.values[4] === 5));
   assert.ok(calls.some(call => call.sql.includes("fencing_token=o.fencing_token+1") && call.values[2] === 90 && call.values[3] === "worker-1"));
   assert.ok(calls.some(call => call.sql.includes("b.binding_status='ACTIVE'") && call.sql.includes("pc.connection_status='ACTIVE'") && call.sql.includes("b.allowed_capabilities ? o.capability_key")));
   assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'")));
@@ -135,6 +140,46 @@ test("worker returns null when no due operation is available", async () => {
     tenantId: "tenant-a", applicationId: "app-a", workerId: "worker-1", auditEnvironment: "sandbox",
   });
   assert.equal(claimed, null);
+});
+
+test("expired leases at the retry limit move to NEEDS_ATTENTION and are audited", async () => {
+  const exhausted = {
+    operation_id: "00000000-0000-4000-8000-000000000001",
+    tenant_id: "tenant-a", application_id: "app-a",
+    connection_id: "00000000-0000-4000-8000-000000000002",
+    capability_key: "email.send", capability_version: "1",
+    idempotency_key: "mail-001", correlation_id: "corr-001",
+    operation_status: "NEEDS_ATTENTION", request_digest: "a".repeat(64), payload_reference: "payload-ref-0001",
+    provider_reference: null, lease_owner: null, lease_expires_at: null,
+    fencing_token: 5, attempt_count: 5, available_at: stamp,
+    last_error_code: "PROVIDER_OPERATION_LEASE_ATTEMPTS_EXHAUSTED",
+    created_at: stamp, updated_at: stamp,
+  };
+  const { repository, calls } = fixture({ recovered: [exhausted] });
+  const result = await repository.recoverExpiredLeases({
+    tenantId: "tenant-a", applicationId: "app-a", maxAttempts: 5, batchSize: 20,
+    auditEnvironment: "sandbox",
+  });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].status, "NEEDS_ATTENTION");
+  assert.equal(result[0].leaseOwner, null);
+  assert.equal(result[0].fencingToken, 5);
+  assert.equal(result[0].lastErrorCode, "PROVIDER_OPERATION_LEASE_ATTEMPTS_EXHAUSTED");
+  assert.ok(calls.some(call => call.sql.includes("lease_expires_at <= NOW()") && call.sql.includes("FOR UPDATE SKIP LOCKED")
+    && call.values[2] === 5 && call.values[3] === 20));
+  assert.ok(calls.some(call => call.values.includes("provider.operation.needs_attention")));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("expired lease recovery validates retry and batch bounds before database access", async () => {
+  const { repository, calls } = fixture();
+  await assert.rejects(() => repository.recoverExpiredLeases({
+    tenantId: "tenant-a", applicationId: "app-a", maxAttempts: 0, auditEnvironment: "sandbox",
+  }), /PROVIDER_OPERATION_MAX_ATTEMPTS_INVALID/);
+  await assert.rejects(() => repository.recoverExpiredLeases({
+    tenantId: "tenant-a", applicationId: "app-a", batchSize: 501, auditEnvironment: "sandbox",
+  }), /PROVIDER_OPERATION_RECOVERY_BATCH_INVALID/);
+  assert.equal(calls.length, 0);
 });
 
 test("worker can renew only its live lease generation", async () => {
