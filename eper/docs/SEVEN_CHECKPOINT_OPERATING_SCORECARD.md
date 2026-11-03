@@ -511,3 +511,16 @@ The three branches are not additive independent patches. Their changed-file sets
 5. Only after that evidence and review, reconsider draft status and merge sequencing. Keep production UAT authorization separate from engineering CI completion.
 
 No PR was merged, no workflow dispatch was initiated, no external provider was activated, and no chargeable AWS resource was provisioned as part of this snapshot.
+
+
+## Integrated-baseline diagnostic — 2026-11-03 07:00 IST
+
+The documentation PR #356 head `3746a97deec99351a1692e801a2cabe7864c7005` triggered a full same-commit integrated workflow. This run is a check of the current main-based baseline plus the documentation-only change; it is **not** a combined #348/#350/#355 integration candidate.
+
+- G9 reconciliation, release-candidate build, container runtime smoke, six-family HTTP smoke, CI and the separate 228-requirement/38-chapter pilot matrix all completed successfully.
+- The integrated gate failed in the Payment API + PostgreSQL + receipt-contract lane. Its full suite reported 1,180 passing, 1 failing and 2 skipped tests.
+- The single failure is `live PostgreSQL commercial access guard denies tariff overage...` at `eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs:79`. Expected `{allowed:false, reason:"tariff_overage"}`; actual `{allowed:true, reason:"allowed"}`.
+- Root cause confirmed by source comparison: main's `PostgresModuleEntitlementService` does not load/evaluate the customer's tariff assignment and active-application count before allowing module access. The #348 head adds the tariff lookup and `evaluateCustomerTariffAccess` enforcement in both module and add-on checks.
+- #348's exact-head PostgreSQL integration run `41491401877` has a successful job, including the dedicated step **“Exercise PostgreSQL customer tariff enforcement at protected access checks”** and the module/add-on tariff lifecycle step. This is branch-level proof for the fix, not proof that the three PRs have been integrated together.
+
+**Disposition:** do not merge #356 or declare the baseline integrated gate green on the basis of the other successful lanes. Treat this as a known main-baseline tariff-enforcement defect whose implementation is present on #348 and has a passing dedicated PostgreSQL validation step. The next closure is to validate that implementation together with #350 and #355 on one consolidated exact-head candidate, then rerun the full suite and pilot matrix. No code was changed by this diagnostic note.
