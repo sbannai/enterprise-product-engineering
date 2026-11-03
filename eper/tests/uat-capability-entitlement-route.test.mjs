@@ -31,7 +31,6 @@ async function withUatApi({ moduleEntitlementService, configured = true, entitle
   if (entitlementRequired === undefined) delete process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED;
   else process.env.EPER_CAPABILITY_ENTITLEMENTS_REQUIRED = entitlementRequired;
 
-  });
   const server = createAppServer({ moduleEntitlementService });
   try {
     await new Promise((resolve, reject) => {
