@@ -158,3 +158,15 @@ test("role assignment directory lists tenant/application history under transacti
   assert.ok(calls.some(c => c.sql.includes("set_config('eper.application_id'")));
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
+
+
+test("permission check accepts explicit provider connection permission keys", async () => {
+  const { calls, pool } = fixture();
+  const allowed = await new PostgresWorkflowActorRoleAssignmentStore(pool)
+    .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "provider.connection.rotate");
+  assert.equal(allowed, true);
+  const query = calls.find(call => call.sql.includes("SELECT EXISTS"));
+  assert.deepEqual(query.values, [
+    input.tenantId, input.applicationId, input.actorId, input.roleId, "provider.connection.rotate",
+  ]);
+});
