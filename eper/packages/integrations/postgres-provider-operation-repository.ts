@@ -216,11 +216,18 @@ export class PostgresProviderOperationRepository {
       await this.scope(client, tenantId, applicationId);
       const claimed = await client.query<OperationRow>(
         `WITH candidate AS (
-           SELECT operation_id FROM eper_provider_operations
-           WHERE tenant_id=$1 AND application_id=$2
-             AND operation_status IN ('QUEUED','RETRYING') AND available_at <= NOW()
-           ORDER BY available_at,created_at,operation_id
-           FOR UPDATE SKIP LOCKED LIMIT 1
+           SELECT o.operation_id FROM eper_provider_operations o
+           JOIN eper_provider_connection_applications b
+             ON b.tenant_id=o.tenant_id AND b.application_id=o.application_id
+            AND b.connection_id=o.connection_id
+           JOIN eper_provider_connections pc
+             ON pc.tenant_id=o.tenant_id AND pc.connection_id=o.connection_id
+           WHERE o.tenant_id=$1 AND o.application_id=$2
+             AND o.operation_status IN ('QUEUED','RETRYING') AND o.available_at <= NOW()
+             AND b.binding_status='ACTIVE' AND pc.connection_status='ACTIVE'
+             AND b.allowed_capabilities ? o.capability_key
+           ORDER BY o.available_at,o.created_at,o.operation_id
+           FOR UPDATE OF o SKIP LOCKED LIMIT 1
          )
          UPDATE eper_provider_operations o
          SET operation_status='DISPATCHING',attempt_count=o.attempt_count+1,
