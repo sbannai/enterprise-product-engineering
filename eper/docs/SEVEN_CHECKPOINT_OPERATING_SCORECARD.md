@@ -647,3 +647,18 @@ This section supersedes the preceding “Exact-head validation status for this s
 - Fresh-clone verification [41657363742](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657363742) ran `npm run dev:verify` on candidate `2c426de8b63e437ffb186ed4887da76b4b704719`, with 1,422 passed, 0 failed and 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS` and `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`. Its Git tree SHA `0c01985a303e9348e728acd04b0a55a80020f9a9` matches main's tree. This is exact-tree evidence, not a run whose commit SHA is the main merge commit.
 
 These are technical validation results only. They do not establish production readiness, business acceptance, or authorize UAT. Branch protection remains disabled and requires repository-administrator action. No chargeable cloud resources or real external/provider actions were used.
+
+
+## Branch-ref reconciliation correction — 2026-11-03 15:19 UTC
+
+The first 22-branch comparison has been completed against main SHA `a3635ffbb522488163904c1236fed294b0a2af17`. The earlier narrative count needs correction: it identified **17 zero-ahead branches** and **5 unique-commit branches**, not 18 and 4. The five unique branches contain six commits in total:
+
+- `fix/b01-lld-evidence-intermediate-state` — 1 unique commit; one test file differs from main. The mainline test has since broadened allowed baseline states, so do not transplant blindly.
+- `fix/eper-ci-node-types` — 1 unique commit; package metadata is older than main and omits current scripts and PostgreSQL dependency.
+- `release/eper-0.1.0-rc2` — 1 unique commit; release workflow predates current mainline concurrency, permissions, timeout, container build and smoke-test safeguards.
+- `release/eper-0.1.0-rc4` — 2 unique commits; release workflow predates the same current safeguards. Review the packaging/versioning delta before disposition.
+- `work/ch463-contract-draft-domain-reconciliation-2026-10-19` — 1 unique commit; Chapter 463 contract draft is materially superseded by the current mainline draft, including the approved source-precedence correction, but retain its historical decision rationale for audit.
+
+The other 17 branches are zero-ahead against main by Git ancestry. This is a strong candidate classification only, not permission to delete: refs may still be used by tags, workflow triggers, deployment/release records, or external collaborators. Preserve them pending reference and owner checks.
+
+This correction supersedes the previous sentence stating 18 zero-ahead and four exceptions. The inventory covers 22 unreferenced branch refs found in the four-page branch listing, not every branch in the repository.
