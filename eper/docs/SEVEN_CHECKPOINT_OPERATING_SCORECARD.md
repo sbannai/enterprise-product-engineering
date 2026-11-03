@@ -524,3 +524,15 @@ The documentation PR #356 head `3746a97deec99351a1692e801a2cabe7864c7005` trigge
 - #348's exact-head PostgreSQL integration run `41491401877` has a successful job, including the dedicated step **“Exercise PostgreSQL customer tariff enforcement at protected access checks”** and the module/add-on tariff lifecycle step. This is branch-level proof for the fix, not proof that the three PRs have been integrated together.
 
 **Disposition:** do not merge #356 or declare the baseline integrated gate green on the basis of the other successful lanes. Treat this as a known main-baseline tariff-enforcement defect whose implementation is present on #348 and has a passing dedicated PostgreSQL validation step. The next closure is to validate that implementation together with #350 and #355 on one consolidated exact-head candidate, then rerun the full suite and pilot matrix. No code was changed by this diagnostic note.
+
+
+## Controlled integration probe — 2026-11-03 07:10 IST
+
+A separate integration branch `integration/eper-348-350-355-candidate` was created at the exact #348 head `e726dca47dad27c278ad011abf59f98aff8eb8df`. Draft integration PR #357 proposes #350 head `1dca64617ec715de7ec90cff1bbaf57f87c3e7b7` on top of that branch; GitHub reports the PR as **not mergeable**. No merge was attempted.
+
+- Git comparison reports the branches diverged from merge base `51b803193c7009c1e7f8115cbb1022233285e940`: the #350 head is 65 commits ahead and 206 commits behind the #348-based integration branch.
+- The four previously identified shared files are independently changed on both sides: `eper/apps/api/main.ts`, `eper/apps/api/server.ts`, `eper/packages/workflows/module-entitlement-policy.ts`, and `eper/packages/workflows/postgres-module-entitlement-service.ts`.
+- #355 also diverges from the same #348-based integration branch (98 commits ahead, 206 behind) and changes the shared API and entitlement files. This confirms that the branches are not a clean sequential fast-forward chain.
+- The not-mergeable result is recorded as an integration blocker; it is not yet attributed to specific textual conflict hunks because the connector's PR metadata does not expose GitHub's conflict paths.
+
+**Disposition:** keep #348/#350/#355 and integration PR #357 unmerged. Do not use a blind PR merge or rewrite any source branch. A real Git merge/rebase workspace is required to resolve and test the shared files against a single candidate. Once conflict resolution is committed on the integration branch, run the full exact-head suite before considering any mainline merge. No source application files were changed in this probe.
