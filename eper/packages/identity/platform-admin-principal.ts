@@ -5,6 +5,7 @@ export const PLATFORM_ADMIN_PERMISSIONS = [
   "customer_admin:recover",
   "application:remediate",
   "provider_catalogue:manage",
+  "platform_admin:credentials:manage",
 ] as const;
 
 export type PlatformAdminPermission = typeof PLATFORM_ADMIN_PERMISSIONS[number];
