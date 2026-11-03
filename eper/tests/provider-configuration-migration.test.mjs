@@ -86,3 +86,12 @@ test("provider operation payload reference migration keeps legacy rows nullable 
   assert.match(source, /tenant_id, application_id, payload_reference/);
   assert.match(source, /independently authorized tenant\/application-scoped payload store/);
 });
+
+test("provider operation leases support expiry recovery and fencing generations", async () => {
+  const source = await readFile(new URL("../packages/audit/migrations/018_provider_operation_leases.sql", import.meta.url), "utf8");
+  assert.match(source, /ADD COLUMN IF NOT EXISTS lease_owner TEXT/);
+  assert.match(source, /ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ/);
+  assert.match(source, /ADD COLUMN IF NOT EXISTS fencing_token BIGINT NOT NULL DEFAULT 0/);
+  assert.match(source, /fencing_token >= 0/);
+  assert.match(source, /operation_status = 'DISPATCHING'/);
+});
