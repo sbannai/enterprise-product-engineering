@@ -13,7 +13,7 @@ export interface CustomerAssetScanWorkerOptions {
   scanner: CustomerAssetScanner;
   tenantId: string; applicationId: string; workerId: string; scannerServiceId: string;
   environment: AuditEnvironment; signal: AbortSignal;
-  pollIntervalMs?: number; leaseMs?: number; batchSize?: number; concurrency?: number;
+  pollIntervalMs?: number; leaseMs?: number; batchSize?: number; concurrency?: number; scanTimeoutMs?: number;
   onError?: (error: unknown) => void;
   onJob?: (result: { uploadSessionId: string; outcome: "completed" | "retry" | "dead_letter" | "lease_lost" }) => void;
 }
@@ -34,10 +34,12 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
   const leaseMs = options.leaseMs ?? 60_000;
   const batchSize = options.batchSize ?? 10;
   const concurrency = options.concurrency ?? 2;
+  const scanTimeoutMs = options.scanTimeoutMs ?? 120_000;
   if (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 100 || pollIntervalMs > 60_000 ||
       !Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000 ||
       !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 50 ||
-      !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 10) {
+      !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 10 ||
+      !Number.isInteger(scanTimeoutMs) || scanTimeoutMs < 1_000 || scanTimeoutMs > 900_000) {
     throw new Error("EPER_CUSTOMER_ASSET_WORKER_OPTIONS_INVALID");
   }
   while (!options.signal.aborted) {
@@ -45,7 +47,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
       const jobs = await options.repository.claimScanJobs({
         tenantId: options.tenantId, applicationId: options.applicationId,
         workerId: options.workerId, scannerServiceId: options.scannerServiceId,
-        environment: options.environment, limit: batchSize, leaseMs,
+        environment: options.environment, limit: Math.min(batchSize, concurrency), leaseMs,
       });
       for (let offset = 0; offset < jobs.length && !options.signal.aborted; offset += concurrency) {
         const batch = jobs.slice(offset, offset + concurrency);
@@ -72,16 +74,29 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             );
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
+            const scanController = new AbortController();
+            let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
-              outcome = await options.scanner.scan({
-                tenantId: options.tenantId, applicationId: options.applicationId,
-                assetId: session.assetId, uploadSessionId: job.uploadSessionId,
-                providerUploadReference: session.providerUploadReference,
-                checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-              }, job.correlationId);
+              const timeout = new Promise<never>((_, reject) => {
+                scanTimer = setTimeout(() => {
+                  scanController.abort();
+                  reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
+                }, scanTimeoutMs);
+              });
+              outcome = await Promise.race([
+                options.scanner.scan({
+                  tenantId: options.tenantId, applicationId: options.applicationId,
+                  assetId: session.assetId, uploadSessionId: job.uploadSessionId,
+                  providerUploadReference: session.providerUploadReference,
+                  checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+                }, job.correlationId, scanController.signal),
+                timeout,
+              ]);
             } catch (error) {
               options.onError?.(error);
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
+            } finally {
+              if (scanTimer) clearTimeout(scanTimer);
             }
             if (leaseLost || options.signal.aborted) {
               options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return;
