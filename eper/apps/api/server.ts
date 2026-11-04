@@ -2005,7 +2005,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 400, { error: "invalid_scan_claim_request" }); return;
         }
         const jobs = await options.customerAssetRepository.claimScanJobs({
-          tenantId, applicationId, workerId, limit, leaseMs,
+          tenantId, applicationId, workerId, scannerServiceId,
+          environment: options.adminConfigEnvironment ?? "sandbox", limit, leaseMs,
         });
         sendJson(request, response, 200, { jobs }); return;
       } catch {
