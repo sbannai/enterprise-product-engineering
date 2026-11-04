@@ -209,6 +209,7 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey]);
       const prior = await client.query<{ upload_session_id: string; asset_id: string }>(
         "SELECT upload_session_id, asset_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE",
         [input.tenantId, input.idempotencyKey],
@@ -259,6 +260,7 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-link:" + input.tenantId + ":" + input.applicationId + ":" + input.assetId]);
       const prior = await client.query<{ asset_id: string }>(
         "SELECT asset_id FROM eper_customer_asset_application_links WHERE tenant_id = $1 AND application_id = $2 AND asset_id = $3 FOR UPDATE",
         [input.tenantId, input.applicationId, input.assetId],
