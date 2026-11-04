@@ -1916,12 +1916,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             typeof body.idempotencyKey !== "string") {
           sendJson(request, response, 400, { error: "invalid_asset_upload_request" }); return;
         }
+        const pendingAsset = await options.customerAssetRepository.getPendingUploadAsset(identity.tenantId, applicationId, assetId);
+        if (!pendingAsset) { sendJson(request, response, 404, { error: "asset_not_found" }); return; }
+        if (pendingAsset.originalFileName !== body.fileName ||
+            pendingAsset.mimeType.toLowerCase() !== body.mimeType.toLowerCase() ||
+            pendingAsset.sizeBytes !== Number(body.sizeBytes)) {
+          sendJson(request, response, 409, { error: "asset_upload_metadata_mismatch" }); return;
+        }
         const grant = await startCustomerAssetUpload({
           tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
           environment: options.adminConfigEnvironment ?? "sandbox",
           correlationId: resolveApiRequestId(request), assetId,
-          expectedSizeBytes: Number(body.sizeBytes), idempotencyKey: body.idempotencyKey,
-          fileName: body.fileName, mimeType: body.mimeType,
+          expectedSizeBytes: pendingAsset.sizeBytes, idempotencyKey: body.idempotencyKey,
+          fileName: pendingAsset.originalFileName, mimeType: pendingAsset.mimeType,
         }, {
           repository: options.customerAssetRepository,
           issueGrant: assetUploadResolver,
