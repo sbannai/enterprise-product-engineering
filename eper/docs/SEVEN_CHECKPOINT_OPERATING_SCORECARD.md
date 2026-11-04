@@ -1342,7 +1342,7 @@ Every listed PR head was re-resolved from live PR metadata. Current-head Actions
 
 | PR | Exact head | Base | Current exact-head evidence |
 |---|---|---|---|
-| #377 | `90c76bcf100693f98f01bc6ec16f24b1cb4d4ef0` | main | CI [41778257052], integrated [41778256981], matrix [41778257110], G9 [41778257056], release [41778257101] succeeded on this scorecard snapshot. |
+| #377 | self-reference — resolve live head from PR metadata; do not pin the scorecard's own changing SHA | main | Current exact-head CI, integrated, matrix, G9, QA, HTTP, container and release evidence is maintained in PR #377 metadata; the file update itself creates a new head. |
 | #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | main | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039] succeeded; 1,433 tests / 1,429 passed / 0 failed / 4 skipped; restore 75/75. |
 | #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | #378 | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] succeeded; 1,438 / 1,434 passed / 0 failed / 4 skipped; restore 76/76. Payload-to-operation database constraint remains absent. |
 | #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | main | Integrated [41763251674], matrix [41763251774], G9 [41763251777] succeeded; documentation/design only. |
