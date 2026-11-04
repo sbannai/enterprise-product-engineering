@@ -2252,3 +2252,83 @@ Fresh-clone [41893090407](https://github.com/sbannai/enterprise-product-engineer
 7. **Release/continuity — RED.** Main protection is explicitly disabled (`protected=false`, required-check enforcement `off`); rulesets collection is empty. The continuity charter remains proposed/owner-review-required. Production recovery and second-engineer clean-clone build/test/release/rollback are not evidenced.
 
 No approved requirement or chapter was changed. No PR was merged, no branch was deleted or force-updated, no repository setting was changed, no chargeable cloud resource was provisioned and no real external/provider action was invoked by this refresh.
+
+
+## Latest exact-head delivery refresh — 2026-11-05 01:10 IST
+
+### Repository baseline
+
+- Dynamically resolved `main`: `2c380d79c55c9183a42ed534ffd1a504f7d41316`; tree `0c01985a303e9348e728acd04b0a55a80020f9a9`.
+- Main check-runs: all 13 returned check-runs completed successfully on that exact SHA.
+- Main branch metadata explicitly reports `protected=false` and required-status-check enforcement `off`; repository rulesets endpoint returns an empty collection.
+- PR #306 merge SHA `6e8dd438e5091b1802d65e4f29951389fe077859` and PR #310 merge SHA `88b9708d748c19dc80a1a2d7ad4960914451db7e` are both verified ancestors of current main (compare: main is ahead, zero behind).
+
+### Current open PR inventory
+
+The live open-pull request query returned the following current heads. Exact-head check-run reads were performed for every row; all returned check-run `head_sha` values matched the listed SHA. Successful checks are not carried across head changes.
+
+| PR | Exact head | Delivery focus |
+|---|---|---|
+| #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | Customer workspace upload UI and durable role authorization |
+| #398 | `f85a7676a12d9ba9a003de6603c34f86460fa2c4` | Provider runtime registry and worker composition seam |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | Provider/asset integration stack |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | PostgreSQL customer asset download authorization |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | Independent exhausted-scan recovery |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | Tenant-isolated asset repository |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | Provider-neutral storage catalogue contract |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | Additive customer asset requirements |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Customer asset and workflow-driven application UX requirements |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | Upload idempotency reservation |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | Restricted-role RLS on payload-integrity base |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | Provider worker/keyring on integrity/RLS base |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | Payload-operation referential integrity |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | Database engine evaluation plan |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Durable encrypted PostgreSQL payload store |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | Actor-scoped customer work queue |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Encrypted provider-payload boundary |
+| #377 | `da9a55009f5338ad49f5fd0f012f21464947fd3b` | This scorecard |
+
+All current open PR heads have completed relevant exact-head Actions. Where an integrated workflow skips its duplicate matrix lane, the separate matrix workflow passed on the same head. Relevant fresh-clone, PostgreSQL, provider-lifecycle, browser, matrix and integrated job logs were inspected. No failing exact-head check was returned. The #377 check-run set itself is 13 successful plus one duplicate matrix skip, with the separate exact-head matrix successful. Its comparison to current main is 47 ahead / 0 behind before this addendum; the new file commit below requires its own validation.
+
+### New customer upload journey — PR #399
+
+PR #399 is a stacked child of #393, based on exact #393 head `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e`; current PR head is `a58a47303d2b6c54bbe9793afc8d3775fbfafc74`. It remains draft and mergeable.
+
+Delivered:
+- Customer Client Assets workspace upload form for PNG/JPG/WEBP/GIF, MP4/MOV/WEBM, PDF, DOCX, PPTX and XLSX.
+- Assigned-application selection, application-restricted/customer-shared scope, display name, transfer status and post-upload verification/scanning status.
+- Short-lived upload capability transfer with browser credentials omitted, redirects rejected and no referrer.
+- Server validates HTTPS, exact configured storage hostname, PUT/POST method, bounded expiry (maximum 15 minutes) and safe upload headers.
+- Server rechecks current tenant/application role permission on metadata creation, upload-grant issuance and completion; session-bound CSRF is required for all browser mutations in PostgreSQL identity mode.
+- New `customer.asset.upload` permission is available in durable workflow role definitions and role-assignment checks. OIDC session labels are not authorization.
+
+Exact-head evidence:
+- Fresh-clone [41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981): `npm run dev:verify`; 1,517 tests / 1,513 passed / 0 failed / 4 skipped; all seven PostgreSQL migration groups including identity applied and repeated; disposable PostgreSQL backup/restore smoke PASS, source/restored base-table counts 80/80.
+- Browser [41898030812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030812): 1/1 customer OIDC workspace/support/logout/revocation browser scenario passed. The same job log includes durable upload API tests for metadata, grant and verification with CSRF and role allow/deny.
+- Matrix [41898030900](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030900): 259 pilot tests passed / 0 failed; 28 HTTP checks passed.
+- PostgreSQL payment integration [41898030614](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030614) and payment contracts [41898030660](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030660): successful.
+
+Boundary: the upload API/UI is tested with injected synthetic storage/verification adapters. The current API composition root does not yet supply concrete `assetUploadPort`, `assetUploadVerificationPort` or `assetMalwareScanPort` implementations. No production storage driver or malware scanner is added; no live binary upload was exercised. Pending uploads remain unavailable until object verification and a clean scan. PR #399 must follow #393 in the stack.
+
+### Provider runtime composition — PR #398
+
+Current exact head: `f85a7676a12d9ba9a003de6603c34f86460fa2c4`.
+
+The branch adds `provider-runtime-worker-composition.ts`. The factory requires an explicit runtime registry and routes dispatch through exact provider key, adapter key, semantic version and capability. It preserves idempotency/correlation data. An empty registry parks work as `NEEDS_ATTENTION` without consuming retry attempts. It does not discover adapters, resolve credentials, load SDKs or perform external actions.
+
+Exact-head evidence:
+- Fresh clone [41893090407](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41893090407): 1,525 tests / 1,521 passed / 0 failed / 4 skipped; `npm run dev:verify`; all seven migration groups including identity; disposable PostgreSQL 16 backup/restore PASS with 80/80 base tables.
+- Provider lifecycle [41893090220](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41893090220), PostgreSQL integration [41893090275](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41893090275) and matrix [41893089871](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41893089871): successful on this exact head.
+- PR #398 remains draft. An independently hosted provider process, real storage/scanner drivers, secret resolution, process supervision, metrics/alerts and recovery rehearsal remain outstanding.
+
+### Seven-pointer disposition
+
+1. **v34-to-228 — AMBER.** Preserve the approved 228 requirements and 38 chapters. The crosswalk still has 45 v34 source candidates, 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. Owner disposition remains required; no automatic baseline expansion.
+2. **Fresh-clone setup — GREEN for local/CI.** #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`, verified ancestor of main. Current #399/#398 fresh-clone evidence includes `npm run dev:verify`, seven migration groups and disposable restore. A second engineer has not independently completed handover.
+3. **PostgreSQL durability — AMBER.** Seven groups including identity, migration repeatability, live PostgreSQL integration and disposable backup/restore are evidenced. Production off-host backup, key custody/retention, approved RPO/RTO and independent restore rehearsal remain unproven.
+4. **Identity/OIDC/sessions — AMBER.** #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e` is a verified main ancestor. Browser routes, secure cookies, CSRF, durable sessions/revocation and tenant/application role/assignment checks have synthetic-IdP browser evidence. Production IdP onboarding, production JWKS rotation and credential lifecycle remain unproven.
+5. **Customer workspace/support — AMBER, improved by #399.** Customer upload form and API journey are implemented and synthetic-adapter tested; server rechecks role and CSRF. Concrete storage upload/verification/scanner drivers and actual binary-transfer E2E remain. Existing ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note visibility and export tests remain. SLA timers, breach detection and escalation are not evidenced.
+6. **Scheduler/workflow operations — AMBER.** Leases/fencing, idempotency, retry/dead-letter/recovery and provider registry/worker composition tests exist. Independent provider-worker host, production dispatcher approval, supervision/restart, metrics/alerts and operational recovery rehearsal remain.
+7. **Release/continuity — RED.** Main metadata explicitly reports `protected=false` and required-check enforcement `off`; repository rulesets collection is empty. Production restore, key custody/RPO/RTO and second-engineer build/test/release/rollback remain unproven. The continuity charter remains proposed / owner review required.
+
+No approved requirement or chapter was changed. No PR was merged, no branch was deleted or force-updated, no repository setting was changed, no chargeable cloud resource was provisioned and no real external/provider action was invoked by this refresh.
