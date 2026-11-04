@@ -1787,3 +1787,12 @@ The provider stack is #378 → #379 → #390 → #391 → #392. #392 is based on
 - No repository protection settings were changed.
 - No chargeable cloud resource or real external/provider action was used.
 - Automated technical checks do not authorize business acceptance, production readiness or UAT.
+
+
+## Exact-head validation and PR inventory correction — 2026-11-04 18:30 IST
+
+The scorecard commit `9c8a8e89d04f1c5ada10db566e2542e53a1f11d2` has now completed exact-head validation. Its applicable workflows all completed successfully: [EPER CI 41834857690](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857690), [same-commit integrated gate 41834857716](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857716), [separate 228/38 matrix 41834857691](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857691), [G9 reconciliation 41834857725](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857725), [release artifact 41834857695](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857695), [six-family HTTP 41834857667](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857667), [container smoke 41834857672](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857672), and [controlled QA 41834857704](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41834857704). The integrated workflow's duplicate matrix job was skipped; the separate matrix completed with 259 passed, 0 failed, 28 HTTP checks passed and no failed chapters. G9 tests: 5 passed, 0 failed. Release candidate was packaged and checksummed; no deployment occurred.
+
+**Open-PR inventory correction:** PR #382 has since been closed unmerged as superseded by #392. It is no longer part of the current open-PR register. Its branch has not been deleted. Worker/keyring functionality is carried on the current #392 head `312a9358150c1967feba9307f1b71fbffd8cb8f5`; #392 exact-head fresh-clone, provider lifecycle, PostgreSQL payment and matrix workflows all pass. The active open-PR register now excludes #382.
+
+This correction changes the scorecard file again. All green evidence above belongs to the prior exact scorecard head `9c8a8e89d04f1c5ada10db566e2542e53a1f11d2`; it must not be treated as validation of the new file commit until the new exact head's Actions complete.
