@@ -232,3 +232,14 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 - The claim endpoint returns only claimed job identifiers, correlation IDs, attempt numbers and lease expiry. It does not expose provider object references.
 - The scan processing endpoint now requires the same worker-instance identity and resolves the upload session only when that exact worker currently owns an unexpired lease. This prevents unclaimed, expired or differently-owned jobs from being scanned through the internal route.
 - The repository still needs an end-to-end transaction that couples scan-result persistence with job completion, plus worker-side polling/dispatch implementation, retry timeout handling and live PostgreSQL concurrency/restart validation. The endpoints provide the authenticated control plane; they do not create a continuously running worker process.
+
+
+### Atomic scan finalization update (2026-11-04)
+
+- `recordScanResult` now requires the authenticated worker-instance ID and locks the upload session, asset and scan-job row together under tenant/application scope.
+- A result is accepted only while the scan job is leased by that exact worker and the lease is still unexpired. The asset transition, scan-job final state and durable audit event are committed in one PostgreSQL transaction; any failure rolls the entire operation back.
+- Clean, infected and not-required outcomes finalize the job as completed in the same transaction as the asset state transition. A terminal scanner error finalizes the job as dead-letter and the asset as failed/quarantined in that same transaction.
+- Retryable scanner errors move the job back to pending with bounded backoff. When the persisted attempt count reaches the maximum, the retry operation retains the active lease long enough for the same worker to atomically persist the terminal error and dead-letter result; a crash before finalization leaves the lease to expire for operational recovery rather than recording a partial asset result.
+- Retry backoff uses the attempt count read from the persisted leased job, never a worker-supplied request field. Completion and retry mutations both reject expired leases.
+- The API no longer persists a scan result and then separately completes the scan job. It delegates both transitions to the repository transaction.
+- API contract tests verify the worker identity is passed to atomic finalization. These injected-repository tests are not a substitute for live PostgreSQL transaction/concurrency tests; those remain required before declaring the lifecycle production-ready.
