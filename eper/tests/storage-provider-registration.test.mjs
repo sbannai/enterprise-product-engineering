@@ -97,3 +97,23 @@ test("storage registration rejects duplicate capabilities and unsupported adapte
     /STORAGE_PROVIDER_IDENTITY_INVALID/,
   );
 });
+
+test("storage registration rejects malformed runtime values with stable errors", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE[0];
+  assert.throws(
+    () => validateStorageProviderRegistration({ ...provider, displayName: null }, explicitProviderAllowlist[provider.providerKey]),
+    /STORAGE_PROVIDER_IDENTITY_INVALID/,
+  );
+  assert.throws(
+    () => validateStorageProviderRegistration({ ...provider, capabilities: null }, explicitProviderAllowlist[provider.providerKey]),
+    /STORAGE_PROVIDER_CAPABILITIES_INVALID/,
+  );
+  assert.throws(
+    () => validateStorageProviderRegistration({ ...provider, authModes: [null] }, explicitProviderAllowlist[provider.providerKey]),
+    /STORAGE_PROVIDER_AUTH_MODES_INVALID/,
+  );
+  assert.throws(
+    () => validateStorageProviderRegistration({ ...provider, configurationSchema: null }, explicitProviderAllowlist[provider.providerKey]),
+    /STORAGE_PROVIDER_SECRET_METADATA_FORBIDDEN/,
+  );
+});
