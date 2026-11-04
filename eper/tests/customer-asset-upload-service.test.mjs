@@ -34,6 +34,7 @@ test("upload start persists provider reference before returning capability", asy
         stored = reservation;
         assert.equal(reservation.providerUploadReference, "opaque-provider-object-001");
         assert.equal(reservation.uploadSessionId.length, 36);
+        return reservation.uploadSessionId;
       },
     },
   });
@@ -58,7 +59,7 @@ test("upload start fails closed when provider cannot issue a grant", async () =>
   let reserved = false;
   const result = await startCustomerAssetUpload(input, {
     issueGrant: async () => null,
-    repository: { reserveUpload: async () => { reserved = true; } },
+    repository: { reserveUpload: async (reservation) => { reserved = true; return reservation.uploadSessionId; } },
   });
   assert.equal(result, null);
   assert.equal(reserved, false);
@@ -72,7 +73,7 @@ test("upload start rejects invalid size, idempotency and excessive expiry", asyn
       url: "https://storage.example.test/upload", method: "PUT",
       expiresAt: new Date(1_700_001_000_000).toISOString(), headers: {},
     }),
-    repository: { reserveUpload: async () => {} },
+    repository: { reserveUpload: async (reservation) => reservation.uploadSessionId },
   };
   await assert.rejects(() => startCustomerAssetUpload({ ...input, expectedSizeBytes: 0 }, dependencies), /EXPECTED_SIZE_INVALID/);
   await assert.rejects(() => startCustomerAssetUpload({ ...input, idempotencyKey: "short" }, dependencies), /IDEMPOTENCY_KEY_INVALID/);
