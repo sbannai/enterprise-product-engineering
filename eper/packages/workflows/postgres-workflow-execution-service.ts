@@ -439,6 +439,49 @@ export class PostgresWorkflowExecutionService {
           LIMIT $4 OFFSET $5`,
         [input.tenantId, input.applicationId, input.actorId, limit, offset],
       );
+      // Window counts are absent when OFFSET is beyond the last row. Preserve
+      // the true total for clients paging to an empty final page.
+      const totalResult = result.rows.length ? null : await client.query<{ total_count: number | string }>(
+        `SELECT COUNT(*)::int AS total_count
+           FROM eper_workflow_instances i
+           JOIN eper_workflow_definition_versions v
+             ON v.tenant_id = i.tenant_id AND v.application_id = i.application_id
+            AND v.workflow_id = i.workflow_id
+            AND v.definition_version = i.definition_version
+            AND v.definition_digest = i.definition_digest
+           LEFT JOIN LATERAL jsonb_array_elements(v.definition->'activities') AS current_activity(activity)
+             ON current_activity.activity->>'id' = i.current_activity_id
+          WHERE i.tenant_id = $1 AND i.application_id = $2
+            AND (
+              i.created_by = $3
+              OR EXISTS (
+                SELECT 1 FROM eper_workflow_actor_role_assignment r
+                  JOIN eper_actor_application_assignment aa
+                    ON aa.tenant_id = r.tenant_id AND aa.application_id = r.application_id
+                   AND aa.actor_id = r.actor_id AND aa.assignment_status = 'active'
+                  JOIN eper_tenant_application_assignment ta
+                    ON ta.tenant_id = r.tenant_id AND ta.application_id = r.application_id
+                   AND ta.assignment_status = 'active'
+                  JOIN eper_workflow_role_definition rd
+                    ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+                   AND rd.role_id = r.role_id AND rd.role_status = 'active'
+                 WHERE r.tenant_id = i.tenant_id AND r.application_id = i.application_id
+                   AND r.actor_id = $3 AND r.assignment_status = 'active'
+                   AND r.role_id = current_activity.activity->>'roleId'
+                   AND rd.permissions ? (current_activity.activity->>'permission')
+              )
+              OR EXISTS (
+                SELECT 1 FROM eper_workflow_actor_role_assignment r
+                  JOIN eper_workflow_role_definition rd
+                    ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+                   AND rd.role_id = r.role_id AND rd.role_status = 'active'
+                 WHERE r.tenant_id = i.tenant_id AND r.application_id = i.application_id
+                   AND r.actor_id = $3 AND r.assignment_status = 'active'
+                   AND (rd.permissions ? 'workflow:view' OR rd.permissions ? 'workflow:admin')
+              )
+            )`,
+        [input.tenantId, input.applicationId, input.actorId],
+      );
       await client.query("COMMIT");
       return {
         // The queue is a summary/read model. Workflow payload data may contain
@@ -454,7 +497,7 @@ export class PostgresWorkflowExecutionService {
           updatedAt: new Date(row.updated_at).toISOString(),
           completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
         })),
-        total: result.rows.length ? Number(result.rows[0].total_count) : 0,
+        total: result.rows.length ? Number(result.rows[0].total_count) : Number(totalResult?.rows[0]?.total_count ?? 0),
         limit, offset,
       };
     } catch (error) {
