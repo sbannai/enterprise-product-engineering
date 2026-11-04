@@ -303,6 +303,8 @@ export class PostgresProviderOperationRepository {
         action: "provider.operation.queued", operationId, correlationId,
         payload: { capabilityKey, capabilityVersion, requestDigest },
       });
+      // PostgreSQL delivers NOTIFY only after COMMIT; payload is a fixed wake token.
+      await client.query("SELECT pg_notify($1, $2)", ["eper_provider_operation_wakeup", "wake"]);
       await client.query("COMMIT");
       return { operation: map(row), created: true };
     } catch (error) {

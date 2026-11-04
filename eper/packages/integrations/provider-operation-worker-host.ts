@@ -4,6 +4,8 @@ import type {
 } from "./provider-operation-worker.js";
 
 export interface ProviderQueueWakeSource {
+  /** Establish LISTEN before the first queue scan to close the scan/subscribe race. */
+  start(): Promise<void>;
   /** Resolves on a generic queue wake-up or after timeout; no tenant data is carried. */
   wait(timeoutMs: number, signal: AbortSignal): Promise<"notified" | "timeout">;
   close(): Promise<void>;
@@ -63,6 +65,7 @@ export class ProviderOperationWorkerHost {
 
   async run(signal: AbortSignal): Promise<void> {
     try {
+      await this.wakeSource.start();
       while (!signal.aborted) {
         let result: ProviderOperationWorkerResult;
         try {
