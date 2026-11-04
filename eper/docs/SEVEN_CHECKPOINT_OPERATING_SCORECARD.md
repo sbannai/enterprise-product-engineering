@@ -1558,3 +1558,87 @@ The provider payload migration family and customer-asset migration family have *
 - The current main commit has no combined status entries exposed by the connected status endpoint; do not infer mainline green from PR-head workflows.
 - The charter's clean-clone handover remains supported by local/CI evidence, but production backup/recovery and a second-engineer release are not demonstrated.
 - No approved requirement or chapter was edited. No PR was merged, no branch was deleted, no chargeable cloud resource was provisioned and no real external/provider action was triggered in this update.
+
+
+## Dated operating update — 2026-11-04 16:54 IST
+
+**Dynamically resolved current main:** `2c380d79c55c9183a42ed534ffd1a504f7d41316`  
+**Main tree:** `0c01985a303e9348e728acd04b0a55a80020f9a9`  
+**Approved product baseline:** 228 requirements / 38 chapters; unchanged.
+
+### Exact-main CI evidence
+
+The direct GitHub commit check-runs endpoint returned **13 check runs for this exact main SHA; all 13 completed successfully**. This corrects the earlier limitation from the combined-status-only query: the classic combined status has no status contexts and reports `pending`, but the check-runs endpoint contains the actual successful workflow jobs.
+
+- [Same-commit integrated validation](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913): PASS. PostgreSQL suite: 1,410 tests / 1,404 passed / 0 failed / 6 skipped.
+- [EPER CI](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771): PASS.
+- [228 requirement / 38 chapter matrix](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818): 228 requirements; 259 pilot tests / 259 passed / 0 failed; 28 HTTP checks passed. The artifact explicitly classifies this as an automated pilot, not acceptance evidence.
+- [G9 reconciliation](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648): PASS.
+- [Six-family HTTP smoke](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875652): PASS.
+- [Container runtime](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875533): PASS.
+- Release artifact, QA technical evidence, and the same-commit gate also completed successfully on the same SHA.
+
+The latest main commit reverts the accidentally unscoped provider payload test file. The integrated PostgreSQL job on this SHA passes the commercial tariff-overage guard, ticketing and workflow checks, and tenant/application isolation assertions.
+
+### Merged foundation ancestry
+
+- PR #306 is confirmed closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; current main is 653 commits ahead and 0 behind that merge commit.
+- PR #310 is confirmed closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; current main is 652 commits ahead and 0 behind that merge commit.
+- #306 is not open work. Its fresh-clone developer setup is part of the integrated main history.
+
+### Live open-PR inventory and exact-head Actions
+
+The current open set was refreshed dynamically. Each run below is associated with the exact head SHA recorded in the live PR metadata; no prior-head green result is substituted.
+
+| PR | Exact head | Exact-head workflow evidence |
+|---|---|---|
+| #377 scorecard | `903b4054d5c65c85f23f5cfe017b25df24c50516` | Integrated [41810591113], CI [41810591215], matrix [41810591236], G9 [41810591160], release [41810591139], HTTP [41810591111], container [41810591140], QA [41810591276], technical evidence [41810591212] — all completed successfully. |
+| #378 encrypted payload boundary | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039], integrated [41738299062] — success. |
+| #379 durable PostgreSQL payload store | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657], integrated [41738351629] — success. |
+| #380 customer asset/application requirements | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Matrix [41763251774], G9 [41763251777], integrated [41763251674], CI [41763251702] — success. |
+| #381 restricted-role RLS proof | `e63f747db7e1f11e4fc7b74fae1591a575870a1d` | Fresh clone [41738364008], provider lifecycle [41738363993], integrated [41738364009], CI [41738364070] — success on its own base. |
+| #382 provider worker/retention/keyring | `8aa4344a02f6f77d5566c7b24d571a5681b68ac2` | Fresh clone [41738377819], PostgreSQL [41738377859], provider lifecycle [41738377748], integrated [41738377787], CI [41738377743] — success on its own base. |
+| #384 customer asset repository | `291129b77ab50623e41dd28c4a746ef70da28183` | Fresh clone [41786048886], PostgreSQL [41786048950], browser [41786049023], integrated [41786048948], provider lifecycle [41786048922] — success. |
+| #385 additive asset requirements | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | Matrix [41764308125], G9 [41764308165], integrated [41764308133], CI [41764331361] — success. |
+| #386 upload idempotency reservation | `7e6727cf9508c498ffcc14ba5b43ed1bee891ee0` | Fresh clone [41800272683], PostgreSQL [41800272797], provider lifecycle [41800272858], matrix [41800272982] — success. |
+| #387 actor-scoped customer work queue | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | Fresh clone [41784823307], PostgreSQL [41784823446], browser [41784823265], integrated [41784823525], matrix [41784823273] — success. |
+| #389 database-engine evaluation plan | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | Matrix [41795128670], G9 [41795128672], integrated [41795128802], CI [41795128689] — success. |
+| #390 payload-operation integrity | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | Fresh clone [41805934645], PostgreSQL [41805934647], provider lifecycle [41805934711], integrated [41805934725], CI [41805934653] — success. |
+| #391 RLS/integrity reconciliation | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | Fresh clone [41820073308], provider lifecycle [41820073247], matrix [41820073834], QA [41820073253], technical evidence [41820073304] — success. |
+
+PR #391 is a new draft successor based directly on #390 head `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f`. Its exact-head fresh-clone log confirms:
+
+- `npm run dev:verify` completed; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- All seven PostgreSQL migration groups ran, including identity; repeatability checks passed.
+- 1,439 tests / 1,435 passed / 0 failed / 4 skipped.
+- Disposable PostgreSQL backup/restore passed: 76 source/restored base tables and 7 migration-ledger tables.
+
+Its live provider lifecycle job passed 1/1 PostgreSQL test for atomic payload enqueue, lease renewal/fencing, retry exhaustion and recovery. The added restricted-role assertions use the actual `eper_provider_catalogue_access` NOLOGIN role: same tenant/application read succeeds, cross-tenant and cross-application reads return no row, and unauthorized writes fail with SQLSTATE `42501`. The payload is created by `enqueueWithPayload`, so it satisfies the deferred integrity constraints.
+
+**Scope limitation for #391:** its returned exact-head workflow set does not include EPER CI, same-commit integrated validation or browser E2E. Those lanes are not claimed as passed on this head.
+
+### Provider-stack integration blocker found by source inspection
+
+The new #391 correction is useful but does not yet integrate the full worker/keyring branch.
+
+- #391 versus #381: diverged; #391 is 13 commits ahead / 1 behind; common base is #379 head `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44`.
+- #391 versus #382: diverged; #391 is 13 ahead / 2 behind; same common base.
+- #382 versus #391: diverged; #382 is 2 ahead / 13 behind.
+
+The #382 tree carries retention metadata migration `022_provider_payload_lifecycle_metadata.sql`, envelope-v2 migration `023_provider_payload_envelope_v2.sql`, keyring/rotation behavior, provider worker implementation and its tests. #391 carries `022_provider_payload_operation_integrity.sql` and a corrected lifecycle RLS test. The audit migration runner sorts full filenames and records filenames in its checksum ledger, so equal numeric prefixes are distinct ledger entries; the issue is not the shared `022` prefix.
+
+A concrete integration incompatibility is confirmed: #382's separate `postgres-encrypted-provider-payload-store.integration.test.mjs` creates payloads with standalone `store.put()` in both its RLS/retention test and its key-rotation test. Once #390's deferred payload↔operation foreign keys are present, those payload-only transactions cannot commit without a matching provider-operation row. The standalone test was green on #382's older base because that base does not contain migration 022 integrity. #391's new RLS assertions move the restricted-role proof onto a payload created through `enqueueWithPayload`, but do not yet adapt the separate #382 RLS/keyring test file.
+
+**Next action:** reconcile #382's worker/keyring/retention changes onto the #390/#391 integrity base; adapt both standalone payload-store integration tests to create matching operations (or otherwise satisfy the deferred relationship); preserve the #381 restricted-role test intent; then rerun the complete fresh-clone, all migration groups, repeatability, live PostgreSQL, provider lifecycle and disposable restore suite on one exact candidate head. Do not merge separate green stacks as if they were one combined candidate.
+
+### Seven approved pointers — current disposition
+
+1. **v34-to-228 reconciliation — AMBER.** Original v34 source rows and statements remain preserved; 45 source candidates are classified as partial shared-control links and additive drafts, with no fabricated exact full-coverage matches. Owner disposition remains outstanding. Approved 228 requirements / 38 chapters remain unchanged.
+2. **Fresh-clone developer setup — GREEN for local/CI scope.** #306 merge is confirmed on main. Current-main integrated checks and #391 candidate fresh-clone logs confirm repeatable setup, identity migrations and disposable restore. This is not production recovery certification.
+3. **PostgreSQL durability/recovery — AMBER.** Main's integrated PostgreSQL suite is green; #391 adds payload-operation integrity and restricted-role evidence. Provider plus asset migrations and #382 keyring/retention tests are not yet validated together. Production backup destination/key custody/RPO/RTO and independent recovery rehearsal remain.
+4. **Identity/OIDC/sessions — AMBER.** #310 and browser/session successors are merged ancestors. Synthetic-IdP browser coverage exists for login, protected workspace, secure sessions, CSRF, logout/revocation and tenant/application assignment. Production IdP onboarding/JWKS rotation and full production role/delegation governance remain unproven.
+5. **Customer workspace/support — AMBER.** Customer ticket submission/history/replies, tenant/application scope, admin triage/assignment/severity, internal-note visibility and CSV export have implementation/test evidence. SLA timers/escalation/breach reporting and complete binary asset upload/storage/scan/share/download UI remain.
+6. **Scheduler/workflow operations — AMBER.** Campaign scheduler has a continuous process entrypoint and live PostgreSQL lease/fencing/retry/dead-letter/recovery evidence. Provider worker remains bounded; independent host supervision, restricted service identity, approved dispatch configuration, metrics/alerts and operational recovery remain.
+7. **Release/continuity — RED.** Current-main release build/checks pass, but branch/ruleset controls were not changed or fully re-read in this run. The continuity charter remains proposed/owner-review-required; production restore, rollback runbooks and second-engineer release rehearsal remain unproven.
+
+No Business UAT status or authorization is recorded by this update. No approved requirement or chapter was edited. No PR was merged, no branch was force-updated or deleted, no chargeable cloud resource was provisioned and no real external/provider action was triggered.
