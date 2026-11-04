@@ -2073,3 +2073,63 @@ The current asset-recovery child PR #396 has advanced through two test-fixture c
 - The scan-recovery worker now has its own opt-in start script and process, but independent supervision/restart/health metrics/alerts remain outstanding. It does not invoke a scanner or storage provider. Concrete API storage upload/download/verification adapters, binary transfer and complete customer asset UI remain outstanding.
 
 The current open-PR inventory is now 16 entries: #396 is a child of #394; #395 remains a parallel catalogue-metadata child of #393. The seven approved requirements pointers and the 228/38 baseline are unchanged. No merge or production-provider action was performed.
+
+
+## Latest operating update — 2026-11-04 22:54 IST
+
+**Dynamically resolved main:** `2c380d79c55c9183a42ed534ffd1a504f7d41316` (tree `0c01985a303e9348e728acd04b0a55a80020f9a9`). Direct current-main check-run query returned 13/13 completed-success checks, all with this exact `head_sha`. The same-commit integrated PostgreSQL job reports 1,410 tests / 1,404 passed / 0 failed / 6 skipped. The separate 228/38 matrix reports 259 passed / 0 failed and 28 HTTP checks; G9 is 5/5. Main remains technically green.
+
+### Current open PR inventory — dynamically refreshed
+
+| PR | Exact current head | Scope / disposition |
+|---|---|---|
+| #398 | `7317acf156a3bce5da03b14052391aed44745ddc` | Provider runtime registry; exact adapter-key binding and deterministic fail-closed worker handling added in this update. Exact-head workflows are queued; not yet validated. |
+| #377 | This scorecard refresh | Documentation-only evidence record; new file commit requires its own exact-head validation. |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | Consolidated customer asset/provider stack. |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | PostgreSQL-backed customer asset download authorization. |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | Independent expired-scan lease recovery and dead-letter/quarantine. |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | Customer asset repository and scan-worker foundation. |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | Provider catalogue metadata and capability validation. |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | Additive asset requirements. |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Customer application/asset UX requirements. |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | Upload idempotency reservation. |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | Restricted-role provider RLS foundation. |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | Provider operation worker host, encrypted payload store and keyring. |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | Reciprocal deferred payload/operation foreign keys. |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | Database-engine evaluation plan only. |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Durable encrypted PostgreSQL provider payload store. |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | Actor-scoped customer workflow queue API/read model. |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Encrypted provider payload boundary. |
+
+The current-head workflow query was refreshed for every open PR. Representative run-detail reads across all 17 heads confirmed that the selected PR runs refer to the exact current head. All relevant returned runs for the 16 heads other than the newly changed #398 completed successfully. For #398, all six newly triggered runs are queued on `7317acf156a3bce5da03b14052391aed44745ddc`; earlier heads `5b9d337`, `c289dec`, `098ae0e` and their runs are stale and are not reused.
+
+### Newly corrected provider registry boundary — PR #398
+
+The exact-head review found two concrete fail-closed gaps and corrected them on the owning branch:
+
+1. Runtime resolution previously matched provider key/version but did not compare the catalogue-selected adapter key. The selection now requires an exact provider + adapter key + semantic version + capability match; adapter-key substitution is rejected.
+2. A missing/unapproved runtime adapter previously surfaced as a generic dispatch error and would consume transient retry budget. `ProviderRuntimeRegistryError` is now classified as a deterministic configuration blocker and persisted as `NEEDS_ATTENTION` for operator review.
+
+New regression tests cover catalogue adapter-key substitution and parking an unregistered adapter without retry. Current exact-head checks are queued, so this correction is not yet reported as test-passed. The registry remains process-local; production worker composition, credential resolution and concrete provider drivers are not wired.
+
+### PostgreSQL exact-head evidence
+
+- PR #392 exact head `312a9358150c1967feba9307f1b71fbffd8cb8f5`: fresh clone [41833626500] passed `npm run dev:verify`, 1,461 tests / 1,457 passed / 0 failed / 4 skipped; all seven migration groups including identity were applied and repeated; disposable PostgreSQL 16 restore passed with 76 source/restored base tables and seven migration ledgers. Provider lifecycle [41833626478] passed: queue lifecycle 1/1, worker 7/7, host 5/5, wake listener 3/3, post-commit NOTIFY 1/1, keyring 6/6 and payload integrity 2/2. No integrated gate, browser E2E or independently supervised provider process is evidenced on this head.
+- PR #394 exact head `c2b7a2c8e7ff3211869e061544672c7db1eb7261`: fresh clone [41868477584] passed 1,510 tests / 1,506 passed / 0 failed / 4 skipped; seven migration groups including identity and repeatability; restore 80/80 base tables and seven ledgers. Chromium [41868477503] passed customer OIDC/workspace/support/logout/revocation 1/1 and Product Admin remediation 1/1.
+- PR #396 exact head `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81`: fresh clone [41871265755] passed 1,510 / 1,506 / 0 / 4; seven migrations, repeatability, restore 80/80 and seven ledgers. PostgreSQL scan-recovery integration passed bounded concurrent exhausted-lease recovery, single finalization, repeat-sweep idempotency, dead-letter state, asset quarantine/failure, audit and tenant/application RLS.
+- PR #398 previous head `5b9d337` had passed its six workflow set and its QA log included the new registry tests, but those results are stale for the corrected current head `7317acf`. Do not carry them forward.
+
+### Requirements, identity, support and workflow boundaries
+
+- **v34-to-228:** the main crosswalk preserves all 45 source rows and original statements/acceptance criteria. Current technical disposition remains 0 exact full matches, 45 partial shared-control links and 45 additive v1.6.0 draft candidates. Four overlap the existing v1.5.0 approval control. Owner approval is pending. The approved 228 requirements and 38 chapters remain unchanged.
+- **Fresh clone / PostgreSQL:** PR #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`, and current main is a descendant (653 commits ahead / 0 behind). The seven-group `dev:verify`, identity migration repeatability, live PostgreSQL and disposable restore evidence are present on current asset/provider child heads. CI restore is not production disaster-recovery certification.
+- **Identity:** PR #310 is merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; successor PRs #324, #329, #337 and #376 are also merged ancestors of main. Browser routes, secure cookies, CSRF, durable sessions/revocation and tenant/application assignment tests exist with a synthetic IdP. Production IdP onboarding, production JWKS/key rotation and operator credential lifecycle are not evidenced.
+- **Support:** current-main tests cover customer ticket creation, history/listing and replies; trusted tenant/application/actor scoping; admin triage/status, assignment and P1 severity rationale; internal-note visibility; and CSV export (including formula neutralization and all-filtered-pages export). SLA timers, breach monitoring and escalation automation are not evidenced.
+- **Scheduler/workflow:** continuous campaign/outbox worker components, lease renewal/fencing, idempotency, retry/dead-letter and audited replay have test evidence. Campaign scheduler has an opt-in worker entrypoint. Workflow outbox remains a reusable process component without an independently deployed worker entrypoint. Restricted production host composition, approved dispatcher, supervision/restart policy, operational metrics/alerts and recovery rehearsal remain.
+- **Release/continuity:** live branch metadata reports `protected=false`; repository rulesets collection is empty. The continuity charter is still marked proposed/owner-review-required. Production backup destination, key custody, retention, RPO/RTO, failover drill and second-engineer clean-clone/release/rollback path remain unproven.
+
+### Merged foundation verification
+
+PR #306 merge `6e8dd438e5091b1802d65e4f29951389fe077859`, PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e`, and identity successors #324 (`a554990cb7f4969bb218aad7a2e9944aec62fa05`), #329 (`82a82d92222c613c02e55f01211ecbb32ce63bba`), #337 (`18315e1654b52f1546936a8fd28daed907cab31e`) and #376 (`9749701bfed527b906183192ca06cc1998e70166`) are confirmed ancestors of current main. They are not open work.
+
+No approved requirement or chapter was changed. No PR was merged, no branch was deleted/force-updated, no repository setting was changed, no chargeable cloud resource was provisioned and no real external/provider action was invoked.
