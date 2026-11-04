@@ -9,6 +9,7 @@
 export type ProviderRuntimeSelection = {
   providerKey: string;
   capabilityKey: string;
+  adapterVersion?: string;
 };
 
 export type ProviderRuntimeDispatchInput = {
@@ -127,14 +128,18 @@ export class ProviderRuntimeAdapterRegistry {
       || !validIdentity(selection.capabilityKey)) {
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
     }
+    if (selection.adapterVersion !== undefined && !/^\\d+\\.\\d+\\.\\d+$/.test(selection.adapterVersion)) {
+      throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
+    }
     const matches = [...this.adapters.values()].filter(adapter =>
-      adapter.providerKey === selection.providerKey);
+      adapter.providerKey === selection.providerKey
+      && (selection.adapterVersion === undefined || adapter.adapterVersion === selection.adapterVersion));
     if (matches.length === 0) {
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE");
     }
     if (matches.length !== 1) {
-      // Multiple installed versions are intentionally ambiguous until the
-      // dispatch selection carries an explicit, policy-approved version.
+      // Multiple installed versions require an explicit version from the
+      // effective provider policy; never pick latest or depend on load order.
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE");
     }
     const adapter = matches[0];
