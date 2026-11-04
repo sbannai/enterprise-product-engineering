@@ -1327,3 +1327,52 @@ The scan worker is now independently startable and continuously polls the durabl
 7. Release/continuity — RED. Main branch reports `protected=false`; rulesets collection is empty. Disposable restore is not production recovery certification. Production backup destination/key custody, RPO/RTO, independent restore rehearsal and second-engineer release/rollback path remain unproven.
 
 Continuity charter remains PROPOSED / OWNER REVIEW REQUIRED. No branch-protection or ruleset settings were changed. No approved requirement/chapter was changed, no PR merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
+
+
+## 2026-11-04 12:00 IST — refreshed exact-head delivery and regression closure
+
+### Dynamically resolved main and merged foundations
+- Current `main`: `2c380d79c55c9183a42ed534ffd1a504f7d41316`; tree recorded at the preceding refresh as `0c01985a303e9348e728acd04b0a55a80020f9a9`.
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; compare confirms the merge is an ancestor of current main (653 commits ahead, 0 behind).
+- PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e` and PR #376 merge `9749701bfed527b906183192ca06cc1998e70166` are also ancestors of current main.
+- PR #306 fresh-clone candidate `2c426de8b63e437ffb186ed4887da76b4b704719` is an ancestor of current main (5 commits behind; compare reports no changed files). Its exact-tree fresh-clone run [41657363742](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657363742) passed 1,426 tests (1,422 passed, 0 failed, 4 skipped), seven migration groups including identity, `npm run dev:verify`, repeatability and disposable backup/restore (75/75 base tables).
+
+### Current open PRs and exact heads
+Every listed PR head was re-resolved from live PR metadata. Current-head Actions were fetched by exact commit SHA; no stale run was reused.
+
+| PR | Exact head | Base | Current exact-head evidence |
+|---|---|---|---|
+| #377 | `90c76bcf100693f98f01bc6ec16f24b1cb4d4ef0` | main | CI [41778257052], integrated [41778256981], matrix [41778257110], G9 [41778257056], release [41778257101] succeeded on this scorecard snapshot. |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | main | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039] succeeded; 1,433 tests / 1,429 passed / 0 failed / 4 skipped; restore 75/75. |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | #378 | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] succeeded; 1,438 / 1,434 passed / 0 failed / 4 skipped; restore 76/76. Payload-to-operation database constraint remains absent. |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | main | Integrated [41763251674], matrix [41763251774], G9 [41763251777] succeeded; documentation/design only. |
+| #381 | `e63f747db7e1f11e4fc7b74fae1591a575870a1d` | #379 | Fresh clone [41738364008], provider lifecycle [41738363993], matrix [41738363997] succeeded; restricted-role RLS read/write proof is live PostgreSQL. |
+| #382 | `8aa4344a02f6f77d5566c7b24d571a5681b68ac2` | #381 | Fresh clone [41738377819], PostgreSQL [41738377859], provider lifecycle [41738377748] succeeded; 1,450 / 1,446 passed / 0 failed / 4 skipped; restore 76/76. Worker remains bounded `runOnce()`. |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | main | CI [41786048984], integrated [41786048948], fresh clone [41786048886], PostgreSQL [41786048950], provider lifecycle [41786048922], browser [41786049023], matrix [41786048963], G9 [41786048971], HTTP [41786048842], container [41786049008] and release [41786048936] succeeded. |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | main | CI [41764331361], integrated [41764308133], matrix [41764308125] and G9 [41764308165] succeeded; documentation-only additive candidate. |
+| #386 | `116fcbbab3632e8923a1b969a8f8f3854f8be216` | #384 feature branch | Fresh clone [41786474384], PostgreSQL [41786474240], provider lifecycle [41786474505], matrix [41786474265] and controlled QA [41786474276] succeeded. Fresh clone: 1,467 / 1,463 passed / 0 failed / 4 skipped; all seven migration groups including identity; `npm run dev:verify`; repeatability; restore 79/79. |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | main | Fresh clone [41784823307], PostgreSQL [41784823446], integrated [41784823525], browser [41784823265], CI [41784823287], matrix [41784823273] and G9 [41784823256] succeeded; fresh clone 1,429 / 1,425 passed / 0 failed / 4 skipped; restore 75/75. |
+
+### PR #384 — current customer-asset worker contract
+Current head `291129b77ab50623e41dd28c4a746ef70da28183` is 140 commits ahead of current main and 0 behind. Fresh-clone log proves all seven migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity), repeatability, `npm run dev:verify`, 1,464 tests / 1,460 passed / 0 failed / 4 skipped and disposable restore 79/79. Integrated PostgreSQL reports 1,448 / 1,442 passed / 0 failed / 6 skipped. Browser E2E passes the synthetic-IdP customer OIDC/workspace/support/logout path (1/1) and Product Admin application remediation (1/1).
+
+The latest commit requires scanner adapters to accept and honor an `AbortSignal`. The worker fences persistence after shutdown but cannot forcibly terminate an adapter that ignores cancellation. No concrete storage adapter, object-verification provider or scanner module is wired; no actual binary upload/download or real scanner call is evidenced. Customer upload UI, download lifecycle, sharing resolver, retention/legal-hold purge, restricted service identity, worker supervision and operational metrics remain.
+
+### PR #386 — database-first upload reservation correction
+The first exact head `030864216d5c44b9d5cb6a249421b52e75ad09be` failed fresh-clone PostgreSQL test 714: a second upload session reused the same asset, violating the schema's unique `(tenant_id, asset_id)` constraint. The next head added a distinct failed-reservation asset but its audit-count assertion expected 16 when the live database returned 15. Current head `116fcbbab3632e8923a1b969a8f8f3854f8be216` corrects the audit count and restricted-asset RLS fixture; its exact-head fresh clone now passes (1,467 / 1,463 / 0 / 4, restore 79/79). The migration adds a provider-free `reserved` state; the service claims idempotency in PostgreSQL before requesting a provider capability, finalizes the opaque reference/expiry after grant issuance, and records failure without disclosing the grant.
+
+The PR remains stacked on the #384 feature branch. That base branch has advanced to `291129b77ab50623e41dd28c4a746ef70da28183`; compare shows #386 is 4 commits behind that current base. Sync the stacked branch and rerun exact-head checks before integration. The schema still permits only one upload session per tenant/asset; re-upload after a failed/expired session is not proven and requires explicit lifecycle semantics.
+
+### PR #387 — customer workflow work-queue read model
+The current implementation adds a bounded/paginated read-only queue endpoint. It derives tenant/actor from trusted identity, requires active tenant/application and actor/application assignment, resolves visibility from the immutable published workflow definition version/digest and current activity role/permission, and returns summary metadata only (no workflow payload). PostgreSQL integration covers creator visibility, empty-page total count, cross-application/tenant isolation and revocation. This is an API/read-model foundation, not a completed customer queue UI or workflow detail/activity journey.
+
+### Seven approved pointers — refreshed disposition
+1. **v34-to-228 reconciliation — AMBER.** Preserve 228 approved requirements across 38 chapters. The v34 crosswalk remains 45 source rows: 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates; owner disposition is still required. CW-060/CW-061 remain additive draft scope.
+2. **Fresh-clone developer setup — GREEN for local/CI handover.** PR #306 is merged and its candidate is an ancestor of current main; exact-tree clean-clone evidence covers `npm run dev:verify`, all seven groups including identity, repeatability and disposable restore.
+3. **PostgreSQL/recovery — AMBER.** #384 and #386 pass their separate fresh-clone/live PostgreSQL/restore checks. Provider payload rows still lack a database-enforced tenant/application/operation foreign key. Provider and customer-asset migration stacks have not been validated together in one clean clone; migration 023 in each feature stack must be reconciled before combined proof. Production backup target, key custody, RPO/RTO and independent restore rehearsal remain.
+4. **Identity/OIDC/sessions — AMBER.** #310/#376 are merged ancestors. Synthetic-IdP browser evidence covers protocol callback, secure cookies, CSRF, durable sessions, revocation and tenant/application assignment. Production IdP onboarding/JWKS rotation and full production role/delegation coverage remain unproven.
+5. **Customer workspace/support — AMBER.** Ticket create/history/replies, tenant/application scope, admin triage/assignment/severity, internal-note separation and export have tests. SLA targets/timers/escalation/breach evidence remain absent. Asset metadata/API/scan-worker foundation is present, but concrete storage/scanner providers, binary transfer, upload UI and download lifecycle are not.
+6. **Scheduler/workflow operations — AMBER.** Campaign/agent worker foundations, workflow outbox lease/fencing/idempotency/retry/dead-letter/recovery and the customer work-queue read model are tested. Provider worker remains bounded `runOnce()`; workflow outbox has no independently startable app entrypoint. Approved dispatch, restricted service identity, supervision, metrics/alerts and recovery proof remain.
+7. **Release/continuity — RED.** Last verified repository configuration reported main unprotected and no rulesets; this configuration was not re-read in this cycle and no settings were changed. Disposable CI restore is not production recovery. Independent second-engineer release/rollback and production restore rehearsal remain unproven.
+
+The continuity charter remains **PROPOSED / OWNER REVIEW REQUIRED**. No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
