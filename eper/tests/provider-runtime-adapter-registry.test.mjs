@@ -83,8 +83,12 @@ test("multiple installed versions require an explicit version and never select l
     [...allowlist, secondAllowlist],
   );
   assert.throws(
-    () => registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }),
-    error => error.code === "PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE",
+    () => registry.resolve({ providerKey: "aws-s3", capabilityKey: capability }),
+    error => error.code === "PROVIDER_RUNTIME_REGISTRATION_INVALID",
+  );
+  assert.equal(
+    registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }).adapterVersion,
+    "1.0.0",
   );
   assert.equal(
     registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "2.0.0" }).adapterVersion,
