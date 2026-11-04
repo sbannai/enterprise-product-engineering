@@ -66,3 +66,27 @@ test("customer asset scan worker times out provider calls and routes them throug
   });
   assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR"));
 });
+
+
+test("customer asset scan worker aborts an in-flight scanner call during shutdown", async () => {
+  const f = fixture("clean");
+  let scanSignal;
+  f.scanner.scan = async (_input, _requestId, signal) => new Promise((resolve) => {
+    scanSignal = signal;
+    signal?.addEventListener("abort", () => resolve({
+      scanStatus: "clean", scannerServiceId: "asset-scanner",
+    }), { once: true });
+  });
+  const shutdown = setTimeout(() => f.controller.abort(), 20);
+  try {
+    await runCustomerAssetScanWorker({
+      ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+      scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    });
+  } finally {
+    clearTimeout(shutdown);
+  }
+  assert.equal(scanSignal?.aborted, true);
+  assert.equal(f.calls.filter((call) => call[0] === "record").length, 0);
+  assert.equal(f.calls.filter((call) => call[0] === "retry").length, 0);
+});
