@@ -204,11 +204,15 @@ export class PostgresCustomerAssetRepository {
       throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_UPLOAD_REFERENCE_INVALID");
     }
     const expiry = Date.parse(input.expiresAt);
-    if (!Number.isFinite(expiry) || expiry <= Date.now()) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
+    if (!Number.isFinite(expiry)) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
+      const expiryCheck = await client.query<{ future: boolean }>(
+        "SELECT $1::timestamptz > now() AS future", [input.expiresAt],
+      );
+      if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey]);
       const prior = await client.query<{ upload_session_id: string; asset_id: string }>(
         "SELECT upload_session_id, asset_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE",
