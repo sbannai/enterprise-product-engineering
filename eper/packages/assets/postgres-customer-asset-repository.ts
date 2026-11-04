@@ -346,7 +346,7 @@ export class PostgresCustomerAssetRepository {
 
   async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string, workerId: string): Promise<{
     assetId: string; providerUploadReference: string; checksumSha256: string;
-    sizeBytes: number; mimeType: string;
+    sizeBytes: number; mimeType: string; attempt: number;
   } | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
@@ -358,10 +358,10 @@ export class PostgresCustomerAssetRepository {
       await this.setContext(client, tenantId, applicationId);
       const result = await client.query<{
         asset_id: string; provider_upload_reference: string; checksum_sha256: string | null;
-        size_bytes: number | string; mime_type: string;
+        size_bytes: number | string; mime_type: string; attempt_count: number;
       }>(
         `SELECT s.asset_id, s.provider_upload_reference, a.checksum_sha256,
-          a.size_bytes, a.mime_type
+          a.size_bytes, a.mime_type, j.attempt_count
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
@@ -583,7 +583,8 @@ export class PostgresCustomerAssetRepository {
             SET state = 'completed', lease_owner = NULL, lease_expires_at = NULL,
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2
-            AND upload_session_id = $3 AND state = 'leased' AND lease_owner = $4`,
+            AND upload_session_id = $3 AND state = 'leased' AND lease_owner = $4
+            AND lease_expires_at > now()`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId],
       );
       await client.query("COMMIT");
@@ -617,7 +618,7 @@ export class PostgresCustomerAssetRepository {
                   ELSE now() + ($5::bigint * interval '1 millisecond') END,
                 last_error_code = $6, lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
-            AND state = 'leased' AND lease_owner = $4
+            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
           RETURNING state`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
           input.retryAfterMs, input.errorCode],
