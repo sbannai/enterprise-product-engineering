@@ -1961,3 +1961,81 @@ The Chromium OIDC/browser workflow [41856413726](https://github.com/sbannai/ente
 ## Browser evidence correction — 2026-11-04 20:56 IST
 
 The earlier 20:45 snapshot recorded PR #394's Chromium job as in progress. It has since completed successfully on the same exact head 09ee86677a4af5114a479cc9fe232be497fcd0d0. Browser run [41856413726](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41856413726) passed the synthetic-IdP customer OIDC/workspace/support/logout/revocation journey (1/1) and Product Admin application-remediation journey (1/1). A fresh direct check-run read now shows all seven #394 checks completed successfully with head_sha equal to 09ee86677a4af5114a479cc9fe232be497fcd0d0. This does not add a same-commit integrated gate or a dedicated provider-lifecycle run, and it does not configure a real storage/scanner provider. The earlier in-progress statement above is superseded by this correction.
+
+
+## Latest dynamic repository and delivery refresh — 2026-11-04 22:10 IST
+
+This is a point-in-time snapshot. The next refresh must resolve `main`, open PRs, PR heads and Actions dynamically again; none of the recorded SHAs or PR numbers are permanent selectors.
+
+### Integrated mainline
+
+- Dynamically resolved `main`: `2c380d79c55c9183a42ed534ffd1a504f7d41316`; tree `0c01985a303e9348e728acd04b0a55a80020f9a9`.
+- Main branch metadata: `protected=false`; required-status-check enforcement is off; repository rulesets endpoint returns an empty list.
+- Direct commit check-runs: 13/13 completed successfully on this exact main SHA. Same-commit integrated run [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913) passed; PostgreSQL suite 1,410 total / 1,404 passed / 0 failed / 6 skipped. Separate 228/38 matrix [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818) passed 259 pilot tests, 0 failed, 28 HTTP checks. G9 [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648) passed 5/5. EPER CI [41675875771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771) passed.
+- PR #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 is merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Current main is a descendant of both merge commits. Identity/browser/session successor PRs #324, #329, #337 and #376 are also confirmed merged ancestors of current main. #310's protocol foundation is not, by itself, the production browser-login completion claim.
+
+### Current open PR inventory — direct REST enumeration
+
+The authoritative open-pulls endpoint returned these 15 open PRs. Direct check-run reads were performed for each exact head; every returned check-run's `head_sha` matched that PR's current head. Relevant job logs were inspected for fresh-clone, PostgreSQL, provider lifecycle, browser, matrix and integrated-gate lanes where present.
+
+| PR | Exact head at this snapshot | Base | Capability / current disposition |
+|---|---|---|---|
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | #393 integration branch | PostgreSQL customer-asset download authorization; 7/7 exact-head checks successful. |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | #393 integration branch | Provider-neutral storage catalogue metadata; 6/6 exact-head checks successful after a focused TypeScript correction. |
+| #377 | `ce2928970bf7ca0b86677f0bb887537c40d61c11` | main | Seven-checkpoint scorecard; 13 successful check-runs and one duplicate matrix lane skipped; separate matrix passed. |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | main | Customer-level asset repository requirements/design v1.7.0 draft; exact-head CI/matrix/G9 passed. |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | main | Client asset and workflow-driven application UX requirements v1.6.0 draft; exact-head CI/matrix/G9 passed. |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | #386 | Combined customer-asset and provider worker/payload integration; fresh clone, PostgreSQL, provider lifecycle, integrated gate and separate matrix passed. |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | #384 | Upload idempotency reservation; fresh clone, PostgreSQL, provider lifecycle and Chromium browser checks passed. |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | main | Tenant-isolated customer asset repository foundation; fresh clone, PostgreSQL, provider lifecycle, browser, integrated gate and matrix passed. |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | #379 | Provider payload/operation referential integrity; fresh clone, PostgreSQL, provider lifecycle, integrated gate and matrix passed. |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | #390 | Restricted-role RLS proof reconciled with payload integrity; fresh clone, provider lifecycle and matrix passed. |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | #391 | Provider worker/host integration with payload integrity; fresh clone, PostgreSQL, provider lifecycle and matrix passed. |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | main | PostgreSQL/MySQL/MongoDB evaluation plan only; technical CI/matrix passed; no comparative benchmark is evidenced. |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | #378 | Durable encrypted PostgreSQL provider payload store; fresh clone, PostgreSQL, provider lifecycle, integrated gate and matrix passed. |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | main | Actor-scoped customer workflow queue read model; fresh clone, PostgreSQL, browser, integrated gate and matrix passed. |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | main | Encrypted provider payload boundary; fresh clone, PostgreSQL, provider lifecycle, integrated gate and matrix passed. |
+
+### Dependency and branch hygiene
+
+Live comparisons against current main show every listed PR head is based on current main (0 commits behind). The feature-stack edges are also linear and non-diverged:
+
+- Asset chain: #384 → #386 (24 ahead / 0 behind) → #393 (2 ahead / 0 behind) → #394 and #395 (each 12 ahead / 0 behind).
+- Provider chain: #378 → #379 (1 ahead / 0 behind) → #390 (12 ahead / 0 behind) → #391 (1 ahead / 0 behind) → #392 (18 ahead / 0 behind).
+- Direct-main branches at this snapshot: #377 (40 ahead), #380 (5 ahead), #385 (4 ahead), #387 (22 ahead), #389 (1 ahead); all 0 behind.
+- No force update or branch deletion was performed. The open feature branches remain attached to their PR dependency stacks. Do not merge a child independently to main while its base is an unmerged integration branch.
+
+### Exact-head corrections and newly completed work
+
+**PR #394 — current head `c2b7a2c8e7ff3211869e061544672c7db1eb7261`.** The PR description was corrected from its stale earlier head to this live head and current evidence. All seven exact-head checks passed:
+- Fresh clone [41868477584]: `npm run dev:verify`, 1,510 tests / 1,506 passed / 0 failed / 4 skipped; all seven PostgreSQL migration groups applied and repeated, including identity; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- Disposable PostgreSQL 16 restore: [same fresh-clone run](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477584); `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`, 80 source/restored base tables, 7 migration ledgers.
+- Live PostgreSQL integration [41868477557] passed.
+- Chromium [41868477503] passed synthetic-IdP customer OIDC/workspace/support/logout/revocation 1/1 and Product Admin remediation 1/1.
+- Matrix [41868477299]: 38/38 chapters, 259 pilot tests passed / 0 failed, 28 HTTP checks.
+- Controlled QA [41868477804] passed.
+- Delivered: tenant/application-scoped PostgreSQL download lookup; active/upload-complete/clean-scan gates; restricted-vs-shared application authorization; no JSON-manifest fallback in PostgreSQL mode; durable download audit; cross-tenant/application/quarantine/lease regression coverage.
+- Still missing: concrete storage download/upload/verification adapters and malware scanner wiring; signed URL issuance and binary transfer; complete customer asset UI. There is no same-commit integrated gate or dedicated provider-lifecycle run on #394's exact head. This PR is an authorization lookup increment, not the complete binary lifecycle.
+
+**PR #395 — current head `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9`.** The prior head `0a85090687806032659473392ddb7d9be4777e9f` failed TypeScript definite-assignment analysis at `storage-provider-registration.ts:46` (`TS2454 serialized used before assigned`). A first helper-annotation correction did not resolve the compiler diagnostic. The focused final correction throws the stable schema-validation error directly from the JSON serialization catch. The final exact head then passed all six check-runs:
+- Fresh clone [41869040234]: 1,518 tests / 1,514 passed / 0 failed / 4 skipped; all seven migration groups including identity applied and repeated; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- Disposable restore: `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`, 80/80 base tables and 7 ledgers.
+- Provider lifecycle [41869040134], PostgreSQL integration [41869040101], matrix [41869040066] and controlled QA [41869040232] passed.
+- Delivered: metadata catalogue and schema validation for S3, Azure Blob, Google Cloud Storage and Dropbox; explicit adapter/capability/auth-mode registry validation; secret-bearing metadata rejection.
+- Still missing: executable adapters, credential resolution/lifecycle, provider network operations, scanner invocation and customer binary UI. No browser E2E or same-commit integrated gate was returned on this exact head.
+
+PR #393's description was updated to record these successors and to avoid claiming the original missing download lookup is still unaddressed. The integration branch still lacks configured storage/scanner adapters, a separately supervised worker host, operational metrics/alerts and the complete customer asset UI.
+
+### Seven approved pointers — refreshed disposition
+
+1. **v34-to-228 reconciliation — AMBER.** Preserve all 228 approved requirements and 38 chapters. The v34 source export preserves 45 candidate rows and original statements/acceptance criteria; current crosswalk remains 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. Owner disposition is still required. Do not silently promote candidates or alter the approved baseline.
+2. **Fresh-clone developer setup — GREEN for local/CI.** #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`, an ancestor of current main. Exact-head successors #393/#394/#395 independently ran `npm run dev:verify`. A second engineer's independent handover/release rehearsal is still not evidenced.
+3. **PostgreSQL durability — AMBER.** Current #394/#395 runs prove clean-clone verification, seven migration groups including identity, migration repeatability, live PostgreSQL tests and disposable backup/restore. Production backup destination, encryption/key custody, retention, RPO/RTO, point-in-time recovery and an independent production recovery rehearsal remain unproven. PostgreSQL remains the approved target; #389 is a plan, not a benchmark.
+4. **Identity/OIDC/sessions — AMBER.** #310 merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; #324/#329/#337/#376 are also merged ancestors of main. Browser callback/session routes, secure cookies, CSRF, durable sessions/revocation and tenant/application assignment/role checks have synthetic-IdP browser evidence. Production IdP onboarding, key/JWKS rotation and operational credential lifecycle remain unproven.
+5. **Customer workspace/support — AMBER.** Customer ticket submission/history/replies, tenant/application/actor scoping, admin triage/assignment/severity, internal-note separation and export have implementation/test evidence. Browser OIDC/workspace/support journey passes on #394. SLA timers, escalation and breach reporting remain; full task-detail/action UX and the customer asset binary UI remain incomplete.
+6. **Scheduler/workflow operations — AMBER.** Continuous worker-loop foundations, lease renewal/fencing, idempotency, retry/dead-letter and recovery/replay have PostgreSQL/worker tests. The provider host has bounded pass, queue wake/reconciliation and shutdown tests. Independently supervised production worker entrypoints, restricted operational identities, approved dispatch wiring, metrics/alerts and recovery runbooks remain.
+7. **Release/continuity — RED.** Main is explicitly unprotected, required-check enforcement is off and no rulesets exist. Production restore/key-custody runbooks, incident/rollback ownership and a second-engineer release path are not evidenced. The continuity charter remains proposed and requires owner approval.
+
+### Continuity and safety
+
+The continuity standard remains `eper/docs/ENGINEERING_CONTINUITY_AND_INDEPENDENCE_CHARTER.md`. No PR was merged; no branch was force-updated or deleted; no repository settings changed; no chargeable cloud resources were provisioned; no real external/provider action was invoked. This update does not make a UAT or business-acceptance decision.
