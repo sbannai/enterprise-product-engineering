@@ -390,8 +390,14 @@ export class PostgresWorkflowExecutionService {
       await client.query("BEGIN");
       await setRlsContext(client, input.tenantId, input.applicationId);
       await assertMembership(client, input);
-      const result = await client.query<InstanceRow & { total_count: number | string }>(
-        `SELECT i.*, COUNT(*) OVER()::int AS total_count
+      const result = await client.query<Pick<InstanceRow,
+        "tenant_id" | "application_id" | "instance_id" | "workflow_id" | "definition_version" |
+        "definition_digest" | "status" | "current_activity_id" | "business_reference" |
+        "version" | "created_by" | "created_at" | "updated_at" | "completed_at"> & { total_count: number | string }>(
+        `SELECT i.tenant_id, i.application_id, i.instance_id, i.workflow_id,
+                i.definition_version, i.definition_digest, i.status, i.current_activity_id,
+                i.business_reference, i.version, i.created_by, i.created_at, i.updated_at,
+                i.completed_at, COUNT(*) OVER()::int AS total_count
            FROM eper_workflow_instances i
            JOIN eper_workflow_definition_versions v
              ON v.tenant_id = i.tenant_id AND v.application_id = i.application_id
@@ -435,7 +441,19 @@ export class PostgresWorkflowExecutionService {
       );
       await client.query("COMMIT");
       return {
-        items: result.rows.map(row => mapInstance(row)),
+        // The queue is a summary/read model. Workflow payload data may contain
+        // personal, financial or otherwise sensitive fields; fetch and expose it
+        // only through a separately authorized detail/activity endpoint.
+        items: result.rows.map(row => ({
+          instanceId: row.instance_id, tenantId: row.tenant_id, applicationId: row.application_id,
+          workflowId: row.workflow_id, definitionVersion: Number(row.definition_version),
+          definitionDigest: row.definition_digest.trim(), status: row.status,
+          currentActivityId: row.current_activity_id, businessReference: row.business_reference,
+          version: Number(row.version), createdBy: row.created_by,
+          createdAt: new Date(row.created_at).toISOString(),
+          updatedAt: new Date(row.updated_at).toISOString(),
+          completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+        })),
         total: result.rows.length ? Number(result.rows[0].total_count) : 0,
         limit, offset,
       };
