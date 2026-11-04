@@ -23,7 +23,7 @@ function harness(overrides = {}) {
   const dependencies = {
     repository,
     payloadStore: { async get(input) { assert.equal(input.digest, operation.requestDigest); return { to: "synthetic@example.invalid" }; } },
-    configuration: { async resolve() { return { tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send", connectionId: "connection-a", providerKey: "synthetic", connectionVersion: 1, policy: {}, policySource: "APPLICATION", tenantDefaultVersion: null }; } },
+    configuration: { async resolve() { return { tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send", connectionId: "connection-a", providerKey: "synthetic", adapterKey: "synthetic.mail", adapterVersion: "1.0.0", connectionVersion: 1, policy: {}, policySource: "APPLICATION", tenantDefaultVersion: null }; } },
     async authorizeOperation() { return true; },
     async dispatch() { calls.dispatches++; return { providerReference: "synthetic-ref-1" }; },
     ...overrides,
