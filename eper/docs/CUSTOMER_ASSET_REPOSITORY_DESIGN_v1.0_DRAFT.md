@@ -204,3 +204,14 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 - The existing transactional `recordScanResult` operation remains the sole persistence transition: clean becomes available; infected becomes rejected/quarantined; scanner error becomes failed/quarantined. Duplicate identical outcomes are idempotent and conflicting outcomes fail closed.
 - This slice does not yet expose a scanner callback or worker endpoint. The adapter and repository lookup are primitives only; the next integration must authenticate a trusted worker/provider boundary before calling `recordScanResult`. No public request may self-assert a scan result.
 - No real scanner, storage provider, external dispatch or cloud resource is configured or provisioned. Malware detection effectiveness is not yet demonstrated.
+
+
+### Authenticated scanner service boundary update (2026-11-04)
+
+- Added internal-only `POST /internal/customer-assets/scan`, gated by `EPER_CUSTOMER_ASSET_SCAN_API_ENABLED=true`, PostgreSQL asset persistence, PostgreSQL audit persistence and a configured scanner adapter.
+- The route requires a dedicated bearer token from `EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN` (minimum 32 characters), compared using constant-time byte comparison. It does not accept customer bearer identities.
+- The request contains only tenant, application and upload-session identifiers. It cannot supply a scan verdict, asset ID, scanner identity, checksum or storage reference. The server resolves the pending completed upload through tenant/application-scoped PostgreSQL lookup.
+- Scanner identity is taken from `EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID` and checked against the resolver outcome before persistence. The opaque provider reference and verified checksum are passed only server-side to the configured scanner adapter.
+- The result is persisted through the existing transactional, audit-writing `recordScanResult` operation. Repeated identical outcomes are idempotent; conflicting outcomes are rejected. Public customer routes cannot call this transition.
+- Added HTTP tests for missing service credentials, valid authenticated scan processing, configured identity enforcement and invalid job references.
+- Runtime dispatch/scheduling, retry queue, scanner-provider selection, provider health monitoring and production security review remain outstanding. Enabling the route without a trusted scanner adapter and secret configuration fails closed. This implementation does not itself run malware detection or establish a production-ready security posture.
