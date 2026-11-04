@@ -6,10 +6,35 @@ import {
   validateStorageProviderRegistration,
 } from "../dist/packages/integrations/storage-provider-registration.js";
 
-const registries = {
-  adapterKeys: STORAGE_PROVIDER_CATALOGUE.map(provider => provider.adapterKey),
-  capabilityKeys: [...STORAGE_CAPABILITIES],
-  authModes: ["workload_identity", "oauth2", "service_principal"],
+// These are explicit test allowlists, not values derived from the catalogue.
+// Production allowlists remain deployment-owned environment configuration.
+const explicitProviderAllowlist = {
+  "aws-s3": {
+    adapterKeys: ["storage.aws-s3"],
+    capabilityKeys: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    authModes: ["workload_identity"],
+  },
+  "azure-blob": {
+    adapterKeys: ["storage.azure-blob"],
+    capabilityKeys: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    authModes: ["workload_identity", "service_principal"],
+  },
+  "google-cloud-storage": {
+    adapterKeys: ["storage.google-cloud-storage"],
+    capabilityKeys: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    authModes: ["workload_identity"],
+  },
+  dropbox: {
+    adapterKeys: ["storage.dropbox"],
+    capabilityKeys: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    authModes: ["oauth2"],
+  },
+};
+
+const closedRegistries = {
+  adapterKeys: [],
+  capabilityKeys: [],
+  authModes: [],
 };
 
 test("storage catalogue defines the four provider families without credential fields", () => {
@@ -18,26 +43,27 @@ test("storage catalogue defines the four provider families without credential fi
     ["aws-s3", "azure-blob", "google-cloud-storage", "dropbox"],
   );
   for (const provider of STORAGE_PROVIDER_CATALOGUE) {
-    validateStorageProviderRegistration(provider, registries);
     const metadata = JSON.stringify(provider.configurationSchema);
     assert.doesNotMatch(metadata, /secret|password|token|private.?key|client.?secret|access.?key/i);
   }
 });
 
-test("storage registration must use already registered adapter, capability and auth keys", () => {
-  const provider = STORAGE_PROVIDER_CATALOGUE[0];
-  assert.throws(
-    () => validateStorageProviderRegistration(provider, { ...registries, adapterKeys: [] }),
-    /STORAGE_PROVIDER_ADAPTER_NOT_REGISTERED/,
-  );
-  assert.throws(
-    () => validateStorageProviderRegistration(provider, { ...registries, capabilityKeys: [] }),
-    /STORAGE_PROVIDER_CAPABILITIES_INVALID/,
-  );
-  assert.throws(
-    () => validateStorageProviderRegistration(provider, { ...registries, authModes: [] }),
-    /STORAGE_PROVIDER_AUTH_MODES_INVALID/,
-  );
+test("storage providers fail closed when runtime registries have not opted in", () => {
+  for (const provider of STORAGE_PROVIDER_CATALOGUE) {
+    assert.throws(
+      () => validateStorageProviderRegistration(provider, closedRegistries),
+      /STORAGE_PROVIDER_CAPABILITIES_INVALID|STORAGE_PROVIDER_AUTH_MODES_INVALID|STORAGE_PROVIDER_ADAPTER_NOT_REGISTERED/,
+      provider.providerKey,
+    );
+  }
+});
+
+test("each storage provider passes only with its explicit provider-specific allowlist", () => {
+  for (const provider of STORAGE_PROVIDER_CATALOGUE) {
+    const registries = explicitProviderAllowlist[provider.providerKey];
+    assert.ok(registries, `missing explicit test allowlist for ${provider.providerKey}`);
+    validateStorageProviderRegistration(provider, registries);
+  }
 });
 
 test("storage registration rejects secret-bearing catalogue metadata", () => {
@@ -49,7 +75,7 @@ test("storage registration rejects secret-bearing catalogue metadata", () => {
         type: "object",
         properties: { clientSecret: { type: "string" } },
       },
-    }, registries),
+    }, explicitProviderAllowlist[provider.providerKey]),
     /STORAGE_PROVIDER_SECRET_METADATA_FORBIDDEN/,
   );
 });
@@ -60,14 +86,14 @@ test("storage registration rejects duplicate capabilities and unsupported adapte
     () => validateStorageProviderRegistration({
       ...provider,
       capabilities: ["storage.upload", "storage.upload"],
-    }, registries),
+    }, explicitProviderAllowlist[provider.providerKey]),
     /STORAGE_PROVIDER_CAPABILITIES_INVALID/,
   );
   assert.throws(
     () => validateStorageProviderRegistration({
       ...provider,
       adapterVersion: "latest",
-    }, registries),
+    }, explicitProviderAllowlist[provider.providerKey]),
     /STORAGE_PROVIDER_IDENTITY_INVALID/,
   );
 });
