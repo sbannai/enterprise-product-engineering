@@ -285,7 +285,7 @@ export class PostgresCustomerAssetRepository {
         `INSERT INTO eper_customer_asset_upload_sessions
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
            provider_upload_reference, upload_status, idempotency_key, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7::text IS NULL THEN 'reserved' ELSE 'initiated' END,$8,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7::varchar IS NULL THEN 'reserved' ELSE 'initiated' END,$8,
            COALESCE($9::timestamptz, now() + interval '15 minutes'))`,
         [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId, input.expectedSizeBytes,
           input.providerUploadReference ?? null, input.idempotencyKey,
