@@ -1774,7 +1774,76 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      if (request.method === "POST") {
+        const identity = await resolveCustomerWorkspaceIdentity(request, options);
+        if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+        if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
+          sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+        }
+        if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+            process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+          sendJson(request, response, 503, { error: "customer_asset_repository_unavailable" }); return;
+        }
+        try {
+          const body = await readJson(request);
+          const applicationId = body.applicationId;
+          const scope = body.scope;
+          const allowedMimes = JSON.parse(process.env.EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON ?? "null");
+          const maxBytes = Number(process.env.EPER_CUSTOMER_ASSET_MAX_FILE_BYTES);
+          const storageAdapterKey = process.env.EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY ?? "";
+          if (!Array.isArray(allowedMimes) || allowedMimes.length === 0 ||
+              !allowedMimes.every((value) => typeof value === "string" && value.length <= 128) ||
+              !Number.isSafeInteger(maxBytes) || maxBytes <= 0 ||
+              !/^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(storageAdapterKey)) {
+            sendJson(request, response, 503, { error: "customer_asset_upload_policy_unconfigured" }); return;
+          }
+          if (typeof applicationId !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+              (scope !== "customer_shared" && scope !== "application_restricted") ||
+              typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.length > 200 ||
+              typeof body.originalFileName !== "string" || !body.originalFileName.trim() || body.originalFileName.length > 255 ||
+              typeof body.mimeType !== "string" || !allowedMimes.includes(body.mimeType) ||
+              typeof body.fileExtension !== "string" || !/^[A-Za-z0-9]{1,12}$/.test(body.fileExtension) ||
+              !Number.isSafeInteger(body.sizeBytes) || Number(body.sizeBytes) <= 0 || Number(body.sizeBytes) > maxBytes ||
+              !["image", "video", "document", "other"].includes(String(body.mediaCategory))) {
+            sendJson(request, response, 400, { error: "invalid_customer_asset_metadata" }); return;
+          }
+          const tenantAssignments = options.tenantApplicationAssignmentStore
+            ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+            : (() => {
+                const raw = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+                return raw && typeof raw === "object" && !Array.isArray(raw)
+                  ? (raw as Record<string, unknown>)[identity.tenantId] : null;
+              })();
+          const actorAssigned = options.actorApplicationAssignmentStore
+            ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+            : identity.applicationIds?.includes(applicationId) === true;
+          if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId) || !actorAssigned) {
+            sendJson(request, response, 404, { error: "application_not_found" }); return;
+          }
+          const asset = await options.customerAssetRepository.create({
+            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+            environment: options.adminConfigEnvironment ?? "sandbox",
+            correlationId: resolveApiRequestId(request), scope,
+            ...(scope === "application_restricted" ? { ownerApplicationId: applicationId } : {}),
+            displayName: body.displayName, originalFileName: body.originalFileName,
+            mediaCategory: body.mediaCategory as "image" | "video" | "document" | "other",
+            mimeType: body.mimeType, fileExtension: body.fileExtension,
+            sizeBytes: Number(body.sizeBytes), storageAdapterKey,
+            storageObjectReference: "pending-upload:" + randomUUID(),
+          });
+          sendJson(request, response, 201, { asset: {
+            assetId: asset.assetId, scope: asset.scope, displayName: asset.displayName,
+            originalFileName: asset.originalFileName, mimeType: asset.mimeType,
+            sizeBytes: asset.sizeBytes, uploadStatus: asset.uploadStatus,
+          } }); return;
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "customer_asset_create_failed";
+          const status = code.includes("MISMATCH") || code.includes("INVALID") ? 400
+            : code.includes("NOT_FOUND") ? 404 : 503;
+          sendJson(request, response, status, { error: status === 503 ? "customer_asset_create_failed" : code }); return;
+        }
+      }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET, POST"); return; }
       const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
       let modulesConfig: unknown;
