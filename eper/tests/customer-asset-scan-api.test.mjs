@@ -160,3 +160,48 @@ test("internal scan claim endpoint returns tenant-scoped jobs under configured w
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+test("scanner retry uses persisted attempt count and does not accept request attempt", async () => {
+  const keys = ["EPER_CUSTOMER_ASSET_SCAN_API_ENABLED", "EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN",
+    "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  process.env.EPER_CUSTOMER_ASSET_SCAN_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN = "internal-malware-scanner-token-with-strong-entropy-0004";
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID = "eper-malware-scanner";
+  const calls = [];
+  const server = createAppServer({
+    customerAssetRepository: {
+      async getUploadSessionForScanning(tenantId, applicationId, uploadSessionId, workerId) {
+        calls.push({ type: "lookup", workerId });
+        return { assetId: "asset-a", providerUploadReference: "private-ref",
+          checksumSha256: "a".repeat(64), sizeBytes: 1024, mimeType: "application/pdf", attempt: 2 };
+      },
+      async retryScanJob(input) { calls.push({ type: "retry", input }); return "pending"; },
+      async recordScanResult(input) { calls.push({ type: "record", input }); throw new Error("must not finalize retryable outcome"); },
+    },
+    assetMalwareScanResolver: async () => ({ scanStatus: "error", scannerServiceId: "eper-malware-scanner" }),
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/internal/customer-assets/scan", {
+      method: "POST",
+      headers: { authorization: "Bearer " + process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN,
+        "content-type": "application/json" },
+      body: JSON.stringify({ tenantId: "tenant-a", applicationId: "app-a",
+        uploadSessionId: "00000000-0000-4000-8000-000000000001",
+        workerId: "eper-malware-scanner:worker-02", attempt: 1 }),
+    });
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { scanJob: { state: "pending", retryAfterMs: 30000 } });
+    assert.deepEqual(calls.map((call) => call.type), ["lookup", "retry"]);
+    assert.equal(calls[0].workerId, "eper-malware-scanner:worker-02");
+    assert.equal(calls[1].input.retryAfterMs, 30000, "attempt 2 from PostgreSQL drives backoff, not request attempt 1");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
