@@ -15,7 +15,7 @@ on:
       - "eper/**"
       - ".github/workflows/ci.yml"
   pull_request:
-    branches: ["main", "reconcile/payment-153-168-integration"]
+    branches: ["main", "reconcile/payment-153-168-integration", "feat/provider-payload-encryption-boundary", "feat/postgres-encrypted-provider-payload-store", "test/provider-payload-rls-role-proof"]
     paths:
       - "eper/**"
 

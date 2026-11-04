@@ -32,7 +32,7 @@ function fixture({ existing = null, claim = null, outcome = null, renewed = null
       calls.push({ sql, values });
       if (sql.includes("INSERT INTO eper_provider_operations")) {
         if (stored) return { rows: [], rowCount: 0 };
-        stored = row();
+        stored = row("QUEUED", { payload_reference: values[9] ?? "payload-ref-0001" });
         return { rows: [stored], rowCount: 1 };
       }
       if (sql.includes("FROM eper_provider_operations") && sql.includes("FOR SHARE")) {
@@ -103,6 +103,67 @@ test("enqueue is idempotent for the same request digest and rejects key reuse fo
     error => error instanceof ProviderOperationIdempotencyConflictError);
   await assert.rejects(() => repository.enqueue({ ...base, payloadReference: "payload-ref-0002" }),
     error => error instanceof ProviderOperationIdempotencyConflictError);
+});
+
+
+test("enqueueWithPayload writes payload, operation and audit in one transaction", async () => {
+  const { repository, calls } = fixture();
+  let payloadWrites = 0;
+  const payloadStore = {
+    async putInTransaction(client, input) {
+      payloadWrites += 1;
+      assert.ok(calls.some(call => call.sql === "BEGIN"));
+      assert.equal(input.tenantId, base.tenantId);
+      assert.equal(input.applicationId, base.applicationId);
+      assert.equal(input.capabilityKey, base.capabilityKey);
+      assert.ok(input.operationId);
+      return { reference: "pp_00000000-0000-4000-8000-000000000001", digest: base.requestDigest };
+    },
+  };
+  const result = await repository.enqueueWithPayload({
+    ...base, payload: { to: ["synthetic@example.invalid"] }, payloadStore,
+  });
+  assert.equal(result.created, true);
+  assert.equal(result.operation.payloadReference, "pp_00000000-0000-4000-8000-000000000001");
+  assert.equal(payloadWrites, 1);
+  const payloadWriteIndex = calls.findIndex(call => call.sql === "BEGIN");
+  const operationInsertIndex = calls.findIndex(call => call.sql.includes("INSERT INTO eper_provider_operations"));
+  const auditIndex = calls.findIndex(call => call.sql.includes("INSERT INTO eper_audit_events"));
+  const commitIndex = calls.findIndex(call => call.sql === "COMMIT");
+  assert.ok(payloadWriteIndex < operationInsertIndex);
+  assert.ok(operationInsertIndex < auditIndex);
+  assert.ok(auditIndex < commitIndex);
+  assert.ok(calls.some(call => call.sql.includes("pg_advisory_xact_lock")));
+});
+
+test("enqueueWithPayload reuses an idempotent operation without creating another payload", async () => {
+  const { repository } = fixture({ existing: {
+    operation_id: "00000000-0000-4000-8000-000000000001",
+    tenant_id: "tenant-a", application_id: "app-a",
+    connection_id: base.connectionId, capability_key: "email.send", capability_version: "1",
+    idempotency_key: "mail-001", correlation_id: "corr-001",
+    operation_status: "QUEUED", request_digest: "a".repeat(64), payload_reference: "pp_existing-reference",
+    provider_reference: null, lease_owner: null, lease_expires_at: null, fencing_token: 0,
+    attempt_count: 0, available_at: stamp, last_error_code: null, created_at: stamp, updated_at: stamp,
+  } });
+  let payloadWrites = 0;
+  const result = await repository.enqueueWithPayload({
+    ...base, payload: { to: ["same@example.invalid"] },
+    payloadStore: { async putInTransaction() { payloadWrites += 1; throw new Error("must not write duplicate payload"); } },
+  });
+  assert.equal(result.created, false);
+  assert.equal(result.operation.operationId, "00000000-0000-4000-8000-000000000001");
+  assert.equal(payloadWrites, 0);
+});
+
+test("enqueueWithPayload rolls back when encrypted payload insertion fails", async () => {
+  const { repository, calls } = fixture();
+  await assert.rejects(() => repository.enqueueWithPayload({
+    ...base, payload: { body: "synthetic" },
+    payloadStore: { async putInTransaction() { throw new Error("synthetic payload insert failure"); } },
+  }), /synthetic payload insert failure/);
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+  assert.ok(!calls.some(call => call.sql.includes("INSERT INTO eper_provider_operations")));
 });
 
 test("worker claim is scoped, ordered and uses SKIP LOCKED", async () => {
