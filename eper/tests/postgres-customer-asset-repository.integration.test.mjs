@@ -107,7 +107,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         tenantId, applicationId, workerId, scannerServiceId: "asset-scanner",
         environment: "uat", limit: 10, leaseMs: 60_000,
       });
-      assert.equal(claimed.length, 2, "both completed uploads enqueue durable scan jobs");
+      assert.equal(claimed.length, 1, "completed upload enqueues one durable scan job");
       assert.ok(claimed.some((job) => job.uploadSessionId === sessionId));
       const clean = await repository.recordScanResult({
         tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
@@ -129,8 +129,12 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         uploadSessionId: restrictedSessionId, receivedSizeBytes: 1024,
         observedMimeType: "image/png", checksumSha256: "c".repeat(64), scanStatus: "pending",
       });
-      const restrictedClaim = claimed.find((job) => job.uploadSessionId === restrictedSessionId);
-      assert.ok(restrictedClaim, "restricted upload has a claimed scan job");
+      const restrictedClaims = await repository.claimScanJobs({
+        tenantId, applicationId, workerId, scannerServiceId: "asset-scanner",
+        environment: "uat", limit: 10, leaseMs: 60_000,
+      });
+      assert.ok(restrictedClaims.some((job) => job.uploadSessionId === restrictedSessionId),
+        "restricted upload has a claimed scan job");
       const quarantined = await repository.recordScanResult({
         tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: restrictedSessionId, scanStatus: "infected",
