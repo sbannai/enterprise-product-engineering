@@ -394,6 +394,101 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         "payload deletion must append an actor-attributed audit event");
       assert.equal(await scopedPayloadStore.delete(exactPayloadReference), false,
         "repeated deletion must be idempotent");
+
+      // Prove PostgreSQL-backed v2 key rotation using operation-backed enqueue.
+      // The deferred payload/operation FKs prohibit payload-only store.put()
+      // fixtures, so each envelope is committed with its matching queue row.
+      const keyA = Buffer.alloc(32, 41);
+      const keyB = Buffer.alloc(32, 42);
+      const keyringA = {
+        legacyV1Key: Buffer.alloc(32, 23),
+        activeWriteKeyId: "payload-key-a",
+        keys: new Map([["payload-key-a", keyA]]),
+      };
+      const keyringB = {
+        legacyV1Key: Buffer.alloc(32, 23),
+        activeWriteKeyId: "payload-key-b",
+        keys: new Map([["payload-key-a", keyA], ["payload-key-b", keyB]]),
+      };
+      const keyringAuthorization = {
+        async authorize() { return true; },
+        async authorizeCreate() { return true; },
+      };
+      const keyringStoreA = new PostgresEncryptedProviderPayloadStore(
+        pool, keyringA, keyringAuthorization,
+      );
+      const keyringPayload = {
+        to: ["synthetic@example.invalid"],
+        body: "keyring-before-rotation-" + suffix,
+      };
+      const keyringDigest = createHash("sha256")
+        .update(JSON.stringify(keyringPayload), "utf8").digest("hex");
+      const keyringFirst = await operationRepository.enqueueWithPayload({
+        tenantId, applicationId, connectionId, capabilityKey: "email.send",
+        capabilityVersion: "1", idempotencyKey: "keyring-a-" + suffix,
+        correlationId: "keyring-a-correlation-" + suffix,
+        requestDigest: keyringDigest, actorId, auditEnvironment,
+        payload: keyringPayload, payloadStore: keyringStoreA,
+      });
+      assert.equal(keyringFirst.created, true);
+      const keyringReference = {
+        tenantId, applicationId,
+        operationId: keyringFirst.operation.operationId,
+        capabilityKey: "email.send",
+        reference: keyringFirst.operation.payloadReference,
+        digest: keyringDigest,
+      };
+      const keyringRowA = await pool.query(
+        "SELECT envelope_version,key_id FROM eper_provider_payloads WHERE payload_reference=$1",
+        [keyringReference.reference],
+      );
+      assert.equal(keyringRowA.rowCount, 1);
+      assert.equal(keyringRowA.rows[0].envelope_version, 2);
+      assert.equal(keyringRowA.rows[0].key_id, "payload-key-a");
+
+      const keyringStoreB = new PostgresEncryptedProviderPayloadStore(
+        pool, keyringB, keyringAuthorization,
+      );
+      assert.deepEqual(await keyringStoreB.get(keyringReference), keyringPayload,
+        "the retiring read key must decrypt existing v2 rows after active-key rotation");
+
+      const rotatedPayload = { body: "keyring-after-rotation-" + suffix };
+      const rotatedDigest = createHash("sha256")
+        .update(JSON.stringify(rotatedPayload), "utf8").digest("hex");
+      const rotated = await operationRepository.enqueueWithPayload({
+        tenantId, applicationId, connectionId, capabilityKey: "email.send",
+        capabilityVersion: "1", idempotencyKey: "keyring-b-" + suffix,
+        correlationId: "keyring-b-correlation-" + suffix,
+        requestDigest: rotatedDigest, actorId, auditEnvironment,
+        payload: rotatedPayload, payloadStore: keyringStoreB,
+      });
+      assert.equal(rotated.created, true);
+      const rotatedReference = {
+        tenantId, applicationId,
+        operationId: rotated.operation.operationId,
+        capabilityKey: "email.send",
+        reference: rotated.operation.payloadReference,
+        digest: rotatedDigest,
+      };
+      const keyringRowB = await pool.query(
+        "SELECT envelope_version,key_id FROM eper_provider_payloads WHERE payload_reference=$1",
+        [rotatedReference.reference],
+      );
+      assert.equal(keyringRowB.rowCount, 1);
+      assert.equal(keyringRowB.rows[0].envelope_version, 2);
+      assert.equal(keyringRowB.rows[0].key_id, "payload-key-b");
+      assert.deepEqual(await keyringStoreB.get(rotatedReference), rotatedPayload);
+
+      const retiredKeyUnavailable = new PostgresEncryptedProviderPayloadStore(pool, {
+        legacyV1Key: Buffer.alloc(32, 23),
+        activeWriteKeyId: "payload-key-b",
+        keys: new Map([["payload-key-b", keyB]]),
+      }, keyringAuthorization);
+      await assert.rejects(
+        () => retiredKeyUnavailable.get(keyringReference),
+        error => error?.code === "PROVIDER_PAYLOAD_DECRYPTION_FAILED",
+        "removing a still-referenced key must fail closed rather than return plaintext",
+      );
     } finally {
       const cleanup = await pool.connect();
       try {
