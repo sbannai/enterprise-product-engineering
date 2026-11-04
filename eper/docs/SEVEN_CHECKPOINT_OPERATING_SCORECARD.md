@@ -1199,3 +1199,8 @@ The runtime boundary remains explicit: `main.ts` wires the PostgreSQL repository
 The continuity charter remains **PROPOSED / OWNER REVIEW REQUIRED**. The GitHub branch endpoint currently reports `main.protected=false` and `protection.enabled=false`; the rulesets endpoint returns an empty list. This is a confirmed release-control gap, not a blocker hidden by green CI.
 
 No PR was merged. No approved requirement or chapter was changed. No branch was deleted. No chargeable cloud resource was provisioned and no real external/provider action was triggered.
+
+
+### Combined migration-stack boundary — 2026-11-04
+
+The current-main tree, provider stack (#378–#382) and customer-asset candidate (#384) have each passed their own applicable PostgreSQL/fresh-clone validation. They are separate candidate heads. No single validation head yet contains both the provider migrations (021–023) and customer-asset migrations (021–022) together. Although the migration ledger keys by full filename and both independent stacks pass, combined filename ordering, checksum-ledger replay, live PostgreSQL integration and disposable restore must be rerun on one combined candidate before integrating both stacks. Do not infer combined-stack proof from the separate green runs.
