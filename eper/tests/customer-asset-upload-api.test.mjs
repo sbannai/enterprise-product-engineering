@@ -26,7 +26,7 @@ test("customer upload reservation requires identity, assignment, provider and du
         assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-001"]);
         return { originalFileName: "proposal.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: 8192 };
       },
-      async reserveUpload(input) { events.push({ type: "reservation", input }); },
+      async reserveUpload(input) { events.push({ type: "reservation", input }); return input.uploadSessionId; },
     },
     assetUploadResolver: async (input, requestId) => {
       events.push({ type: "provider", input, requestId });
