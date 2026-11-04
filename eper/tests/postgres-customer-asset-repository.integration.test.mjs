@@ -83,7 +83,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: sessionId, receivedSizeBytes: 1,
         observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        checksumSha256: "b".repeat(64), scanStatus: "clean",
+        checksumSha256: "b".repeat(64), scanStatus: "pending",
       }), /UPLOAD_SIZE_MISMATCH/);
       await assert.rejects(() => repository.completeUpload({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
