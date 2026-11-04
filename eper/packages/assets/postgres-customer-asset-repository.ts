@@ -302,6 +302,48 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async getUploadSessionForVerification(tenantId: string, applicationId: string, uploadSessionId: string): Promise<{
+    assetId: string; actorId: string; providerUploadReference: string;
+    expectedSizeBytes: number; expectedMimeType: string; expiresAt: string;
+  } | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(uploadSessionId, "uploadSessionId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<{
+        asset_id: string; actor_id: string; provider_upload_reference: string;
+        expected_size_bytes: number | string; expected_mime_type: string; expires_at: string | Date;
+      }>(
+        `SELECT s.asset_id, s.actor_id, s.provider_upload_reference,
+          s.expected_size_bytes, a.mime_type AS expected_mime_type, s.expires_at
+         FROM eper_customer_asset_upload_sessions s
+         JOIN eper_customer_assets a
+           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
+         WHERE s.tenant_id = $1 AND s.application_id = $2
+           AND s.upload_session_id = $3
+           AND s.upload_status IN ('initiated', 'in_progress')
+           AND s.expires_at > now()
+           AND a.upload_status = 'pending' AND a.lifecycle_status = 'active'`,
+        [tenantId, applicationId, uploadSessionId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      return row ? {
+        assetId: row.asset_id, actorId: row.actor_id,
+        providerUploadReference: row.provider_upload_reference,
+        expectedSizeBytes: Number(row.expected_size_bytes),
+        expectedMimeType: row.expected_mime_type,
+        expiresAt: new Date(row.expires_at).toISOString(),
+      } : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async completeUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; uploadSessionId: string; receivedSizeBytes: number;
