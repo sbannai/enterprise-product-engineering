@@ -94,7 +94,8 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
   if (value.enum !== undefined &&
       (!Array.isArray(value.enum) || value.enum.length < 1 || value.enum.length > 100 ||
        value.enum.some(item => item !== null &&
-         !["string", "number", "boolean"].includes(typeof item)) ||
+         (!["string", "number", "boolean"].includes(typeof item) ||
+          (typeof item === "number" && !Number.isFinite(item)))) ||
        new Set(value.enum.map(item => JSON.stringify(item))).size !== value.enum.length)) invalid();
 
   for (const key of ["minLength", "maxLength"] as const) {
