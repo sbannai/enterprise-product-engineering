@@ -466,6 +466,15 @@ export class PostgresCustomerAssetRepository {
       );
       const row = updated.rows[0];
       if (!row) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_COMPLETION_FAILED");
+      // Transactional outbox: the scan job is committed atomically with the
+      // transition to scanning, so a process crash cannot lose the dispatch.
+      await client.query(
+        `INSERT INTO eper_customer_asset_scan_jobs
+          (tenant_id, application_id, upload_session_id, asset_id, correlation_id)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (tenant_id, upload_session_id) DO NOTHING`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, session.asset_id, input.correlationId],
+      );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.actorId, action: "customer.asset.upload.complete",
@@ -490,6 +499,133 @@ export class PostgresCustomerAssetRepository {
    * upload-completion path cannot self-assert a clean scan; only this separately
    * authorized service operation can move a scanning asset to available.
    */
+  /**
+   * Claims due scan jobs using SKIP LOCKED. Expired leases are reclaimable;
+   * attempts are bounded in the database and worker identity fences completion.
+   */
+  async claimScanJobs(input: {
+    tenantId: string; applicationId: string; workerId: string;
+    limit?: number; leaseMs?: number;
+  }): Promise<Array<{ uploadSessionId: string; assetId: string; correlationId: string; attempt: number; leaseExpiresAt: string }>> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.workerId, "workerId");
+    const limit = input.limit ?? 10;
+    const leaseMs = input.leaseMs ?? 60_000;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("EPER_CUSTOMER_ASSET_SCAN_CLAIM_LIMIT_INVALID");
+    if (!Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      await client.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
+                last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2
+            AND state = 'leased' AND lease_expires_at <= now()
+            AND attempt_count >= max_attempts`,
+        [input.tenantId, input.applicationId],
+      );
+      const claimed = await client.query<{
+        upload_session_id: string; asset_id: string; correlation_id: string;
+        attempt_count: number; lease_expires_at: string | Date;
+      }>(
+        `WITH candidates AS (
+           SELECT tenant_id, upload_session_id
+             FROM eper_customer_asset_scan_jobs
+            WHERE tenant_id = $1 AND application_id = $2
+              AND attempt_count < max_attempts AND available_at <= now()
+              AND (state = 'pending' OR (state = 'leased' AND lease_expires_at <= now()))
+            ORDER BY available_at, created_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT $3
+         )
+         UPDATE eper_customer_asset_scan_jobs j
+            SET state = 'leased', lease_owner = $4,
+                lease_expires_at = now() + ($5::bigint * interval '1 millisecond'),
+                attempt_count = j.attempt_count + 1, updated_at = now()
+           FROM candidates c
+          WHERE j.tenant_id = c.tenant_id AND j.upload_session_id = c.upload_session_id
+         RETURNING j.upload_session_id, j.asset_id, j.correlation_id,
+                   j.attempt_count, j.lease_expires_at`,
+        [input.tenantId, input.applicationId, limit, input.workerId, leaseMs],
+      );
+      await client.query("COMMIT");
+      return claimed.rows.map((row) => ({
+        uploadSessionId: row.upload_session_id, assetId: row.asset_id,
+        correlationId: row.correlation_id, attempt: Number(row.attempt_count),
+        leaseExpiresAt: new Date(row.lease_expires_at).toISOString(),
+      }));
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async completeScanJob(input: {
+    tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
+  }): Promise<boolean> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    this.validateId(input.workerId, "workerId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const result = await client.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET state = 'completed', lease_owner = NULL, lease_expires_at = NULL,
+                updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2
+            AND upload_session_id = $3 AND state = 'leased' AND lease_owner = $4`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId],
+      );
+      await client.query("COMMIT");
+      return result.rowCount === 1;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async retryScanJob(input: {
+    tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
+    errorCode: string; retryAfterMs: number;
+  }): Promise<"pending" | "dead_letter" | "lease_lost"> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    this.validateId(input.workerId, "workerId");
+    if (!/^[A-Z0-9_]{1,64}$/.test(input.errorCode)) throw new Error("EPER_CUSTOMER_ASSET_SCAN_ERROR_CODE_INVALID");
+    if (!Number.isInteger(input.retryAfterMs) || input.retryAfterMs < 1_000 || input.retryAfterMs > 3_600_000) {
+      throw new Error("EPER_CUSTOMER_ASSET_SCAN_RETRY_DELAY_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const result = await client.query<{ state: "pending" | "dead_letter" }>(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET state = CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE 'pending' END,
+                available_at = CASE WHEN attempt_count >= max_attempts THEN available_at
+                  ELSE now() + ($5::bigint * interval '1 millisecond') END,
+                last_error_code = $6, lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND state = 'leased' AND lease_owner = $4
+          RETURNING state`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
+          input.retryAfterMs, input.errorCode],
+      );
+      await client.query("COMMIT");
+      return result.rows[0]?.state ?? "lease_lost";
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async recordScanResult(input: {
     tenantId: string; applicationId: string; scannerServiceId: string;
     environment: AuditEnvironment; correlationId: string; uploadSessionId: string;
