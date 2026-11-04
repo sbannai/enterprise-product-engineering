@@ -1796,3 +1796,14 @@ The scorecard commit `9c8a8e89d04f1c5ada10db566e2542e53a1f11d2` has now complete
 **Open-PR inventory correction:** PR #382 has since been closed unmerged as superseded by #392. It is no longer part of the current open-PR register. Its branch has not been deleted. Worker/keyring functionality is carried on the current #392 head `312a9358150c1967feba9307f1b71fbffd8cb8f5`; #392 exact-head fresh-clone, provider lifecycle, PostgreSQL payment and matrix workflows all pass. The active open-PR register now excludes #382.
 
 This correction changes the scorecard file again. All green evidence above belongs to the prior exact scorecard head `9c8a8e89d04f1c5ada10db566e2542e53a1f11d2`; it must not be treated as validation of the new file commit until the new exact head's Actions complete.
+
+
+## Superseded provider-branch closure correction — 2026-11-04 18:32 IST
+
+PR #381 and PR #382 are now both **closed unmerged** and are excluded from the current open-PR register. Their branches were not deleted.
+
+The unique #381 commit `e63f747db7e1f11e4fc7b74fae1591a575870a1d` added restricted-role RLS assertions and a workflow path trigger for the standalone encrypted-payload integration test. The active successor path has carried the security proof into the operation-backed lifecycle test on #391/#392: it uses `SET LOCAL ROLE eper_provider_catalogue_access`, verifies same-scope reads, cross-tenant and cross-application row hiding, and rejects unauthorized writes with SQLSTATE `42501`. The current #392 workflow also includes the standalone payload integration test path; its exact-head run passes the invalid-UUID and orphan-FK rejection cases. This is why the old RLS branch can be closed without discarding its behavior. Keep the closed branch as source history until normal repository retention policy permits cleanup; do not delete it in this delivery cycle.
+
+The preceding scorecard head `aafdb2e9ede5ee0c85cfc3e2a9644d7b28ba4979` completed exact-head validation: EPER CI [41835329928], same-commit integrated gate [41835329760], separate 228/38 matrix [41835329905], G9 [41835329842], release artifact [41835329836], six-family HTTP [41835329921], container smoke [41835329841] and controlled QA [41835330028] all succeeded. The integrated workflow's duplicate matrix job was skipped; the separate matrix reports 259 passed, 0 failed and 28 HTTP checks passed; G9 reports 5 passed, 0 failed.
+
+This closure correction changes the scorecard file head again. The new file commit's exact-head checks must be evaluated independently; prior green runs belong to `aafdb2e9ede5ee0c85cfc3e2a9644d7b28ba4979` only.
