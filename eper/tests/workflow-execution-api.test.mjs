@@ -154,7 +154,15 @@ test("customer workflow work queue GET derives tenant and actor from trusted cre
     async transition() { throw new Error("not used"); },
     async listVisibleInstances(input) {
       calls.push(input);
-      return { items: [], total: 0, limit: input.limit, offset: input.offset };
+      return {
+        items: [{
+          instanceId: "instance-a", workflowId: "onboarding", status: "running",
+          currentActivityId: "review", businessReference: "APP-100",
+          version: 1, createdAt: "2026-11-04T00:00:00.000Z",
+          updatedAt: "2026-11-04T00:00:00.000Z", completedAt: null,
+        }],
+        total: 1, limit: input.limit, offset: input.offset,
+      };
     },
   };
   const server = createAppServer({
@@ -168,12 +176,23 @@ test("customer workflow work queue GET derives tenant and actor from trusted cre
     const address = server.address(); assert.ok(address && typeof address === "object");
     const url = "http://127.0.0.1:" + address.port + "/customer/applications/app-a/workflow-instances?limit=15&offset=30";
     assert.equal((await fetch(url)).status, 401);
+    const unauthorizedApplication = await fetch(
+      "http://127.0.0.1:" + address.port + "/customer/applications/app-b/workflow-instances",
+      { headers: { authorization: "Bearer " + token } },
+    );
+    assert.equal(unauthorizedApplication.status, 403);
     const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.data.total, 0);
     assert.equal(body.data.limit, 15);
     assert.equal(body.data.offset, 30);
+    assert.equal(body.data.items.length, 1);
+    assert.equal(Object.hasOwn(body.data.items[0], "data"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "tenantId"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "applicationId"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "createdBy"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "definitionDigest"), false);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].tenantId, "tenant-a");
     assert.equal(calls[0].actorId, "actor-a");
