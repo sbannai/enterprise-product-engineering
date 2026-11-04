@@ -1445,3 +1445,25 @@ Support SLA remains incomplete: no evidenced first-response/resolution timers, e
 7. Release/continuity — RED. Main protection is currently disabled and repository rulesets are empty. The continuity charter remains PROPOSED / OWNER REVIEW REQUIRED. CI restore is not production recovery; independent second-engineer release/rollback remains unproven.
 
 No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
+
+## 2026-11-04 14:02 IST — #386 parent synchronization and exact-head retest
+
+PR #386 was synchronized without creating a replacement branch or PR:
+- Merge commit 887cbe570fba3d416ba7c05c07162ff787ed246c has parents current #384 head 291129b77ab50623e41dd28c4a746ef70da28183 and prior #386 head 116fcbbab3632e8923a1b969a8f8f3854f8be216.
+- The #384 changes since the prior base touched only the scan-worker entrypoint, scan-worker implementation and scan-worker test; none overlapped the seven #386 upload-reservation files.
+- The synchronized #386 head is 7e6727cf9508c498ffcc14ba5b43ed1bee891ee0. Compare against the live #384 branch reports 17 commits ahead / 0 behind; GitHub PR mergeability is clean.
+- A new regression proves that a failed durable reservation prevents any provider capability call. The previous test name was corrected to identify grant-finalization failure accurately.
+
+Exact-head evidence for 7e6727cf9508c498ffcc14ba5b43ed1bee891ee0:
+- Fresh clone [41800272683]: PASS; 1,468 tests / 1,464 passed / 0 failed / 4 skipped; all seven migration groups including identity; npm run dev:verify; migration repeatability; disposable backup/restore 79/79.
+- PostgreSQL integration [41800272797]: PASS.
+- Provider lifecycle [41800272858]: PASS.
+- 228/38 matrix [41800272982]: PASS.
+- Controlled QA [41800272798] and technical simulation [41800272760]: PASS.
+- The fresh-clone log explicitly confirms the new reservation-failure-before-provider test passed.
+
+The previous #386 head's green runs are not reused. The branch is now synchronized with the current #384 parent. The PR API's base.sha field still shows the old snapshot, but live branch comparison reports 0 behind and the PR is mergeable/clean.
+
+The asset migration stack remains separate from the provider payload stack. This #386 clean clone applies customer asset migrations 021/022/023 and the seven migration groups, but it does not include provider payload migrations 021/022 from #379/#390. A combined provider-plus-asset migration candidate is still required. The schema still permits one upload session per tenant/asset; retry after a failed/expired session is not proven and needs an explicit lifecycle decision.
+
+No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
