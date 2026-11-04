@@ -55,12 +55,17 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         [tenantId, applicationId, connectionId],
       );
 
-      const enqueue = (key) => operationRepository.enqueue({
-        tenantId, applicationId, connectionId, capabilityKey: "email.send",
-        capabilityVersion: "1", idempotencyKey: key,
-        correlationId: "operation-" + key, requestDigest: "a".repeat(64),
-        payloadReference: "opaque-payload-" + key, actorId, auditEnvironment,
-      });
+      const enqueue = (key) => {
+        const payload = { to: ["synthetic@example.invalid"], body: "lifecycle-" + key };
+        const requestDigest = createHash("sha256")
+          .update(JSON.stringify(payload), "utf8").digest("hex");
+        return operationRepository.enqueueWithPayload({
+          tenantId, applicationId, connectionId, capabilityKey: "email.send",
+          capabilityVersion: "1", idempotencyKey: key,
+          correlationId: "operation-" + key, requestDigest,
+          actorId, auditEnvironment, payload, payloadStore,
+        });
+      };
 
       const first = await enqueue("lifecycle-" + suffix);
       assert.equal(first.created, true);
@@ -185,11 +190,61 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       const atomicFirst = await operationRepository.enqueueWithPayload(atomicInput);
       assert.equal(atomicFirst.created, true);
       assert.equal(atomicFirst.operation.requestDigest, payloadDigest);
-      assert.deepEqual(await payloadStore.get({
+      const exactPayloadReference = {
         tenantId, applicationId, operationId: atomicFirst.operation.operationId,
         capabilityKey: "email.send", reference: atomicFirst.operation.payloadReference,
         digest: payloadDigest,
-      }), providerPayload);
+      };
+      assert.deepEqual(await payloadStore.get(exactPayloadReference), providerPayload);
+      const persistedEnvelope = await pool.query(
+        `SELECT payload_digest,envelope_version,nonce,auth_tag,ciphertext
+         FROM eper_provider_payloads
+         WHERE payload_reference=$1 AND tenant_id=$2 AND application_id=$3`,
+        [exactPayloadReference.reference, tenantId, applicationId],
+      );
+      assert.equal(persistedEnvelope.rowCount, 1);
+      assert.equal(persistedEnvelope.rows[0].envelope_version, 1);
+      assert.ok(persistedEnvelope.rows[0].ciphertext.length > 0);
+      assert.equal(JSON.stringify(persistedEnvelope.rows[0]).includes(providerPayload.body), false,
+        "PostgreSQL must persist only the encrypted envelope, never provider payload plaintext");
+
+      let scopedAccess = true;
+      const scopedPayloadStore = new PostgresEncryptedProviderPayloadStore(
+        pool, Buffer.alloc(32, 23), {
+          async authorize(requested) {
+            return scopedAccess && requested.tenantId === tenantId
+              && requested.applicationId === applicationId
+              && requested.operationId === atomicFirst.operation.operationId
+              && requested.capabilityKey === "email.send";
+          },
+          async authorizeCreate(requested) {
+            return scopedAccess && requested.tenantId === tenantId
+              && requested.applicationId === applicationId
+              && requested.capabilityKey === "email.send";
+          },
+        },
+      );
+      assert.deepEqual(await scopedPayloadStore.get(exactPayloadReference), providerPayload);
+      await assert.rejects(
+        () => scopedPayloadStore.get({ ...exactPayloadReference, applicationId: applicationId + "-other" }),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
+      scopedAccess = false;
+      await assert.rejects(
+        () => scopedPayloadStore.get(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
+      await assert.rejects(
+        () => scopedPayloadStore.put({
+          tenantId, applicationId, operationId: randomUUID(), capabilityKey: "email.send",
+          payload: { body: "must-not-persist-without-create-authorization" },
+        }),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
+      await assert.rejects(
+        () => scopedPayloadStore.delete(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
       const payloadCountAfterCreate = await pool.query(
         "SELECT COUNT(*)::int AS count FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
         [tenantId, applicationId, atomicFirst.operation.operationId],
@@ -203,14 +258,64 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         [tenantId, applicationId, atomicFirst.operation.operationId],
       );
       assert.equal(payloadCountAfterRetry.rows[0].count, 1, "idempotent retry must not create an orphan duplicate payload");
+
+      const danglingPayload = { to: ["synthetic@example.invalid"], body: "dangling-" + suffix };
+      const danglingDigest = createHash("sha256")
+        .update(JSON.stringify(danglingPayload), "utf8").digest("hex");
+      const danglingReference = "pp_" + randomUUID();
+      await assert.rejects(
+        () => operationRepository.enqueueWithPayload({
+          ...atomicInput,
+          idempotencyKey: "dangling-" + suffix,
+          correlationId: "dangling-correlation-" + suffix,
+          requestDigest: danglingDigest,
+          payload: danglingPayload,
+          payloadStore: {
+            async putInTransaction() {
+              return { reference: danglingReference, digest: danglingDigest };
+            },
+          },
+        }),
+        error => error?.code === "23503"
+          && error?.constraint === "eper_provider_operations_payload_fk",
+        "the deferred reverse FK must reject an operation that references no payload envelope",
+      );
+      const danglingOperation = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",
+        [tenantId, applicationId, "dangling-" + suffix],
+      );
+      assert.equal(danglingOperation.rows[0].count, 0,
+        "the failed operation transaction must not leave a dangling queue row");
     } finally {
-      if (connectionId) {
-        await pool.query("DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
-        await pool.query("DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
-        await pool.query("DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
-        await pool.query("DELETE FROM eper_provider_connections WHERE tenant_id=$1 AND connection_id=$2", [tenantId, connectionId]).catch(() => undefined);
+      const cleanup = await pool.connect();
+      try {
+        await cleanup.query("BEGIN");
+        await cleanup.query("SET CONSTRAINTS ALL DEFERRED");
+        if (connectionId) {
+          await cleanup.query(
+            "DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_provider_connections WHERE tenant_id=$1 AND connection_id=$2",
+            [tenantId, connectionId],
+          );
+        }
+        await cleanup.query("DELETE FROM eper_provider_definitions WHERE provider_key=$1", [providerKey]);
+        await cleanup.query("COMMIT");
+      } catch {
+        await cleanup.query("ROLLBACK").catch(() => undefined);
+      } finally {
+        cleanup.release();
+        await pool.end();
       }
-      await pool.query("DELETE FROM eper_provider_definitions WHERE provider_key=$1", [providerKey]).catch(() => undefined);
-      await pool.end();
     }
   });
