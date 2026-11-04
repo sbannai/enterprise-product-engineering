@@ -63,6 +63,7 @@ import { createStorageUploadAdapter, type StorageUploadGrant } from "../../packa
 import { createStorageUploadVerificationAdapter, type StorageUploadVerificationRequest, type StorageUploadVerificationResult } from "../../packages/assets/storage-upload-verification-adapter.js";
 import { createStorageMalwareScanAdapter, type StorageMalwareScanRequest, type StorageMalwareScanResult } from "../../packages/assets/storage-malware-scan-adapter.js";
 import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
+import { validateCustomerAssetUploadPolicy } from "../../packages/assets/customer-asset-file-policy.js";
 import type { StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
 import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
@@ -2205,6 +2206,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             typeof body.idempotencyKey !== "string") {
           sendJson(request, response, 400, { error: "invalid_asset_upload_request" }); return;
         }
+        validateCustomerAssetUploadPolicy({
+          fileName: body.fileName, mimeType: body.mimeType, sizeBytes: Number(body.sizeBytes),
+        }, process.env.EPER_CUSTOMER_ASSET_FILE_POLICY_JSON);
         const pendingAsset = await options.customerAssetRepository.getPendingUploadAsset(identity.tenantId, applicationId, assetId);
         if (!pendingAsset) { sendJson(request, response, 404, { error: "asset_not_found" }); return; }
         if (pendingAsset.originalFileName !== body.fileName ||
@@ -2241,6 +2245,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const code = error instanceof Error ? error.message : "asset_upload_start_failed";
         const status = code.includes("NOT_FOUND") ? 404
           : code.includes("CONFLICT") ? 409
+          : code.includes("FILE_POLICY") ? 503
+          : code.includes("FILE_TYPE") || code.includes("FILE_SIZE") ||
+            code.includes("FILE_NAME") || code.includes("FILE_METADATA") ? 400
           : code.includes("INVALID") || code.includes("MISMATCH") ? 400
           : 503;
         sendJson(request, response, status, { error: status === 503 ? "asset_upload_start_failed" : code }); return;
