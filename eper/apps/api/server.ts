@@ -2061,8 +2061,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 503, { error: "asset_scanner_identity_mismatch" }); return;
         }
         if (outcome.scanStatus === "error") {
-          const attempt = typeof body.attempt === "number" && Number.isInteger(body.attempt) && body.attempt > 0
-            ? Math.min(body.attempt, 5) : 1;
+          // Retry policy is based on the persisted claim count, never a worker-supplied value.
+          const attempt = Math.max(1, Math.min(session.attempt, 5));
           const retryAfterMs = Math.min(3_600_000, 15_000 * (2 ** (attempt - 1)));
           const retryState = await options.customerAssetRepository.retryScanJob({
             tenantId, applicationId, uploadSessionId, workerId,
