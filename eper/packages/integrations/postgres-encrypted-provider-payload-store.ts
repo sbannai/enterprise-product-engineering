@@ -301,6 +301,17 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
         || !row.retention_policy_id || !row.retention_policy_version) {
         throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE");
       }
+      // Detach the optional operation reference in this transaction before
+      // retention removes the envelope; the deferred reverse FK must still hold.
+      const detached = await client.query(
+        `UPDATE eper_provider_operations SET payload_reference=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
+           AND payload_reference=$4`,
+        [scope.tenantId, scope.applicationId, scope.operationId, input.reference],
+      );
+      if ((detached.rowCount ?? 0) !== 1) {
+        throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_OPERATION_REFERENCE_MISMATCH");
+      }
       const removed = await client.query(
         `DELETE FROM eper_provider_payloads
          WHERE payload_reference=$1 AND tenant_id=$2 AND application_id=$3
