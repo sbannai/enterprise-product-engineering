@@ -9,6 +9,12 @@ on:
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
+      - "eper/tests/postgres-encrypted-provider-payload-store.integration.test.mjs"
+      - "eper/tests/provider-operation-worker.test.mjs"
+      - "eper/tests/provider-operation-worker-host.test.mjs"
+      - "eper/tests/postgres-provider-queue-wake-source.test.mjs"
+      - "eper/tests/postgres-provider-queue-wake-source.integration.test.mjs"
+      - "eper/tests/provider-payload-keyring.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -21,6 +27,12 @@ on:
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
+      - "eper/tests/postgres-encrypted-provider-payload-store.integration.test.mjs"
+      - "eper/tests/provider-operation-worker.test.mjs"
+      - "eper/tests/provider-operation-worker-host.test.mjs"
+      - "eper/tests/postgres-provider-queue-wake-source.test.mjs"
+      - "eper/tests/postgres-provider-queue-wake-source.integration.test.mjs"
+      - "eper/tests/provider-payload-keyring.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -67,3 +79,15 @@ jobs:
         run: npm run migrate:audit
       - name: Exercise durable provider-operation concurrency, fencing and recovery
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
+      - name: Exercise bounded provider worker authorization, routing and outcome handling
+        run: node --test tests/provider-operation-worker.test.mjs
+      - name: Exercise event-driven provider worker host lifecycle
+        run: node --test tests/provider-operation-worker-host.test.mjs
+      - name: Exercise PostgreSQL queue notification listener and reconnect
+        run: node --test tests/postgres-provider-queue-wake-source.test.mjs
+      - name: Verify PostgreSQL NOTIFY delivery occurs after transaction commit
+        run: node --test tests/postgres-provider-queue-wake-source.integration.test.mjs
+      - name: Exercise legacy v1 compatibility and v2 keyring rotation
+        run: node --test tests/provider-payload-keyring.test.mjs
+      - name: Exercise encrypted payload PostgreSQL scope and lifecycle metadata
+        run: node --test tests/postgres-encrypted-provider-payload-store.integration.test.mjs
