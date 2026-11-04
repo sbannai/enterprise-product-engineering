@@ -31,6 +31,12 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assetIds.push(shared.assetId);
       assert.equal(shared.uploadStatus, "pending");
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), []);
+      assert.equal(await repository.getPendingUploadAsset(tenantId, applicationId, shared.assetId), shared,
+        "the creating application can retrieve its pending shared asset for upload completion");
+      assert.equal(await repository.getPendingUploadAsset(tenantId, otherApplication, shared.assetId), null,
+        "another application cannot retrieve an unlinked pending shared asset");
+      assert.equal(await repository.getPendingUploadAsset(otherTenant, applicationId, shared.assetId), null,
+        "another tenant cannot retrieve the pending asset");
 
       const restricted = await repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
