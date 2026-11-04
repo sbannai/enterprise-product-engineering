@@ -2022,7 +2022,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const remaining = expiry - Date.now();
         const headersSafe = grant.headers && Object.entries(grant.headers).every(([name, value]) =>
           /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) &&
-          typeof value === "string" && value.length <= 4096 && !/[\\r\\n]/.test(value));
+          typeof value === "string" && value.length <= 4096 && !/[\r\n]/.test(value));
         if (uploadUrl.protocol !== "https:" || uploadUrl.username || uploadUrl.password ||
             !configuredAssetStorageHosts.some((host) => host.toLowerCase() === uploadUrl.hostname.toLowerCase()) ||
             (grant.method !== "PUT" && grant.method !== "POST") ||
