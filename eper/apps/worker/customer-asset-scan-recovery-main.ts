@@ -3,6 +3,24 @@ import { assertAuditStoreReady } from "../../packages/audit/audit-event-store.js
 import { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
 import type { AuditEnvironment } from "../../packages/audit/audit-event-store.js";
 
+function waitForNextPass(signal: AbortSignal, intervalMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const onAbort = (): void => finish();
+    timer = setTimeout(finish, intervalMs);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) finish();
+  });
+}
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(name + "_REQUIRED");
@@ -59,10 +77,7 @@ try {
       console.error("EPER customer asset scan recovery operation failed");
     }
     if (controller.signal.aborted) break;
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, intervalMs);
-      controller.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
-    });
+    await waitForNextPass(controller.signal, intervalMs);
   }
 } finally {
   await pool.end();
