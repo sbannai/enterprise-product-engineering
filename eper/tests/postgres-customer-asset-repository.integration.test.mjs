@@ -136,8 +136,8 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       }
 
       const ownerVisible = await repository.listForApplication(tenantId, applicationId);
-      assert.deepEqual(new Set(ownerVisible.map((asset) => asset.assetId)), new Set([shared.assetId, restricted.assetId]),
-        "the owning application sees its available restricted asset and explicitly linked shared asset");
+      assert.deepEqual(ownerVisible.map((asset) => asset.assetId), [shared.assetId],
+        "the owning application sees its available, explicitly linked shared asset but not the quarantined restricted asset");
       assert.deepEqual(await repository.listForApplication(tenantId, otherApplication), [],
         "another application in the same tenant sees neither an unlinked shared asset nor a restricted asset");
       assert.deepEqual(await repository.listForApplication(otherTenant, applicationId), [],
