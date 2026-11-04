@@ -52,7 +52,7 @@ export function validateStorageProviderRegistration(
   if (!/^[a-z][a-z0-9-]{1,63}$/.test(registration.providerKey) ||
       !registration.displayName.trim() ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(registration.adapterKey) ||
-      !/^\\d+\\.\\d+\\.\\d+$/.test(registration.adapterVersion)) {
+      !/^\d+\.\d+\.\d+$/.test(registration.adapterVersion)) {
     throw new Error("STORAGE_PROVIDER_IDENTITY_INVALID");
   }
   if (!registration.capabilities.length ||
