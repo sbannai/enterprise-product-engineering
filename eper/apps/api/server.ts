@@ -1971,6 +1971,45 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Direct uploads require durable identity assignments, PostgreSQL reservation/audit,
     // and an injected provider adapter. The signed capability is withheld until reservation commits.
+    // Workers claim durable scan jobs through a separate authenticated endpoint.
+    // Tenant/application scope is explicit; worker identity is server-configured.
+    if (requestUrl.pathname === "/internal/customer-assets/scan/claim") {
+      if (process.env.EPER_CUSTOMER_ASSET_SCAN_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const scannerToken = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN ?? "";
+      if (scannerToken.length < 32 || !bearerMatches(request, scannerToken)) {
+        sendJson(request, response, 401, { error: "unauthorized" }); return;
+      }
+      const workerId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
+      if (!options.customerAssetRepository ||
+          process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+          !/^[a-zA-Z0-9._:-]{2,128}$/.test(workerId)) {
+        sendJson(request, response, 503, { error: "asset_scanner_unavailable" }); return;
+      }
+      try {
+        const body = await readJson(request);
+        const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
+        const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+        const limit = body.limit === undefined ? 10 : body.limit;
+        const leaseMs = body.leaseMs === undefined ? 60_000 : body.leaseMs;
+        if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(tenantId) ||
+            !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+            !Number.isInteger(limit) || limit < 1 || limit > 50 ||
+            !Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) {
+          sendJson(request, response, 400, { error: "invalid_scan_claim_request" }); return;
+        }
+        const jobs = await options.customerAssetRepository.claimScanJobs({
+          tenantId, applicationId, workerId, limit, leaseMs,
+        });
+        sendJson(request, response, 200, { jobs }); return;
+      } catch {
+        sendJson(request, response, 503, { error: "asset_scan_claim_failed" }); return;
+      }
+    }
+
     // Internal scanner worker boundary. This route is separate from customer
     // identity and accepts no client-supplied scan outcome or scanner identity.
     if (requestUrl.pathname === "/internal/customer-assets/scan" ) {
@@ -2012,12 +2051,41 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             outcome.scannerServiceId !== process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID) {
           sendJson(request, response, 503, { error: "asset_scanner_identity_mismatch" }); return;
         }
+        const workerId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID;
+        if (outcome.scanStatus === "error") {
+          const attempt = typeof body.attempt === "number" && Number.isInteger(body.attempt) && body.attempt > 0
+            ? Math.min(body.attempt, 5) : 1;
+          const retryAfterMs = Math.min(3_600_000, 15_000 * (2 ** (attempt - 1)));
+          const retryState = await options.customerAssetRepository.retryScanJob({
+            tenantId, applicationId, uploadSessionId, workerId,
+            errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
+          });
+          if (retryState === "lease_lost") {
+            sendJson(request, response, 409, { error: "scan_job_lease_lost" }); return;
+          }
+          if (retryState === "pending") {
+            sendJson(request, response, 202, { scanJob: { state: "pending", retryAfterMs } }); return;
+          }
+          const failedAsset = await options.customerAssetRepository.recordScanResult({
+            tenantId, applicationId, scannerServiceId: workerId,
+            environment: options.adminConfigEnvironment ?? "sandbox",
+            correlationId: requestId, uploadSessionId, scanStatus: "error",
+          });
+          sendJson(request, response, 200, { scanJob: { state: "dead_letter" }, asset: {
+            assetId: failedAsset.assetId, uploadStatus: failedAsset.uploadStatus,
+            scanStatus: failedAsset.scanStatus, lifecycleStatus: failedAsset.lifecycleStatus,
+          } }); return;
+        }
         const asset = await options.customerAssetRepository.recordScanResult({
-          tenantId, applicationId, scannerServiceId: process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID,
+          tenantId, applicationId, scannerServiceId: workerId,
           environment: options.adminConfigEnvironment ?? "sandbox",
           correlationId: requestId, uploadSessionId, scanStatus: outcome.scanStatus,
         });
-        sendJson(request, response, 200, { asset: {
+        const completed = await options.customerAssetRepository.completeScanJob({
+          tenantId, applicationId, uploadSessionId, workerId,
+        });
+        if (!completed) { sendJson(request, response, 409, { error: "scan_job_lease_lost_after_result" }); return; }
+        sendJson(request, response, 200, { scanJob: { state: "completed" }, asset: {
           assetId: asset.assetId, uploadStatus: asset.uploadStatus,
           scanStatus: asset.scanStatus, lifecycleStatus: asset.lifecycleStatus,
         } }); return;
