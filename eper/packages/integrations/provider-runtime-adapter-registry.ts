@@ -8,6 +8,7 @@
  */
 export type ProviderRuntimeSelection = {
   providerKey: string;
+  adapterKey: string;
   capabilityKey: string;
   adapterVersion: string;
 };
@@ -128,7 +129,7 @@ export class ProviderRuntimeAdapterRegistry {
 
   resolve(selection: ProviderRuntimeSelection): ProviderRuntimeAdapter {
     if (!selection || !validIdentity(selection.providerKey)
-      || !validIdentity(selection.capabilityKey)) {
+      || !validIdentity(selection.adapterKey) || !validIdentity(selection.capabilityKey)) {
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
     }
     if (typeof selection.adapterVersion !== "string"
@@ -137,6 +138,7 @@ export class ProviderRuntimeAdapterRegistry {
     }
     const matches = [...this.adapters.values()].filter(adapter =>
       adapter.providerKey === selection.providerKey
+      && adapter.adapterKey === selection.adapterKey
       && adapter.adapterVersion === selection.adapterVersion);
     if (matches.length === 0) {
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE");
