@@ -224,3 +224,11 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 - Added repository worker primitives: bounded batch claims using `FOR UPDATE SKIP LOCKED`, lease expiry/reclaim after worker interruption, worker-identity-fenced completion, bounded retry delay and dead-letter transition after the configured attempt limit. The default lease is 60 seconds, claim batch is capped at 50, lease maximum is 15 minutes, retry delay maximum is one hour and attempts are capped at five by schema.
 - Repository readiness now requires the dispatch table. Static migration coverage verifies the new table, attempt/lease fields, RLS and least-privilege grant.
 - This is the durable queue and repository lifecycle foundation, not a running background worker. The authenticated scan endpoint still processes a supplied upload-session identifier synchronously; a dedicated worker claim/dispatch loop, retry policy wiring, scan-job completion coupling to scan-result persistence, timeout cancellation and live PostgreSQL concurrency/restart tests remain outstanding. No scanner or storage provider has been selected or provisioned; no cloud resources were created.
+
+
+### Authenticated worker claim integration update (2026-11-04)
+
+- Added `POST /internal/customer-assets/scan/claim`, protected by the scanner service bearer secret and PostgreSQL/audit readiness checks. The worker supplies tenant/application scope, a worker-instance ID prefixed by the configured scanner service ID, and bounded claim/lease settings. The service identity itself remains server-configured.
+- The claim endpoint returns only claimed job identifiers, correlation IDs, attempt numbers and lease expiry. It does not expose provider object references.
+- The scan processing endpoint now requires the same worker-instance identity and resolves the upload session only when that exact worker currently owns an unexpired lease. This prevents unclaimed, expired or differently-owned jobs from being scanned through the internal route.
+- The repository still needs an end-to-end transaction that couples scan-result persistence with job completion, plus worker-side polling/dispatch implementation, retry timeout handling and live PostgreSQL concurrency/restart validation. The endpoints provide the authenticated control plane; they do not create a continuously running worker process.
