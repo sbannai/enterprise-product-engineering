@@ -43,6 +43,7 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("COUNT(*) OVER()")) return { rows: [], rowCount: 0 };
       if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
         return { rows: roleAllowed ? [{ role_id: "employee" }] : [], rowCount: roleAllowed ? 1 : 0 };
       }
