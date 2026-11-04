@@ -138,3 +138,50 @@ test("workflow execution routes are hidden when the feature flag is disabled", a
     else process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = previous;
   }
 });
+
+
+test("customer workflow work queue GET derives tenant and actor from trusted credentials", async () => {
+  const keys = ["EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "workflow-queue-api-test-token-0000000000000001";
+  process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "operator", applicationIds: ["app-a"] },
+  });
+  const calls = [];
+  const workflowExecutionService = {
+    async start() { throw new Error("not used"); },
+    async transition() { throw new Error("not used"); },
+    async listVisibleInstances(input) {
+      calls.push(input);
+      return { items: [], total: 0, limit: input.limit, offset: input.offset };
+    },
+  };
+  const server = createAppServer({
+    workflowExecutionService,
+    workflowRoleDefinitionStore: {}, workflowActorRoleAssignmentStore: {},
+    workflowDefinitionPublisher: {},
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications/app-a/workflow-instances?limit=15&offset=30";
+    assert.equal((await fetch(url)).status, 401);
+    const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.total, 0);
+    assert.equal(body.limit, 15);
+    assert.equal(body.offset, 30);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].tenantId, "tenant-a");
+    assert.equal(calls[0].actorId, "actor-a");
+    assert.equal(calls[0].applicationId, "app-a");
+    assert.equal(calls[0].limit, 15);
+    assert.equal(calls[0].offset, 30);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
