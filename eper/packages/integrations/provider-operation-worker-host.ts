@@ -57,7 +57,8 @@ export class ProviderOperationWorkerHost {
       throw new Error("PROVIDER_WORKER_RECONCILIATION_INTERVAL_INVALID");
     }
     if (!worker || typeof worker.runOnce !== "function"
-      || !wakeSource || typeof wakeSource.wait !== "function"
+      || !wakeSource || typeof wakeSource.start !== "function"
+      || typeof wakeSource.wait !== "function"
       || typeof wakeSource.close !== "function") {
       throw new Error("PROVIDER_WORKER_HOST_DEPENDENCIES_INVALID");
     }

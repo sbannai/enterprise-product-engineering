@@ -31,6 +31,7 @@ on:
       - "eper/tests/provider-operation-worker.test.mjs"
       - "eper/tests/provider-operation-worker-host.test.mjs"
       - "eper/tests/postgres-provider-queue-wake-source.test.mjs"
+      - "eper/tests/postgres-provider-queue-wake-source.integration.test.mjs"
       - "eper/tests/provider-payload-keyring.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
