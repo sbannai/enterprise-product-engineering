@@ -61,14 +61,16 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.equal(await repository.reserveUpload(reserveInput), sessionId);
 
       const linkKey = "asset-link-" + randomUUID();
-      await repository.link({
+      const concurrentReservations = await Promise.all(
+        Array.from({ length: 5 }, () => repository.reserveUpload(reserveInput)),
+      );
+      assert.deepEqual(new Set(concurrentReservations), new Set([sessionId]),
+        "concurrent retries for the same tenant/idempotency key must converge on one session");
+
+      await Promise.all(Array.from({ length: 5 }, () => repository.link({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         idempotencyKey: linkKey, assetId: shared.assetId, reason: "integration-test",
-      });
-      await repository.link({
-        tenantId, applicationId, actorId, environment: "uat", correlationId,
-        idempotencyKey: linkKey, assetId: shared.assetId, reason: "integration-test",
-      });
+      })));
 
       const client = await pool.connect();
       try {
@@ -79,6 +81,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId, applicationId, shared.assetId],
         );
         assert.equal(links.rows.length, 1);
+        await client.query(
+          "UPDATE eper_customer_assets SET upload_status = 'available', scan_status = 'clean' WHERE tenant_id = $1 AND asset_id = ANY($2::uuid[])",
+          [tenantId, [shared.assetId, restricted.assetId]],
+        );
         const sessions = await client.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND asset_id = $2",
           [tenantId, shared.assetId],
@@ -95,8 +101,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         client.release();
       }
 
-      assert.deepEqual(await repository.listForApplication(otherTenant, applicationId), []);
-      assert.deepEqual(await repository.listForApplication(tenantId, otherApplication), []);
+      const ownerVisible = await repository.listForApplication(tenantId, applicationId);
+      assert.deepEqual(new Set(ownerVisible.map((asset) => asset.assetId)), new Set([shared.assetId, restricted.assetId]),
+        "the owning application sees its available restricted asset and explicitly linked shared asset");
+      assert.deepEqual(await repository.listForApplication(tenantId, otherApplication), [],
+        "another application in the same tenant sees neither an unlinked shared asset nor a restricted asset");
+      assert.deepEqual(await repository.listForApplication(otherTenant, applicationId), [],
+        "another tenant sees no assets");
     } finally {
       const client = await pool.connect();
       try {
