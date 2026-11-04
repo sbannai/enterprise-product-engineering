@@ -26,7 +26,6 @@ test("internal asset scan requires service bearer token and records only trusted
         calls.push({ type: "record", input });
         return { assetId: "asset-a", uploadStatus: "available", scanStatus: "clean", lifecycleStatus: "active" };
       },
-      async completeScanJob(input) { calls.push({ type: "complete", input }); return true; },
     },
     assetMalwareScanResolver: async (input, requestId) => {
       calls.push({ type: "scan", input, requestId });
@@ -57,12 +56,12 @@ test("internal asset scan requires service bearer token and records only trusted
       scanJob: { state: "completed" },
       asset: { assetId: "asset-a", uploadStatus: "available", scanStatus: "clean", lifecycleStatus: "active" },
     });
-    assert.deepEqual(calls.map((call) => call.type), ["lookup", "scan", "record", "complete"]);
+    assert.deepEqual(calls.map((call) => call.type), ["lookup", "scan", "record"]);
     assert.equal(calls[1].input.providerUploadReference, "private-object-ref");
     assert.equal(calls[2].input.scannerServiceId, "eper-malware-scanner");
     assert.equal(calls[2].input.scanStatus, "clean");
     assert.equal(calls[2].input.correlationId, "scan-correlation-001");
-    assert.equal(calls[3].input.workerId, "eper-malware-scanner:worker-01");
+    assert.equal(calls[2].input.workerId, "eper-malware-scanner:worker-01");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
