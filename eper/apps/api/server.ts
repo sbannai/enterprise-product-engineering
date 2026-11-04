@@ -59,6 +59,7 @@ import type { PostgresActorApplicationAssignmentStore } from "../../packages/ide
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
+import { createStorageUploadAdapter, type StorageUploadGrant } from "../../packages/assets/storage-upload-adapter.js";
 import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
 import type { StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
@@ -522,7 +523,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -589,6 +590,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   const assetDownloadResolver: CustomerAssetDownloadResolver | undefined = options.assetDownloadResolver ?? (
     options.assetStoragePort && configuredAssetStorageHosts.length > 0
       ? createStorageDownloadAdapter(options.assetStoragePort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
+  const assetUploadResolver = options.assetUploadResolver ?? (
+    options.assetUploadPort && configuredAssetStorageHosts.length > 0
+      ? createStorageUploadAdapter(options.assetUploadPort, { allowedHosts: configuredAssetStorageHosts })
       : undefined
   );
   const assetAuditWriter: CustomerAssetAuditWriter | undefined = options.assetAuditWriter ?? (
@@ -1879,7 +1885,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
       if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
-          !options.assetUploadResolver || process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+          !assetUploadResolver || process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
         sendJson(request, response, 503, { error: "asset_upload_provider_or_durable_store_unavailable" }); return;
       }
       const [applicationId, assetId] = [assetUploadMatch[1], assetUploadMatch[2]];
@@ -1918,7 +1924,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           fileName: body.fileName, mimeType: body.mimeType,
         }, {
           repository: options.customerAssetRepository,
-          issueGrant: options.assetUploadResolver,
+          issueGrant: assetUploadResolver,
         });
         if (!grant) { sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return; }
         sendJson(request, response, 201, { upload: grant }); return;
