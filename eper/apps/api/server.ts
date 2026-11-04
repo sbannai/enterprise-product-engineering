@@ -726,6 +726,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     const workflowPublishRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/publish$/.exec(requestUrl.pathname);
     const workflowStartRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflows\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/instances$/.exec(requestUrl.pathname);
     const workflowTransitionRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-instances\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/transitions$/i.exec(requestUrl.pathname);
+    const workflowInstanceListRoute = /^\/customer\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-instances$/.exec(requestUrl.pathname);
     const workflowOutboxDeadLetters = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-outbox\/dead-letters$/.exec(requestUrl.pathname);
     const workflowOutboxReplayRoute = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/workflow-outbox\/dead-letters\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/replay$/i.exec(requestUrl.pathname);
     const actionProposalCollection = /^\/admin\/applications\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/action-proposals$/.exec(requestUrl.pathname);
@@ -1178,7 +1179,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       }
     }
 
-    if (workflowStartRoute || workflowTransitionRoute) {
+    if (workflowStartRoute || workflowTransitionRoute || workflowInstanceListRoute) {
       if (process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
@@ -1187,11 +1188,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (!options.workflowExecutionService) {
         sendApiError(request, response, 503, "WORKFLOW_EXECUTION_UNAVAILABLE", "Workflow execution is not configured."); return;
       }
-      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
       try {
-        const body = await readJson(request);
         const environment = options.adminConfigEnvironment ?? "sandbox";
         const correlationId = resolveApiRequestId(request);
+        if (workflowInstanceListRoute) {
+          if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+          const rawLimit = requestUrl.searchParams.get("limit");
+          const rawOffset = requestUrl.searchParams.get("offset");
+          const limit = rawLimit === null ? 25 : Number(rawLimit);
+          const offset = rawOffset === null ? 0 : Number(rawOffset);
+          const result = await options.workflowExecutionService.listVisibleInstances({
+            tenantId: identity.tenantId, applicationId: workflowInstanceListRoute[1], actorId: identity.actorId,
+            correlationId, environment, serviceVersion: options.serviceVersion, limit, offset,
+          });
+          sendApiSuccess(request, response, 200, { ...result }); return;
+        }
+        if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+        const body = await readJson(request);
         if (workflowStartRoute) {
           if (!allowedBodyKeys(body, ["idempotencyKey", "businessReference", "data"])) {
             sendApiError(request, response, 400, "INVALID_WORKFLOW_START_BODY", "Only idempotencyKey, businessReference and data are accepted."); return;
