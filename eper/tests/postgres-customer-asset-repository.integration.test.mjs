@@ -72,6 +72,44 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         idempotencyKey: linkKey, assetId: shared.assetId, reason: "integration-test",
       })));
 
+      const restrictedSessionId = await repository.reserveUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        assetId: restricted.assetId, expectedSizeBytes: 1024,
+        idempotencyKey: "asset-upload-" + randomUUID(),
+        providerUploadReference: "opaque-upload:restricted-session",
+        expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      });
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: sessionId, receivedSizeBytes: 1,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        checksumSha256: "b".repeat(64), scanStatus: "clean",
+      }), /UPLOAD_SIZE_MISMATCH/);
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: sessionId, receivedSizeBytes: 4096,
+        observedMimeType: "application/pdf",
+        checksumSha256: "b".repeat(64), scanStatus: "clean",
+      }), /UPLOAD_MIME_MISMATCH/);
+      const completed = await repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: sessionId, receivedSizeBytes: 4096,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        checksumSha256: "b".repeat(64), scanStatus: "clean",
+      });
+      assert.equal(completed.uploadStatus, "available");
+      assert.equal(completed.scanStatus, "clean");
+      assert.equal(completed.checksumSha256, "b".repeat(64));
+      const quarantined = await repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: restrictedSessionId, receivedSizeBytes: 1024,
+        observedMimeType: "image/png", checksumSha256: "c".repeat(64), scanStatus: "infected",
+      });
+      assert.equal(quarantined.uploadStatus, "rejected");
+      assert.equal(quarantined.lifecycleStatus, "quarantined");
+      assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [completed],
+        "infected assets must never appear in the available asset listing");
+
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -81,20 +119,16 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId, applicationId, shared.assetId],
         );
         assert.equal(links.rows.length, 1);
-        await client.query(
-          "UPDATE eper_customer_assets SET upload_status = 'available', scan_status = 'clean' WHERE tenant_id = $1 AND asset_id = ANY($2::uuid[])",
-          [tenantId, [shared.assetId, restricted.assetId]],
-        );
         const sessions = await client.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND asset_id = $2",
           [tenantId, shared.assetId],
         );
         assert.equal(sessions.rows.length, 1);
         const audit = await client.query(
-          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.application.link')",
+          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.application.link', 'customer.asset.upload.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 4, "two creates, one upload reservation and one link are audited once each");
+        assert.equal(audit.rows.length, 7, "two creates, two reservations, one link and two completions are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
