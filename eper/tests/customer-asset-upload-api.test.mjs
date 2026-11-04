@@ -21,6 +21,10 @@ test("customer upload reservation requires identity, assignment, provider and du
   const events = [];
   const server = createAppServer({
     customerAssetRepository: {
+      async getPendingUploadAsset(tenantId, applicationId, assetId) {
+        assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-001"]);
+        return { originalFileName: "proposal.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: 8192 };
+      },
       async reserveUpload(input) { events.push({ type: "reservation", input }); },
     },
     assetUploadResolver: async (input, requestId) => {
@@ -81,7 +85,7 @@ test("customer upload reservation fails closed when provider or repository confi
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [token]: { tenantId: "tenant-a", actorId: "actor-a", applicationIds: ["app-a"] } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
-  const server = createAppServer({ customerAssetRepository: { async reserveUpload() { throw new Error("must not run"); } } });
+  const server = createAppServer({ customerAssetRepository: { async getPendingUploadAsset() { throw new Error("must not run"); }, async reserveUpload() { throw new Error("must not run"); } } });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     const address = server.address(); assert.ok(address && typeof address === "object");
