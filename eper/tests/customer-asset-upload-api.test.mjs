@@ -166,3 +166,94 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+test("upload completion uses provider-observed metadata and leaves asset in scanning state", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-upload-complete-test-token-000000001";
+  const sessionId = "00000000-0000-4000-8000-000000000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  let verificationInput;
+  let completionInput;
+  const server = createAppServer({
+    customerAssetRepository: {
+      async getUploadSessionForVerification(tenantId, applicationId, uploadSessionId) {
+        assert.deepEqual([tenantId, applicationId, uploadSessionId], ["tenant-a", "app-a", sessionId]);
+        return {
+          assetId: "asset-a", actorId: "actor-a", providerUploadReference: "opaque-provider-reference",
+          expectedSizeBytes: 4096, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        };
+      },
+      async completeUpload(input) {
+        completionInput = input;
+        return { assetId: "asset-a", uploadStatus: "scanning", scanStatus: "pending", lifecycleStatus: "active", checksumSha256: input.checksumSha256 };
+      },
+    },
+    assetUploadVerificationResolver: async (input, requestId) => {
+      verificationInput = { input, requestId };
+      return { sizeBytes: 4096, detectedMimeType: "application/pdf", checksumSha256: "b".repeat(64) };
+    },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port +
+      "/customer/applications/app-a/assets/asset-a/uploads/" + sessionId + "/complete", {
+      method: "POST",
+      headers: { authorization: "Bearer " + token, "content-type": "application/json", "x-correlation-id": "upload-complete-correlation-001" },
+      body: "{}",
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.asset.uploadStatus, "scanning");
+    assert.equal(body.asset.scanStatus, "pending");
+    assert.equal(verificationInput.input.providerUploadReference, "opaque-provider-reference");
+    assert.equal(verificationInput.requestId, "upload-complete-correlation-001");
+    assert.equal(completionInput.receivedSizeBytes, 4096);
+    assert.equal(completionInput.observedMimeType, "application/pdf");
+    assert.equal(completionInput.checksumSha256, "b".repeat(64));
+    assert.equal(completionInput.scanStatus, "pending");
+    assert.equal(JSON.stringify(body).includes("opaque-provider-reference"), false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
+test("upload completion fails closed when the trusted verification adapter is unavailable", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const token = "customer-upload-no-verifier-token-0000000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  const server = createAppServer({ customerAssetRepository: {} });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port +
+      "/customer/applications/app-a/assets/asset-a/uploads/00000000-0000-4000-8000-000000000002/complete", {
+      method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: "{}",
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "asset_upload_verification_unavailable" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
