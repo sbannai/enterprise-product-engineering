@@ -356,6 +356,89 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [clean],
         "infected assets must never appear in the available asset listing");
 
+      // Independent recovery must finalize exhausted leases without another scanner claim.
+      const exhaustedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Exhausted scan test", originalFileName: "exhausted.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 512, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-exhausted",
+      });
+      assetIds.push(exhaustedAsset.assetId);
+      const exhaustedSession = await repository.reserveUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        assetId: exhaustedAsset.assetId, expectedSizeBytes: 512,
+        idempotencyKey: "asset-exhausted-" + randomUUID(),
+        providerUploadReference: "opaque-upload:exhausted",
+        expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      });
+      await repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: exhaustedSession, receivedSizeBytes: 512,
+        observedMimeType: "application/pdf", checksumSha256: "f".repeat(64), scanStatus: "pending",
+      });
+      const exhaustedWorker = "asset-scanner:crashed-worker";
+      const exhaustedClaim = await repository.claimScanJobs({
+        tenantId, applicationId, workerId: exhaustedWorker, scannerServiceId: "asset-scanner",
+        environment: "uat", limit: 10, leaseMs: 5_000,
+      });
+      assert.ok(exhaustedClaim.some((job) => job.uploadSessionId === exhaustedSession));
+      const expireClient = await pool.connect();
+      try {
+        await expireClient.query("BEGIN");
+        await expireClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        await expireClient.query(
+          "UPDATE eper_customer_asset_scan_jobs SET attempt_count = max_attempts, lease_expires_at = now() - interval '1 second' WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
+          [tenantId, applicationId, exhaustedSession],
+        );
+        await expireClient.query("COMMIT");
+      } finally {
+        try { await expireClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        expireClient.release();
+      }
+      const recovered = await Promise.all([
+        repository.recoverExhaustedScanJobs({
+          tenantId, applicationId, scannerServiceId: "asset-scan-recovery", environment: "uat", limit: 10,
+        }),
+        repository.recoverExhaustedScanJobs({
+          tenantId, applicationId, scannerServiceId: "asset-scan-recovery", environment: "uat", limit: 10,
+        }),
+      ]);
+      assert.equal(recovered.reduce((sum, count) => sum + count, 0), 1,
+        "concurrent independent sweeps finalize an exhausted lease exactly once");
+      assert.equal(await repository.recoverExhaustedScanJobs({
+        tenantId, applicationId, scannerServiceId: "asset-scan-recovery", environment: "uat", limit: 10,
+      }), 0, "repeated recovery sweep is idempotent");
+      const recoveredClient = await pool.connect();
+      try {
+        await recoveredClient.query("BEGIN");
+        await recoveredClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const recoveredRows = await recoveredClient.query(
+          "SELECT j.state, a.upload_status, a.scan_status, a.lifecycle_status FROM eper_customer_asset_scan_jobs j JOIN eper_customer_assets a ON a.tenant_id = j.tenant_id AND a.asset_id = j.asset_id WHERE j.tenant_id = $1 AND j.application_id = $2 AND j.upload_session_id = $3",
+          [tenantId, applicationId, exhaustedSession],
+        );
+        assert.deepEqual(recoveredRows.rows[0], {
+          state: "dead_letter", upload_status: "failed", scan_status: "error", lifecycle_status: "quarantined",
+        });
+        const recoveryAudit = await recoveredClient.query(
+          "SELECT action, actor_id FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action = 'customer.asset.scan.exhausted'",
+          [tenantId, correlationId],
+        );
+        assert.ok(recoveryAudit.rows.some((row) => row.actor_id === "asset-scan-recovery"),
+          "independent recovery writes its audit event in the same transaction");
+        await recoveredClient.query("COMMIT");
+      } finally {
+        try { await recoveredClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        recoveredClient.release();
+      }
+
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -374,7 +457,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 15, "four creates, four reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 18, "the original asset lifecycle mutations are audited once each; the independent exhausted-scan recovery audit is asserted separately");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -403,13 +486,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
+          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, exhaustedAsset.assetId]),
           "RLS role sees only assets linked to or owned by its current application");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 4,
+        assert.equal(sameApplicationSessions.rows.length, 5,
           "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],

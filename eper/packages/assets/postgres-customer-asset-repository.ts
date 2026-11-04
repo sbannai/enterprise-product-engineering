@@ -646,9 +646,81 @@ export class PostgresCustomerAssetRepository {
    * authorized service operation can move a scanning asset to available.
    */
   /**
-   * Claims due scan jobs using SKIP LOCKED. Expired leases are reclaimable;
-   * attempts are bounded in the database and worker identity fences completion.
+   * Independently finalizes expired scan leases after the persisted attempt limit.
+   * This operation never claims work or calls a scanner/provider. Row locks make
+   * concurrent recovery processes safe; asset quarantine and audit are atomic
+   * with the dead-letter transition.
    */
+  async recoverExhaustedScanJobs(input: {
+    tenantId: string; applicationId: string; scannerServiceId: string;
+    environment: AuditEnvironment; limit?: number;
+  }): Promise<number> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.scannerServiceId, "scannerServiceId");
+    const limit = input.limit ?? 25;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new Error("EPER_CUSTOMER_ASSET_SCAN_RECOVERY_LIMIT_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const exhausted = await client.query<{
+        upload_session_id: string; asset_id: string; correlation_id: string;
+      }>(
+        `WITH candidates AS (
+           SELECT tenant_id, application_id, upload_session_id
+             FROM eper_customer_asset_scan_jobs
+            WHERE tenant_id = $1 AND application_id = $2
+              AND state = 'leased' AND lease_expires_at <= now()
+              AND attempt_count >= max_attempts
+            ORDER BY lease_expires_at, upload_session_id
+            FOR UPDATE SKIP LOCKED
+            LIMIT $3
+         )
+         UPDATE eper_customer_asset_scan_jobs j
+            SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
+                last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = now()
+           FROM candidates c
+          WHERE j.tenant_id = c.tenant_id
+            AND j.application_id = c.application_id
+            AND j.upload_session_id = c.upload_session_id
+          RETURNING j.upload_session_id, j.asset_id, j.correlation_id`,
+        [input.tenantId, input.applicationId, limit],
+      );
+      for (const job of exhausted.rows) {
+        const quarantined = await client.query(
+          `UPDATE eper_customer_assets
+              SET upload_status = 'failed', scan_status = 'error',
+                  lifecycle_status = 'quarantined', updated_by = $3,
+                  updated_at = now(), version = version + 1
+            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
+            RETURNING asset_id`,
+          [input.tenantId, job.asset_id, input.scannerServiceId],
+        );
+        if (quarantined.rowCount !== 1) {
+          throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
+        }
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "service", actorId: input.scannerServiceId,
+          action: "customer.asset.scan.exhausted", outcome: "failure",
+          reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
+          resourceId: job.asset_id, correlationId: job.correlation_id, source: "job",
+          operationName: "independent customer asset scan recovery",
+          payload: { assetId: job.asset_id, uploadSessionId: job.upload_session_id,
+            scanStatus: "error", resultingAssetStatus: "failed" },
+        });
+      }
+      await client.query("COMMIT");
+      return exhausted.rows.length;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async claimScanJobs(input: {
     tenantId: string; applicationId: string; workerId: string;
     scannerServiceId: string; environment: AuditEnvironment;
