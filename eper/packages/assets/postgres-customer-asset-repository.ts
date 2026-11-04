@@ -134,6 +134,32 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async getPendingUploadAsset(tenantId: string, applicationId: string, assetId: string): Promise<CustomerAsset | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(assetId, "assetId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<AssetRow>(
+        `SELECT tenant_id, asset_id, repository_scope, owner_application_id, display_name,
+          original_file_name, media_category, mime_type, file_extension, size_bytes,
+          checksum_sha256, storage_adapter_key, upload_status, scan_status, lifecycle_status,
+          version, created_by, created_at
+         FROM eper_customer_assets
+         WHERE tenant_id = $1 AND asset_id = $2
+           AND upload_status = 'pending' AND lifecycle_status = 'active'`,
+        [tenantId, assetId],
+      );
+      await client.query("COMMIT");
+      return result.rows[0] ? mapAsset(result.rows[0]) : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async create(input: CreateCustomerAssetInput): Promise<CustomerAsset> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
