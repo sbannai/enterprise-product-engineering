@@ -90,3 +90,23 @@ test("customer asset scan worker aborts an in-flight scanner call during shutdow
   assert.equal(f.calls.filter((call) => call[0] === "record").length, 0);
   assert.equal(f.calls.filter((call) => call[0] === "retry").length, 0);
 });
+
+test("customer asset scan worker waits for an in-flight lease renewal before job cleanup", async () => {
+  const f = fixture("clean");
+  let renewalFinished = false;
+  f.repository.renewScanJobLease = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    renewalFinished = true;
+    return true;
+  };
+  f.scanner.scan = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1_800));
+    return { scanStatus: "clean", scannerServiceId: "asset-scanner" };
+  };
+  await runCustomerAssetScanWorker({
+    ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    leaseMs: 5_000, onJob() { f.controller.abort(); },
+  });
+  assert.equal(renewalFinished, true, "worker must not return while its lease renewal query is still running");
+});
