@@ -236,7 +236,7 @@ export class PostgresCustomerAssetRepository {
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
-    providerUploadReference: string; expiresAt: string; uploadSessionId?: string;
+    providerUploadReference?: string; expiresAt?: string; uploadSessionId?: string;
   }): Promise<string> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
@@ -248,19 +248,22 @@ export class PostgresCustomerAssetRepository {
     if (!/^[a-zA-Z0-9._:-]{16,128}$/.test(input.idempotencyKey)) {
       throw new Error("EPER_CUSTOMER_ASSET_IDEMPOTENCY_KEY_INVALID");
     }
-    if (!input.providerUploadReference?.trim() || input.providerUploadReference.length > 2048) {
+    if (input.providerUploadReference !== undefined &&
+        (!input.providerUploadReference.trim() || input.providerUploadReference.length > 2048)) {
       throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_UPLOAD_REFERENCE_INVALID");
     }
-    const expiry = Date.parse(input.expiresAt);
-    if (!Number.isFinite(expiry)) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
+    const expiry = input.expiresAt === undefined ? null : Date.parse(input.expiresAt);
+    if (expiry !== null && !Number.isFinite(expiry)) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const expiryCheck = await client.query<{ future: boolean }>(
-        "SELECT $1::timestamptz > now() AS future", [input.expiresAt],
-      );
-      if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
+      if (input.expiresAt !== undefined) {
+        const expiryCheck = await client.query<{ future: boolean }>(
+          "SELECT $1::timestamptz > now() AS future", [input.expiresAt],
+        );
+        if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
+      }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey]);
       const prior = await client.query<{ upload_session_id: string; asset_id: string }>(
         "SELECT upload_session_id, asset_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE",
@@ -282,9 +285,11 @@ export class PostgresCustomerAssetRepository {
         `INSERT INTO eper_customer_asset_upload_sessions
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
            provider_upload_reference, upload_status, idempotency_key, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'initiated',$8,$9)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 IS NULL THEN 'reserved' ELSE 'initiated' END,$8,
+           COALESCE($9::timestamptz, now() + interval '15 minutes'))`,
         [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId, input.expectedSizeBytes,
-          input.providerUploadReference, input.idempotencyKey, new Date(expiry).toISOString()],
+          input.providerUploadReference ?? null, input.idempotencyKey,
+          expiry === null ? null : new Date(expiry).toISOString()],
       );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
@@ -292,10 +297,92 @@ export class PostgresCustomerAssetRepository {
         outcome: "success", resourceType: "customer-asset-upload", resourceId: sessionId,
         correlationId: input.correlationId, idempotencyKey: input.idempotencyKey,
         source: "api", operationName: "POST /customer/assets/:assetId/uploads",
-        payload: { assetId: input.assetId, expectedSizeBytes: input.expectedSizeBytes, expiresAt: new Date(expiry).toISOString() },
+        payload: { assetId: input.assetId, expectedSizeBytes: input.expectedSizeBytes,
+          reservationState: input.providerUploadReference ? "initiated" : "reserved",
+          expiresAt: expiry === null ? null : new Date(expiry).toISOString() },
       });
       await client.query("COMMIT");
       return sessionId;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async finalizeUploadGrant(input: {
+    tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
+    correlationId: string; uploadSessionId: string; providerUploadReference: string; expiresAt: string;
+  }): Promise<void> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    if (!input.providerUploadReference?.trim() || input.providerUploadReference.length > 2048) {
+      throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_UPLOAD_REFERENCE_INVALID");
+    }
+    const expiry = Date.parse(input.expiresAt);
+    if (!Number.isFinite(expiry)) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const updated = await client.query(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET provider_upload_reference = $5, upload_status = 'initiated',
+                expires_at = $6, updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND actor_id = $4 AND upload_status = 'reserved' AND provider_upload_reference IS NULL
+            AND $6::timestamptz > now()`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId,
+          input.providerUploadReference, new Date(expiry).toISOString()],
+      );
+      if (updated.rowCount !== 1) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RESERVATION_NOT_FINALIZABLE");
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "human", actorId: input.actorId, action: "customer.asset.upload.grant.finalize",
+        outcome: "success", resourceType: "customer-asset-upload", resourceId: input.uploadSessionId,
+        correlationId: input.correlationId, source: "api",
+        operationName: "POST /customer/assets/:assetId/uploads",
+        payload: { uploadSessionId: input.uploadSessionId, expiresAt: new Date(expiry).toISOString() },
+      });
+      await client.query("COMMIT");
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async failUploadReservation(input: {
+    tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
+    correlationId: string; uploadSessionId: string;
+    reason: "provider_error" | "provider_unavailable" | "invalid_provider_grant" | "grant_persistence_failed";
+  }): Promise<void> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const updated = await client.query(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET upload_status = 'failed', updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND actor_id = $4 AND upload_status = 'reserved'`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId],
+      );
+      if (updated.rowCount === 1) {
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "human", actorId: input.actorId, action: "customer.asset.upload.reserve.fail",
+          outcome: "failure", resourceType: "customer-asset-upload", resourceId: input.uploadSessionId,
+          correlationId: input.correlationId, source: "api",
+          operationName: "POST /customer/assets/:assetId/uploads",
+          payload: { uploadSessionId: input.uploadSessionId, reason: input.reason },
+        });
+      }
+      await client.query("COMMIT");
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
