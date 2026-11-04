@@ -186,24 +186,7 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(crossTenantQueue.total, 0);
       assert.equal(crossTenantQueue.items.length, 0);
 
-      // Revocation must immediately cut off even creator-visible queue summaries.
-      const revokeClient = await pool.connect();
-      try {
-        await revokeClient.query(
-          `UPDATE eper_actor_application_assignment
-              SET assignment_status = 'revoked', revoked_at = NOW(), revoked_by = $4,
-                  updated_at = NOW(), updated_by = $4, version = version + 1
-            WHERE tenant_id = $1 AND actor_id = $2 AND application_id = $3`,
-          [tenantId, actorId, applicationId, "workflow-security-test"],
-        );
-      } finally { revokeClient.release(); }
-      await assert.rejects(
-        service.listVisibleInstances({
-          tenantId, applicationId, actorId, correlationId, environment,
-        }),
-        error => error.code === "WORKFLOW_EXECUTION_ACTOR_APPLICATION_NOT_ACTIVE" && error.statusCode === 403,
-      );
-      const successfulApprovalIndex = approvalResults.findIndex(result => result.status === "fulfilled");
+const successfulApprovalIndex = approvalResults.findIndex(result => result.status === "fulfilled");
       const successfulApprovalInput = approveInputs[successfulApprovalIndex];
 
       // A new service object simulates process recreation; the database is the authority.
@@ -601,7 +584,24 @@ test("PostgreSQL action approval store persists proposals, maker-checker decisio
         }),
         /ACTION_APPROVAL_GATE_DENIED:APPROVAL_REVOKED/,
       );
-    } finally {
+      // Revocation must immediately cut off even creator-visible queue summaries.
+      const revokeClient = await pool.connect();
+      try {
+        await revokeClient.query(
+          `UPDATE eper_actor_application_assignment
+              SET assignment_status = 'revoked', revoked_at = NOW(), revoked_by = $4,
+                  updated_at = NOW(), updated_by = $4, version = version + 1
+            WHERE tenant_id = $1 AND actor_id = $2 AND application_id = $3`,
+          [tenantId, actorId, applicationId, "workflow-security-test"],
+        );
+      } finally { revokeClient.release(); }
+      await assert.rejects(
+        service.listVisibleInstances({
+          tenantId, applicationId, actorId, correlationId, environment,
+        }),
+        error => error.code === "WORKFLOW_EXECUTION_ACTOR_APPLICATION_NOT_ACTIVE" && error.statusCode === 403,
+      );
+          } finally {
       await pool.end();
     }
   });
