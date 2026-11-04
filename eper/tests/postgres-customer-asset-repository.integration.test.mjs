@@ -57,6 +57,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         assetId: shared.assetId, expectedSizeBytes: 4096, idempotencyKey,
         providerUploadReference: "opaque-upload:test-session", expiresAt: expiry,
       };
+      await assert.rejects(() => repository.reserveUpload({
+        ...reserveInput, idempotencyKey: "asset-expired-" + randomUUID(),
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      }), /UPLOAD_EXPIRY_INVALID/);
       const sessionId = await repository.reserveUpload(reserveInput);
       assert.equal(await repository.reserveUpload(reserveInput), sessionId);
 
@@ -109,6 +113,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       }), clean, "duplicate scanner callback is idempotent");
+      await assert.rejects(() => repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        correlationId, uploadSessionId: sessionId, scanStatus: "infected",
+      }), /SCAN_RESULT_CONFLICT/);
       await repository.completeUpload({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: restrictedSessionId, receivedSizeBytes: 1024,
