@@ -210,8 +210,8 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       assert.equal(payloadCountAfterRetry.rows[0].count, 1, "idempotent retry must not create an orphan duplicate payload");
     } finally {
       if (connectionId) {
-        await pool.query("DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
         await pool.query("DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
+        await pool.query("DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
         await pool.query("DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
         await pool.query("DELETE FROM eper_provider_connections WHERE tenant_id=$1 AND connection_id=$2", [tenantId, connectionId]).catch(() => undefined);
       }
