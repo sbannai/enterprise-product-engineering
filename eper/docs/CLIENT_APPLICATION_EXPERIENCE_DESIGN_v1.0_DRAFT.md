@@ -270,3 +270,139 @@ For upload failures, retain the upload session where safe and provide retry/resu
 6. Notification preference, consent, quiet-hour and delivery policy.
 
 These decisions must be resolved through explicit product/customer policy and recorded before implementation depends on them.
+
+## 15. Design review disposition — 2026-11-04
+
+This section records the design-session outcome and distinguishes previously owner-directed decisions from implementation recommendations. The document remains a draft design contract; it does not promote EPER-CW-061 or EPER-CW-060 to the approved 228-requirement baseline.
+
+### 15.1 Owner-directed decisions carried forward
+
+| Decision | Disposition for this design |
+|---|---|
+| Workflow drives the client journey | Confirmed. The published, application-scoped workflow definition and its pinned version drive activities, forms, rules, task eligibility and transitions. Do not maintain a second hard-coded journey. |
+| Workflow versioning | Confirmed. Publishing creates a successor immutable version. An existing application instance remains pinned to its original version unless a separately authorized migration is performed. |
+| Customer Admin owns workflow design | Confirmed. Customer Admin owns the tenant/application-scoped Workflow Studio, rule engine, visual workflow designer, application workflow roles and actor assignments. |
+| Product Admin is a separate control plane | Confirmed. Product Admin owns platform-wide customer lifecycle, price book/tariffs, commercial entitlements, platform catalogue and explicitly delegated platform support. Product Admin does not become a workflow author or gain default access to customer business records. |
+| Customer/application configuration hierarchy | Confirmed. Customer-wide defaults may be inherited by applications, with explicit application-level overrides. This applies to alert and video-conferencing policy; recipients, credentials, delivery history and application-specific rules remain application-scoped. |
+| Customer asset reuse | Confirmed. Customer-level assets may be referenced by applications only through explicit, authorized application links. A shared asset reference never widens tenant, actor or application access. |
+| External actions | Confirmed. Email/SMS/WhatsApp, publishing, conferencing actions and CRM writes remain subject to explicit human approval and execution-time authorization where the action policy requires it. A UI success message must not imply external delivery. |
+| Approved requirements baseline | Confirmed. The approved 228 requirements across 38 chapters remain unchanged. CW-060 and CW-061 remain additive v1.6.0 draft candidates pending owner approval. |
+
+A Customer Admin is not automatically a reviewer or approver. If the same person must operate on a business application, that person needs an explicit application-scoped actor/role assignment and the same activity authorization checks as any other operator.
+
+### 15.2 Three distinct experience surfaces
+
+Do not combine these into one navigation tree or use a Product Admin menu as the application's runtime menu.
+
+1. **Runtime application workspace**
+   - Audience: applicant/external submitter, processor/reviewer and approver.
+   - Primary navigation: My Applications, My Tasks and Help.
+   - Within an application: Overview, Tasks, Documents and Activity.
+   - Only the signed-in actor's permitted tasks, fields, evidence and actions are shown.
+   - Application settings and workflow authoring are not exposed to applicants by default.
+
+2. **Customer Admin workspace**
+   - Entry: Customer workspace → Applications → select application → Configure.
+   - Areas: Workflow Studio (visual designer and rule engine), workflow roles and actor assignments, application settings, customer asset repository, application-level operational metrics.
+   - Customer Admin can set customer-wide defaults and explicit application overrides according to policy.
+   - Workflow publication is a controlled action that validates the definition and role grants and creates a new immutable version. It does not rewrite running instances.
+   - Access to business-instance content is still assignment- and permission-based; the Customer Admin role alone is not blanket access to every applicant record.
+
+3. **Product Admin console**
+   - Areas: customer lifecycle, commercial plans/tariffs, price book, entitlements, platform provider catalogue and delegated cross-tenant support controls.
+   - These controls remain outside the Customer Admin Workflow Studio and outside the applicant runtime journey.
+   - Any exceptional support access to customer content must be separately authorized, time-bounded where applicable, attributable and audited.
+
+Role or application context changes must be explicit and visually obvious. Do not infer a role from a query parameter, form value, OIDC claim or hidden UI control.
+
+### 15.3 Task and form ergonomics
+
+**Task queue**
+- Default view is "Assigned to me"; separate "Available to my role" only when the workflow policy permits claiming or team pickup.
+- Each row/card shows a human task title, application reference, service name, user-facing status, due date/SLA and one clear action.
+- Default sort is actionable/overdue first, then due date, then most recently updated. Filters are status and application; avoid a large filter panel by default.
+- Desktop may use a compact table with readable row height. Tablet/mobile uses stacked cards with the primary action visible without horizontal scrolling.
+- Do not display internal workflow IDs, raw routing expressions, confidential reviewer notes or another actor's queue.
+
+**Task detail**
+- Header: application reference, service, current safe status and save state.
+- Main column: short, clearly titled form sections with labels above controls, concise help and grouped related fields.
+- Context column on wide screens: task instructions, due date, permitted evidence and safe application summary. Collapse it below the form on narrow screens.
+- Consequential actions are grouped in a persistent action area: Save draft, Submit, Approve, Reject or Return for information, but only actions permitted by the current activity and actor are rendered.
+- Return/reject actions collect a required reason when the workflow policy says so. Destructive or terminal actions require a clear confirmation that states the consequence.
+- Prevent double submission while a request is pending. Preserve the original idempotency key and payload when the outcome is uncertain; do not create a new request on a blind retry.
+
+**Dynamic forms**
+- Use the workflow's pinned activity schema. The renderer must not invent fields or actions absent from that schema.
+- Use one-column fields on mobile and at most two columns for short, related fields on desktop. Long text, complex choices and evidence controls span the full width.
+- Show required state, constraints and contextual help before submission. Do not rely on placeholder text as a label.
+- Validate on blur and submit, not aggressively on every keystroke. Show an error summary plus inline field errors; move focus to the summary after a failed submit and associate each error programmatically with its field.
+- Debounced autosave is supplementary; retain an explicit Save draft action and a visible last-saved timestamp/state.
+- Conditional visibility and allowed values come from the server-evaluated workflow rules. The server remains authoritative for required fields, hidden fields, transitions and submitted values.
+
+### 15.4 User-facing status and progress semantics
+
+The workflow engine's internal state is not copied directly into customer-facing labels. Each workflow must define an explicit, safe milestone projection.
+
+Recommended normalized application labels are Draft, Submitted, In progress, Action required, Awaiting review, Awaiting decision, Completed, Not approved and Cancelled. A customer may configure display wording, but the underlying semantic mapping must remain stable for filters, metrics and accessibility. Internal states such as lease, retry, dead-letter, routing and worker failure are never shown as business milestones.
+
+- "Action required" is shown only when the current actor has an actionable task.
+- "Awaiting review" or "Awaiting decision" is shown when the application is waiting on another authorized actor; do not disclose their identity unless policy permits.
+- SLA labels are derived from the configured due date and policy time zone; use text such as Due tomorrow or Overdue, not colour alone.
+- Do not calculate progress as completed activity count divided by total activity count. Branches, parallel activities, optional steps and skipped paths require explicit milestone metadata and a defined projection.
+- If the workflow does not provide a safe milestone mapping, show the current user-facing status and next permitted action without inventing a percentage or journey stage.
+
+Task status is distinct from application status. A task may be Available, In progress, Waiting, Completed or Returned while its application has a different overall status.
+
+### 15.5 Current implementation review and gaps
+
+Source review of main at `2c380d79c55c9183a42ed534ffd1a504f7d41316` found:
+
+- The customer portal already has an OIDC-oriented shell, tenant/application assignment checks, module-aware navigation and basic loading/error/empty messaging. Its My Applications view currently renders application IDs and an assignment message, not an application journey or task experience.
+- `GET /customer/applications` returns the actor's assigned application IDs. It is not yet a workflow-aware application read model.
+- Workflow execution has opt-in POST routes for starting an instance and submitting a transition. `PostgresWorkflowExecutionService` currently exposes the start/transition write path; customer-facing GET projections for instance overview, task queues and user-visible history are not present in that service/API.
+- The existing workflow configuration and Customer Admin Studio support application-scoped drafts, role definitions, publication, a basic activity/transition map and a simple routing-rule editor. The domain supports nested rule expressions, but the richer multi-condition visual group editor and a fully integrated runtime task UI are follow-on work.
+- The generated task-form preview is still a preview; it is not a connected business application screen.
+- The customer workflow start/transition route currently resolves the compatibility customer access identity directly. Before wiring it to the OIDC browser workspace, use the durable browser-session identity resolver in PostgreSQL identity mode, intersect current tenant/application and actor/application assignments on every request, and apply the browser CSRF control to cookie-authenticated writes. The compatibility bearer mapping must not silently become the durable browser identity path.
+- The customer asset repository work is a separate dependency. Its current repository foundation does not yet provide the complete upload, scan, publish and customer-facing upload journey. Do not present Documents upload as available until those API/storage/security steps exist.
+
+These are implementation gaps, not reasons to change the workflow-first product design.
+
+### 15.6 Next implementation slice — role-aware application read model and first runtime journey
+
+Build one thin, end-to-end vertical slice before expanding the screen catalogue or polishing the visual designer.
+
+**Scope**
+1. Add a PostgreSQL-backed application read model that can return, for a trusted actor and one authorized application:
+   - safe application summary and current user-facing status;
+   - workflow instance overview with the exact pinned definition version/digest;
+   - the actor's currently actionable tasks and permitted actions;
+   - current activity form schema and safe guidance;
+   - explicit safe milestone projection; and
+   - a filtered user-visible activity history.
+2. Add bounded, tenant/application/actor-scoped read APIs for the task queue, instance overview and user-visible history. Preserve the existing response envelope, pagination conventions and non-disclosing cross-tenant behavior.
+3. Align workflow start/transition browser calls with the durable OIDC session resolver and CSRF checks when PostgreSQL browser identity is enabled. Never accept tenant, actor, role or permission from the browser body.
+4. Extend My Applications from ID-only cards into an application list and stable application shell. Add My Tasks, Overview, current Task/Form and Activity screens. Use the existing supported field types for this slice; do not introduce arbitrary scripts or client-side rule execution.
+5. Connect Submit/Approve/Reject/Return controls to the existing transactional transition service with expected-version and idempotency handling. Keep the workflow API disabled by default until its exact-head security and integration evidence is complete.
+
+**Representative acceptance journey**
+- An authorized applicant opens an assigned application, sees a safe milestone and next action, completes a workflow-defined form, saves, refreshes and resumes without data loss, then submits once.
+- The assigned reviewer sees the task in their own queue, opens the same pinned application version and performs only the permitted review action.
+- An authorized approver sees the decision task only if assigned and permitted; the applicant then sees the persisted terminal outcome and only the public history entries.
+- A duplicate request, stale version, unauthorized actor, cross-application identifier, interrupted network or unavailable persistence produces a safe, recoverable state without duplicate transitions or silent data loss.
+
+**Exit evidence**
+- Unit and API tests for task projection, safe milestone mapping, role/assignment filtering, status mapping and response allowlists.
+- Live PostgreSQL tests for tenant/application isolation, instance-version pinning, concurrent transitions, expected-version conflicts, idempotency and atomic audit.
+- Browser tests for applicant, reviewer and approver journeys using the OIDC browser session; include keyboard-only operation and narrow viewport coverage at approximately 375 px, 768 px and 1280 px.
+- Accessibility checks for labels, error associations, focus order, live status announcements, contrast and reflow.
+- Exact-head CI and integrated validation. A skipped PostgreSQL or browser test is not a pass.
+
+**Explicitly out of this slice**
+- New workflow field types, arbitrary scripts and a complete drag-and-drop workflow designer redesign.
+- Full asset upload/scan/download UI until the customer asset API and storage adapter lifecycle is complete.
+- Real email/SMS/WhatsApp/video-provider delivery, autonomous AI actions, live CRM writes, production deployment or chargeable cloud resources.
+- Product Admin commercial controls inside the Customer Admin or applicant runtime navigation.
+- Business UAT authorization.
+
+The first slice is complete only when the representative journey is backed by durable read/write state and exact-head evidence. A static wireframe or preview-only task form does not satisfy this exit criterion.
