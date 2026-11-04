@@ -54,7 +54,7 @@ let shuttingDown = false;
 function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log("EPER customer asset scan worker shutting down", signal);
+  console.log("EPER customer asset scan worker shutting down");
   controller.abort();
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => shutdown(signal));
@@ -73,7 +73,7 @@ try {
   }
   const scanner = await module.createCustomerAssetScanner({ pool, env: process.env });
   if (!scanner || typeof scanner.scan !== "function") throw new Error("CUSTOMER_ASSET_SCANNER_CONTRACT_INVALID");
-  console.log("EPER customer asset scan worker started", { workerId, tenantId, applicationId });
+  console.log("EPER customer asset scan worker started");
   await runCustomerAssetScanWorker({
     repository, scanner, tenantId, applicationId, workerId, scannerServiceId, environment,
     signal: controller.signal,
@@ -82,8 +82,9 @@ try {
     batchSize: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_BATCH_SIZE", 10, 1, 50),
     concurrency: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_CONCURRENCY", 2, 1, 10),
     scanTimeoutMs: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT_MS", 120_000, 1_000, 900_000),
-    onError(error) { console.error("EPER customer asset scan worker error", error); },
-    onJob(result) { console.log("EPER customer asset scan job", result); },
+    // Never emit provider exceptions, opaque upload references, tenant IDs or session IDs to logs.
+    onError() { console.error("EPER customer asset scan worker operation failed"); },
+    onJob(result) { console.log("EPER customer asset scan job outcome", result.outcome); },
   });
 } finally {
   await pool.end();
