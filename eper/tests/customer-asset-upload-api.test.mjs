@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
+import { createCustomerCsrfToken } from "../dist/packages/identity/customer-browser-security.js";
 
 test("customer upload reservation requires identity, assignment, provider and durable audit", async () => {
   const keys = [
@@ -261,5 +262,115 @@ test("upload completion fails closed when the trusted verification adapter is un
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
+
+test("durable customer asset upload mutations require CSRF and current application-role permission", async () => {
+  const keys = [
+    "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
+    "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON", "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES",
+    "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY",
+  ];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const sessionToken = "s".repeat(48);
+  const csrfSecret = "customer-asset-upload-csrf-secret-000000000000";
+  const csrfToken = createCustomerCsrfToken(sessionToken, csrfSecret);
+  const mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  Object.assign(process.env, {
+    EPER_CUSTOMER_ASSETS_API_ENABLED: "true",
+    EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
+    EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_IDENTITY_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_WORKSPACE_MODULES_JSON: JSON.stringify({ "tenant-a": ["client-assets"] }),
+    EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON: JSON.stringify([mimeType]),
+    EPER_CUSTOMER_ASSET_MAX_FILE_BYTES: "10485760",
+    EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY: "customer-storage",
+  });
+  let allowUpload = true;
+  let authorizationCalls = 0;
+  let created;
+  const server = createAppServer({
+    customerIdentitySessionStore: {
+      async resolveSession(token) {
+        assert.equal(token, sessionToken);
+        return { tenantId: "tenant-a", actorId: "actor-a", issuer: "https://idp.example.test", subject: "subject-a" };
+      },
+    },
+    tenantApplicationAssignmentStore: {
+      async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a"]; },
+    },
+    actorApplicationAssignmentStore: {
+      async listActive(tenantId, actorId) {
+        assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]);
+        return ["app-a"];
+      },
+      async isAssigned(tenantId, actorId, applicationId) {
+        assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+        return true;
+      },
+    },
+    assetUploadAuthorizer: {
+      async authorize(input) {
+        authorizationCalls++;
+        assert.deepEqual(input, { tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a" });
+        return allowUpload;
+      },
+    },
+    customerAssetRepository: {
+      async create(input) {
+        created = input;
+        return {
+          assetId: "asset-oidc-001", scope: input.scope, displayName: input.displayName,
+          originalFileName: input.originalFileName, mimeType: input.mimeType,
+          sizeBytes: input.sizeBytes, uploadStatus: "pending",
+        };
+      },
+    },
+    customerOidcPublicOrigin: "http://localhost",
+    customerCsrfSecret: csrfSecret,
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const endpoint = "http://127.0.0.1:" + address.port + "/customer/assets";
+    const body = {
+      applicationId: "app-a", scope: "application_restricted", displayName: "Client proposal",
+      originalFileName: "proposal.docx", mimeType, fileExtension: "docx",
+      mediaCategory: "document", sizeBytes: 4096, tenantId: "attacker-controlled",
+    };
+    const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
+    const missingCsrf = await fetch(endpoint, {
+      method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    assert.equal(missingCsrf.status, 403);
+    assert.equal(authorizationCalls, 0);
+    assert.equal(created, undefined);
+
+    const headers = {
+      cookie, origin: "http://localhost", "x-csrf-token": csrfToken,
+      "content-type": "application/json", "x-correlation-id": "oidc-asset-create-001",
+    };
+    const allowed = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal(allowed.status, 201);
+    assert.equal((await allowed.json()).asset.assetId, "asset-oidc-001");
+    assert.equal(authorizationCalls, 1);
+    assert.equal(created.tenantId, "tenant-a");
+    assert.equal(created.actorId, "actor-a");
+    assert.equal(created.applicationId, "app-a");
+
+    allowUpload = false;
+    const denied = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal(denied.status, 403);
+    assert.equal(authorizationCalls, 2);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
   }
 });
