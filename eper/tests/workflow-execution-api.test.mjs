@@ -172,7 +172,10 @@ test("customer workflow work queue GET derives tenant and actor from trusted cre
     workflowExecutionService,
     workflowRoleDefinitionStore: {}, workflowActorRoleAssignmentStore: {},
     workflowDefinitionPublisher: {},
-    tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a", "app-b"]; } },
+    actorApplicationAssignmentStore: {
+      async isAssigned(_tenantId, _actorId, applicationId) { return applicationId === "app-a"; },
+    },
   });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
