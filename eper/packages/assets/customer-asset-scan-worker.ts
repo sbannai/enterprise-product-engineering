@@ -6,7 +6,7 @@ export interface CustomerAssetScanner {
   scan(input: {
     tenantId: string; applicationId: string; assetId: string; uploadSessionId: string;
     providerUploadReference: string; checksumSha256: string; sizeBytes: number; mimeType: string;
-  }, requestId: string): Promise<TrustedMalwareScanOutcome>;
+  }, requestId: string, signal?: AbortSignal): Promise<TrustedMalwareScanOutcome>;
 }
 export interface CustomerAssetScanWorkerOptions {
   repository: PostgresCustomerAssetRepository;
