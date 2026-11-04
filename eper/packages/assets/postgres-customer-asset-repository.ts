@@ -646,10 +646,6 @@ export class PostgresCustomerAssetRepository {
    * authorized service operation can move a scanning asset to available.
    */
   /**
-   * Claims due scan jobs using SKIP LOCKED. Expired leases are reclaimable;
-   * attempts are bounded in the database and worker identity fences completion.
-   */
-  /**
    * Independently finalizes expired scan leases after the persisted attempt limit.
    * This operation never claims work or calls a scanner/provider. Row locks make
    * concurrent recovery processes safe; asset quarantine and audit are atomic
@@ -718,7 +714,7 @@ export class PostgresCustomerAssetRepository {
         });
       }
       await client.query("COMMIT");
-      return exhausted.rowCount;
+      return exhausted.rows.length;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
