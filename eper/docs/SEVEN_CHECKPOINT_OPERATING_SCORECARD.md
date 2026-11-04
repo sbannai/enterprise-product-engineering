@@ -1287,3 +1287,43 @@ Next delivery sequence:
 5. Complete support SLA timers/escalation/breach evidence and the second-engineer release/restore/rollback path.
 
 No approved requirement or chapter was changed. No PR was merged or branch deleted. No chargeable cloud resource was provisioned and no real external/provider action was triggered.
+
+
+## 2026-11-04 10:40 IST — exact-head refresh
+
+### Mainline and merged foundations
+- Dynamically resolved main: `2c380d79c55c9183a42ed534ffd1a504f7d41316`; tree: `0c01985a303e9348e728acd04b0a55a80020f9a9`.
+- PR #306 merge `6e8dd438e5091b1802d65e4f29951389fe077859` is an ancestor of main. Its fresh-clone candidate `2c426de8b63e437ffb186ed4887da76b4b704719` has the exact same tree as current main. Run [41657363742](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657363742): 1,426 tests, 1,422 passed, 0 failed, 4 skipped; seven migration-ledger groups, identity included, repeatability, `npm run dev:verify`, disposable backup/restore and 75/75 base tables.
+- PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e` and PR #376 merge `9749701bfed527b906183192ca06cc1998e70166` are ancestors of main.
+
+### Dynamically refreshed open PRs and exact heads
+All returned Actions runs below are tied to the exact listed head and completed successfully. Stacked provider branches remain one commit ahead of their respective base branch.
+
+| PR | Base | Exact head | Selected exact-head evidence |
+|---|---|---|---|
+| #377 | main | `207d4722e461857537d623397b6e1e042a379e55` | CI [41773475932], integrated [41773475965], matrix [41773475934], G9 [41773475962], release [41773475968] |
+| #378 | main | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039] |
+| #379 | #378 branch | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] |
+| #380 | main | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Integrated [41763251674], matrix [41763251774], G9 [41763251777] |
+| #381 | #379 branch | `e63f747db7e1f11e4fc7b74fae1591a575870a1d` | Fresh clone [41738364008], provider lifecycle [41738363993], matrix [41738363997] |
+| #382 | #381 branch | `8aa4344a02f6f77d5566c7b24d571a5681b68ac2` | Fresh clone [41738377819], PostgreSQL [41738377859], provider lifecycle [41738377748] |
+| #384 | main | `36bce45869212e12cd911e415b378712e9710842` | Fresh clone [41776817648], integrated [41776817928], browser [41776817575], PostgreSQL [41776817512], matrix [41776817583] |
+| #385 | main | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | Integrated [41764308133], matrix [41764308125], G9 [41764308165] |
+
+### PR #384 current implementation evidence
+The PR head advanced from the previous scorecard snapshot to `36bce45869212e12cd911e415b378712e9710842`. Its current-head fresh-clone log reports 1,463 tests, 1,459 passed, 0 failed, 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`; source/restored base tables 79/79; migration-ledger tables 7. Integrated PostgreSQL reports the same test totals. Browser E2E passes customer OIDC/workspace/support/logout (1/1) and Product Admin remediation (1/1).
+
+The seven-ledger fresh clone includes identity. In the asset branch, audit migrations 021/022 are customer-asset repository and scan-dispatch migrations. Provider payload migrations 021–023 live in the separate #379/#382 stack. These feature branches have not been combined into one candidate; duplicate 021/022 numbering is an explicit migration-composition blocker, not evidence of a combined-stack pass.
+
+The scan worker is now independently startable and continuously polls the durable scan queue with lease renewal, bounded concurrency/timeouts, retry/dead-letter handling and graceful shutdown. Concrete blob storage, server-side object-verification provider, scanner module, actual binary upload, customer upload UI and download lifecycle remain unimplemented/unverified.
+
+### Seven-pointer status
+1. v34-to-228 — AMBER. Approved 228 requirements and 38 chapters remain unchanged. The crosswalk retains 45 v34 source rows with 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates; owner disposition remains required.
+2. Fresh clone — GREEN for local/CI handover. PR #306 is merged and exact-tree verified against main.
+3. PostgreSQL — AMBER. Separate provider and asset candidates each pass fresh-clone, repeatability, live PostgreSQL and disposable restore checks. Provider payload rows still lack a database-enforced tenant/application/operation foreign key. Combined migration stack is not yet proven.
+4. Identity — AMBER. #310/#376 are merged. Synthetic-IdP browser E2E, durable sessions, secure cookies, CSRF, revocation and tenant/application assignment checks are evidenced. Production IdP/JWKS onboarding is not evidenced.
+5. Customer workspace/support — AMBER. Ticket creation/list/history/replies, actor/application scoping, admin queue/lifecycle, tenant isolation and export utilities are tested. SLA targets/timers/escalation/breach evidence are absent. Customer asset upload UI/provider integration remains incomplete.
+6. Scheduler/workflow operations — AMBER. Campaign/agent worker entrypoints and workflow outbox lease/fencing/idempotency/retry/dead-letter/recovery tests exist. Workflow outbox and provider operation worker still lack independent application hosting/supervision; approved production dispatch, restricted service identity, metrics and alerts remain.
+7. Release/continuity — RED. Main branch reports `protected=false`; rulesets collection is empty. Disposable restore is not production recovery certification. Production backup destination/key custody, RPO/RTO, independent restore rehearsal and second-engineer release/rollback path remain unproven.
+
+Continuity charter remains PROPOSED / OWNER REVIEW REQUIRED. No branch-protection or ruleset settings were changed. No approved requirement/chapter was changed, no PR merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
