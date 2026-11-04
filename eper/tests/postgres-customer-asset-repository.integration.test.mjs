@@ -148,6 +148,29 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await finalizedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         finalizedClient.release();
       }
+      const expiryClient = await pool.connect();
+      try {
+        await expiryClient.query("BEGIN");
+        await expiryClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        await expiryClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET expires_at = now() - interval '1 second' WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, reservedSessionId],
+        );
+        await expiryClient.query("COMMIT");
+      } finally {
+        try { await expiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        expiryClient.release();
+      }
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: reservedSessionId, receivedSizeBytes: 2048,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        checksumSha256: "e".repeat(64), scanStatus: "pending",
+      }), /UPLOAD_SESSION_EXPIRED/,
+      "an expired provider grant cannot be completed or promoted to scanning");
 
       const failedAsset = await repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
