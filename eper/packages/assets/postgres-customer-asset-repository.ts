@@ -515,6 +515,7 @@ export class PostgresCustomerAssetRepository {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.workerId, "workerId");
+    this.validateId(input.scannerServiceId, "scannerServiceId");
     const limit = input.limit ?? 10;
     const leaseMs = input.leaseMs ?? 60_000;
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("EPER_CUSTOMER_ASSET_SCAN_CLAIM_LIMIT_INVALID");
@@ -546,7 +547,7 @@ export class PostgresCustomerAssetRepository {
                   updated_at = now(), version = version + 1
             WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
             RETURNING asset_id`,
-          [input.tenantId, job.asset_id, input.applicationId, input.scannerServiceId],
+          [input.tenantId, job.asset_id, input.scannerServiceId],
         );
         if (failed.rowCount !== 1) {
           throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
