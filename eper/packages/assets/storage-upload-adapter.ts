@@ -86,7 +86,7 @@ export function createStorageUploadAdapter(
       if (!grant.headers || typeof grant.headers !== "object" || Array.isArray(grant.headers)) return null;
       for (const [name, value] of Object.entries(grant.headers)) {
         if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) ||
-            typeof value !== "string" || value.length > 4096 || /[\\r\\n]/.test(value)) return null;
+            typeof value !== "string" || value.length > 4096 || /[\r\n]/.test(value)) return null;
         headers[name] = value;
       }
     }
