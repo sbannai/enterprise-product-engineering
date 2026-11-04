@@ -2016,6 +2016,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           issueGrant: assetUploadResolver,
         });
         if (!grant) { sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return; }
+        let uploadUrl: URL;
+        try { uploadUrl = new URL(grant.url); } catch { uploadUrl = new URL("about:blank"); }
+        const expiry = Date.parse(grant.expiresAt);
+        const remaining = expiry - Date.now();
+        const headersSafe = grant.headers && Object.entries(grant.headers).every(([name, value]) =>
+          /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) &&
+          typeof value === "string" && value.length <= 4096 && !/[\\r\\n]/.test(value));
+        if (uploadUrl.protocol !== "https:" || uploadUrl.username || uploadUrl.password ||
+            !configuredAssetStorageHosts.some((host) => host.toLowerCase() === uploadUrl.hostname.toLowerCase()) ||
+            (grant.method !== "PUT" && grant.method !== "POST") ||
+            !Number.isFinite(expiry) || remaining <= 0 || remaining > 15 * 60_000 || !headersSafe) {
+          sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
         sendJson(request, response, 201, { upload: grant }); return;
       } catch (error) {
         const code = error instanceof Error ? error.message : "asset_upload_start_failed";
