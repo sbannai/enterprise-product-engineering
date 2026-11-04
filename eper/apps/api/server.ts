@@ -1963,7 +1963,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Direct uploads require durable identity assignments, PostgreSQL reservation/audit,
     // and an injected provider adapter. The signed capability is withheld until reservation commits.
-    const assetUploadCompleteMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{1,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/uploads\\/([a-zA-Z0-9-]{16,64})\\/complete$/.exec(requestUrl.pathname);
+    const assetUploadCompleteMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/uploads\/([a-zA-Z0-9-]{16,64})\/complete$/.exec(requestUrl.pathname);
     if (assetUploadCompleteMatch) {
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
       if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
