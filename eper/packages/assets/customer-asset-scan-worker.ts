@@ -75,6 +75,9 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
             const scanController = new AbortController();
+            const abortScanOnShutdown = () => scanController.abort();
+            if (options.signal.aborted) scanController.abort();
+            else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
               const timeout = new Promise<never>((_, reject) => {
@@ -97,6 +100,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
             } finally {
               if (scanTimer) clearTimeout(scanTimer);
+              options.signal.removeEventListener("abort", abortScanOnShutdown);
             }
             if (leaseLost || options.signal.aborted) {
               options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return;
