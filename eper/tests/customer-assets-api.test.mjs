@@ -459,3 +459,46 @@ test("customer asset API refuses PostgreSQL mode without its durable repository"
     else process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = previous;
   }
 });
+
+
+test("PostgreSQL asset download never falls back to a legacy manifest entry", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "postgres-download-no-fallback-token-00000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  // Deliberately leave a legacy copy: PostgreSQL mode must ignore it.
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": [{ id: "asset-1", name: "Legacy copy.pdf", accessReference: "blobref:legacy" }] },
+  });
+  let lookupCalls = 0, providerCalls = 0;
+  const server = createAppServer({
+    customerAssetRepository: { async getDownloadAsset(tenantId, applicationId, assetId) {
+      lookupCalls++;
+      assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-1"]);
+      return null;
+    } },
+    assetDownloadResolver: async () => { providerCalls++; return null; },
+    assetAuditWriter: async () => {},
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/applications/app-a/assets/asset-1/download",
+      { headers: { authorization: "Bearer " + token } });
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "asset_not_found" });
+    assert.equal(lookupCalls, 1);
+    assert.equal(providerCalls, 0, "storage provider must not be invoked for an asset absent from PostgreSQL");
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});

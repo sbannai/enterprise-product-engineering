@@ -134,6 +134,52 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  /** Returns a private storage reference only after tenant, application, sharing and lifecycle authorization. */
+  async getDownloadAsset(tenantId: string, applicationId: string, assetId: string): Promise<{
+    accessReference: string; fileName: string; mimeType: string;
+  } | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(assetId, "assetId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<{
+        storage_object_reference: string; original_file_name: string; mime_type: string;
+      }>(
+        `SELECT a.storage_object_reference, a.original_file_name, a.mime_type
+         FROM eper_customer_assets a
+         WHERE a.tenant_id = $1 AND a.asset_id = $2
+           AND a.lifecycle_status = 'active'
+           AND a.upload_status = 'available'
+           AND a.scan_status IN ('clean', 'not_required')
+           AND (
+             (a.repository_scope = 'application_restricted' AND a.owner_application_id = $3)
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = a.asset_id
+             ))
+           )
+         LIMIT 1`,
+        [tenantId, assetId, applicationId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      if (!row || typeof row.storage_object_reference !== "string" || !row.storage_object_reference.trim()) return null;
+      return {
+        accessReference: row.storage_object_reference,
+        fileName: row.original_file_name,
+        mimeType: row.mime_type,
+      };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async getPendingUploadAsset(tenantId: string, applicationId: string, assetId: string): Promise<CustomerAsset | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
@@ -149,8 +195,17 @@ export class PostgresCustomerAssetRepository {
           version, created_by, created_at
          FROM eper_customer_assets
          WHERE tenant_id = $1 AND asset_id = $2
-           AND upload_status = 'pending' AND lifecycle_status = 'active'`,
-        [tenantId, assetId],
+           AND upload_status = 'pending' AND lifecycle_status = 'active'
+           AND (
+             (repository_scope = 'application_restricted' AND owner_application_id = $3)
+             OR (repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = eper_customer_assets.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = eper_customer_assets.asset_id
+             ))
+           )`,
+        [tenantId, assetId, applicationId]
       );
       await client.query("COMMIT");
       return result.rows[0] ? mapAsset(result.rows[0]) : null;

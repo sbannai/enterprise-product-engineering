@@ -31,6 +31,12 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assetIds.push(shared.assetId);
       assert.equal(shared.uploadStatus, "pending");
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), []);
+      assert.deepEqual(await repository.getPendingUploadAsset(tenantId, applicationId, shared.assetId), shared,
+        "the creating application can retrieve its pending shared asset for upload completion");
+      assert.equal(await repository.getPendingUploadAsset(tenantId, otherApplication, shared.assetId), null,
+        "another application cannot retrieve an unlinked pending shared asset");
+      assert.equal(await repository.getPendingUploadAsset(otherTenant, applicationId, shared.assetId), null,
+        "another tenant cannot retrieve the pending asset");
 
       const restricted = await repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
@@ -142,6 +148,41 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await finalizedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         finalizedClient.release();
       }
+      const verificationSession = await repository.getUploadSessionForVerification(
+        tenantId, applicationId, reservedSessionId,
+      );
+      assert.equal(verificationSession?.assetId, reservedAsset.assetId);
+      assert.equal(verificationSession?.providerUploadReference, "opaque-upload:finalized-reservation");
+      assert.equal(await repository.getUploadSessionForVerification(
+        tenantId, otherApplication, reservedSessionId,
+      ), null, "provider verification cannot resolve a session from another application");
+
+      const expiryClient = await pool.connect();
+      try {
+        await expiryClient.query("BEGIN");
+        await expiryClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        await expiryClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET expires_at = now() - interval '1 second' WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, reservedSessionId],
+        );
+        await expiryClient.query("COMMIT");
+      } finally {
+        try { await expiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        expiryClient.release();
+      }
+      assert.equal(await repository.getUploadSessionForVerification(
+        tenantId, applicationId, reservedSessionId,
+      ), null, "expired sessions must not be handed to the provider verifier");
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: reservedSessionId, receivedSizeBytes: 2048,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        checksumSha256: "e".repeat(64), scanStatus: "pending",
+      }), /UPLOAD_SESSION_EXPIRED/,
+      "an expired provider grant cannot be completed or promoted to scanning");
 
       const failedAsset = await repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
@@ -179,6 +220,15 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await failedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         failedClient.release();
       }
+      assert.equal(await repository.getDownloadAsset(tenantId, applicationId, failedAsset.assetId), null,
+        "provider failure must never make a pending asset downloadable");
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: failedReservationId, receivedSizeBytes: 1536,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        checksumSha256: "d".repeat(64), scanStatus: "pending",
+      }), /UPLOAD_SESSION_NOT_COMPLETABLE/,
+      "a failed provider reservation cannot be completed or promoted to scanning");
 
       await Promise.all(Array.from({ length: 5 }, () => repository.link({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
@@ -224,15 +274,60 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.equal(await repository.renewScanJobLease({
         tenantId, applicationId, uploadSessionId: sessionId, workerId: "asset-scanner:other-worker", leaseMs: 60_000,
       }), false, "a different worker cannot renew the lease");
-      const clean = await repository.recordScanResult({
+      // Simulate a worker that finishes after its lease has expired. A replacement
+      // worker must acquire the job; the stale worker must not publish its result.
+      const leaseExpiryClient = await pool.connect();
+      try {
+        await leaseExpiryClient.query("BEGIN");
+        await leaseExpiryClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        await leaseExpiryClient.query(
+          "UPDATE eper_customer_asset_scan_jobs SET lease_expires_at = now() - interval '1 second' WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
+          [tenantId, applicationId, sessionId],
+        );
+        await leaseExpiryClient.query("COMMIT");
+      } finally {
+        try { await leaseExpiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        leaseExpiryClient.release();
+      }
+      assert.equal(await repository.getUploadSessionForScanning(
+        tenantId, applicationId, sessionId, workerId,
+      ), null, "expired lease cannot expose provider object to stale worker");
+      assert.equal(await repository.renewScanJobLease({
+        tenantId, applicationId, uploadSessionId: sessionId, workerId, leaseMs: 60_000,
+      }), false, "expired lease cannot be renewed by stale worker");
+      const replacementWorkerId = "asset-scanner:replacement-worker";
+      const replacementClaims = await repository.claimScanJobs({
+        tenantId, applicationId, workerId: replacementWorkerId, scannerServiceId: "asset-scanner",
+        environment: "uat", limit: 10, leaseMs: 60_000,
+      });
+      assert.ok(replacementClaims.some((job) => job.uploadSessionId === sessionId),
+        "replacement worker reclaims expired scan job");
+      await assert.rejects(() => repository.recordScanResult({
         tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
+        correlationId, uploadSessionId: sessionId, scanStatus: "clean",
+      }), /SCAN_LEASE_LOST/, "stale worker cannot publish a clean result");
+      const clean = await repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId: replacementWorkerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       });
       assert.equal(clean.uploadStatus, "available");
       assert.equal(clean.scanStatus, "clean");
       assert.equal(clean.checksumSha256, "b".repeat(64));
+      const authorizedDownload = await repository.getDownloadAsset(tenantId, applicationId, shared.assetId);
+      assert.deepEqual(authorizedDownload, {
+        accessReference: "opaque:test-shared", fileName: "brief.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }, "download lookup returns the private provider reference only for an available clean asset");
+      assert.equal(await repository.getDownloadAsset(tenantId, otherApplication, shared.assetId), null,
+        "another application cannot download a shared asset without an explicit link");
+      assert.equal(await repository.getDownloadAsset(otherTenant, applicationId, shared.assetId), null,
+        "another tenant cannot download the asset");
+
       assert.deepEqual(await repository.recordScanResult({
-        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId: replacementWorkerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       }), clean, "duplicate scanner callback is idempotent");
       await assert.rejects(() => repository.recordScanResult({
@@ -256,6 +351,8 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       });
       assert.equal(quarantined.uploadStatus, "rejected");
       assert.equal(quarantined.lifecycleStatus, "quarantined");
+      assert.equal(await repository.getDownloadAsset(tenantId, applicationId, restricted.assetId), null,
+        "quarantined/infected assets cannot be downloaded");
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [clean],
         "infected assets must never appear in the available asset listing");
 
