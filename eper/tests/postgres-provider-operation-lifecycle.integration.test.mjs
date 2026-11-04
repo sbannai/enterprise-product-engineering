@@ -208,14 +208,64 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         [tenantId, applicationId, atomicFirst.operation.operationId],
       );
       assert.equal(payloadCountAfterRetry.rows[0].count, 1, "idempotent retry must not create an orphan duplicate payload");
+
+      const danglingPayload = { to: ["synthetic@example.invalid"], body: "dangling-" + suffix };
+      const danglingDigest = createHash("sha256")
+        .update(JSON.stringify(danglingPayload), "utf8").digest("hex");
+      const danglingReference = "pp_" + randomUUID();
+      await assert.rejects(
+        () => operationRepository.enqueueWithPayload({
+          ...atomicInput,
+          idempotencyKey: "dangling-" + suffix,
+          correlationId: "dangling-correlation-" + suffix,
+          requestDigest: danglingDigest,
+          payload: danglingPayload,
+          payloadStore: {
+            async putInTransaction() {
+              return { reference: danglingReference, digest: danglingDigest };
+            },
+          },
+        }),
+        error => error?.code === "23503"
+          && error?.constraint === "eper_provider_operations_payload_fk",
+        "the deferred reverse FK must reject an operation that references no payload envelope",
+      );
+      const danglingOperation = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",
+        [tenantId, applicationId, "dangling-" + suffix],
+      );
+      assert.equal(danglingOperation.rows[0].count, 0,
+        "the failed operation transaction must not leave a dangling queue row");
     } finally {
-      if (connectionId) {
-        await pool.query("DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
-        await pool.query("DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
-        await pool.query("DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]).catch(() => undefined);
-        await pool.query("DELETE FROM eper_provider_connections WHERE tenant_id=$1 AND connection_id=$2", [tenantId, connectionId]).catch(() => undefined);
+      const cleanup = await pool.connect();
+      try {
+        await cleanup.query("BEGIN");
+        await cleanup.query("SET CONSTRAINTS ALL DEFERRED");
+        if (connectionId) {
+          await cleanup.query(
+            "DELETE FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_provider_connection_applications WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_provider_connections WHERE tenant_id=$1 AND connection_id=$2",
+            [tenantId, connectionId],
+          );
+        }
+        await cleanup.query("DELETE FROM eper_provider_definitions WHERE provider_key=$1", [providerKey]);
+        await cleanup.query("COMMIT");
+      } catch {
+        await cleanup.query("ROLLBACK").catch(() => undefined);
+      } finally {
+        cleanup.release();
+        await pool.end();
       }
-      await pool.query("DELETE FROM eper_provider_definitions WHERE provider_key=$1", [providerKey]).catch(() => undefined);
-      await pool.end();
     }
   });
