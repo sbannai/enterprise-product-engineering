@@ -73,7 +73,7 @@ test("runtime registry rejects a catalogue adapter-key mismatch", () => {
     () => registry.resolve({
       providerKey: "aws-s3",
       adapterKey: "storage.other",
-      capabilityKey,
+      capabilityKey: capability,
       adapterVersion: "1.0.0",
     }),
     error => error.code === "PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE",
