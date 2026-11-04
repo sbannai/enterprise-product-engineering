@@ -54,19 +54,25 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
         await Promise.all(batch.map(async (job) => {
           let leaseLost = false;
           let renewing = false;
-          const renewTimer = setInterval(async () => {
+          let renewalInFlight: Promise<void> | undefined;
+          const renewTimer = setInterval(() => {
             if (renewing || leaseLost || options.signal.aborted) return;
             renewing = true;
-            try {
-              const renewed = await options.repository.renewScanJobLease({
-                tenantId: options.tenantId, applicationId: options.applicationId,
-                uploadSessionId: job.uploadSessionId, workerId: options.workerId, leaseMs,
-              });
-              if (!renewed) leaseLost = true;
-            } catch (error) {
-              leaseLost = true;
-              options.onError?.(error);
-            } finally { renewing = false; }
+            renewalInFlight = (async () => {
+              try {
+                const renewed = await options.repository.renewScanJobLease({
+                  tenantId: options.tenantId, applicationId: options.applicationId,
+                  uploadSessionId: job.uploadSessionId, workerId: options.workerId, leaseMs,
+                });
+                if (!renewed) leaseLost = true;
+              } catch (error) {
+                leaseLost = true;
+                options.onError?.(error);
+              } finally {
+                renewing = false;
+                renewalInFlight = undefined;
+              }
+            })();
           }, Math.max(1_000, Math.floor(leaseMs / 3)));
           try {
             const session = await options.repository.getUploadSessionForScanning(
@@ -134,7 +140,11 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               outcome: outcome.scanStatus === "error" ? "dead_letter" : "completed" });
           } catch (error) {
             options.onError?.(error);
-          } finally { clearInterval(renewTimer); }
+          } finally {
+            clearInterval(renewTimer);
+            // Do not let a lease-renewal query outlive this job's lifecycle.
+            await renewalInFlight;
+          }
         }));
       }
       if (jobs.length === 0 && !options.signal.aborted) await sleep(pollIntervalMs, options.signal);
