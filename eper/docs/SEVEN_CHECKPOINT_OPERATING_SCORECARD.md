@@ -1055,3 +1055,73 @@ The downstream diffs remain clean one-commit deltas against their immediate base
 - Repository rulesets endpoint returned an empty list. Main branch-protection endpoint returned HTTP 403 to this integration and remains **NOT ASSESSED**. Disposable CI backup/restore is proven; production backup destination, RPO/RTO, independent restore rehearsal and second-engineer release/rollback are not demonstrated.
 
 No PR was merged, no approved requirement/chapter was changed, no chargeable cloud resource was provisioned and no real external/provider action was triggered.
+
+
+### Operating update — 2026-11-04 07:51 IST (dynamic repository reconciliation)
+
+This addendum supersedes the earlier 04:47 IST open-PR snapshot. Repository state, main SHA, open PRs and workflow runs were re-resolved from GitHub for this update.
+
+**Current main:** `2c380d79c55c9183a42ed534ffd1a504f7d41316`  
+**Main tree:** `0c01985a303e9348e728acd04b0a55a80020f9a9`  
+**Latest main commit:** `revert: remove unintended provider payload test commit from main` (2026-11-03T16:36:07Z). The commit deletes `eper/tests/postgres-encrypted-provider-payload-store.integration.test.mjs`; the provider candidate branches retain that test and their exact-head evidence.
+
+#### Exact-main validation
+
+All eight push-triggered workflows returned `completed/success` on the exact current main SHA:
+
+| Workflow | Run |
+|---|---|
+| EPER CI | [41675875771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771) |
+| Same-commit integrated validation | [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913) |
+| 228 requirements / 38 chapter pilot matrix | [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818) |
+| G9 reconciliation | [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648) |
+| Six-family capability HTTP smoke | [41675875652](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875652) |
+| Container runtime smoke | [41675875533](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875533) |
+| Controlled QA technical re-execution | [41675875702](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875702) |
+| Controlled technical simulation | [41675875724](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875724) |
+
+The exact-main integrated PostgreSQL job completed with 1,410 tests, 1,404 passed, 0 failed and 6 skipped. Its seven-migration repeatability test passed. The separate exact-main chapter matrix reports 38 chapters, 259 passed tests, 0 failed tests, 28 passed checks and no failed chapters. This is technical evidence only.
+
+PR #306 remains merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; comparison confirms it is an ancestor of current main. PR #310 remains merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`, also an ancestor. Successor PR #376 is merged at `9749701bfed527b906183192ca06cc1998e70166`, also an ancestor.
+
+Fresh-clone run [41657363742](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41657363742) ran on candidate `2c426de8b63e437ffb186ed4887da76b4b704719`, whose tree SHA exactly matches current main. It completed with 1,426 tests, 1,422 passed, 0 failed and 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; seven migration groups (including identity) applied and repeated; disposable PostgreSQL backup/restore passed with 75/75 base tables restored. This is exact-tree fresh-clone evidence, although the workflow ran on the tree-equivalent candidate SHA rather than the main commit SHA itself.
+
+#### Live open-PR inventory and exact-head evidence
+
+The current open list is #377, #378, #379, #380, #381, #382 and #384. All listed PR heads below were fetched dynamically; the earlier PR-body snapshots are not used as current metadata.
+
+| PR | Exact head / base | Exact-head evidence and delivery boundary |
+|---|---|---|
+| #377 | This scorecard branch; main-targeted | The pre-update head `80e4b566fa77e86c49693f4b3ef38a9705a25ac0` had nine successful exact-head workflows (EPER CI [41738891293], integrated [41738891209], matrix [41738891237], G9 [41738891297], release [41738891248] and other returned lanes). **This addendum changes the head; those prior green runs are historical and do not validate this new commit.** Inspect the new exact-head Actions before review. |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` / main | All 13 returned workflows succeeded, including EPER CI [41738299249], integrated [41738299062], fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039], matrix [41738298906] and G9 [41738298972]. Fresh clone: 1,433 tests, 1,429 passed, 0 failed, 4 skipped; restore 75/75. PostgreSQL encrypted-payload tests 2/2; queue lifecycle 1/1. This is the encrypted payload boundary/store prerequisite, not a continuous delivery runtime. |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc813bfe` / #378 | All eight returned workflows succeeded, including EPER CI [41738351610], integrated [41738351629], fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] and matrix [41738351607]. Fresh clone: 1,438 tests, 1,434 passed, 0 failed, 4 skipped; restore 76/76. PostgreSQL payload and queue lifecycle tests passed. The public standalone payload `put()` still commits independently and can leave a payload without an operation row; `enqueueWithPayload()` uses the transaction-scoped insert. Database-enforced orphan prevention remains open. |
+| #380 | `03afcbe2bafa59143ac189b8a7a11d5b912c0477` / main | All nine returned workflows succeeded, including EPER CI [41754913312], integrated [41754913335], separate matrix [41754913298], G9 [41754913348] and release [41754913294]. The separate matrix reports 38 chapters, 259 passed tests, 0 failed tests, 28 checks and no failed chapters. CW-060/061 and the client application experience document remain additive draft/design scope, not complete upload or workspace runtime delivery. |
+| #381 | `e63f747db7e1f11e4fc7b74fae1591a575870a1d` / #379 | All eight returned workflows succeeded, including EPER CI [41738364070], integrated [41738364009], fresh clone [41738364008], provider lifecycle [41738363993] and matrix [41738363997]. Fresh clone: 1,438 tests, 1,434 passed, 0 failed, 4 skipped; restore 76/76. The exact-head fresh-clone suite ran the encrypted-payload PostgreSQL test, which executes `SET LOCAL ROLE eper_provider_catalogue_access`, verifies allowed in-scope reads, cross-tenant/application read isolation and RLS write rejection. |
+| #382 | `8aa4344a02f6f77d5566c7b24d571a5681b68ac2` / #381 | All nine returned workflows succeeded, including EPER CI [41738377743], integrated [41738377787], fresh clone [41738377819], PostgreSQL [41738377859], provider lifecycle [41738377748] and matrix [41738378040]. Fresh clone: 1,450 tests, 1,446 passed, 0 failed, 4 skipped; restore 76/76. Provider lifecycle: queue 1/1, bounded worker 5/5, keyring 6/6, encrypted-payload PostgreSQL 2/2. Worker is bounded `runOnce()`; no independent process host, real adapter dispatch, production worker identity or supervision is included. Migrations 022/023 add lifecycle metadata/envelope compatibility; no versioned retention-policy resolver or bounded purge worker is delivered. |
+| #384 | `537c26402c679a61569af4cf7602f56b2d38a268` / main | All 12 returned workflows succeeded, including EPER CI [41756909976], integrated [41756910021], fresh clone [41756910300], PostgreSQL [41756910013], provider lifecycle [41756910018] and matrix [41756910091]. Fresh clone: 1,431 tests, 1,427 passed, 0 failed, 4 skipped; all seven migration groups applied and repeated; disposable restore 78/78. The customer-asset live PostgreSQL integration test passed 1/1 and verifies shared/restricted visibility, explicit links, cross-application/tenant isolation, idempotent upload reservation and audit. Migration `021_customer_asset_repository.sql` was applied. `PostgresCustomerAssetRepository` implements readiness, metadata create/list, upload-session reservation and explicit application linking. The PR description was corrected to reflect this implementation. API routes, provider upload capability, binary transfer, completion verification, malware scanning, customer UI and download/purge lifecycle remain absent. |
+
+The provider stack remains dependency-ordered (#378 → #379 → #381 → #382); these are not duplicate standalone implementations. The migration runner records full migration filenames in its checksum ledger, so distinct `021_*.sql` filenames are distinct migration entries; do not renumber or rewrite applied migrations without a deliberate migration plan.
+
+#### Seven approved pointers — current evidence-based position
+
+| Pointer | Status | Evidence / remaining blocker |
+|---|---|---|
+| 1. v34-to-228 reconciliation | AMBER | Crosswalk preserves 45 source rows, records 0 exact full-coverage matches and 45 partial shared-control links/additive candidates. Approved 228 requirements and 38 chapters are unchanged. Owner disposition of additive v1.6.0 candidates remains separate. |
+| 2. Fresh-clone setup | GREEN for local/CI handover | PR #306 is merged and current-main ancestry is verified. Exact-tree fresh-clone run proves `npm run dev:verify`, seven migration groups including identity, repeatability and disposable restore. |
+| 3. PostgreSQL and recovery | AMBER | Current-main integrated PostgreSQL suite and fresh-clone tree evidence pass. Provider candidate branches add encrypted payload persistence, RLS and worker tests. Production backup destination, key custody, retention execution, RPO/RTO and independent restore rehearsal remain. Current main does not contain the encrypted-provider-payload integration test removed by its latest revert commit; candidate #381/#382 do. |
+| 4. Identity/OIDC/sessions | AMBER | #310 and #376 merge commits are ancestors of main. The #376 browser run [41652347404] passed 1,312 suite tests and both customer OIDC/workspace/support and Product Admin application-remediation journeys (1/1 each) using a synthetic IdP. Secure cookies, CSRF, durable sessions/revocation and assignment integration have test evidence. Production IdP onboarding/JWKS rotation and a complete Product Admin OIDC login remain unproven. |
+| 5. Customer workspace/support | AMBER | Support submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note separation and export have test evidence. Owner-defined SLA targets/timers/escalation/breach evidence remain absent. #384 adds a durable PostgreSQL asset metadata repository and live integration test, but not upload routes, binary storage, scanning or customer UI. #380 remains design/change-control documentation. |
+| 6. Scheduler/workflow operations | AMBER | Campaign and agent worker entrypoints exist; workflow outbox continuous processing, lease renewal/fencing, idempotency, retry/dead-letter and recovery abstractions have tests. There is no dedicated independently startable workflow-outbox worker app. Provider worker remains bounded `runOnce()`; approved dispatcher, restricted production identity, supervision and operational metrics/alerts remain. |
+| 7. Release/continuity | RED | Main branch endpoint reports `protected=false` and `protection.enabled=false`; repository rulesets collection is empty. CI restore is disposable evidence only. Production backup target, RPO/RTO, independent restore rehearsal, second-engineer release/rollback path and owner approval of the proposed continuity charter remain. |
+
+#### Governance and next actions
+
+- Preserve the approved 228 requirements / 38 chapters; additive v1.6.0 candidates remain draft until owner disposition.
+- Correct and validate the current #377 scorecard head; do not use its superseded green runs as evidence.
+- Continue #384 only as an asset repository foundation until API authorization, provider upload, verification/scanning and UI are implemented and tested together.
+- Resolve the provider payload-to-operation integrity invariant at the database boundary before treating payload persistence as complete.
+- Add the versioned retention-policy resolver and bounded legal-hold-aware purge worker; then add an independently hosted provider worker with restricted identity, supervision and alerts.
+- Enable owner-approved main protection/required checks, then demonstrate a second-engineer release and restore/rollback path.
+- Do not infer production login from synthetic-IdP browser tests. Do not report or authorize Business UAT.
+
+No approved requirement/chapter was changed. No PR was merged or branch deleted. No chargeable cloud resource or real external/provider action was used.
