@@ -89,7 +89,7 @@ export class ProviderRuntimeAdapterRegistry {
     const permitted = new Map<string, ProviderRuntimeAllowlistEntry>();
     for (const entry of allowlist) {
       if (!entry || !validIdentity(entry.providerKey) || !validIdentity(entry.adapterKey)
-        || !/^\\d+\\.\\d+\\.\\d+$/.test(entry.adapterVersion)
+        || !/^\d+\.\d+\.\d+$/.test(entry.adapterVersion)
          || !validCapabilities(entry.capabilities)) {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
       }
@@ -103,7 +103,7 @@ export class ProviderRuntimeAdapterRegistry {
     const resolved = new Map<string, ProviderRuntimeAdapter>();
     for (const adapter of registrations) {
       if (!adapter || !validIdentity(adapter.providerKey) || !validIdentity(adapter.adapterKey)
-        || !/^\\d+\\.\\d+\\.\\d+$/.test(adapter.adapterVersion)
+        || !/^\d+\.\d+\.\d+$/.test(adapter.adapterVersion)
          || !validCapabilities(adapter.capabilities)
         || typeof adapter.dispatch !== "function") {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
