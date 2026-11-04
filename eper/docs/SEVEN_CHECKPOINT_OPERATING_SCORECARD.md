@@ -2057,3 +2057,19 @@ A new open draft PR was created after the 22:10 inventory snapshot. The current 
 - Dependency: asset stack is now #384 → #386 → #393 → #394 → #396, with #395 as a parallel metadata-catalogue child of #393. All edges are ahead/0-behind. Do not merge child branches independently to main.
 
 The 22:10 table remains a historical snapshot; this addendum is the later exact-head correction. Approved 228 requirements / 38 chapters remain unchanged. No merge, provider invocation, cloud provisioning or external action was performed.
+
+
+## PR #396 final exact-head result — 2026-11-04 22:18 IST
+
+The current asset-recovery child PR #396 has advanced through two test-fixture corrections. The authoritative current head is `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81`; prior heads and their runs are stale.
+
+- The first exact-head failure was the existing RLS expected asset/session set not including the new recovery fixture. The owning branch updated the set/counts.
+- The next exact-head failure was an assumed 21-row lifecycle audit count; the actual query intentionally covers the original 18 lifecycle events while the new `customer.asset.scan.exhausted` event is asserted separately. The owning branch restored the 18 count and clarified the assertion.
+- Current exact-head check-runs: 7/7 completed successfully, all `head_sha` values match `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81`.
+- Fresh-clone [41871265755](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265755): `npm run dev:verify`, 1,510 tests / 1,506 passed / 0 failed / 4 skipped; all seven PostgreSQL migration groups including identity applied and repeated; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; disposable PostgreSQL 16 restore `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`, 80/80 base tables, 7 migration ledgers.
+- PostgreSQL asset repository integration test 730 passed, including two concurrent exhausted-scan sweeps finalizing one job once, repeat sweep returning zero, dead-letter state, asset failed/quarantined state, recovery audit, and tenant/application RLS.
+- Provider lifecycle [41871265677](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265677), PostgreSQL integration [41871265396](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265396), payment contract [41871265037](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265037), 228/38 matrix [41871265459](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265459) and controlled QA [41871264880](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871264880) passed.
+- Matrix: 38 chapters, 259 pilot tests passed / 0 failed, 28 HTTP checks. QA suite: 1,486 total / 1,446 passed / 0 failed / 40 skipped.
+- The scan-recovery worker now has its own opt-in start script and process, but independent supervision/restart/health metrics/alerts remain outstanding. It does not invoke a scanner or storage provider. Concrete API storage upload/download/verification adapters, binary transfer and complete customer asset UI remain outstanding.
+
+The current open-PR inventory is now 16 entries: #396 is a child of #394; #395 remains a parallel catalogue-metadata child of #393. The seven approved requirements pointers and the 228/38 baseline are unchanged. No merge or production-provider action was performed.
