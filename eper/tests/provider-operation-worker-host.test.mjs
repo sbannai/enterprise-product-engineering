@@ -71,3 +71,22 @@ test("provider host reports worker failures and closes cleanly on abort", async 
   assert.equal(state.calls.closed, 1);
   assert.equal(state.calls.waits.length, 0);
 });
+
+test("provider host reconnects its wake source before the next scan", async () => {
+  const state = setup([]);
+  let waits = 0;
+  state.wakeSource.wait = async () => {
+    waits++;
+    if (waits === 1) throw new Error("listener disconnected");
+    state.controller.abort();
+    return "timeout";
+  };
+  const host = new ProviderOperationWorkerHost(state.worker, state.wakeSource, {
+    onError(error) { state.calls.errors.push(error.message); },
+  });
+  await host.run(state.controller.signal);
+  assert.equal(state.calls.starts, 2);
+  assert.equal(state.calls.passes, 2);
+  assert.deepEqual(state.calls.errors, ["listener disconnected"]);
+  assert.equal(state.calls.closed, 1);
+});

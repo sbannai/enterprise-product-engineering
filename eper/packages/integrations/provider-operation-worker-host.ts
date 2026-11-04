@@ -83,7 +83,15 @@ export class ProviderOperationWorkerHost {
           await this.wakeSource.wait(this.reconciliationIntervalMs, signal);
         } catch (error) {
           this.options.onError?.(error);
-          if (!signal.aborted) await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
+          if (!signal.aborted) {
+            try {
+              // Re-establish LISTEN before the next queue scan after a disconnect.
+              await this.wakeSource.start();
+            } catch (reconnectError) {
+              this.options.onError?.(reconnectError);
+              await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
+            }
+          }
         }
       }
     } finally {
