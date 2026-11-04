@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
-import type { StorageUploadAdapterOptions, StorageUploadRequest } from "./storage-upload-adapter.js";
+import type { StorageUploadRequest } from "./storage-upload-adapter.js";
 
 export interface CustomerAssetUploadGrant {
   uploadSessionId: string;
