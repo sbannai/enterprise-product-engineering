@@ -61,6 +61,7 @@ import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import { createStorageUploadAdapter, type StorageUploadGrant } from "../../packages/assets/storage-upload-adapter.js";
 import { createStorageUploadVerificationAdapter, type StorageUploadVerificationRequest, type StorageUploadVerificationResult } from "../../packages/assets/storage-upload-verification-adapter.js";
+import { createStorageMalwareScanAdapter, type StorageMalwareScanRequest, type StorageMalwareScanResult } from "../../packages/assets/storage-malware-scan-adapter.js";
 import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
 import type { StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
@@ -524,7 +525,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadVerificationPort?: IntegrationPort<StorageUploadVerificationRequest, StorageUploadVerificationResult>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; assetUploadVerificationResolver?: (input: StorageUploadVerificationRequest, requestId: string) => Promise<{ sizeBytes: number; detectedMimeType: string; checksumSha256: string } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadVerificationPort?: IntegrationPort<StorageUploadVerificationRequest, StorageUploadVerificationResult>; assetMalwareScanPort?: IntegrationPort<StorageMalwareScanRequest, StorageMalwareScanResult>; assetMalwareScanResolver?: (input: StorageMalwareScanRequest, requestId: string) => Promise<{ scanStatus: "clean" | "infected" | "error"; scannerServiceId: string; engine?: string; signatureVersion?: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; assetUploadVerificationResolver?: (input: StorageUploadVerificationRequest, requestId: string) => Promise<{ sizeBytes: number; detectedMimeType: string; checksumSha256: string } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -596,6 +597,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   const assetUploadResolver = options.assetUploadResolver ?? (
     options.assetUploadPort && configuredAssetStorageHosts.length > 0
       ? createStorageUploadAdapter(options.assetUploadPort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
+  const assetMalwareScanResolver = options.assetMalwareScanResolver ?? (
+    options.assetMalwareScanPort && process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID
+      ? createStorageMalwareScanAdapter(options.assetMalwareScanPort, {
+          scannerServiceId: process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID,
+        })
       : undefined
   );
   const assetUploadVerificationResolver = options.assetUploadVerificationResolver ?? (
@@ -1963,6 +1971,59 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Direct uploads require durable identity assignments, PostgreSQL reservation/audit,
     // and an injected provider adapter. The signed capability is withheld until reservation commits.
+    // Internal scanner worker boundary. This route is separate from customer
+    // identity and accepts no client-supplied scan outcome or scanner identity.
+    if (requestUrl.pathname === "/internal/customer-assets/scan" ) {
+      if (process.env.EPER_CUSTOMER_ASSET_SCAN_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const scannerToken = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN ?? "";
+      if (scannerToken.length < 32 || !bearerMatches(request, scannerToken)) {
+        sendJson(request, response, 401, { error: "unauthorized" }); return;
+      }
+      if (!options.customerAssetRepository ||
+          process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" || !assetMalwareScanResolver) {
+        sendJson(request, response, 503, { error: "asset_scanner_unavailable" }); return;
+      }
+      try {
+        const body = await readJson(request);
+        const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
+        const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+        const uploadSessionId = typeof body.uploadSessionId === "string" ? body.uploadSessionId : "";
+        if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(tenantId) ||
+            !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+            !/^[a-zA-Z0-9-]{16,64}$/.test(uploadSessionId)) {
+          sendJson(request, response, 400, { error: "invalid_scan_job_reference" }); return;
+        }
+        const session = await options.customerAssetRepository.getUploadSessionForScanning(
+          tenantId, applicationId, uploadSessionId,
+        );
+        if (!session) { sendJson(request, response, 404, { error: "scan_job_not_found_or_not_pending" }); return; }
+        const requestId = resolveApiRequestId(request);
+        const outcome = await assetMalwareScanResolver({
+          tenantId, applicationId, assetId: session.assetId, uploadSessionId,
+          providerUploadReference: session.providerUploadReference,
+          checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes,
+          mimeType: session.mimeType,
+        }, requestId);
+        const asset = await options.customerAssetRepository.recordScanResult({
+          tenantId, applicationId, scannerServiceId: outcome.scannerServiceId,
+          environment: options.adminConfigEnvironment ?? "sandbox",
+          correlationId: requestId, uploadSessionId, scanStatus: outcome.scanStatus,
+        });
+        sendJson(request, response, 200, { asset: {
+          assetId: asset.assetId, uploadStatus: asset.uploadStatus,
+          scanStatus: asset.scanStatus, lifecycleStatus: asset.lifecycleStatus,
+        } }); return;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "asset_scan_failed";
+        const status = code.includes("NOT_FOUND") ? 404 : 503;
+        sendJson(request, response, status, { error: status === 503 ? "asset_scan_failed" : code }); return;
+      }
+    }
+
     const assetUploadCompleteMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/uploads\/([a-zA-Z0-9-]{16,64})\/complete$/.exec(requestUrl.pathname);
     if (assetUploadCompleteMatch) {
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
