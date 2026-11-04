@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
+const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -42,4 +43,15 @@ test("customer asset RLS enforces tenant and application isolation with a dedica
   assert.ok(migration.includes("ALTER TABLE %I FORCE ROW LEVEL SECURITY"));
   assert.ok(migration.includes("tenant_id = current_setting('eper.tenant_id', true)"));
   assert.ok(migration.includes("application_id = current_setting('eper.application_id', true)"));
+});
+
+test("scan dispatch migration creates a tenant/application-isolated transactional outbox", () => {
+  assert.ok(scanDispatchMigration.includes("CREATE TABLE IF NOT EXISTS eper_customer_asset_scan_jobs"));
+  assert.ok(scanDispatchMigration.includes("UNIQUE") || scanDispatchMigration.includes("PRIMARY KEY (tenant_id, upload_session_id)"));
+  assert.ok(scanDispatchMigration.includes("attempt_count integer NOT NULL DEFAULT 0"));
+  assert.ok(scanDispatchMigration.includes("max_attempts integer NOT NULL DEFAULT 5"));
+  assert.ok(scanDispatchMigration.includes("lease_expires_at timestamptz"));
+  assert.ok(scanDispatchMigration.includes("FORCE ROW LEVEL SECURITY"));
+  assert.ok(scanDispatchMigration.includes("application_id = current_setting('eper.application_id', true)"));
+  assert.ok(scanDispatchMigration.includes("GRANT SELECT, INSERT, UPDATE ON eper_customer_asset_scan_jobs TO eper_customer_asset_access"));
 });
