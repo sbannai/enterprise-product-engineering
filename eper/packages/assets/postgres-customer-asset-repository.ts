@@ -344,13 +344,14 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
-  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string): Promise<{
+  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string, workerId: string): Promise<{
     assetId: string; providerUploadReference: string; checksumSha256: string;
     sizeBytes: number; mimeType: string;
   } | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
     this.validateId(uploadSessionId, "uploadSessionId");
+    this.validateId(workerId, "workerId");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN READ ONLY");
@@ -364,11 +365,14 @@ export class PostgresCustomerAssetRepository {
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
+         JOIN eper_customer_asset_scan_jobs j
+           ON j.tenant_id = s.tenant_id AND j.upload_session_id = s.upload_session_id
          WHERE s.tenant_id = $1 AND s.application_id = $2
            AND s.upload_session_id = $3 AND s.upload_status = 'completed'
            AND a.upload_status = 'scanning' AND a.scan_status = 'pending'
-           AND a.lifecycle_status = 'active' AND a.checksum_sha256 IS NOT NULL`,
-        [tenantId, applicationId, uploadSessionId],
+           AND a.lifecycle_status = 'active' AND a.checksum_sha256 IS NOT NULL
+           AND j.state = 'leased' AND j.lease_owner = $4 AND j.lease_expires_at > now()`,
+        [tenantId, applicationId, uploadSessionId, workerId],
       );
       await client.query("COMMIT");
       const row = result.rows[0];
