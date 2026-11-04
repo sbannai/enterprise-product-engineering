@@ -1994,14 +1994,14 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
         const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
         const workerId = typeof body.workerId === "string" ? body.workerId : "";
-        const limit = body.limit === undefined ? 10 : body.limit;
-        const leaseMs = body.leaseMs === undefined ? 60_000 : body.leaseMs;
+        const limit: unknown = body.limit === undefined ? 10 : body.limit;
+        const leaseMs: unknown = body.leaseMs === undefined ? 60_000 : body.leaseMs;
         if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(tenantId) ||
             !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
             !/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
             !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128 ||
-            !Number.isInteger(limit) || limit < 1 || limit > 50 ||
-            !Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) {
+            typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
+            typeof leaseMs !== "number" || !Number.isSafeInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) {
           sendJson(request, response, 400, { error: "invalid_scan_claim_request" }); return;
         }
         const jobs = await options.customerAssetRepository.claimScanJobs({
