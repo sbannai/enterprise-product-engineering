@@ -1,5 +1,5 @@
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
-import type { ProviderDispatchSelection, ProviderDispatchConfigurationService } from "./provider-dispatch-configuration-service.js";
+import { ProviderDispatchConfigurationError, type ProviderDispatchSelection, type ProviderDispatchConfigurationService } from "./provider-dispatch-configuration-service.js";
 import type { ProviderOperation } from "./postgres-provider-operation-repository.js";
 
 type Repository = {
@@ -130,10 +130,22 @@ export class ProviderOperationWorker {
         result.needsAttention += 1;
         return;
       }
-      const selection = await this.dependencies.configuration.resolve({
-        tenantId: operation.tenantId, applicationId: operation.applicationId,
-        capabilityKey: operation.capabilityKey,
-      });
+      let selection: ProviderDispatchSelection;
+      try {
+        selection = await this.dependencies.configuration.resolve({
+          tenantId: operation.tenantId, applicationId: operation.applicationId,
+          capabilityKey: operation.capabilityKey,
+        });
+      } catch (error) {
+        // A missing/ambiguous binding or invalid effective policy is a durable
+        // configuration blocker, not a transient provider/network failure.
+        if (error instanceof ProviderDispatchConfigurationError) {
+          await this.saveOutcome(operation, "NEEDS_ATTENTION", error.code);
+          result.needsAttention += 1;
+          return;
+        }
+        throw error;
+      }
       if (selection.tenantId !== operation.tenantId
         || selection.applicationId !== operation.applicationId
         || selection.connectionId !== operation.connectionId

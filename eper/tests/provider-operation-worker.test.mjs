@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ProviderOperationWorker } from "../dist/packages/integrations/provider-operation-worker.js";
+import { ProviderDispatchConfigurationError } from "../dist/packages/integrations/provider-dispatch-configuration-service.js";
 
 const operation = {
   operationId: "operation-12345678", tenantId: "tenant-a", applicationId: "app-a",
@@ -81,6 +82,26 @@ test("provider worker retries with a safe code and never stores adapter exceptio
   assert.equal(calls.outcomes[0].outcome, "RETRY");
   assert.equal(calls.outcomes[0].errorCode, "PROVIDER_OPERATION_DISPATCH_FAILED");
   assert.equal(JSON.stringify(calls.outcomes).includes("secret-token"), false);
+});
+
+test("provider worker parks deterministic configuration blockers without reading payload or dispatching", async () => {
+  for (const code of [
+    "PROVIDER_DISPATCH_NO_ACTIVE_BINDING",
+    "PROVIDER_DISPATCH_AMBIGUOUS_BINDING",
+    "PROVIDER_DISPATCH_POLICY_INVALID",
+  ]) {
+    const { calls, dependencies } = harness({
+      configuration: { async resolve() { throw new ProviderDispatchConfigurationError(code); } },
+      payloadStore: { async get() { assert.fail("payload must not be read for a configuration blocker"); } },
+    });
+    const worker = new ProviderOperationWorker(dependencies, options);
+    const result = await worker.runOnce();
+    assert.equal(result.needsAttention, 1);
+    assert.equal(result.retried, 0);
+    assert.equal(calls.dispatches, 0);
+    assert.equal(calls.outcomes[0].outcome, "NEEDS_ATTENTION");
+    assert.equal(calls.outcomes[0].errorCode, code);
+  }
 });
 
 test("provider worker rejects mismatched resolved connection without dispatch", async () => {
