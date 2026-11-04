@@ -41,6 +41,21 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         storageObjectReference: "opaque:test-restricted",
       });
       assetIds.push(restricted.assetId);
+
+      // A separate asset is required because the schema permits only one upload
+      // session per tenant/asset; keep the provider-free reservation independent
+      // from the provider-bound session exercised below.
+      const reservedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Reservation test file", originalFileName: "reservation.xlsx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileExtension: "xlsx", sizeBytes: 2048, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-reservation",
+      });
+      assetIds.push(reservedAsset.assetId);
+
       await assert.rejects(() => repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         scope: "application_restricted", ownerApplicationId: otherApplication,
@@ -70,6 +85,100 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       );
       assert.deepEqual(new Set(concurrentReservations), new Set([sessionId]),
         "concurrent retries for the same tenant/idempotency key must converge on one session");
+
+      // Exercise the provider-free reservation path used before a storage
+      // provider is allowed to mint a capability.
+      const reservedKey = "asset-reserved-" + randomUUID();
+      const reservationInput = {
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        assetId: reservedAsset.assetId, expectedSizeBytes: 2048, idempotencyKey: reservedKey,
+      };
+      const reservationIds = await Promise.all(
+        Array.from({ length: 5 }, () => repository.reserveUpload(reservationInput)),
+      );
+      assert.equal(new Set(reservationIds).size, 1,
+        "concurrent provider-free reservations must converge on one durable session");
+      const reservedSessionId = reservationIds[0];
+      const reservationClient = await pool.connect();
+      try {
+        await reservationClient.query("BEGIN");
+        await reservationClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const reservedRow = await reservationClient.query(
+          "SELECT upload_status, provider_upload_reference FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, reservedSessionId],
+        );
+        assert.equal(reservedRow.rows[0]?.upload_status, "reserved");
+        assert.equal(reservedRow.rows[0]?.provider_upload_reference, null,
+          "a reservation must not persist or expose a provider reference before grant finalization");
+        await reservationClient.query("COMMIT");
+      } finally {
+        try { await reservationClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        reservationClient.release();
+      }
+      await repository.finalizeUploadGrant({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: reservedSessionId,
+        providerUploadReference: "opaque-upload:finalized-reservation",
+        expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      });
+      const finalizedClient = await pool.connect();
+      try {
+        await finalizedClient.query("BEGIN");
+        await finalizedClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const finalizedRow = await finalizedClient.query(
+          "SELECT upload_status, provider_upload_reference FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, reservedSessionId],
+        );
+        assert.equal(finalizedRow.rows[0]?.upload_status, "initiated");
+        assert.equal(finalizedRow.rows[0]?.provider_upload_reference, "opaque-upload:finalized-reservation");
+        await finalizedClient.query("COMMIT");
+      } finally {
+        try { await finalizedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        finalizedClient.release();
+      }
+
+      const failedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Failed reservation test file", originalFileName: "failed-reservation.docx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 1536, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-failed-reservation",
+      });
+      assetIds.push(failedAsset.assetId);
+      const failedReservationId = await repository.reserveUpload({
+        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+        idempotencyKey: "asset-failed-" + randomUUID(),
+      });
+      await repository.failUploadReservation({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: failedReservationId, reason: "provider_unavailable",
+      });
+      const failedClient = await pool.connect();
+      try {
+        await failedClient.query("BEGIN");
+        await failedClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const failedRow = await failedClient.query(
+          "SELECT upload_status FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, failedReservationId],
+        );
+        assert.equal(failedRow.rows[0]?.upload_status, "failed",
+          "provider failure must durably fail the reservation");
+        await failedClient.query("COMMIT");
+      } finally {
+        try { await failedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        failedClient.release();
+      }
 
       await Promise.all(Array.from({ length: 5 }, () => repository.link({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
@@ -165,10 +274,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(sessions.rows.length, 1);
         const audit = await client.query(
-          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
+          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 9, "two creates, two reservations, one link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 15, "four creates, four reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -197,14 +306,14 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([shared.assetId, restricted.assetId]),
+          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
           "RLS role sees only assets linked to or owned by its current application");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 2,
-          "upload sessions are bound to their creating application");
+        assert.equal(sameApplicationSessions.rows.length, 4,
+          "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
         );

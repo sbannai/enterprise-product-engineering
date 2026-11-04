@@ -27,6 +27,8 @@ test("customer upload reservation requires identity, assignment, provider and du
         return { originalFileName: "proposal.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: 8192 };
       },
       async reserveUpload(input) { events.push({ type: "reservation", input }); return input.uploadSessionId; },
+      async finalizeUploadGrant(input) { events.push({ type: "finalization", input }); },
+      async failUploadReservation(input) { events.push({ type: "failure", input }); },
     },
     assetUploadResolver: async (input, requestId) => {
       events.push({ type: "provider", input, requestId });
@@ -62,11 +64,11 @@ test("customer upload reservation requires identity, assignment, provider and du
     assert.equal(result.upload.method, "PUT");
     assert.equal(result.upload.url, "https://storage.example.test/upload?signature=private");
     assert.equal(result.upload.uploadSessionId, events[1].input.uploadSessionId);
-    assert.deepEqual(events.map((event) => event.type), ["provider", "reservation"]);
+    assert.deepEqual(events.map((event) => event.type), ["reservation", "provider", "finalization"]);
     assert.equal(events[0].input.tenantId, "tenant-a");
     assert.equal(events[0].input.applicationId, "app-a");
-    assert.equal(events[1].input.providerUploadReference, "provider-private-object-reference");
-    assert.equal(events[1].input.correlationId, "upload-api-correlation-001");
+    assert.equal(events[2].input.providerUploadReference, "provider-private-object-reference");
+    assert.equal(events[2].input.correlationId, "upload-api-correlation-001");
     assert.equal("providerUploadReference" in result.upload, false);
     assert.equal(JSON.stringify(result).includes("provider-private-object-reference"), false);
   } finally {
