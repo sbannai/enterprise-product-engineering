@@ -95,15 +95,28 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: sessionId, receivedSizeBytes: 4096,
         observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        checksumSha256: "b".repeat(64), scanStatus: "clean",
+        checksumSha256: "b".repeat(64), scanStatus: "pending",
       });
-      assert.equal(completed.uploadStatus, "available");
-      assert.equal(completed.scanStatus, "clean");
-      assert.equal(completed.checksumSha256, "b".repeat(64));
-      const quarantined = await repository.completeUpload({
+      assert.equal(completed.uploadStatus, "scanning");
+      const clean = await repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        correlationId, uploadSessionId: sessionId, scanStatus: "clean",
+      });
+      assert.equal(clean.uploadStatus, "available");
+      assert.equal(clean.scanStatus, "clean");
+      assert.equal(clean.checksumSha256, "b".repeat(64));
+      assert.deepEqual(await repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        correlationId, uploadSessionId: sessionId, scanStatus: "clean",
+      }), clean, "duplicate scanner callback is idempotent");
+      await repository.completeUpload({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: restrictedSessionId, receivedSizeBytes: 1024,
-        observedMimeType: "image/png", checksumSha256: "c".repeat(64), scanStatus: "infected",
+        observedMimeType: "image/png", checksumSha256: "c".repeat(64), scanStatus: "pending",
+      });
+      const quarantined = await repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        correlationId, uploadSessionId: restrictedSessionId, scanStatus: "infected",
       });
       assert.equal(quarantined.uploadStatus, "rejected");
       assert.equal(quarantined.lifecycleStatus, "quarantined");
@@ -125,10 +138,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(sessions.rows.length, 1);
         const audit = await client.query(
-          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.application.link', 'customer.asset.upload.complete')",
+          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 7, "two creates, two reservations, one link and two completions are audited once each");
+        assert.equal(audit.rows.length, 9, "two creates, two reservations, one link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
