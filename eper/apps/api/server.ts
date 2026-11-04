@@ -1775,10 +1775,19 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
       if (request.method === "POST") {
+        if (process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres") { sendMethodNotAllowed(request, response, "GET"); return; }
         const identity = await resolveCustomerWorkspaceIdentity(request, options);
         if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
         if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
           sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+        }
+        let modulesConfig: unknown;
+        try { modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+        catch { sendJson(request, response, 503, { error: "customer_asset_upload_policy_unconfigured" }); return; }
+        const tenantModules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+          ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+        if (!Array.isArray(tenantModules) || !tenantModules.includes("client-assets")) {
+          sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
         }
         if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
             process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
@@ -1803,6 +1812,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               typeof body.originalFileName !== "string" || !body.originalFileName.trim() || body.originalFileName.length > 255 ||
               typeof body.mimeType !== "string" || !allowedMimes.includes(body.mimeType) ||
               typeof body.fileExtension !== "string" || !/^[A-Za-z0-9]{1,12}$/.test(body.fileExtension) ||
+              !body.originalFileName.toLowerCase().endsWith("." + body.fileExtension.toLowerCase()) ||
               !Number.isSafeInteger(body.sizeBytes) || Number(body.sizeBytes) <= 0 || Number(body.sizeBytes) > maxBytes ||
               !["image", "video", "document", "other"].includes(String(body.mediaCategory))) {
             sendJson(request, response, 400, { error: "invalid_customer_asset_metadata" }); return;
