@@ -251,3 +251,15 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 - Recovery is fenced by tenant/application scope and only updates an asset still in the scanning state. Any asset-state conflict aborts the transaction rather than silently leaving a dead-letter job without corresponding lifecycle evidence.
 - The authenticated claim route supplies the server-configured scanner service identity and audit environment; neither is accepted from the worker request body.
 - This closes the terminal-attempt crash gap in the repository transaction path. Live PostgreSQL crash/restart and competing-worker validation remain outstanding.
+
+
+### Dedicated scan worker runtime update (2026-11-04)
+
+- Added a dedicated worker loop that polls the tenant/application-scoped PostgreSQL scan outbox, claims bounded batches, and processes jobs with configurable bounded concurrency.
+- Added fenced lease renewal. A worker can extend only its own currently active lease; a lost/expired lease prevents the worker from finalizing a result.
+- Scanner implementation is injected through a server-side module factory constrained to the compiled asset scanner adapter directory. The worker does not accept a provider reference, verdict, scanner identity or adapter module path from a job payload.
+- Added a separately gated worker entrypoint and `npm run start:customer-asset-scan-worker`. Startup requires explicit enablement, PostgreSQL asset and audit persistence, tenant/application scope, worker identity, scanner service identity and an injected scanner module.
+- Scanner exceptions and malformed/mismatched service outcomes fail closed to the persisted retry path. Retry delay derives from the claimed attempt count. The final permitted failure is finalized as a dead letter and quarantined asset using the atomic repository transaction.
+- Added unit tests for clean finalization and retryable scanner errors. These tests exercise the worker orchestration with an injected repository; they do not establish live PostgreSQL lease renewal or scanner-provider behavior.
+- Corrected the exhausted-lease recovery update parameter binding discovered while reviewing the worker path.
+- No scanner provider module has been configured or deployed, and the worker remains disabled by default. Live PostgreSQL worker concurrency, lease-expiry and process-restart tests remain required.
