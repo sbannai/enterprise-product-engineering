@@ -55,6 +55,22 @@ test("provider worker fails closed on authorization denial without reading paylo
   assert.equal(calls.outcomes[0].errorCode, "PROVIDER_OPERATION_AUTHORIZATION_DENIED");
 });
 
+test("provider worker rejects a route resolved for a different tenant or application", async () => {
+  for (const selection of [
+    { tenantId: "tenant-b", applicationId: "app-a", connectionId: "connection-a", capabilityKey: "email.send" },
+    { tenantId: "tenant-a", applicationId: "app-b", connectionId: "connection-a", capabilityKey: "email.send" },
+  ]) {
+    const { calls, dependencies } = harness({
+      configuration: { async resolve() { return selection; } },
+    });
+    const worker = new ProviderOperationWorker(dependencies, options);
+    const result = await worker.runOnce();
+    assert.equal(result.needsAttention, 1);
+    assert.equal(calls.dispatches, 0);
+    assert.equal(calls.outcomes[0].errorCode, "PROVIDER_OPERATION_ROUTE_MISMATCH");
+  }
+});
+
 test("provider worker retries with a safe code and never stores adapter exception text", async () => {
   const { calls, dependencies } = harness({
     async dispatch() { throw new Error("secret-token-and-private-body"); },

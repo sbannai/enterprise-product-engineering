@@ -134,7 +134,10 @@ export class ProviderOperationWorker {
         tenantId: operation.tenantId, applicationId: operation.applicationId,
         capabilityKey: operation.capabilityKey,
       });
-      if (selection.connectionId !== operation.connectionId || selection.capabilityKey !== operation.capabilityKey) {
+      if (selection.tenantId !== operation.tenantId
+        || selection.applicationId !== operation.applicationId
+        || selection.connectionId !== operation.connectionId
+        || selection.capabilityKey !== operation.capabilityKey) {
         await this.saveOutcome(operation, "NEEDS_ATTENTION", "PROVIDER_OPERATION_ROUTE_MISMATCH");
         result.needsAttention += 1;
         return;
