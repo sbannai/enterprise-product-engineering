@@ -379,7 +379,7 @@ export class PostgresCustomerAssetRepository {
       return row ? {
         assetId: row.asset_id, providerUploadReference: row.provider_upload_reference,
         checksumSha256: row.checksum_sha256 as string, sizeBytes: Number(row.size_bytes),
-        mimeType: row.mime_type,
+        mimeType: row.mime_type, attempt: Number(row.attempt_count),
       } : null;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
