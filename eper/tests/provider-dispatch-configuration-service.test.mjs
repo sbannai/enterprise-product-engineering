@@ -32,6 +32,9 @@ function service(connections, effective = {
   policy: { retryLimit: 4, senderProfile: "default" },
   source: "TENANT_DEFAULT",
   tenantDefaultVersion: 3,
+}, definition = {
+  providerKey: "mail-provider", adapterKey: "mail.smtp", adapterVersion: "2.1.0",
+  capabilities: ["email.send"], status: "ACTIVE",
 }) {
   const calls = [];
   return {
@@ -44,6 +47,10 @@ function service(connections, effective = {
       { async resolveEffectivePolicy(input) {
         calls.push({ method: "resolveEffectivePolicy", ...input });
         return effective;
+      } },
+      { async get(providerKey) {
+        calls.push({ method: "getProviderDefinition", providerKey });
+        return definition;
       } },
     ),
   };
@@ -59,10 +66,12 @@ test("dispatch resolution selects only an active application binding and applies
   });
   assert.equal(result.connectionId, "connection-a");
   assert.equal(result.providerKey, "mail-provider");
+  assert.equal(result.adapterKey, "mail.smtp");
+  assert.equal(result.adapterVersion, "2.1.0");
   assert.deepEqual(result.policy, { retryLimit: 4, senderProfile: "default" });
   assert.equal(result.policySource, "TENANT_DEFAULT");
   assert.equal(result.tenantDefaultVersion, 3);
-  assert.deepEqual(calls.map(call => call.method), ["listForApplication", "resolveEffectivePolicy"]);
+  assert.deepEqual(calls.map(call => call.method), ["listForApplication", "getProviderDefinition", "resolveEffectivePolicy"]);
 });
 
 test("application override is carried into dispatch configuration", async () => {
@@ -112,6 +121,21 @@ test("dispatch rejects absent policy and never exposes secret references", async
     tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
   }), error => error instanceof ProviderDispatchConfigurationError
     && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+});
+
+
+test("dispatch rejects missing or inactive catalogue definitions and unsupported catalogue capabilities", async () => {
+  for (const definition of [
+    null,
+    { providerKey: "mail-provider", adapterKey: "mail.smtp", adapterVersion: "2.1.0", capabilities: ["email.send"], status: "SUSPENDED" },
+    { providerKey: "mail-provider", adapterKey: "mail.smtp", adapterVersion: "2.1.0", capabilities: ["sms.send"], status: "ACTIVE" },
+  ]) {
+    const { instance } = service([connection()], undefined, definition);
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && ["PROVIDER_DISPATCH_CATALOGUE_UNAVAILABLE", "PROVIDER_DISPATCH_CATALOGUE_INACTIVE", "PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED"].includes(error.code));
+  }
 });
 
 test("dispatch validates required tenant, application and capability identifiers", async () => {
