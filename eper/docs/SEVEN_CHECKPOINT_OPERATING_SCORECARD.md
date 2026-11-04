@@ -1715,6 +1715,6 @@ The customer-asset stack remains separate: #384/#386 have their own fresh-clone 
 ### Continuity and safety boundary
 
 - The current mainline CI evidence is from exact SHA `2c380d79c55c9183a42ed534ffd1a504f7d41316`; PR-head green runs are not substituted for main.
-- The scorecard branch itself is being updated by this commit. Its new exact-head Actions must complete before this documentation revision is treated as validated.
+- The scorecard branch's current-head Actions are recorded in this PR's description; never infer validation from prior-head runs.
 - No approved requirement or chapter was edited. No PR was merged, no branch was deleted, no repository settings were changed, no chargeable cloud resource was provisioned and no real external/provider action was triggered.
 - No acceptance or release authorization is implied by automated tests.
