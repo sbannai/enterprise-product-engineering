@@ -229,6 +229,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await client.query("DELETE FROM eper_customer_asset_scan_jobs WHERE tenant_id = $1", [tenantId]);
         await client.query("DELETE FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1", [tenantId]);
         await client.query("DELETE FROM eper_customer_asset_application_links WHERE tenant_id = $1", [tenantId]);
         await client.query("DELETE FROM eper_customer_assets WHERE tenant_id = $1", [tenantId]);
