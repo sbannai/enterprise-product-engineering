@@ -253,10 +253,10 @@ export class PostgresCustomerAssetRepository {
       const sessionId = randomUUID();
       await client.query(
         `INSERT INTO eper_customer_asset_upload_sessions
-          (tenant_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
+          (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
            provider_upload_reference, upload_status, idempotency_key, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'initiated',$7,$8)`,
-        [input.tenantId, sessionId, input.assetId, input.actorId, input.expectedSizeBytes,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'initiated',$8,$9)`,
+        [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId, input.expectedSizeBytes,
           input.providerUploadReference, input.idempotencyKey, new Date(expiry).toISOString()],
       );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
