@@ -1487,3 +1487,16 @@ Exact-head Actions:
 The new commit is on #390's owning branch; no mainline code changed. #390 remains stacked on #379. #381/#382 still require synchronization with #390 before the provider stack is integrated. The combined provider-plus-customer-asset migration stack remains unproven in one clean clone.
 
 No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
+
+
+## 2026-11-04 — exact provider descendant divergence
+
+Live GitHub comparisons use the current branch refs, not PR snapshot base SHAs:
+
+- #390 integrity branch `fix/provider-payload-operation-integrity` is at `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f`.
+- #381 restricted-role RLS branch `test/provider-payload-rls-role-proof` is divergent from #390: #381 is 1 commit ahead and 12 behind; merge base is #379 head `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44`. Its branch-specific changes are the provider lifecycle workflow and PostgreSQL payload-store integration test.
+- #382 provider-worker branch `feat/provider-operation-worker-runtime` is divergent from #390: #382 is 2 commits ahead and 12 behind; merge base is the same #379 head. Its branch-specific changes include payload retention/key lifecycle, envelope-v2 migration, keyring, provider worker, integration/unit tests and workflow wiring.
+
+This is not a green, integrated provider stack. Synchronization must preserve #390's two deferred composite foreign keys and UUID/text identity contract, #381's restricted-role RLS proof, and #382's retention/key-rotation/envelope-v2 behavior. The overlapping PostgreSQL integration test, payload-store implementation and workflow wiring require conflict-aware reconciliation; do not force-update either branch or replace tests wholesale. After synchronization, rerun clean-clone migration/restore, restricted-role RLS, provider lifecycle and worker tests on the new exact heads.
+
+No branch was synchronized in this step because a safe merge needs to reconcile those overlapping persistence/security changes. The open PRs remain #381 and #382; no duplicate or orphan branch was created.
