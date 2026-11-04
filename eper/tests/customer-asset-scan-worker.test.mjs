@@ -52,3 +52,17 @@ test("customer asset scan worker persists bounded retry for a scanner error", as
   assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR" && call[2] === 15_000));
   assert.equal(f.calls.filter((call) => call[0] === "record").length, 0);
 });
+
+
+test("customer asset scan worker times out provider calls and routes them through retry", async () => {
+  const f = fixture("clean");
+  f.scanner.scan = async (_input, _requestId, signal) => new Promise((_resolve, reject) => {
+    signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+  });
+  await runCustomerAssetScanWorker({
+    ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    scanTimeoutMs: 1_000, onJob() { f.controller.abort(); },
+  });
+  assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR"));
+});
