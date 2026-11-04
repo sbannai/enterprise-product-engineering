@@ -165,9 +165,9 @@ form.querySelector("#assetUploadDisplayName").value="";
 }catch(error){
 if(generation!==sessionGeneration)return;
 const message=String(error?.message||"");
-fail(message==="HTTP 403"?"You do not have permission to upload assets for this application.":
-message==="HTTP 400"?"The file type or size does not match the configured upload policy.":
-message==="HTTP 503"?"Storage or upload verification is not configured. Contact your administrator.":
+fail(message.includes("customer_asset_upload_forbidden")?"You do not have permission to upload assets for this application.":
+message.includes("invalid_customer_asset_metadata")||message.includes("FILE_TYPE")||message.includes("FILE_SIZE")?"The file type or size does not match the configured upload policy.":
+message.includes("asset_upload_provider_or_durable_store_unavailable")||message.includes("asset_upload_verification_unavailable")||message.includes("customer_asset_authorization_unavailable")?"Storage, authorization or upload verification is not configured. Contact your administrator.":
 "Upload could not be completed. The reservation may already exist; refresh the workspace or contact support before retrying.");
 notify("error",status?.textContent||"Upload could not be completed.","Upload unavailable");
 }finally{
