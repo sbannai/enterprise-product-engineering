@@ -59,6 +59,13 @@ function validIdentity(value: unknown): value is string {
     && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
 }
 
+function validCapabilities(value: unknown): value is readonly string[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every((capability: unknown) => validIdentity(capability))
+    && new Set(value).size === value.length;
+}
+
 function registrationKey(providerKey: string, adapterVersion: string): string {
   return providerKey + "::" + adapterVersion;
 }
@@ -83,9 +90,7 @@ export class ProviderRuntimeAdapterRegistry {
     for (const entry of allowlist) {
       if (!entry || !validIdentity(entry.providerKey) || !validIdentity(entry.adapterKey)
         || !/^\\d+\\.\\d+\\.\\d+$/.test(entry.adapterVersion)
-        || !Array.isArray(entry.capabilities) || entry.capabilities.length === 0
-        || entry.capabilities.some(capability => !validIdentity(capability))
-        || new Set(entry.capabilities).size !== entry.capabilities.length) {
+         || !validCapabilities(entry.capabilities)) {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
       }
       const key = registrationKey(entry.providerKey, entry.adapterVersion);
@@ -99,9 +104,7 @@ export class ProviderRuntimeAdapterRegistry {
     for (const adapter of registrations) {
       if (!adapter || !validIdentity(adapter.providerKey) || !validIdentity(adapter.adapterKey)
         || !/^\\d+\\.\\d+\\.\\d+$/.test(adapter.adapterVersion)
-        || !Array.isArray(adapter.capabilities) || adapter.capabilities.length === 0
-        || adapter.capabilities.some(capability => !validIdentity(capability))
-        || new Set(adapter.capabilities).size !== adapter.capabilities.length
+         || !validCapabilities(adapter.capabilities)
         || typeof adapter.dispatch !== "function") {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
       }
@@ -111,8 +114,8 @@ export class ProviderRuntimeAdapterRegistry {
       }
       const permittedEntry = permitted.get(key);
       if (!permittedEntry || permittedEntry.adapterKey !== adapter.adapterKey
-        || adapter.capabilities.some(capability => !permittedEntry.capabilities.includes(capability))
-        || permittedEntry.capabilities.some(capability => !adapter.capabilities.includes(capability))) {
+         || adapter.capabilities.some((capability: string) => !permittedEntry.capabilities.includes(capability))
+        || permittedEntry.capabilities.some((capability: string) => !adapter.capabilities.includes(capability))) {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_NOT_ALLOWLISTED");
       }
       resolved.set(key, Object.freeze({
