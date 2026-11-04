@@ -157,3 +157,21 @@ test("storage registration rejects over-deep configuration schemas", () => {
     /STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID/,
   );
 });
+
+test("storage registration rejects non-finite numeric enum values", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE[0];
+  const registries = explicitProviderAllowlist[provider.providerKey];
+  for (const invalid of [NaN, Infinity, -Infinity]) {
+    assert.throws(
+      () => validateStorageProviderRegistration({
+        ...provider,
+        configurationSchema: { type: "string", enum: ["valid", invalid] },
+      }, registries),
+      /STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID/,
+    );
+  }
+  validateStorageProviderRegistration({
+    ...provider,
+    configurationSchema: { type: "number", enum: [-10, 0, 1.5, 42] },
+  }, registries);
+});
