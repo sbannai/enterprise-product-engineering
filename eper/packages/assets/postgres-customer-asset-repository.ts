@@ -509,6 +509,7 @@ export class PostgresCustomerAssetRepository {
    */
   async claimScanJobs(input: {
     tenantId: string; applicationId: string; workerId: string;
+    scannerServiceId: string; environment: AuditEnvironment;
     limit?: number; leaseMs?: number;
   }): Promise<Array<{ uploadSessionId: string; assetId: string; correlationId: string; attempt: number; leaseExpiresAt: string }>> {
     this.validateId(input.tenantId, "tenantId");
@@ -522,15 +523,45 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      await client.query(
+      const exhausted = await client.query<{
+        upload_session_id: string; asset_id: string; correlation_id: string;
+      }>(
         `UPDATE eper_customer_asset_scan_jobs
             SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
                 last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2
             AND state = 'leased' AND lease_expires_at <= now()
-            AND attempt_count >= max_attempts`,
+            AND attempt_count >= max_attempts
+          RETURNING upload_session_id, asset_id, correlation_id`,
         [input.tenantId, input.applicationId],
       );
+      // An exhausted lease may have expired after the worker crashed before
+      // finalization. Close the asset lifecycle and append its audit event in
+      // this same transaction; never leave a scanning asset behind a dead letter.
+      for (const job of exhausted.rows) {
+        const failed = await client.query(
+          `UPDATE eper_customer_assets
+              SET upload_status = 'failed', scan_status = 'error',
+                  lifecycle_status = 'quarantined', updated_by = $4,
+                  updated_at = now(), version = version + 1
+            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
+            RETURNING asset_id`,
+          [input.tenantId, job.asset_id, input.applicationId, input.scannerServiceId],
+        );
+        if (failed.rowCount !== 1) {
+          throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
+        }
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "service", actorId: input.scannerServiceId,
+          action: "customer.asset.scan.exhausted", outcome: "failure",
+          reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
+          resourceId: job.asset_id, correlationId: job.correlation_id, source: "job",
+          operationName: "customer asset scan lease recovery",
+          payload: { assetId: job.asset_id, uploadSessionId: job.upload_session_id,
+            scanStatus: "error", resultingAssetStatus: "failed" },
+        });
+      }
       const claimed = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
         attempt_count: number; lease_expires_at: string | Date;
