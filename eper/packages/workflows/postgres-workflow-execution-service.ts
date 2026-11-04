@@ -376,7 +376,7 @@ export class PostgresWorkflowExecutionService {
 
   /** Lists only instances visible to this actor in the requested tenant/application scope. */
   async listVisibleInstances(input: WorkflowExecutionContext & { limit?: number; offset?: number }): Promise<{
-    items: WorkflowInstanceRecord[]; total: number; limit: number; offset: number;
+    items: Array<Omit<WorkflowInstanceRecord, "data">>; total: number; limit: number; offset: number;
   }> {
     validateContext(input);
     const limit = input.limit ?? 25;
