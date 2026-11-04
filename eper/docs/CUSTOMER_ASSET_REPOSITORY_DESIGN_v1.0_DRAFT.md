@@ -106,7 +106,8 @@ No fixed maximum upload size is approved by this design. Customer-level quotas, 
 
 | Operation | Purpose | Required controls |
 |---|---|---|
-| `POST /customer/applications/{appId}/assets/{assetId}/uploads` | Issue a short-lived upload grant and reserve the upload session | Authenticated actor, tenant/application assignment, client-assets entitlement, idempotency, provider allowlist, durable audit |
+| `POST /customer/assets` | Create pending customer-shared or application-restricted asset metadata | Customer Admin/asset-manager role, tenant/application assignment, MIME allowlist, size cap, durable audit |
+| `POST /customer/applications/{appId}/assets/{assetId}/uploads` | Issue a short-lived upload grant and reserve the upload session | Customer Admin/asset-manager role, pending asset metadata match, tenant/application assignment, idempotency, provider allowlist, durable audit |
 | `POST /customer/assets/uploads/{id}/complete` | Verify transfer and queue scanning | Tenant/session match, checksum and size verification |
 | `GET /customer/assets` | List customer-shared repository | Tenant-scoped pagination and actor authorization |
 | `GET /customer/assets/{id}` | Read safe metadata | Tenant + asset scope |
@@ -186,8 +187,8 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 
 ### Upload reservation API implementation update (2026-11-04)
 
-- Added `POST /customer/applications/{appId}/assets/{assetId}/uploads`. It resolves the authenticated customer identity, verifies the customer asset module and both tenant/application and actor/application assignment, and rejects requests unless PostgreSQL asset persistence, durable audit mode, repository and upload provider are available.
+- Added `POST /customer/assets` for pending metadata creation and `POST /customer/applications/{appId}/assets/{assetId}/uploads` for upload reservation. Both resolve the authenticated identity, require the `customer-admin` or `customer-asset-manager` role, verify the `client-assets` module and tenant/application plus actor/application assignment, and require PostgreSQL asset persistence with durable audit. Metadata creation requires explicit configured MIME allowlist, per-file byte cap and storage adapter key; tenant ID is always derived from identity.
 - Added a provider-neutral upload adapter over `IntegrationPort`. It requires an opaque provider-side upload reference, HTTPS URL, exact configured host allowlist, PUT/POST method, safe headers and a capability lifetime no longer than 15 minutes.
-- Added upload orchestration that issues the provider capability, persists the opaque provider reference and idempotent upload reservation with transactional audit, and only then returns the signed capability to the caller. The provider reference is never returned to the browser.
+- Added upload orchestration that first checks the pending asset’s persisted filename, MIME type and size, issues the provider capability, persists the opaque provider reference and idempotent upload reservation with transactional audit, and only then returns the signed capability to the caller. The provider reference is never returned to the browser.
 - The API is deliberately fail-closed when no upload provider port is injected. The current application bootstrap does not select or configure a real storage vendor, and no external provider or cloud resource has been provisioned. API tests inject a fake provider and repository; they are contract tests, not live provider or PostgreSQL evidence.
 - Upload completion remains a separate trusted-server operation. Client-supplied checksum, MIME or size values must not be treated as provider verification. A provider inspection adapter must verify object existence, actual bytes, checksum and detected content type before calling the repository completion method.
