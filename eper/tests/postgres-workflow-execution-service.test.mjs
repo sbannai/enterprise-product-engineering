@@ -133,9 +133,9 @@ test("customer work queue is tenant/application scoped and resolves permissions 
   });
   assert.deepEqual(result, { items: [], total: 0, limit: 20, offset: 40 });
   const listCall = calls.find(call => call.sql.includes("COUNT(*) OVER()"));
-  assert.ok(listCall, "work queue query should use a single bounded page query");
-  assert.doesNotMatch(listCall.sql, /SELECT\\s+i\\.\\*/i, "queue must not fetch private workflow payloads");
-  assert.doesNotMatch(listCall.sql, /i\\.data\\b/i, "queue must not select workflow payload data");
+  assert.ok(listCall, "work queue query should use a bounded page query");
+  assert.doesNotMatch(listCall.sql, /SELECT\s+i\.\*/i, "queue must not fetch private workflow payloads");
+  assert.doesNotMatch(listCall.sql, /i\.data\b/i, "queue must not select workflow payload data");
   assert.equal(Object.hasOwn(result.items[0] ?? {}, "data"), false);
   assert.match(listCall.sql, /i\.tenant_id = \$1 AND i\.application_id = \$2/);
   assert.match(listCall.sql, /definition_version = i\.definition_version/);
