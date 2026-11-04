@@ -102,19 +102,26 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         checksumSha256: "b".repeat(64), scanStatus: "pending",
       });
       assert.equal(completed.uploadStatus, "scanning");
+      const workerId = "asset-scanner:integration-worker";
+      const claimed = await repository.claimScanJobs({
+        tenantId, applicationId, workerId, scannerServiceId: "asset-scanner",
+        environment: "uat", limit: 10, leaseMs: 60_000,
+      });
+      assert.equal(claimed.length, 2, "both completed uploads enqueue durable scan jobs");
+      assert.ok(claimed.some((job) => job.uploadSessionId === sessionId));
       const clean = await repository.recordScanResult({
-        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       });
       assert.equal(clean.uploadStatus, "available");
       assert.equal(clean.scanStatus, "clean");
       assert.equal(clean.checksumSha256, "b".repeat(64));
       assert.deepEqual(await repository.recordScanResult({
-        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       }), clean, "duplicate scanner callback is idempotent");
       await assert.rejects(() => repository.recordScanResult({
-        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "infected",
       }), /SCAN_RESULT_CONFLICT/);
       await repository.completeUpload({
@@ -122,8 +129,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         uploadSessionId: restrictedSessionId, receivedSizeBytes: 1024,
         observedMimeType: "image/png", checksumSha256: "c".repeat(64), scanStatus: "pending",
       });
+      const restrictedClaim = claimed.find((job) => job.uploadSessionId === restrictedSessionId);
+      assert.ok(restrictedClaim, "restricted upload has a claimed scan job");
       const quarantined = await repository.recordScanResult({
-        tenantId, applicationId, scannerServiceId: "asset-scanner", environment: "uat",
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: restrictedSessionId, scanStatus: "infected",
       });
       assert.equal(quarantined.uploadStatus, "rejected");
