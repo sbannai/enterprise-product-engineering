@@ -117,3 +117,43 @@ test("storage registration rejects malformed runtime values with stable errors",
     /STORAGE_PROVIDER_SECRET_METADATA_FORBIDDEN/,
   );
 });
+
+
+test("storage registration rejects unsupported schema keywords and invalid required fields", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE[0];
+  const registries = explicitProviderAllowlist[provider.providerKey];
+  assert.throws(
+    () => validateStorageProviderRegistration({
+      ...provider,
+      configurationSchema: { type: "object", properties: {}, patternProperties: {} },
+    }, registries),
+    /STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID/,
+  );
+  assert.throws(
+    () => validateStorageProviderRegistration({
+      ...provider,
+      configurationSchema: {
+        type: "object",
+        properties: { bucket: { type: "string" } },
+        required: ["missing"],
+      },
+    }, registries),
+    /STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID/,
+  );
+});
+
+test("storage registration rejects over-deep configuration schemas", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE[0];
+  const registries = explicitProviderAllowlist[provider.providerKey];
+  let nested = { type: "string" };
+  for (let depth = 0; depth < 10; depth += 1) {
+    nested = { type: "object", properties: { nested } };
+  }
+  assert.throws(
+    () => validateStorageProviderRegistration({
+      ...provider,
+      configurationSchema: nested,
+    }, registries),
+    /STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID/,
+  );
+});
