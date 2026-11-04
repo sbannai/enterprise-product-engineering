@@ -6,7 +6,7 @@ import { createCustomerCsrfToken } from "../dist/packages/identity/customer-brow
 test("customer upload reservation requires identity, assignment, provider and durable audit", async () => {
   const keys = [
     "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
-    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
     "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -14,6 +14,7 @@ test("customer upload reservation requires identity, assignment, provider and du
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ASSET_FILE_POLICY_JSON = JSON.stringify({ files: [
     { extension: ".docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", maxSizeBytes: 16384 },
   ] });
@@ -83,13 +84,14 @@ test("customer upload reservation requires identity, assignment, provider and du
 });
 
 test("customer upload reservation fails closed when provider or repository configuration is absent", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-unconfigured-token-00000000001";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
@@ -111,7 +113,7 @@ test("customer upload reservation fails closed when provider or repository confi
 
 
 test("customer asset metadata creation is tenant-derived, role-gated and audited through the repository", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
     "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON",
     "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES", "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY"];
@@ -120,6 +122,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-derived", actorId: "actor-admin", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
@@ -176,7 +179,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
 
 
 test("upload completion uses provider-observed metadata and leaves asset in scanning state", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-complete-test-token-000000001";
@@ -184,6 +187,7 @@ test("upload completion uses provider-observed metadata and leaves asset in scan
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
@@ -237,13 +241,14 @@ test("upload completion uses provider-observed metadata and leaves asset in scan
 });
 
 test("upload completion fails closed when the trusted verification adapter is unavailable", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-no-verifier-token-0000000001";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
