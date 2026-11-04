@@ -129,12 +129,13 @@ test("dispatch rejects missing or inactive catalogue definitions and unsupported
     null,
     { providerKey: "mail-provider", adapterKey: "mail.smtp", adapterVersion: "2.1.0", capabilities: ["email.send"], status: "SUSPENDED" },
     { providerKey: "mail-provider", adapterKey: "mail.smtp", adapterVersion: "2.1.0", capabilities: ["sms.send"], status: "ACTIVE" },
+    { providerKey: "mail-provider", adapterKey: "mail.smtp", adapterVersion: "latest", capabilities: ["email.send"], status: "ACTIVE" },
   ]) {
     const { instance } = service([connection()], undefined, definition);
     await assert.rejects(() => instance.resolve({
       tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
     }), error => error instanceof ProviderDispatchConfigurationError
-      && ["PROVIDER_DISPATCH_CATALOGUE_UNAVAILABLE", "PROVIDER_DISPATCH_CATALOGUE_INACTIVE", "PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED"].includes(error.code));
+      && ["PROVIDER_DISPATCH_CATALOGUE_UNAVAILABLE", "PROVIDER_DISPATCH_CATALOGUE_INACTIVE", "PROVIDER_DISPATCH_CATALOGUE_INVALID", "PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED"].includes(error.code));
   }
 });
 
