@@ -2133,3 +2133,8 @@ New regression tests cover catalogue adapter-key substitution and parking an unr
 PR #306 merge `6e8dd438e5091b1802d65e4f29951389fe077859`, PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e`, and identity successors #324 (`a554990cb7f4969bb218aad7a2e9944aec62fa05`), #329 (`82a82d92222c613c02e55f01211ecbb32ce63bba`), #337 (`18315e1654b52f1546936a8fd28daed907cab31e`) and #376 (`9749701bfed527b906183192ca06cc1998e70166`) are confirmed ancestors of current main. They are not open work.
 
 No approved requirement or chapter was changed. No PR was merged, no branch was deleted/force-updated, no repository setting was changed, no chargeable cloud resource was provisioned and no real external/provider action was invoked.
+
+
+### Snapshot correction — scorecard branch head changed in this run
+
+The 22:54 open-PR snapshot above was written while PR #377 still pointed to its prior head. Appending that snapshot advanced the scorecard PR itself to `83b674a3937bc04c00b1d349aa2878d28e0c1017`. Its own exact-head workflows were subsequently created and remain queued. Therefore PR #377 is also pending validation; the sentence above about the other 16 heads applies to the pre-update scorecard head and is superseded for #377. At the latest refreshed state, the 15 unchanged open PR heads other than #398 and #377 retain their successful exact-head evidence. Do not carry the prior #377 green checks forward.
