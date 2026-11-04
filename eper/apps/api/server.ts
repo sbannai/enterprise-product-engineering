@@ -1982,11 +1982,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (scannerToken.length < 32 || !bearerMatches(request, scannerToken)) {
         sendJson(request, response, 401, { error: "unauthorized" }); return;
       }
-      const workerId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
+      const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
       if (!options.customerAssetRepository ||
           process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
           process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
-          !/^[a-zA-Z0-9._:-]{2,128}$/.test(workerId)) {
+          !/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId)) {
         sendJson(request, response, 503, { error: "asset_scanner_unavailable" }); return;
       }
       try {
