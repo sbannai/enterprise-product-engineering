@@ -5,7 +5,7 @@ import { createAppServer } from "../dist/apps/api/server.js";
 test("customer upload reservation requires identity, assignment, provider and durable audit", async () => {
   const keys = [
     "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
-    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
     "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -13,6 +13,10 @@ test("customer upload reservation requires identity, assignment, provider and du
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ASSET_FILE_POLICY_JSON = JSON.stringify({ files: [
+    { extension: ".docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", maxSizeBytes: 16384 },
+  ] });
+
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
