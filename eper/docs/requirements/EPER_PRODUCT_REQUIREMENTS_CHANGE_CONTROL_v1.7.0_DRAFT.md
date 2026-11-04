@@ -21,7 +21,7 @@ The existing controlled register already records EPER-ACT-APPROVAL-001 as versio
 
 ## 3. Candidate population
 
-The draft population is exactly 45 IDs:
+The original v34 source population is exactly 45 IDs. Later owner-directed additions are appended in dated sections and are not part of the 45-row v34 source export:
 
 - EPER-CW-001 through EPER-CW-045.
 - Original requirement statements and acceptance criteria are retained verbatim in the source CSV.
