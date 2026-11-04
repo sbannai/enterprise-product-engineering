@@ -1884,6 +1884,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
       const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+      }
       if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
           !assetUploadResolver || process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
         sendJson(request, response, 503, { error: "asset_upload_provider_or_durable_store_unavailable" }); return;
