@@ -108,6 +108,7 @@ CREATE INDEX IF NOT EXISTS eper_customer_asset_links_asset_idx
 -- multipart/session tokens are stored only as opaque references, never credentials.
 CREATE TABLE IF NOT EXISTS eper_customer_asset_upload_sessions (
   tenant_id varchar(128) NOT NULL,
+  application_id varchar(128) NOT NULL CHECK (length(btrim(application_id)) BETWEEN 1 AND 128),
   upload_session_id uuid NOT NULL,
   asset_id uuid NOT NULL,
   actor_id varchar(128) NOT NULL CHECK (length(btrim(actor_id)) BETWEEN 1 AND 128),
@@ -148,10 +149,59 @@ BEGIN
   END LOOP;
 END $$;
 
+-- The database role enforces application visibility for asset reads and writes.
+-- Shared assets become visible only after an explicit application link; restricted
+-- assets are visible only to their owner application. Inserts are tenant-bound and
+-- restricted assets must name the current application as owner.
 DROP POLICY IF EXISTS customer_asset_tenant_isolation ON eper_customer_assets;
-CREATE POLICY customer_asset_tenant_isolation ON eper_customer_assets
-  USING (tenant_id = current_setting('eper.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('eper.tenant_id', true));
+CREATE POLICY customer_asset_application_read ON eper_customer_assets
+  FOR SELECT
+  USING (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND (
+      (repository_scope = 'application_restricted'
+        AND owner_application_id = current_setting('eper.application_id', true))
+      OR
+      (repository_scope = 'customer_shared' AND EXISTS (
+        SELECT 1 FROM eper_customer_asset_application_links l
+         WHERE l.tenant_id = eper_customer_assets.tenant_id
+           AND l.asset_id = eper_customer_assets.asset_id
+           AND l.application_id = current_setting('eper.application_id', true)
+      ))
+    )
+  );
+CREATE POLICY customer_asset_application_insert ON eper_customer_assets
+  FOR INSERT
+  WITH CHECK (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND (
+      repository_scope = 'customer_shared'
+      OR owner_application_id = current_setting('eper.application_id', true)
+    )
+  );
+CREATE POLICY customer_asset_application_update ON eper_customer_assets
+  FOR UPDATE
+  USING (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND (
+      (repository_scope = 'application_restricted'
+        AND owner_application_id = current_setting('eper.application_id', true))
+      OR
+      (repository_scope = 'customer_shared' AND EXISTS (
+        SELECT 1 FROM eper_customer_asset_application_links l
+         WHERE l.tenant_id = eper_customer_assets.tenant_id
+           AND l.asset_id = eper_customer_assets.asset_id
+           AND l.application_id = current_setting('eper.application_id', true)
+      ))
+    )
+  )
+  WITH CHECK (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND (
+      repository_scope = 'customer_shared'
+      OR owner_application_id = current_setting('eper.application_id', true)
+    )
+  );
 
 DROP POLICY IF EXISTS customer_asset_application_link_isolation ON eper_customer_asset_application_links;
 CREATE POLICY customer_asset_application_link_isolation ON eper_customer_asset_application_links
@@ -166,7 +216,32 @@ CREATE POLICY customer_asset_application_link_isolation ON eper_customer_asset_a
 
 DROP POLICY IF EXISTS customer_asset_upload_session_isolation ON eper_customer_asset_upload_sessions;
 CREATE POLICY customer_asset_upload_session_isolation ON eper_customer_asset_upload_sessions
-  USING (tenant_id = current_setting('eper.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('eper.tenant_id', true));
+  USING (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND application_id = current_setting('eper.application_id', true)
+  )
+  WITH CHECK (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND application_id = current_setting('eper.application_id', true)
+  );
+
+
+-- Dedicated non-login runtime group role. Login credentials are provisioned by
+-- operators and granted membership; this migration stores no secrets.
+DO $roles$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_customer_asset_access') THEN
+    CREATE ROLE eper_customer_asset_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+  END IF;
+END
+$roles$;
+ALTER ROLE eper_customer_asset_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+GRANT USAGE ON SCHEMA public TO eper_customer_asset_access;
+GRANT SELECT, INSERT, UPDATE ON eper_customer_assets TO eper_customer_asset_access;
+GRANT SELECT, INSERT ON eper_customer_asset_application_links TO eper_customer_asset_access;
+GRANT SELECT, INSERT, UPDATE ON eper_customer_asset_upload_sessions TO eper_customer_asset_access;
+GRANT INSERT ON eper_audit_events TO eper_customer_asset_access;
+GRANT SELECT ON eper_audit_chain_head TO eper_customer_asset_access;
+GRANT UPDATE (last_event_hash, updated_at) ON eper_audit_chain_head TO eper_customer_asset_access;
 
 COMMIT;
