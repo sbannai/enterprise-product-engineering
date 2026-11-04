@@ -151,7 +151,7 @@ export class ProviderOperationWorker {
         || selection.connectionId !== operation.connectionId
         || selection.capabilityKey !== operation.capabilityKey
         || typeof selection.adapterKey !== "string" || !selection.adapterKey.trim()
-        || typeof selection.adapterVersion !== "string" || !/^\\d+\\.\\d+\\.\\d+$/.test(selection.adapterVersion)) {
+        || typeof selection.adapterVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(selection.adapterVersion)) {
         await this.saveOutcome(operation, "NEEDS_ATTENTION", "PROVIDER_OPERATION_ROUTE_MISMATCH");
         result.needsAttention += 1;
         return;
