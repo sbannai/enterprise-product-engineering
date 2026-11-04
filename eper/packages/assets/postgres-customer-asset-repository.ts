@@ -210,7 +210,7 @@ export class PostgresCustomerAssetRepository {
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
-    providerUploadReference: string; expiresAt: string;
+    providerUploadReference: string; expiresAt: string; uploadSessionId?: string;
   }): Promise<string> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
@@ -250,7 +250,8 @@ export class PostgresCustomerAssetRepository {
         [input.tenantId, input.assetId],
       );
       if (!asset.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
-      const sessionId = randomUUID();
+      const sessionId = input.uploadSessionId ?? randomUUID();
+      this.validateId(sessionId, "uploadSessionId");
       await client.query(
         `INSERT INTO eper_customer_asset_upload_sessions
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
