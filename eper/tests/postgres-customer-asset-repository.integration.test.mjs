@@ -185,6 +185,15 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await failedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         failedClient.release();
       }
+      assert.equal(await repository.getDownloadAsset(tenantId, applicationId, failedAsset.assetId), null,
+        "provider failure must never make a pending asset downloadable");
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: failedReservationId, receivedSizeBytes: 1536,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        checksumSha256: "d".repeat(64), scanStatus: "pending",
+      }), /UPLOAD_SESSION_NOT_COMPLETABLE/,
+      "a failed provider reservation cannot be completed or promoted to scanning");
 
       await Promise.all(Array.from({ length: 5 }, () => repository.link({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
