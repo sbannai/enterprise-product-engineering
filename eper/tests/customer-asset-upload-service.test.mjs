@@ -79,3 +79,15 @@ test("upload start rejects invalid size, idempotency and excessive expiry", asyn
   await assert.rejects(() => startCustomerAssetUpload({ ...input, idempotencyKey: "short" }, dependencies), /IDEMPOTENCY_KEY_INVALID/);
   assert.equal(await startCustomerAssetUpload(input, dependencies), null);
 });
+
+
+test("upload start never returns a fresh grant for an existing idempotency session", async () => {
+  await assert.rejects(() => startCustomerAssetUpload(input, {
+    issueGrant: async () => ({
+      providerUploadReference: "new-provider-reference",
+      url: "https://storage.example.test/new-session", method: "PUT",
+      expiresAt: new Date(Date.now() + 30_000).toISOString(), headers: {},
+    }),
+    repository: { reserveUpload: async () => "prior-session-id-00000000" },
+  }), /IDEMPOTENCY_REPLAY_CONFLICT/);
+});
