@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ProviderOperationWorker } from "../dist/packages/integrations/provider-operation-worker.js";
 import { ProviderDispatchConfigurationError } from "../dist/packages/integrations/provider-dispatch-configuration-service.js";
+import { ProviderRuntimeRegistryError } from "../dist/packages/integrations/provider-runtime-adapter-registry.js";
 
 const operation = {
   operationId: "operation-12345678", tenantId: "tenant-a", applicationId: "app-a",
@@ -102,6 +103,20 @@ test("provider worker parks deterministic configuration blockers without reading
     assert.equal(calls.outcomes[0].outcome, "NEEDS_ATTENTION");
     assert.equal(calls.outcomes[0].errorCode, code);
   }
+});
+
+test("provider worker parks an unregistered runtime adapter for operator review", async () => {
+  const { calls, dependencies } = harness({
+    async dispatch() {
+      throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE");
+    },
+  });
+  const worker = new ProviderOperationWorker(dependencies, options);
+  const result = await worker.runOnce();
+  assert.equal(result.needsAttention, 1);
+  assert.equal(result.retried, 0);
+  assert.equal(calls.outcomes[0].outcome, "NEEDS_ATTENTION");
+  assert.equal(calls.outcomes[0].errorCode, "PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE");
 });
 
 test("provider worker rejects mismatched resolved connection without dispatch", async () => {
