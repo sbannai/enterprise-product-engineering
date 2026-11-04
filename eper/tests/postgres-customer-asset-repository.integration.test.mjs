@@ -109,6 +109,12 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       });
       assert.equal(claimed.length, 1, "completed upload enqueues one durable scan job");
       assert.ok(claimed.some((job) => job.uploadSessionId === sessionId));
+      assert.equal(await repository.renewScanJobLease({
+        tenantId, applicationId, uploadSessionId: sessionId, workerId, leaseMs: 60_000,
+      }), true, "the current worker can renew its active lease");
+      assert.equal(await repository.renewScanJobLease({
+        tenantId, applicationId, uploadSessionId: sessionId, workerId: "asset-scanner:other-worker", leaseMs: 60_000,
+      }), false, "a different worker cannot renew the lease");
       const clean = await repository.recordScanResult({
         tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
