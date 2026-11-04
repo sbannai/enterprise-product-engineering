@@ -89,6 +89,10 @@ export class ProviderDispatchConfigurationService {
     if (definition.status !== "ACTIVE") {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CATALOGUE_INACTIVE");
     }
+    if (typeof definition.adapterKey !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(definition.adapterKey)
+      || typeof definition.adapterVersion !== "string" || !/^\\d+\\.\\d+\\.\\d+$/.test(definition.adapterVersion)) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CATALOGUE_INVALID");
+    }
     if (!definition.capabilities.includes(input.capabilityKey)) {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED");
     }
