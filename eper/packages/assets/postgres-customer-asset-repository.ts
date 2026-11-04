@@ -613,13 +613,16 @@ export class PostgresCustomerAssetRepository {
       await this.setContext(client, input.tenantId, input.applicationId);
       const result = await client.query<{ state: "pending" | "dead_letter" }>(
         `UPDATE eper_customer_asset_scan_jobs
-            SET state = CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE 'pending' END,
+            SET state = CASE WHEN attempt_count >= max_attempts THEN 'leased' ELSE 'pending' END,
                 available_at = CASE WHEN attempt_count >= max_attempts THEN available_at
                   ELSE now() + ($5::bigint * interval '1 millisecond') END,
-                last_error_code = $6, lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
+                last_error_code = $6,
+                lease_owner = CASE WHEN attempt_count >= max_attempts THEN lease_owner ELSE NULL END,
+                lease_expires_at = CASE WHEN attempt_count >= max_attempts THEN lease_expires_at ELSE NULL END,
+                updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
-          RETURNING state`,
+          RETURNING CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE state END AS state`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
           input.retryAfterMs, input.errorCode],
       );
@@ -632,13 +635,14 @@ export class PostgresCustomerAssetRepository {
   }
 
   async recordScanResult(input: {
-    tenantId: string; applicationId: string; scannerServiceId: string;
+    tenantId: string; applicationId: string; scannerServiceId: string; workerId: string;
     environment: AuditEnvironment; correlationId: string; uploadSessionId: string;
     scanStatus: "clean" | "infected" | "error" | "not_required";
   }): Promise<CustomerAsset> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.scannerServiceId, "scannerServiceId");
+    this.validateId(input.workerId, "workerId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
     const client = await this.pool.connect();
@@ -648,15 +652,19 @@ export class PostgresCustomerAssetRepository {
       const locked = await client.query<{
         asset_id: string; upload_status: string; scan_status: string;
         lifecycle_status: string; session_status: string;
+        job_state: string; lease_owner: string | null; lease_active: boolean;
       }>(
         `SELECT a.asset_id, a.upload_status, a.scan_status, a.lifecycle_status,
-          s.upload_status AS session_status
+          s.upload_status AS session_status, j.state AS job_state, j.lease_owner,
+          (j.lease_expires_at > now()) AS lease_active
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         WHERE s.tenant_id = $1 AND s.upload_session_id = $2
-         FOR UPDATE OF s, a`,
-        [input.tenantId, input.uploadSessionId],
+         JOIN eper_customer_asset_scan_jobs j
+           ON j.tenant_id = s.tenant_id AND j.upload_session_id = s.upload_session_id
+         WHERE s.tenant_id = $1 AND s.application_id = $2 AND s.upload_session_id = $3
+         FOR UPDATE OF s, a, j`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
       );
       const current = locked.rows[0];
       if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
@@ -679,6 +687,9 @@ export class PostgresCustomerAssetRepository {
       if (current.upload_status !== "scanning") {
         throw new Error("EPER_CUSTOMER_ASSET_NOT_AWAITING_SCAN");
       }
+      if (current.job_state !== "leased" || current.lease_owner !== input.workerId || !current.lease_active) {
+        throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST");
+      }
       const uploadStatus: CustomerAssetStatus =
         input.scanStatus === "clean" || input.scanStatus === "not_required" ? "available"
           : input.scanStatus === "infected" ? "rejected" : "failed";
@@ -697,6 +708,15 @@ export class PostgresCustomerAssetRepository {
       );
       const row = updated.rows[0];
       if (!row) throw new Error("EPER_CUSTOMER_ASSET_SCAN_RESULT_UPDATE_FAILED");
+      const finalized = await client.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET state = CASE WHEN $5 = 'error' THEN 'dead_letter' ELSE 'completed' END,
+                lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.scanStatus],
+      );
+      if (finalized.rowCount !== 1) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST");
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "service", actorId: input.scannerServiceId, action: "customer.asset.scan.complete",
