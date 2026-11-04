@@ -1376,3 +1376,72 @@ The current implementation adds a bounded/paginated read-only queue endpoint. It
 7. **Release/continuity — RED.** Last verified repository configuration reported main unprotected and no rulesets; this configuration was not re-read in this cycle and no settings were changed. Disposable CI restore is not production recovery. Independent second-engineer release/rollback and production restore rehearsal remain unproven.
 
 The continuity charter remains **PROPOSED / OWNER REVIEW REQUIRED**. No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
+
+## 2026-11-04 13:52 IST — dynamic-main refresh and provider payload integrity candidate
+
+### Mainline and repository controls
+- Dynamically resolved main at 2c380d79c55c9183a42ed534ffd1a504f7d41316; tree 0c01985a303e9348e728acd04b0a55a80020f9a9.
+- Current-main CI [41675875771], integrated validation [41675875913], 228/38 matrix [41675875818], G9 [41675875648], six-family HTTP smoke [41675875652] and container runtime [41675875533] all succeeded on the current main commit.
+- The matrix log explicitly reports 38 chapters, 228 requirements, 259 pilot tests, 0 failed tests, 28 HTTP checks and no failed chapters. G9 is 5/5 and confirms six requirements per chapter, registry/routing joins, pending-versus-closed separation and automated-pilot-versus-acceptance separation.
+- Main branch metadata was re-read: protected=false; repository rulesets returned an empty list. No repository control was changed.
+- PR #306 merge 6e8dd438e5091b1802d65e4f29951389fe077859, PR #310 merge 88b9708d748c19dc80a1a2d7ad4960914451db7e and PR #376 merge 9749701bfed527b906183192ca06cc1998e70166 are confirmed ancestors of current main. PR #306's fresh-clone candidate has the same Git tree as current main; its original clean-clone evidence remains applicable.
+
+### Current open PR inventory — exact heads resolved on this run
+The live open-PR list was refreshed after the provider-branch correction. Every run below is tied to the listed head; prior-head green badges are not substituted.
+
+| PR | Exact head | Base | Exact-head evidence / disposition |
+|---|---|---|---|
+| #377 | 7c34a8a2e7f52bafdd862e1e7096005b0ab29cd9 (scorecard branch before this addendum; resolve live PR head after this file commit) | main | Prior exact-head integrated [41787156808], matrix [41787156840], G9 and CI passed. This scorecard update creates a new head and requires its own exact-head checks. |
+| #378 | 813de84caa4c9cf4eb7c5a2c89a92b30d662ff05 | main | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039] succeeded; 1,433 tests / 1,429 passed / 0 failed / 4 skipped; restore 75/75. |
+| #379 | 82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44 | #378 | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] succeeded; 1,438 / 1,434 passed / 0 failed / 4 skipped; restore 76/76. The payload-operation FK is supplied by follow-up #390, not by this head alone. |
+| #380 | 55006ab19bcbb685fc3e84c4230fd865087887f3 | main | Integrated [41763251674], matrix [41763251774], G9 [41763251777] succeeded; additive requirements/design only. |
+| #381 | e63f747db7e1f11e4fc7b74fae1591a575870a1d | #379 | Fresh clone [41738364008] and provider lifecycle [41738363993] succeeded; restricted-role RLS and tenant/application denial are exercised on live PostgreSQL. |
+| #382 | 8aa4344a02f6f77d5566c7b24d571a5681b68ac2 | #381 | Fresh clone [41738377819], PostgreSQL [41738377859], provider lifecycle [41738377748] succeeded; 1,450 / 1,446 passed / 0 failed / 4 skipped; restore 76/76. Provider worker remains a bounded runOnce() component. |
+| #384 | 291129b77ab50623e41dd28c4a746ef70da28183 | main | CI [41786048984], integrated [41786048948], fresh clone [41786048886], PostgreSQL [41786048950], browser [41786049023], matrix [41786048963], G9 [41786048971], provider lifecycle [41786048922], HTTP, container and release jobs succeeded. Fresh clone 1,464 / 1,460 passed / 0 failed / 4 skipped; restore 79/79. |
+| #385 | 2a2b059b37d06621f8e4efb2e2b6f467520114b5 | main | Integrated [41764308133], matrix [41764308125], G9 [41764308165] and CI [41764331361] succeeded; documentation-only additive candidate. |
+| #386 | 116fcbbab3632e8923a1b969a8f8f3854f8be216 | #384 feature branch | Fresh clone [41786474384], PostgreSQL [41786474240], provider lifecycle [41786474505] succeeded; 1,467 / 1,463 passed / 0 failed / 4 skipped; restore 79/79. Base drift remains: PR base snapshot 36bce45869212e12cd911e415b378712e9710842 is four commits behind current #384 head 291129b77ab50623e41dd28c4a746ef70da28183. Synchronize and rerun before integration. |
+| #387 | 53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d | main | Fresh clone [41784823307], PostgreSQL [41784823446], integrated [41784823525], browser [41784823265], CI, matrix and G9 succeeded; fresh clone 1,429 / 1,425 passed / 0 failed / 4 skipped; restore 75/75. |
+| #389 | aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2 | main | PostgreSQL/MySQL/MongoDB evaluation plan is documentation-only; integrated [41795128802], matrix [41795128670] and G9 [41795128672] succeeded. PostgreSQL remains the owner-approved target; this PR does not authorize an engine change. |
+| #390 | 8b2a46da6d03df296525fab8b797ecc71ec08c8c | #379 | Current exact-head pass: provider lifecycle [41798735618], fresh clone [41798735439], PostgreSQL integration [41798735450], CI [41798735408], integrated [41798735582], matrix [41798735722], controlled QA [41798735542] and technical simulation [41798735404] all succeeded. Details below. |
+
+### PR #390 — payload/operation database integrity correction
+The first candidate failed because eper_provider_payloads.operation_id is TEXT while the queue operation identifier is UUID. An intermediate type-conversion attempt then failed on malformed SQL. Both heads were superseded; no stale green result is used.
+
+The final implementation preserves the payload table's TEXT storage contract and adds a generated TEXT representation of the UUID operation identifier on eper_provider_operations. Migration 022_provider_payload_operation_integrity.sql adds a tenant/application/operation unique key and both directions of deferred composite FK:
+- payload envelope → matching provider operation (rejects orphan payloads);
+- non-null operation payload reference → matching envelope (rejects dangling and cross-tenant/application references).
+
+The PostgreSQL integration now checks both rejection paths, confirms the failed operation transaction leaves no queue row, validates UUID operation identities in the PostgreSQL payload store, and deletes both sides in one transaction so deferred constraints are satisfied during fixture cleanup.
+
+Current exact-head results:
+- Provider lifecycle [41798735618]: 1 test / 1 passed / 0 failed / 0 skipped. The log shows migration 022 applied; both expected FK rejection probes were exercised.
+- Fresh clone [41798735439]: 1,439 tests / 1,435 passed / 0 failed / 4 skipped; npm run dev:verify passed; seven migration groups including identity and migration 022; repeatability passed; disposable backup/restore passed with 76/76 base tables.
+- PostgreSQL integration [41798735450]: the integrated PostgreSQL job reports 1,423 tests / 1,417 passed / 0 failed / 6 skipped.
+- CI [41798735408] and same-commit integrated gate [41798735582] passed.
+- Matrix [41798735722]: 38 chapters, 228 requirements, 259 pilot tests, 0 failed tests, 28 HTTP checks.
+- All current-head jobs completed successfully on 8b2a46da6d03df296525fab8b797ecc71ec08c8c.
+
+This closes the database-enforced payload/operation relationship on the #379+#390 candidate stack. It is not merged into main. The #381/#382 downstream provider stack does not yet include #390, and the combined provider-plus-customer-asset migration stack has not yet been exercised as one clean-clone candidate. The provider migration directory is filename-sorted and its ledger is keyed by full migration filename; the distinct 022_* files therefore have deterministic lexical order, but combined-stack evidence is still required.
+
+### Customer support and browser evidence
+The exact #384 integrated PostgreSQL log passes tests for:
+- customer ticket creation, history/list and replies;
+- tenant/application and actor assignment checks, including cross-tenant denial;
+- admin queue, status lifecycle, assignment and severity classification;
+- internal-note visibility, with customer reads filtered at the SQL boundary and customers prohibited from creating internal notes;
+- current-page CSV and all-filtered-results export, with formula-cell neutralization covered by UI tests.
+
+The #384 browser E2E [41786049023] passes the synthetic-IdP customer OIDC/workspace/support/logout journey (1/1). #387 adds a backend customer work-queue read model; it is not yet the complete customer queue/task-detail UI.
+
+Support SLA remains incomplete: no evidenced first-response/resolution timers, escalation schedule, breach detection or auditable SLA report.
+
+### Seven approved pointers — current disposition
+1. v34-to-228 reconciliation — AMBER. Preserve 228 approved requirements and 38 chapters. The v34 crosswalk remains 45 source rows: 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. Owner disposition is required; no approved baseline changes were made.
+2. Fresh-clone developer setup — GREEN for local/CI handover. PR #306 is merged and its candidate has the same Git tree as current main. Current #390 fresh clone independently verifies npm run dev:verify, all seven groups including identity, repeatability and disposable restore.
+3. PostgreSQL/recovery — AMBER. #390 proves the provider payload-operation FK on its own stack. The #381/#382 provider descendants must be synchronized and retested, then provider and customer-asset migration families must be validated together in one clean clone. Production backup target, key custody, RPO/RTO and independent restore rehearsal remain unproven.
+4. Identity/OIDC/sessions — AMBER. #310 and successor browser/session PRs are merged ancestors of main. Synthetic-IdP browser evidence covers protocol callback, secure cookies, CSRF, durable sessions, revocation and tenant/application assignment. Production IdP onboarding, JWKS rotation and full production role/delegation governance remain unproven.
+5. Customer workspace/support — AMBER. Ticket journey, tenant/application scope, admin triage/assignment/severity, internal-note separation and CSV export are tested. SLA controls remain absent. Customer asset metadata/API/scan-worker foundations exist; concrete storage/scanner providers, binary upload/download and complete asset UI remain.
+6. Scheduler/workflow operations — AMBER. Workflow outbox lease/fencing/idempotency/retry/dead-letter/recovery and the customer queue API are tested. Provider worker remains bounded runOnce(); workflow outbox has no independently hosted production worker entrypoint. Approved dispatch, restricted service identity, supervision, metrics/alerts and production recovery remain.
+7. Release/continuity — RED. Main protection is currently disabled and repository rulesets are empty. The continuity charter remains PROPOSED / OWNER REVIEW REQUIRED. CI restore is not production recovery; independent second-engineer release/rollback remains unproven.
+
+No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
