@@ -7,6 +7,7 @@ function setup(results) {
   const worker = { async runOnce() { calls.passes++; return results.shift() ?? {
     recovered: 0, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
   }; } };
+  const controller = new AbortController();
   const wakeSource = {
     async wait(timeout, signal) {
       calls.waits.push(timeout);
@@ -15,7 +16,6 @@ function setup(results) {
     },
     async close() { calls.closed++; },
   };
-  const controller = new AbortController();
   return { calls, worker, wakeSource, controller };
 }
 
@@ -32,7 +32,7 @@ test("provider host performs a bounded pass then waits for a queue wake or recon
 
 test("provider host drains a full batch before waiting", async () => {
   const state = setup([{
-    recovered: 0, claimed: 100, succeeded: 100, retried: 0, needsAttention: 0, leaseLost: 0,
+    recovered: 0, claimed: 10, succeeded: 10, retried: 0, needsAttention: 0, leaseLost: 0,
   }]);
   const host = new ProviderOperationWorkerHost(state.worker, state.wakeSource);
   await host.run(state.controller.signal);
@@ -46,4 +46,24 @@ test("provider host validates bounded reconciliation interval", () => {
   assert.throws(() => new ProviderOperationWorkerHost(state.worker, state.wakeSource, {
     reconciliationIntervalMs: 10,
   }), /PROVIDER_WORKER_RECONCILIATION_INTERVAL_INVALID/);
+});
+
+
+test("provider host reports worker failures and closes cleanly on abort", async () => {
+  const state = setup([]);
+  const worker = {
+    async runOnce() {
+      state.controller.abort();
+      throw new Error("synthetic worker failure");
+    },
+  };
+  const host = new ProviderOperationWorkerHost(worker, state.wakeSource, {
+    onError(error) {
+      state.calls.errors.push(error.message);
+    },
+  });
+  await host.run(state.controller.signal);
+  assert.deepEqual(state.calls.errors, ["synthetic worker failure"]);
+  assert.equal(state.calls.closed, 1);
+  assert.equal(state.calls.waits.length, 0);
 });
