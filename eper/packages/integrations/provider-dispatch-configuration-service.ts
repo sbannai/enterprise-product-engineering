@@ -32,6 +32,7 @@ export class ProviderDispatchConfigurationError extends Error {
     | "PROVIDER_DISPATCH_POLICY_INVALID"
     | "PROVIDER_DISPATCH_CATALOGUE_UNAVAILABLE"
     | "PROVIDER_DISPATCH_CATALOGUE_INACTIVE"
+    | "PROVIDER_DISPATCH_CATALOGUE_INVALID"
     | "PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED") {
     super(code);
     this.name = "ProviderDispatchConfigurationError";
