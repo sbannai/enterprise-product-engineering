@@ -171,9 +171,9 @@ test("customer workflow work queue GET derives tenant and actor from trusted cre
     const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.total, 0);
-    assert.equal(body.limit, 15);
-    assert.equal(body.offset, 30);
+    assert.equal(body.data.total, 0);
+    assert.equal(body.data.limit, 15);
+    assert.equal(body.data.offset, 30);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].tenantId, "tenant-a");
     assert.equal(calls[0].actorId, "actor-a");
