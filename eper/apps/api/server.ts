@@ -2033,7 +2033,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       } catch (error) {
         const code = error instanceof Error ? error.message : "asset_upload_start_failed";
         const status = code.includes("NOT_FOUND") ? 404
-          : code.includes("INVALID") || code.includes("MISMATCH") || code.includes("CONFLICT") ? 400
+          : code.includes("CONFLICT") ? 409
+          : code.includes("INVALID") || code.includes("MISMATCH") ? 400
           : 503;
         sendJson(request, response, status, { error: status === 503 ? "asset_upload_start_failed" : code }); return;
       }
