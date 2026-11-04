@@ -74,7 +74,7 @@ export async function startCustomerAssetUpload(
   // Persist the opaque provider reference and audit event before returning the
   // capability to the browser. If persistence fails, the grant remains undisclosed
   // and expires naturally at the provider.
-  await dependencies.repository.reserveUpload({
+  const reservedSessionId = await dependencies.repository.reserveUpload({
     tenantId: input.tenantId,
     applicationId: input.applicationId,
     actorId: input.actorId,
@@ -87,6 +87,11 @@ export async function startCustomerAssetUpload(
     expiresAt: grant.expiresAt,
     uploadSessionId,
   });
+  if (reservedSessionId !== uploadSessionId) {
+    // A duplicate idempotency key refers to a prior provider session. Never return
+    // a freshly issued capability that does not match the persisted session.
+    throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_REPLAY_CONFLICT");
+  }
 
   return {
     uploadSessionId,
