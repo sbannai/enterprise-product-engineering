@@ -53,9 +53,10 @@ test("internal asset scan requires service bearer token and records only trusted
       body,
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { asset: {
-      assetId: "asset-a", uploadStatus: "available", scanStatus: "clean", lifecycleStatus: "active",
-    } });
+    assert.deepEqual(await response.json(), {
+      scanJob: { state: "completed" },
+      asset: { assetId: "asset-a", uploadStatus: "available", scanStatus: "clean", lifecycleStatus: "active" },
+    });
     assert.deepEqual(calls.map((call) => call.type), ["lookup", "scan", "record", "complete"]);
     assert.equal(calls[1].input.providerUploadReference, "private-object-ref");
     assert.equal(calls[2].input.scannerServiceId, "eper-malware-scanner");
