@@ -1297,11 +1297,11 @@ No approved requirement or chapter was changed. No PR was merged or branch delet
 - PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e` and PR #376 merge `9749701bfed527b906183192ca06cc1998e70166` are ancestors of main.
 
 ### Dynamically refreshed open PRs and exact heads
-All returned Actions runs below are tied to the exact listed head and completed successfully. Stacked provider branches remain one commit ahead of their respective base branch.
+All returned Actions runs for the other open PRs below are tied to their exact listed heads and completed successfully. The scorecard PR's own head is tracked in its live PR metadata and will be refreshed after this documentation commit. Stacked provider branches remain one commit ahead of their respective base branch.
 
 | PR | Base | Exact head | Selected exact-head evidence |
 |---|---|---|---|
-| #377 | main | `207d4722e461857537d623397b6e1e042a379e55` | CI [41773475932], integrated [41773475965], matrix [41773475934], G9 [41773475962], release [41773475968] |
+| #377 | main | This scorecard's owning branch; exact live head and its own Actions evidence are maintained in the PR description to avoid a self-referential SHA snapshot. |
 | #378 | main | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039] |
 | #379 | #378 branch | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] |
 | #380 | main | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Integrated [41763251674], matrix [41763251774], G9 [41763251777] |
