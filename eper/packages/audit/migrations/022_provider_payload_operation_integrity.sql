@@ -53,6 +53,11 @@ COMMIT;
   END IF;
 END $;
 
+-- Remove the text-only CHECK expression from migration 021 before changing the
+-- column type; UUID itself enforces the identity format.
+ALTER TABLE eper_provider_payloads
+  DROP CONSTRAINT IF EXISTS eper_provider_payloads_operation_id_check;
+
 ALTER TABLE eper_provider_payloads
   ALTER COLUMN operation_id TYPE UUID USING operation_id::uuid;
 
