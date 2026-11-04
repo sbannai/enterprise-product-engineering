@@ -159,6 +159,32 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(completed.status, "completed");
       assert.equal(completed.version, 3);
       assert.equal(completed.currentActivityId, null);
+
+      // The customer work queue exposes only summary metadata, never the private
+      // workflow payload, and its total remains accurate when a page is empty.
+      const ownQueue = await service.listVisibleInstances({
+        tenantId, applicationId, actorId, correlationId, environment, limit: 10, offset: 0,
+      });
+      assert.equal(ownQueue.total, 1);
+      assert.equal(ownQueue.items.length, 1);
+      assert.equal(ownQueue.items[0].instanceId, started.instanceId);
+      assert.equal(Object.hasOwn(ownQueue.items[0], "data"), false);
+      const emptyPage = await service.listVisibleInstances({
+        tenantId, applicationId, actorId, correlationId, environment, limit: 10, offset: 10,
+      });
+      assert.equal(emptyPage.items.length, 0);
+      assert.equal(emptyPage.total, 1, "total must not collapse to zero on an empty page");
+
+      const crossApplicationQueue = await service.listVisibleInstances({
+        tenantId, applicationId: otherApplicationId, actorId, correlationId, environment,
+      });
+      assert.equal(crossApplicationQueue.total, 0);
+      assert.equal(crossApplicationQueue.items.length, 0);
+      const crossTenantQueue = await service.listVisibleInstances({
+        tenantId: otherTenantId, applicationId, actorId: otherActorId, correlationId, environment,
+      });
+      assert.equal(crossTenantQueue.total, 0);
+      assert.equal(crossTenantQueue.items.length, 0);
       const successfulApprovalIndex = approvalResults.findIndex(result => result.status === "fulfilled");
       const successfulApprovalInput = approveInputs[successfulApprovalIndex];
 
