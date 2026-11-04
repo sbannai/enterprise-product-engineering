@@ -2039,3 +2039,21 @@ PR #393's description was updated to record these successors and to avoid claimi
 ### Continuity and safety
 
 The continuity standard remains `eper/docs/ENGINEERING_CONTINUITY_AND_INDEPENDENCE_CHARTER.md`. No PR was merged; no branch was force-updated or deleted; no repository settings changed; no chargeable cloud resources were provisioned; no real external/provider action was invoked. This update does not make a UAT or business-acceptance decision.
+
+
+## Open-PR inventory delta — 2026-11-04 22:14 IST
+
+A new open draft PR was created after the 22:10 inventory snapshot. The current open-PR register now contains 16 entries; re-read the repository's open-pulls endpoint on every subsequent run.
+
+### PR #396 — independent customer-asset scan recovery
+
+- Current head: `a4f0f929aad3b3eb5b6e6aea27070d90f4da9366`.
+- Base: PR #394 at `c2b7a2c8e7ff3211869e061544672c7db1eb7261`; comparison: 6 ahead / 0 behind.
+- Adds tenant/application-scoped recovery of expired scan leases at or above max attempts; bounded batch with `FOR UPDATE SKIP LOCKED`; atomic dead-letter transition, asset quarantine/failure and audit append; separate opt-in PostgreSQL recovery process and package start script. It does not load a scanner or storage provider.
+- A review found the first wait-loop version added an AbortSignal listener on every interval but did not remove it on normal timer completion. The owning branch was corrected: the current helper removes the listener on both timer completion and shutdown. The prior head's runs are stale and are not reused.
+- Current exact-head checks: matrix [41870621522](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41870621522) and payment contract [41870621496](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41870621496) completed successfully. Fresh-clone [41870621733], PostgreSQL [41870621558], provider lifecycle [41870621548] and controlled QA [41870621498] are still in progress at this snapshot. Each returned check-run's `head_sha` matches the current PR head.
+- Relevant in-progress job steps show typecheck/build already passed in provider lifecycle and payment integration; fresh-clone lockfile install passed and `npm run dev:verify` is running. Do not claim final PostgreSQL/restore/recovery proof until the exact-head jobs complete.
+- Remaining: independent process supervision/restart, health metrics/alerts/runbooks; concrete scanner module/provider; concrete API storage upload/download/verification adapters; binary transfer and complete customer asset UI; production restore/key custody.
+- Dependency: asset stack is now #384 → #386 → #393 → #394 → #396, with #395 as a parallel metadata-catalogue child of #393. All edges are ahead/0-behind. Do not merge child branches independently to main.
+
+The 22:10 table remains a historical snapshot; this addendum is the later exact-head correction. Approved 228 requirements / 38 chapters remain unchanged. No merge, provider invocation, cloud provisioning or external action was performed.
