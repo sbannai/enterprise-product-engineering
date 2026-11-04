@@ -81,6 +81,7 @@ try {
     leaseMs: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_LEASE_MS", 60_000, 5_000, 900_000),
     batchSize: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_BATCH_SIZE", 10, 1, 50),
     concurrency: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_CONCURRENCY", 2, 1, 10),
+    scanTimeoutMs: boundedInteger("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT_MS", 120_000, 1_000, 900_000),
     onError(error) { console.error("EPER customer asset scan worker error", error); },
     onJob(result) { console.log("EPER customer asset scan job", result); },
   });
