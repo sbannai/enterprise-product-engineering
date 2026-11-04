@@ -22,6 +22,7 @@ import { PostgresCampaignSchedulerStore } from "../../packages/campaign-schedule
 import { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
+import { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
 import { PostgresPlatformAdminCredentialStore } from "../../packages/identity/postgres-platform-admin-credential-store.js";
 import { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
 import { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
@@ -52,11 +53,15 @@ const providerCatalogueAdminEnabled = process.env.EPER_PROVIDER_CATALOGUE_ADMIN_
 const workflowOutboxAdminEnabled = process.env.EPER_WORKFLOW_OUTBOX_ADMIN_API_ENABLED === "true";
 const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENABLED === "true";
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
+const customerAssetPersistenceMode = process.env.EPER_CUSTOMER_ASSET_PERSISTENCE ?? "legacy";
+if (customerAssetPersistenceMode !== "legacy" && customerAssetPersistenceMode !== "postgres") {
+  throw new Error("EPER_CUSTOMER_ASSET_PERSISTENCE_UNSUPPORTED");
+}
 const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres";
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 
 // Privileged control-plane stores use independent PostgreSQL credentials and pools.
@@ -225,6 +230,14 @@ if (auditMode !== "disabled" && auditMode !== "postgres") {
 if (auditMode === "postgres" && !paymentPool) {
   throw new Error("EPER_AUDIT_REQUIRES_POSTGRES_PAYMENT_PERSISTENCE");
 }
+if (customerAssetPersistenceMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
+  throw new Error("CUSTOMER_ASSET_REPOSITORY_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
+}
+const customerAssetRepository = customerAssetPersistenceMode === "postgres" && paymentPool
+  ? new PostgresCustomerAssetRepository(paymentPool)
+  : undefined;
+if (customerAssetRepository) await customerAssetRepository.assertReady();
+
 if (customerIdentityPersistenceMode === "postgres" && (!paymentPool || auditMode !== "postgres")) {
   throw new Error("CUSTOMER_IDENTITY_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
@@ -472,7 +485,7 @@ if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
-  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore,
+  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, customerAssetRepository,
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
