@@ -231,6 +231,16 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.equal(clean.uploadStatus, "available");
       assert.equal(clean.scanStatus, "clean");
       assert.equal(clean.checksumSha256, "b".repeat(64));
+      const authorizedDownload = await repository.getDownloadAsset(tenantId, applicationId, shared.assetId);
+      assert.deepEqual(authorizedDownload, {
+        accessReference: "opaque:test-shared", fileName: "brief.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }, "download lookup returns the private provider reference only for an available clean asset");
+      assert.equal(await repository.getDownloadAsset(tenantId, otherApplication, shared.assetId), null,
+        "another application cannot download a shared asset without an explicit link");
+      assert.equal(await repository.getDownloadAsset(otherTenant, applicationId, shared.assetId), null,
+        "another tenant cannot download the asset");
+
       assert.deepEqual(await repository.recordScanResult({
         tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
@@ -256,6 +266,8 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       });
       assert.equal(quarantined.uploadStatus, "rejected");
       assert.equal(quarantined.lifecycleStatus, "quarantined");
+      assert.equal(await repository.getDownloadAsset(tenantId, applicationId, restricted.assetId), null,
+        "quarantined/infected assets cannot be downloaded");
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [clean],
         "infected assets must never appear in the available asset listing");
 
