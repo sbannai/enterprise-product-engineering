@@ -543,7 +543,7 @@ export class PostgresCustomerAssetRepository {
         const failed = await client.query(
           `UPDATE eper_customer_assets
               SET upload_status = 'failed', scan_status = 'error',
-                  lifecycle_status = 'quarantined', updated_by = $4,
+                  lifecycle_status = 'quarantined', updated_by = $3,
                   updated_at = now(), version = version + 1
             WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
             RETURNING asset_id`,
