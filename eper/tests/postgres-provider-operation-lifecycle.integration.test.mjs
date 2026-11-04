@@ -190,11 +190,61 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       const atomicFirst = await operationRepository.enqueueWithPayload(atomicInput);
       assert.equal(atomicFirst.created, true);
       assert.equal(atomicFirst.operation.requestDigest, payloadDigest);
-      assert.deepEqual(await payloadStore.get({
+      const exactPayloadReference = {
         tenantId, applicationId, operationId: atomicFirst.operation.operationId,
         capabilityKey: "email.send", reference: atomicFirst.operation.payloadReference,
         digest: payloadDigest,
-      }), providerPayload);
+      };
+      assert.deepEqual(await payloadStore.get(exactPayloadReference), providerPayload);
+      const persistedEnvelope = await pool.query(
+        `SELECT payload_digest,envelope_version,nonce,auth_tag,ciphertext
+         FROM eper_provider_payloads
+         WHERE payload_reference=$1 AND tenant_id=$2 AND application_id=$3`,
+        [exactPayloadReference.reference, tenantId, applicationId],
+      );
+      assert.equal(persistedEnvelope.rowCount, 1);
+      assert.equal(persistedEnvelope.rows[0].envelope_version, 1);
+      assert.ok(persistedEnvelope.rows[0].ciphertext.length > 0);
+      assert.equal(JSON.stringify(persistedEnvelope.rows[0]).includes(providerPayload.body), false,
+        "PostgreSQL must persist only the encrypted envelope, never provider payload plaintext");
+
+      let scopedAccess = true;
+      const scopedPayloadStore = new PostgresEncryptedProviderPayloadStore(
+        pool, Buffer.alloc(32, 23), {
+          async authorize(requested) {
+            return scopedAccess && requested.tenantId === tenantId
+              && requested.applicationId === applicationId
+              && requested.operationId === atomicFirst.operation.operationId
+              && requested.capabilityKey === "email.send";
+          },
+          async authorizeCreate(requested) {
+            return scopedAccess && requested.tenantId === tenantId
+              && requested.applicationId === applicationId
+              && requested.capabilityKey === "email.send";
+          },
+        },
+      );
+      assert.deepEqual(await scopedPayloadStore.get(exactPayloadReference), providerPayload);
+      await assert.rejects(
+        () => scopedPayloadStore.get({ ...exactPayloadReference, applicationId: applicationId + "-other" }),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
+      scopedAccess = false;
+      await assert.rejects(
+        () => scopedPayloadStore.get(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
+      await assert.rejects(
+        () => scopedPayloadStore.put({
+          tenantId, applicationId, operationId: randomUUID(), capabilityKey: "email.send",
+          payload: { body: "must-not-persist-without-create-authorization" },
+        }),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
+      await assert.rejects(
+        () => scopedPayloadStore.delete(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
+      );
       const payloadCountAfterCreate = await pool.query(
         "SELECT COUNT(*)::int AS count FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
         [tenantId, applicationId, atomicFirst.operation.operationId],
