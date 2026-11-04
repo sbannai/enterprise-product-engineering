@@ -49,7 +49,23 @@ test("upload start persists provider reference before returning capability", asy
   assert.equal(Object.hasOwn(result, "providerUploadReference"), false);
 });
 
-test("upload start never returns a capability if durable reservation fails", async () => {
+test("upload start does not call the provider when durable reservation fails", async () => {
+  let providerCalls = 0;
+  await assert.rejects(() => startCustomerAssetUpload(input, {
+    repository: {
+      reserveUpload: async () => { throw new Error("reservation unavailable"); },
+      finalizeUploadGrant: async () => {},
+      failUploadReservation: async () => {},
+    },
+    issueGrant: async () => {
+      providerCalls += 1;
+      return null;
+    },
+  }), /reservation unavailable/);
+  assert.equal(providerCalls, 0, "provider capability issuance must follow a committed reservation");
+});
+
+test("upload start never returns a capability if grant finalization fails", async () => {
   await assert.rejects(() => startCustomerAssetUpload(input, {
     issueGrant: async () => ({
       providerUploadReference: "opaque-provider-object-002",
