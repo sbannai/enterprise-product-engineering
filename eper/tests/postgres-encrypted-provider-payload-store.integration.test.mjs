@@ -9,6 +9,33 @@ import {
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
 
+test("PostgreSQL payload store rejects non-UUID operation identities before insert",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 2 });
+    const store = new PostgresEncryptedProviderPayloadStore(
+      pool,
+      Buffer.alloc(32, 19),
+      {
+        async authorize() { return true; },
+        async authorizeCreate() { return true; },
+      },
+    );
+    try {
+      await assert.rejects(
+        () => store.put({
+          tenantId: "payload-invalid-tenant",
+          applicationId: "payload-invalid-app",
+          operationId: "not-a-uuid",
+          capabilityKey: "email.send",
+          payload: { body: "synthetic-invalid-operation-probe" },
+        }),
+        error => error?.code === "PROVIDER_PAYLOAD_SCOPE_INVALID",
+      );
+    } finally {
+      await pool.end();
+    }
+  });
+
 test("PostgreSQL rejects a provider payload committed without its matching operation",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 2 });
@@ -16,7 +43,7 @@ test("PostgreSQL rejects a provider payload committed without its matching opera
     const scope = {
       tenantId: "payload-orphan-tenant-" + suffix,
       applicationId: "payload-orphan-app-" + suffix,
-      operationId: "payload-orphan-operation-" + suffix,
+      operationId: randomUUID(),
       capabilityKey: "email.send",
     };
     const store = new PostgresEncryptedProviderPayloadStore(
