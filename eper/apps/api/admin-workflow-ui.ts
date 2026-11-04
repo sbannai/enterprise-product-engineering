@@ -36,7 +36,7 @@ ${applicationToastMarkup}
 <script>
 (function(){
 var $=function(id){return document.getElementById(id)};
-var permissions=['workflow:view','workflow:act','workflow:approve','workflow:admin','role:assign','access:manage'];
+var permissions=['workflow:view','workflow:act','workflow:approve','workflow:admin','role:assign','access:manage','customer.asset.upload'];
 var workflows=[],roles=[],selectedWorkflow=null,selectedRole=null,activityDrafts=[],ruleDrafts=[],workflowVersion=0,roleVersion=0,persistenceMode="process-memory";
 function toast(kind,msg,title){if(window.EPERToast)window.EPERToast[kind](msg,title)}
 function api(path,options){options=options||{};var base=$('apiBase').value.trim().replace(/\/$/,'');var headers=Object.assign({'content-type':'application/json','authorization':'Bearer '+$('adminToken').value.trim()},options.headers||{});return fetch(base+path,Object.assign({},options,{headers:headers})).then(async function(r){var d={};try{d=await r.json()}catch(e){}if(!r.ok)throw new Error(typeof d.error==='string'?d.error:(d.error&&d.error.code)||('HTTP '+r.status));return d})}
