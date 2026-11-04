@@ -135,7 +135,8 @@ test("internal scan claim endpoint returns tenant-scoped jobs under configured w
     assert.equal(payload.jobs.length, 1);
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], { tenantId: "tenant-a", applicationId: "app-a",
-      workerId: "eper-malware-scanner:worker-01", limit: 3, leaseMs: 30000 });
+      workerId: "eper-malware-scanner:worker-01", scannerServiceId: "eper-malware-scanner",
+      environment: "sandbox", limit: 3, leaseMs: 30000 });
 
     for (const invalidOptions of [
       { limit: "3", leaseMs: 30000 },
