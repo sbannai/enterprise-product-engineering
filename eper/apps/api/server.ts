@@ -2008,8 +2008,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes,
           mimeType: session.mimeType,
         }, requestId);
+        if (!process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ||
+            outcome.scannerServiceId !== process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID) {
+          sendJson(request, response, 503, { error: "asset_scanner_identity_mismatch" }); return;
+        }
         const asset = await options.customerAssetRepository.recordScanResult({
-          tenantId, applicationId, scannerServiceId: outcome.scannerServiceId,
+          tenantId, applicationId, scannerServiceId: process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID,
           environment: options.adminConfigEnvironment ?? "sandbox",
           correlationId: requestId, uploadSessionId, scanStatus: outcome.scanStatus,
         });
