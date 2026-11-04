@@ -253,7 +253,7 @@ export class PostgresCustomerAssetRepository {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; uploadSessionId: string; receivedSizeBytes: number;
     observedMimeType: string; checksumSha256: string;
-    scanStatus: "pending" | "clean" | "infected" | "error" | "not_required";
+    scanStatus: "pending";
   }): Promise<CustomerAsset> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
@@ -307,12 +307,10 @@ export class PostgresCustomerAssetRepository {
       if (session.asset_mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_MIME_MISMATCH");
       }
-      const nextStatus: CustomerAssetStatus =
-        input.scanStatus === "clean" || input.scanStatus === "not_required" ? "available"
-          : input.scanStatus === "infected" ? "rejected"
-            : input.scanStatus === "error" ? "failed" : "scanning";
-      const lifecycleStatus = input.scanStatus === "infected" || input.scanStatus === "error"
-        ? "quarantined" : "active";
+      // Upload completion is not a scanner attestation. Always hold the asset
+      // in scanning until recordScanResult receives a trusted provider/worker result.
+      const nextStatus: CustomerAssetStatus = "scanning";
+      const lifecycleStatus = "active";
       await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET received_size_bytes = $3, upload_status = 'completed', updated_at = now()
