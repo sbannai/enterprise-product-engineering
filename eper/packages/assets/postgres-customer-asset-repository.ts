@@ -249,6 +249,104 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async completeUpload(input: {
+    tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
+    correlationId: string; uploadSessionId: string; receivedSizeBytes: number;
+    observedMimeType: string; checksumSha256: string;
+    scanStatus: "pending" | "clean" | "infected" | "error" | "not_required";
+  }): Promise<CustomerAsset> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.receivedSizeBytes) || input.receivedSizeBytes <= 0) {
+      throw new Error("EPER_CUSTOMER_ASSET_RECEIVED_SIZE_INVALID");
+    }
+    if (!/^[a-f0-9]{64}$/.test(input.checksumSha256)) {
+      throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
+    }
+    if (!input.observedMimeType?.trim() || input.observedMimeType.length > 128) {
+      throw new Error("EPER_CUSTOMER_ASSET_MIME_TYPE_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const locked = await client.query<{
+        upload_session_id: string; asset_id: string; actor_id: string;
+        expected_size_bytes: number | string; expires_at: string | Date;
+        upload_status: string; asset_mime_type: string;
+      }>(
+        `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
+          s.expires_at, s.upload_status, a.mime_type AS asset_mime_type
+         FROM eper_customer_asset_upload_sessions s
+         JOIN eper_customer_assets a
+           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
+         WHERE s.tenant_id = $1 AND s.upload_session_id = $2
+           AND a.lifecycle_status = 'active'
+         FOR UPDATE OF s, a`,
+        [input.tenantId, input.uploadSessionId],
+      );
+      const session = locked.rows[0];
+      if (!session) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      if (session.upload_status !== "initiated" && session.upload_status !== "in_progress") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_COMPLETABLE");
+      }
+      if (new Date(session.expires_at).getTime() <= Date.now()) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
+      }
+      if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SIZE_MISMATCH");
+      }
+      if (session.asset_mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_MIME_MISMATCH");
+      }
+      const nextStatus: CustomerAssetStatus =
+        input.scanStatus === "clean" || input.scanStatus === "not_required" ? "available"
+          : input.scanStatus === "infected" ? "rejected"
+            : input.scanStatus === "error" ? "failed" : "scanning";
+      const lifecycleStatus = input.scanStatus === "infected" || input.scanStatus === "error"
+        ? "quarantined" : "active";
+      await client.query(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET received_size_bytes = $3, upload_status = 'completed', updated_at = now()
+          WHERE tenant_id = $1 AND upload_session_id = $2`,
+        [input.tenantId, input.uploadSessionId, input.receivedSizeBytes],
+      );
+      const updated = await client.query<AssetRow>(
+        `UPDATE eper_customer_assets
+            SET checksum_sha256 = $3, upload_status = $4, scan_status = $5,
+                lifecycle_status = $6, updated_by = $7, updated_at = now(), version = version + 1
+          WHERE tenant_id = $1 AND asset_id = $2
+          RETURNING tenant_id, asset_id, repository_scope, owner_application_id, display_name,
+            original_file_name, media_category, mime_type, file_extension, size_bytes,
+            checksum_sha256, storage_adapter_key, upload_status, scan_status, lifecycle_status,
+            version, created_by, created_at`,
+        [input.tenantId, session.asset_id, input.checksumSha256, nextStatus,
+          input.scanStatus, lifecycleStatus, input.actorId],
+      );
+      const row = updated.rows[0];
+      if (!row) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_COMPLETION_FAILED");
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "human", actorId: input.actorId, action: "customer.asset.upload.complete",
+        outcome: "success", resourceType: "customer-asset-upload", resourceId: input.uploadSessionId,
+        correlationId: input.correlationId, source: "api",
+        operationName: "POST /customer/assets/:assetId/uploads/:sessionId/complete",
+        payload: {
+          assetId: session.asset_id, receivedSizeBytes: input.receivedSizeBytes,
+          scanStatus: input.scanStatus, resultingAssetStatus: nextStatus,
+        },
+      });
+      await client.query("COMMIT");
+      return mapAsset(row);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async link(input: LinkCustomerAssetInput): Promise<void> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
