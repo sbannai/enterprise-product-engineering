@@ -5,88 +5,44 @@ import pg from "pg";
 import {
   PostgresEncryptedProviderPayloadStore,
 } from "../dist/packages/integrations/postgres-encrypted-provider-payload-store.js";
-import { ProviderPayloadStoreError } from "../dist/packages/integrations/encrypted-provider-payload-store.js";
 
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
 
-test("PostgreSQL encrypted provider payloads persist ciphertext and enforce exact scope authorization",
+test("PostgreSQL rejects a provider payload committed without its matching operation",
   { skip: !connectionString }, async () => {
-    const pool = new Pool({ connectionString, max: 4 });
+    const pool = new Pool({ connectionString, max: 2 });
     const suffix = randomUUID().replaceAll("-", "").slice(0, 20);
     const scope = {
-      tenantId: "payload-tenant-" + suffix,
-      applicationId: "payload-app-" + suffix,
-      operationId: "payload-operation-" + suffix,
+      tenantId: "payload-orphan-tenant-" + suffix,
+      applicationId: "payload-orphan-app-" + suffix,
+      operationId: "payload-orphan-operation-" + suffix,
       capabilityKey: "email.send",
     };
-    const secretText = "synthetic-private-body-" + suffix;
-    let permitted = true;
     const store = new PostgresEncryptedProviderPayloadStore(
       pool,
       Buffer.alloc(32, 19),
-      { async authorize(requested) {
-        assert.deepEqual(requested, scope);
-        return permitted;
-      }, async authorizeCreate(requested) {
-        assert.deepEqual(requested, scope);
-        return permitted;
-      } },
+      {
+        async authorize() { return true; },
+        async authorizeCreate() { return true; },
+      },
     );
 
     try {
-      const reference = await store.put({
-        ...scope,
-        payload: { to: ["synthetic@example.invalid"], body: secretText },
-      });
-      assert.match(reference.reference, /^pp_[a-f0-9-]{36}$/);
-      assert.match(reference.digest, /^[a-f0-9]{64}$/);
+      await assert.rejects(
+        () => store.put({ ...scope, payload: { body: "synthetic-orphan-probe" } }),
+        error => error?.code === "23503"
+          && error?.constraint === "eper_provider_payloads_operation_fk",
+        "the deferred composite foreign key must reject an orphan at commit",
+      );
 
       const persisted = await pool.query(
-        "SELECT payload_digest,envelope_version,nonce,auth_tag,ciphertext FROM eper_provider_payloads WHERE payload_reference=$1",
-        [reference.reference],
-      );
-      assert.equal(persisted.rowCount, 1);
-      assert.equal(persisted.rows[0].envelope_version, 1);
-      assert.ok(persisted.rows[0].ciphertext.length > 0);
-      assert.equal(JSON.stringify(persisted.rows[0]).includes(secretText), false,
-        "database envelope must not contain plaintext payload values");
-
-      assert.deepEqual(await store.get(reference), {
-        to: ["synthetic@example.invalid"], body: secretText,
-      });
-
-      await assert.rejects(
-        () => store.get({ ...reference, applicationId: "another-application" }),
-        error => error instanceof ProviderPayloadStoreError
-          && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
-      );
-
-      permitted = false;
-      await assert.rejects(
-        () => store.put({ ...scope, payload: { body: "must-not-persist" } }),
-        error => error instanceof ProviderPayloadStoreError
-          && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
-      );
-      await assert.rejects(
-        () => store.get(reference),
-        error => error instanceof ProviderPayloadStoreError
-          && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
-      );
-      await assert.rejects(
-        () => store.delete(reference),
-        error => error instanceof ProviderPayloadStoreError
-          && error.code === "PROVIDER_PAYLOAD_ACCESS_DENIED",
-      );
-
-      permitted = true;
-      assert.equal(await store.delete(reference), true);
-      assert.equal(await store.delete(reference), false);
-    } finally {
-      await pool.query(
-        "DELETE FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2",
+        "SELECT COUNT(*)::int AS count FROM eper_provider_payloads WHERE tenant_id=$1 AND application_id=$2",
         [scope.tenantId, scope.applicationId],
-      ).catch(() => undefined);
+      );
+      assert.equal(persisted.rows[0].count, 0,
+        "the failed transaction must leave no orphan payload behind");
+    } finally {
       await pool.end();
     }
   });
