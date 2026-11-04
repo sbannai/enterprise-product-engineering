@@ -120,7 +120,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       });
       assert.equal(quarantined.uploadStatus, "rejected");
       assert.equal(quarantined.lifecycleStatus, "quarantined");
-      assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [completed],
+      assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [clean],
         "infected assets must never appear in the available asset listing");
 
       const client = await pool.connect();
