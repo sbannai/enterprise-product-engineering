@@ -193,3 +193,14 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 - The API is deliberately fail-closed when no upload provider port is injected. The current application bootstrap does not select or configure a real storage vendor, and no external provider or cloud resource has been provisioned. API tests inject a fake provider and repository; they are contract tests, not live provider or PostgreSQL evidence.
 - Added `POST /customer/applications/{appId}/assets/{assetId}/uploads/{sessionId}/complete`. It resolves the session and opaque provider reference from PostgreSQL under tenant/application RLS, checks the initiating actor, then invokes a provider-neutral server-to-server verification port. Only provider-observed object existence, byte count, detected MIME type and SHA-256 checksum are passed to the transactional repository completion method. The client cannot supply or override these values.
 - Successful verification moves the asset only to `scanning` with scan status `pending`; it does not make the asset downloadable. A trusted scanner must separately record a clean result before availability. The verification adapter and API tests use fake provider/repository implementations; no real storage vendor or cloud resource is configured.
+
+
+### Malware scan adapter implementation update (2026-11-04)
+
+- Added a provider-neutral malware scan adapter over the existing integration port. It sends only server-resolved tenant/application/asset/session identity, opaque storage reference, verified checksum, byte count and MIME type to the configured scanner.
+- Scanner service identity is supplied by trusted runtime configuration; any service identity included in a provider response is ignored.
+- Only explicit `clean`, `infected` or `error` outcomes are accepted. Provider exceptions, unsuccessful outcomes, malformed responses and invalid scan inputs fail closed to `error`; they can never produce a clean result.
+- Added a tenant/application-RLS-scoped repository lookup for completed upload sessions whose asset is still `scanning` / `pending`. It exposes the opaque provider reference only to server-side scan orchestration and returns no session unless checksum evidence exists.
+- The existing transactional `recordScanResult` operation remains the sole persistence transition: clean becomes available; infected becomes rejected/quarantined; scanner error becomes failed/quarantined. Duplicate identical outcomes are idempotent and conflicting outcomes fail closed.
+- This slice does not yet expose a scanner callback or worker endpoint. The adapter and repository lookup are primitives only; the next integration must authenticate a trusted worker/provider boundary before calling `recordScanResult`. No public request may self-assert a scan result.
+- No real scanner, storage provider, external dispatch or cloud resource is configured or provisioned. Malware detection effectiveness is not yet demonstrated.
