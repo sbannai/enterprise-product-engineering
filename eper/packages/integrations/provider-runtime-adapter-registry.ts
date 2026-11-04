@@ -131,7 +131,8 @@ export class ProviderRuntimeAdapterRegistry {
       || !validIdentity(selection.capabilityKey)) {
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
     }
-    if (selection.adapterVersion !== undefined && !/^\\d+\\.\\d+\\.\\d+$/.test(selection.adapterVersion)) {
+    if (typeof selection.adapterVersion !== "string"
+      || !/^\d+\.\d+\.\d+$/.test(selection.adapterVersion)) {
       throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
     }
     const matches = [...this.adapters.values()].filter(adapter =>
