@@ -374,3 +374,151 @@ test("durable customer asset upload mutations require CSRF and current applicati
     }
   }
 });
+
+
+test("durable OIDC asset upload completes metadata, grant and verification only with CSRF and application permission", async () => {
+  const keys = [
+    "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+    "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON",
+    "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES", "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY",
+    "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const sessionToken = "d".repeat(48);
+  const csrfSecret = "customer-asset-full-flow-csrf-secret-000000000000";
+  const csrfToken = createCustomerCsrfToken(sessionToken, csrfSecret);
+  const mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const uploadSessionId = "00000000-0000-4000-8000-000000000002";
+  Object.assign(process.env, {
+    EPER_CUSTOMER_ASSETS_API_ENABLED: "true",
+    EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
+    EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_IDENTITY_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_WORKSPACE_MODULES_JSON: JSON.stringify({ "tenant-a": ["client-assets"] }),
+    EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON: JSON.stringify([mimeType]),
+    EPER_CUSTOMER_ASSET_MAX_FILE_BYTES: "10485760",
+    EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY: "customer-storage",
+    EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON: JSON.stringify(["storage.example.test"]),
+  });
+  let allowUpload = true;
+  const authorizations = [];
+  const events = [];
+  const server = createAppServer({
+    customerIdentitySessionStore: {
+      async resolveSession(token) {
+        assert.equal(token, sessionToken);
+        return { tenantId: "tenant-a", actorId: "actor-a", issuer: "https://idp.example.test", subject: "subject-a" };
+      },
+    },
+    tenantApplicationAssignmentStore: {
+      async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a"]; },
+    },
+    actorApplicationAssignmentStore: {
+      async listActive(tenantId, actorId) { assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]); return ["app-a"]; },
+      async isAssigned(tenantId, actorId, applicationId) {
+        assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+        return true;
+      },
+    },
+    assetUploadAuthorizer: {
+      async authorize(input) {
+        authorizations.push(input);
+        return allowUpload;
+      },
+    },
+    customerAssetRepository: {
+      async create(input) {
+        events.push("metadata");
+        return { assetId: "asset-oidc-002", scope: input.scope, displayName: input.displayName,
+          originalFileName: input.originalFileName, mimeType: input.mimeType, sizeBytes: input.sizeBytes, uploadStatus: "pending" };
+      },
+      async getPendingUploadAsset(tenantId, applicationId, assetId) {
+        assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-oidc-002"]);
+        return { originalFileName: "proposal.docx", mimeType, sizeBytes: 4096 };
+      },
+      async reserveUpload(input) { events.push("reservation"); return input.uploadSessionId; },
+      async finalizeUploadGrant(input) { events.push("grant-finalized"); assert.equal(input.providerUploadReference, "private-provider-reference"); },
+      async failUploadReservation() { events.push("reservation-failed"); },
+      async getUploadSessionForVerification(tenantId, applicationId, sessionId) {
+        assert.deepEqual([tenantId, applicationId, sessionId], ["tenant-a", "app-a", uploadSessionId]);
+        return { assetId: "asset-oidc-002", actorId: "actor-a", providerUploadReference: "private-provider-reference",
+          expectedSizeBytes: 4096, expectedMimeType: mimeType, expiresAt: new Date(Date.now() + 60_000).toISOString() };
+      },
+      async completeUpload(input) {
+        events.push("completed");
+        assert.equal(input.receivedSizeBytes, 4096);
+        return { assetId: "asset-oidc-002", uploadStatus: "scanning", scanStatus: "pending",
+          lifecycleStatus: "active", checksumSha256: input.checksumSha256 };
+      },
+    },
+    assetUploadResolver: async () => ({
+      providerUploadReference: "private-provider-reference",
+      url: "https://storage.example.test/upload?signature=synthetic",
+      method: "PUT",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      headers: { "content-type": mimeType },
+    }),
+    assetUploadVerificationResolver: async () => ({
+      sizeBytes: 4096, detectedMimeType: mimeType, checksumSha256: "a".repeat(64),
+    }),
+    customerOidcPublicOrigin: "http://localhost",
+    customerCsrfSecret: csrfSecret,
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
+    const headers = { cookie, origin: "http://localhost", "x-csrf-token": csrfToken, "content-type": "application/json" };
+    const created = await fetch(base + "/customer/assets", {
+      method: "POST", headers,
+      body: JSON.stringify({ applicationId: "app-a", scope: "application_restricted", displayName: "Client proposal",
+        originalFileName: "proposal.docx", mimeType, fileExtension: "docx", mediaCategory: "document", sizeBytes: 4096 }),
+    });
+    assert.equal(created.status, 201);
+    assert.equal((await created.json()).asset.assetId, "asset-oidc-002");
+
+    const uploadPath = base + "/customer/applications/app-a/assets/asset-oidc-002/uploads";
+    const missingCsrf = await fetch(uploadPath, {
+      method: "POST", headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ fileName: "proposal.docx", mimeType, sizeBytes: 4096, idempotencyKey: "oidc-asset-upload-idempotency-001" }),
+    });
+    assert.equal(missingCsrf.status, 403);
+    assert.equal(authorizations.length, 1);
+
+    const started = await fetch(uploadPath, {
+      method: "POST", headers,
+      body: JSON.stringify({ fileName: "proposal.docx", mimeType, sizeBytes: 4096, idempotencyKey: "oidc-asset-upload-idempotency-001" }),
+    });
+    assert.equal(started.status, 201);
+    const grant = (await started.json()).upload;
+    assert.equal(grant.method, "PUT");
+    assert.equal(grant.url, "https://storage.example.test/upload?signature=synthetic");
+    assert.equal(grant.uploadSessionId, uploadSessionId);
+    assert.equal("providerUploadReference" in grant, false);
+
+    const completed = await fetch(uploadPath + "/" + uploadSessionId + "/complete", {
+      method: "POST", headers, body: "{}",
+    });
+    assert.equal(completed.status, 200);
+    assert.equal((await completed.json()).asset.scanStatus, "pending");
+    assert.deepEqual(events, ["metadata", "reservation", "grant-finalized", "completed"]);
+    assert.equal(authorizations.length, 3);
+    assert.ok(authorizations.every(input => input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.actorId === "actor-a"));
+
+    allowUpload = false;
+    const denied = await fetch(uploadPath + "/" + uploadSessionId + "/complete", {
+      method: "POST", headers, body: "{}",
+    });
+    assert.equal(denied.status, 403);
+    assert.equal(authorizations.length, 4);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
