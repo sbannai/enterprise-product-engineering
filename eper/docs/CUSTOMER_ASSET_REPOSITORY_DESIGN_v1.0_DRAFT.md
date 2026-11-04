@@ -161,3 +161,22 @@ Provider configuration belongs to the customer's configured integration settings
 | Production readiness / Business UAT | Not authorized |
 
 This migration is a foundation, not a complete feature. No upload provider is selected, no external dispatch is enabled, and no cloud infrastructure is provisioned.
+
+
+## 10. PostgreSQL runtime integration and upload lifecycle
+
+The implementation branch now includes a PostgreSQL metadata repository and an explicit API selection boundary.
+
+- `EPER_CUSTOMER_ASSET_PERSISTENCE=legacy` retains the existing configuration-backed manifest for compatibility.
+- `EPER_CUSTOMER_ASSET_PERSISTENCE=postgres` selects `PostgresCustomerAssetRepository`; API startup requires the repository schema and PostgreSQL durable audit mode. It must never fall back to the legacy JSON manifest.
+- The `GET /customer/assets` manifest intersects active tenant application assignments with active actor application assignments, then reads each permitted application through the repository. Only safe metadata is returned.
+- The repository is wired into the API runtime. The migration is delivered through the existing audit migration runner; deployments must apply and verify migration 021 before enabling PostgreSQL asset mode.
+- Upload completion checks the reserved actor, expiry, expected byte count and declared MIME type. It records the supplied SHA-256 and moves the asset to `scanning` when scan status is pending.
+- A separate trusted scanner result operation records clean, infected, error or not-required outcomes. Only clean or explicitly not-required results make an asset available. Infected and scan-error results are quarantined. Duplicate identical scanner callbacks are idempotent; conflicting outcomes fail closed.
+- Scanner identity is represented as a service actor in the audit trail. The scanner operation must be callable only from an authenticated provider callback or trusted worker boundary; this repository method is not itself an authentication mechanism.
+
+### Runtime and evidence boundaries
+
+This repository does not yet transfer binary bytes, calculate the checksum from the received stream, inspect file signatures/content, issue upload grants, run an antivirus engine, or implement an actual cloud storage adapter. The current completion method validates metadata supplied by its trusted caller. Those provider and streaming controls remain required before production readiness.
+
+The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `DATABASE_URL` is configured. A skipped integration test is not evidence of database behavior. Static migration checks and API tests using an injected repository are separate evidence classes from a live PostgreSQL integration run.
