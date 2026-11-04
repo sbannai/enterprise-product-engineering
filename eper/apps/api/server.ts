@@ -633,6 +633,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     try {
       const parsed = new URL("https://" + host);
       return parsed.hostname.toLowerCase() === host.toLowerCase() && !parsed.port &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/.test(host) &&
         parsed.pathname === "/" && !parsed.search && !parsed.hash ? [parsed.origin] : [];
     } catch { return []; }
   }))].join(" ");
