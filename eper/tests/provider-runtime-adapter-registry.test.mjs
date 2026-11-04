@@ -26,13 +26,13 @@ const adapter = {
 
 test("runtime registry resolves only an explicitly allowlisted provider/version/capability", () => {
   const registry = new ProviderRuntimeAdapterRegistry([adapter], allowlist);
-  assert.equal(registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }).adapterVersion, "1.0.0");
+  assert.equal(registry.resolve({ providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }).adapterVersion, "1.0.0");
 });
 
 test("empty runtime registry fails closed", () => {
   const registry = new ProviderRuntimeAdapterRegistry([], []);
   assert.throws(
-    () => registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }),
+    () => registry.resolve({ providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }),
     error => error instanceof ProviderRuntimeRegistryError
       && error.code === "PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE",
   );
@@ -67,10 +67,23 @@ test("runtime registry rejects capability escalation beyond the allowlist", () =
   );
 });
 
+test("runtime registry rejects a catalogue adapter-key mismatch", () => {
+  const registry = new ProviderRuntimeAdapterRegistry([adapter], allowlist);
+  assert.throws(
+    () => registry.resolve({
+      providerKey: "aws-s3",
+      adapterKey: "storage.other",
+      capabilityKey,
+      adapterVersion: "1.0.0",
+    }),
+    error => error.code === "PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE",
+  );
+});
+
 test("runtime registry rejects unsupported capabilities", () => {
   const registry = new ProviderRuntimeAdapterRegistry([adapter], allowlist);
   assert.throws(
-    () => registry.resolve({ providerKey: "aws-s3", capabilityKey: "storage.delete", adapterVersion: "1.0.0" }),
+    () => registry.resolve({ providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: "storage.delete", adapterVersion: "1.0.0" }),
     error => error.code === "PROVIDER_RUNTIME_CAPABILITY_UNSUPPORTED",
   );
 });
@@ -83,15 +96,15 @@ test("multiple installed versions require an explicit version and never select l
     [...allowlist, secondAllowlist],
   );
   assert.throws(
-    () => registry.resolve({ providerKey: "aws-s3", capabilityKey: capability }),
+    () => registry.resolve({ providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability }),
     error => error.code === "PROVIDER_RUNTIME_REGISTRATION_INVALID",
   );
   assert.equal(
-    registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }).adapterVersion,
+    registry.resolve({ providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" }).adapterVersion,
     "1.0.0",
   );
   assert.equal(
-    registry.resolve({ providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "2.0.0" }).adapterVersion,
+    registry.resolve({ providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability, adapterVersion: "2.0.0" }).adapterVersion,
     "2.0.0",
   );
 });
@@ -99,7 +112,7 @@ test("multiple installed versions require an explicit version and never select l
 test("dispatch passes idempotency and correlation context to the resolved adapter", async () => {
   const registry = new ProviderRuntimeAdapterRegistry([adapter], allowlist);
   const result = await registry.dispatch({
-    selection: { providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" },
+    selection: { providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" },
     payload: { objectKey: "opaque-reference" },
     idempotencyKey: "asset-upload-001",
     correlationId: "correlation-001",
@@ -112,7 +125,7 @@ test("dispatch rejects missing idempotency and cancellation context", async () =
   const registry = new ProviderRuntimeAdapterRegistry([adapter], allowlist);
   await assert.rejects(
     () => registry.dispatch({
-      selection: { providerKey: "aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" },
+      selection: { providerKey: "aws-s3", adapterKey: "storage.aws-s3", capabilityKey: capability, adapterVersion: "1.0.0" },
       payload: {},
       idempotencyKey: "",
       correlationId: "correlation-001",
