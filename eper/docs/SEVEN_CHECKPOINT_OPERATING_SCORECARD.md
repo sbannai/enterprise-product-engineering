@@ -1500,3 +1500,61 @@ Live GitHub comparisons use the current branch refs, not PR snapshot base SHAs:
 This is not a green, integrated provider stack. Synchronization must preserve #390's two deferred composite foreign keys and UUID/text identity contract, #381's restricted-role RLS proof, and #382's retention/key-rotation/envelope-v2 behavior. The overlapping PostgreSQL integration test, payload-store implementation and workflow wiring require conflict-aware reconciliation; do not force-update either branch or replace tests wholesale. After synchronization, rerun clean-clone migration/restore, restricted-role RLS, provider lifecycle and worker tests on the new exact heads.
 
 No branch was synchronized in this step because a safe merge needs to reconcile those overlapping persistence/security changes. The open PRs remain #381 and #382; no duplicate or orphan branch was created.
+
+
+## 2026-11-04 15:19 IST — current-main refresh and exact-head PR audit
+
+### Current integrated baseline
+
+- Dynamically resolved `main`: `0866c09f6a83026b466de26af4a13465f7db1511`.
+- The latest main commit removes the accidentally unscoped in-memory provider-payload test file; no approved requirement or chapter is changed by that commit.
+- The GitHub PR base metadata for the scorecard and current main-targeted PRs resolves to this SHA. The compare endpoint confirms every current open PR head listed below contains this main commit (zero commits behind).
+- The commit-status endpoint returned no combined status entries for this SHA, and the available commit-run listing is limited to PR-triggered runs. Therefore current-main CI is **NOT ASSESSED** in this update; PR-head passes below are not substituted for mainline evidence.
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 is closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Both merge commits are confirmed ancestors of current main. #306 is not open work.
+
+### Live open-PR inventory and exact-head validation
+
+The live open-PR query returned the following current set. Workflow runs were retrieved by each listed head SHA; job summaries and relevant job logs were inspected. Only runs associated with the current listed head are cited.
+
+| PR | Exact current head | Current-main relationship | Exact-head evidence |
+|---|---|---|---|
+| #377 scorecard | `d617f447b934bc2dccd53875460324deaaccf472` | 31 ahead / 0 behind | CI [41806644848], integrated [41806644919], matrix [41806644839], G9 [41806645109], release [41806644876], HTTP [41806644776], container [41806645218] — success. Integrated PostgreSQL 1,410 tests / 1,404 passed / 0 failed / 6 skipped; separate matrix 228 requirements / 38 chapters / 259 passed / 0 failed / 28 HTTP checks. |
+| #378 encrypted payload boundary | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | 9 ahead / 0 behind | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039], integrated [41738299062], matrix [41738298906] — success. Fresh clone 1,433 tests / 1,429 passed / 0 failed / 4 skipped; `npm run dev:verify`, seven migration ledgers and disposable restore passed. |
+| #379 durable encrypted payload store | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | 10 ahead / 0 behind | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657], integrated [41738351629], matrix [41738351607] — success. Fresh clone 1,438 tests / 1,434 passed / 0 failed / 4 skipped; repeatability and disposable restore passed. |
+| #380 additive customer UX requirements | `55006ab19bcbb685fc3e84c4230fd865087887f3` | 7 ahead / 0 behind | Matrix [41763251774], G9 [41763251777], integrated [41763251674], CI [41763251702] — success. Matrix log: 228 requirements, 38 chapters, 259 pilot tests passed, 0 failed, 28 HTTP checks. Documentation/design candidate only. |
+| #381 restricted-role provider RLS | `e63f747db7e1f11e4fc7b74fae1591a575870a1d` | 11 ahead / 0 behind | Fresh clone [41738364008], provider lifecycle [41738363993], integrated [41738364009], CI [41738364070], matrix [41738363997] — success. Fresh clone 1,438 tests / 1,434 passed / 0 failed / 4 skipped; live PostgreSQL restricted-role RLS proof passed. |
+| #382 provider operation worker | `8aa4344a02f6f77d5566c7b24d571a5681b68ac2` | 12 ahead / 0 behind | Fresh clone [41738377819], PostgreSQL [41738377859], provider lifecycle [41738377748], integrated [41738377787], CI [41738377743], matrix [41738378040] — success. Provider lifecycle log passed live PostgreSQL claim/renewal/fencing/retry/recovery and bounded worker authorization/routing/outcome tests. This remains a bounded worker pass, not a supervised independent production host. |
+| #384 customer asset repository | `291129b77ab50623e41dd28c4a746ef70da28183` | 142 ahead / 0 behind | Fresh clone [41786048886], PostgreSQL [41786048950], browser [41786049023], provider lifecycle [41786048922], integrated [41786048948], matrix [41786048963], G9 [41786048971] — success. Fresh clone 1,464 tests / 1,460 passed / 0 failed / 4 skipped; seven migration ledgers, repeatability and disposable restore passed. Browser customer OIDC/workspace/support/logout journey 1/1 passed. |
+| #385 additive asset requirements | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | 6 ahead / 0 behind | Matrix [41764308125], G9 [41764308165], integrated [41764308133], CI [41764331361] — success. Matrix log: 228 requirements, 38 chapters, 259 pilot tests passed, 0 failed, 28 HTTP checks. Documentation/change-control candidate only. |
+| #386 upload idempotency reservation | `7e6727cf9508c498ffcc14ba5b43ed1bee891ee0` | 159 ahead / 0 behind | Fresh clone [41800272683], PostgreSQL [41800272797], provider lifecycle [41800272858], matrix [41800272982], QA [41800272798] — success. Fresh clone 1,468 tests / 1,464 passed / 0 failed / 4 skipped; seven migration ledgers, repeatability and disposable restore passed. Its branch includes current #384 head. |
+| #387 actor-scoped customer work queue | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | 24 ahead / 0 behind | Fresh clone [41784823307], PostgreSQL [41784823446], browser [41784823265], integrated [41784823525], matrix [41784823273], G9 [41784823256] — success. Fresh clone 1,429 tests / 1,425 passed / 0 failed / 4 skipped; restore passed. Browser customer OIDC/workspace/support/logout 1/1 passed. Work-queue GET derives tenant/actor from trusted credentials. |
+| #389 database-engine evaluation plan | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | 3 ahead / 0 behind | Matrix [41795128670], G9 [41795128672], integrated [41795128802], CI [41795128689] — success. Matrix log: 228 requirements, 38 chapters, 259 pilot tests passed, 0 failed, 28 HTTP checks. Documentation/evaluation plan only; PostgreSQL remains the control candidate. |
+| #390 payload-operation integrity | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | 22 ahead / 0 behind | Fresh clone [41805934645], PostgreSQL [41805934647], provider lifecycle [41805934711], pilot matrix [41805934646], integrated [41805934725], CI [41805934653] — success. Fresh clone 1,439 tests / 1,435 passed / 0 failed / 4 skipped; all seven migration groups including identity, repeatability and disposable restore 76/76. PostgreSQL integration 1,423 tests / 1,417 passed / 0 failed / 6 skipped. Pilot matrix 228/38, 259 passed, 0 failed, 28 HTTP checks. |
+
+### Provider stack and asset-stack reconciliation
+
+Live branch comparison confirms:
+
+- #390 versus #381: diverged; #381 is 1 commit ahead / 12 behind; merge base is #379 head `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44`.
+- #390 versus #382: diverged; #382 is 2 commits ahead / 12 behind; same merge base.
+- #386 versus #384: #386 is 17 commits ahead / 0 behind; current #384 parent is included.
+
+The #381/#382 descendants still need conflict-aware synchronization with #390. Preserve #390's two deferred tenant/application-scoped composite FKs and UUID/TEXT key contract, #381's restricted-role RLS proof, and #382's retention/key-rotation/envelope-v2/keyring/worker behavior. Overlapping payload-store, PostgreSQL integration-test and workflow files must be reconciled deliberately; no force update or wholesale test replacement is appropriate.
+
+The provider payload migration family and customer-asset migration family have **not** yet been applied together in one fresh clone with repeatability, live PostgreSQL tests and disposable backup/restore. Separate successful fresh-clone runs do not prove the combined migration graph.
+
+### Seven approved pointers — current disposition
+
+1. **v34-to-228 reconciliation — AMBER.** The original v34 export remains 45 rows: 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. Preserve all 228 approved requirements and 38 chapters. Owner disposition of the crosswalk and additive candidates remains required.
+2. **Fresh-clone setup — GREEN for local/CI handover.** #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859` and is an ancestor of current main. Multiple exact-head candidate runs prove `npm run dev:verify`, seven migration groups including identity, repeatability and disposable restore. This is not production recovery certification.
+3. **PostgreSQL durability/recovery — AMBER.** Live PostgreSQL integration, checksummed/repeatable migrations, identity group, tenant/application RLS, provider payload encryption and #390 referential integrity have candidate evidence. Combined provider+asset migration proof and production backup destination/key custody/RPO/RTO/independent restore rehearsal remain.
+4. **Identity/OIDC/sessions — AMBER.** #310 is merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; browser/session successors are merged ancestors of main. Current browser evidence covers synthetic-IdP login, protected workspace/support access, secure session handling, logout/revocation and tenant/application assignment. Production IdP onboarding/JWKS rotation and complete production role/delegation governance remain unproven.
+5. **Customer workspace/support — AMBER.** Current exact-head logs prove ticket creation, list/history, replies, tenant/application/actor scope, admin queue/status/assignment/severity and protected customer OIDC journey. Main-branch UI source/test confirms internal notes are admin-only (customer reply queries filter `customer_visible`; customer authors cannot create internal notes) and CSV exports support current-page and all-filtered-results modes with spreadsheet-formula neutralization. SLA response/resolution timers, escalation and breach reporting remain absent. Asset repository/upload reservation/scan foundations exist; actual binary transfer, concrete storage/scanner integration, publication/download lifecycle and complete customer asset UI remain.
+6. **Scheduler/workflow operations — AMBER.** Campaign scheduler has a continuous loop and independent worker entrypoint, with live PostgreSQL lease renewal, dispatch fencing, retry/dead-letter and restart recovery tests. Provider worker remains bounded; workflow outbox has no independently supervised production entrypoint. Restricted service identity, approved dispatch configuration, worker supervision, delivery metrics/alerts and operational recovery remain.
+7. **Release/continuity — RED.** This run did not have repository-ruleset/branch-protection read permission; controls are NOT ASSESSED here and no settings were changed. The continuity charter remains PROPOSED / OWNER REVIEW REQUIRED. Production restore, runbooks, rollback, second-engineer release path and independent handover rehearsal remain unproven.
+
+### Continuity and safety boundary
+
+- The current main commit has no combined status entries exposed by the connected status endpoint; do not infer mainline green from PR-head workflows.
+- The charter's clean-clone handover remains supported by local/CI evidence, but production backup/recovery and a second-engineer release are not demonstrated.
+- No approved requirement or chapter was edited. No PR was merged, no branch was deleted, no chargeable cloud resource was provisioned and no real external/provider action was triggered in this update.
