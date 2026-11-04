@@ -41,6 +41,21 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         storageObjectReference: "opaque:test-restricted",
       });
       assetIds.push(restricted.assetId);
+
+      // A separate asset is required because the schema permits only one upload
+      // session per tenant/asset; keep the provider-free reservation independent
+      // from the provider-bound session exercised below.
+      const reservedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Reservation test file", originalFileName: "reservation.xlsx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileExtension: "xlsx", sizeBytes: 2048, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-reservation",
+      });
+      assetIds.push(reservedAsset.assetId);
+
       await assert.rejects(() => repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         scope: "application_restricted", ownerApplicationId: otherApplication,
@@ -76,7 +91,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       const reservedKey = "asset-reserved-" + randomUUID();
       const reservationInput = {
         tenantId, applicationId, actorId, environment: "uat", correlationId,
-        assetId: shared.assetId, expectedSizeBytes: 4096, idempotencyKey: reservedKey,
+        assetId: reservedAsset.assetId, expectedSizeBytes: 2048, idempotencyKey: reservedKey,
       };
       const reservationIds = await Promise.all(
         Array.from({ length: 5 }, () => repository.reserveUpload(reservationInput)),
@@ -251,7 +266,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 14, "two creates, four reservations, one grant finalization, one failed reservation, two application links, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 15, "three creates, four reservations, one grant finalization, one failed reservation, two application links, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
