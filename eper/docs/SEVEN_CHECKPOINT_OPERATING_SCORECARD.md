@@ -2138,3 +2138,64 @@ No approved requirement or chapter was changed. No PR was merged, no branch was 
 ### Snapshot correction — scorecard branch head changed in this run
 
 The 22:54 open-PR snapshot above was written while PR #377 still pointed to its prior head. Appending that snapshot advanced the scorecard PR itself to `83b674a3937bc04c00b1d349aa2878d28e0c1017`. Its own exact-head workflows were subsequently created and remain queued. Therefore PR #377 is also pending validation; the sentence above about the other 16 heads applies to the pre-update scorecard head and is superseded for #377. At the latest refreshed state, the 15 unchanged open PR heads other than #398 and #377 retain their successful exact-head evidence. Do not carry the prior #377 green checks forward.
+
+
+## Operating refresh — 2026-11-04 23:42 IST
+
+### Dynamically resolved mainline and current exact-head Actions
+
+- Current `main` ref resolves to `2c380d79c55c9183a42ed534ffd1a504f7d41316`.
+- Direct commit check-runs: 13/13 completed successfully on that exact SHA. Same-commit integrated validation [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913) passed; the mainline PostgreSQL suite reports 1,410 tests / 1,404 passed / 0 failed / 6 skipped. The separate 228/38 matrix [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818) reports 259 pilot tests passed / 0 failed and 28 HTTP checks passed. G9 [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648) passed 5/5.
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 is closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Both merge commits are ancestors of current main (main is 653 commits ahead / 0 behind #306; #310 is likewise a merged ancestor). Neither is open work.
+- The continuity charter remains **PROPOSED / OWNER REVIEW REQUIRED**. The rulesets endpoint returns an empty collection. The branch-protection endpoint returned HTTP 403 to this integration, so branch protection itself could not be independently re-read in this run; do not infer that it is enabled.
+
+### Live open-PR inventory and exact heads
+
+The open PR search returned the following current set. Every returned check-run for each listed head has a matching `head_sha`. All applicable returned workflows are completed-success; duplicate matrix subjobs are skipped only where a separate exact-head chapter-matrix workflow succeeded.
+
+| PR | Exact current head | Delivery scope |
+|---|---|---|
+| #377 | `90417e84692ad5f357d1d204831f8e3e9fdc733d` (before this scorecard refresh commit) | Seven-checkpoint evidence |
+| #398 | `7317acf156a3bce5da03b14052391aed44745ddc` | Fail-closed provider runtime adapter registry |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | Asset/provider integration candidate |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | PostgreSQL customer asset download authorization |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | Independent exhausted-scan recovery |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | Tenant-isolated customer asset repository |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | Provider-neutral storage catalogue contract |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | Customer asset requirements |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Asset library and workflow-driven customer UX requirements |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | Upload idempotency reservation |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | Restricted-role RLS on payload-integrity stack |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | Provider worker/keyring on integrity stack |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | Payload-operation referential integrity |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | Database-engine evaluation plan (plan only) |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Durable encrypted PostgreSQL payload store |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | Actor-scoped customer workflow queue |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Encrypted provider-payload boundary |
+
+Relevant current-head job logs were inspected for each open PR (fresh-clone or integrated gate); no failing job was returned. #398's previous queued state is superseded: its six current-head checks have now all completed successfully.
+
+### Newly completed provider runtime registry validation
+
+PR #398 current head `7317acf156a3bce5da03b14052391aed44745ddc`:
+
+- Fresh clone [41878295166](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41878295166): 1,522 tests / 1,518 passed / 0 failed / 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- Seven migration groups, including identity, applied and repeatability checks passed.
+- Disposable PostgreSQL 16 backup/restore: `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`; 80 source/restored base tables; seven migration ledgers.
+- Provider lifecycle [41878295173](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41878295173) passed its queue, worker, host, wake-listener, notification, keyring and payload-integrity test groups.
+- PostgreSQL/payment integration [41878295161](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41878295161), 228/38 matrix [41878295162](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41878295162) and controlled QA [41878295169](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41878295169) completed successfully.
+- The log contains intentional negative-test constraint/RLS/rollback errors; corresponding test assertions passed. They are not CI failures.
+
+The registry correction now requires exact provider/adapter/version/capability identity and parks deterministic missing/unapproved adapter errors as `NEEDS_ATTENTION`, not transient retries. It remains process-local and is **not** yet wired into an independently hosted worker composition root. Secret resolution and concrete storage/scanner drivers remain outstanding.
+
+### Seven-pointer disposition — unchanged baseline
+
+1. **v34-to-228 reconciliation — AMBER.** Preserve all 45 v34 source rows and original statements/acceptance criteria. Current crosswalk: 0 exact full matches, 45 partial shared-control links, 45 additive draft candidates. Owner disposition remains required. Approved 228 requirements / 38 chapters are unchanged.
+2. **Fresh-clone developer setup — GREEN for local/CI.** #306 merge verified. Current asset/provider child heads run `npm run dev:verify`; second-engineer handover is not yet demonstrated.
+3. **PostgreSQL durability — AMBER.** Seven migration groups including identity, repeatability, live PostgreSQL and disposable restore are evidenced. CI restore is not production disaster-recovery certification; off-host backup, key custody, retention, RPO/RTO and independent recovery rehearsal remain.
+4. **Identity/OIDC/sessions — AMBER.** #310 and successor browser/session PRs are merged. Browser routes, secure cookies, CSRF, durable sessions/revocation and tenant/application assignment checks have synthetic-IdP E2E evidence. Production IdP onboarding, production JWKS/key rotation and operator credential lifecycle remain unproven.
+5. **Customer workspace/support — AMBER.** Ticket submission/history/replies, tenant/application/actor scope, admin triage/assignment/severity, internal-note visibility and CSV export are tested. SLA timers, breach monitoring/escalation and complete asset binary/UI journey remain.
+6. **Scheduler/workflow operations — AMBER.** Continuous worker components, leases/fencing, idempotency, retries, dead-letter and recovery/replay have test evidence. Independent production supervision, approved dispatcher, metrics/alerts and recovery rehearsal remain.
+7. **Release/continuity — RED.** Rulesets collection is empty; branch-protection endpoint could not be read (403). The charter is proposed/owner-review-required. Production recovery and second-engineer release/rollback path remain unproven.
+
+No PR was merged. No branch was deleted or force-updated. No repository settings were changed. No chargeable cloud resources or real external/provider actions were invoked. This is engineering evidence only; it does not confer production or business acceptance.
