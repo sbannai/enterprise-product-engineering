@@ -90,8 +90,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /Promise\.all\(\[loadAllClientAssets\(\),api\("\/customer\/applications"\)\.catch\(\(\)=>\(\{applications:\[\]\}\)\)\]\)\.then\(\(\[initialItems,applicationPayload\]\)=>\{if\(renderSequence!==viewLoadSequence\)return;/, "asset view must load assigned applications without allowing stale responses to replace another view");
     assert.match(html, /api\("\/customer\/assets\?all=true"\)/, "all client assets are fetched with one API request");
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
-    assert.match(html, /function uploadCustomerFile\(upload,file,onProgress\)/, "customer asset uploads use a dedicated transfer path");
-    assert.match(html, /xhr\.withCredentials=false/, "signed storage uploads must not send customer session cookies");
+    assert.match(html, /async function uploadCustomerFile\(upload,file\)/, "customer asset uploads use a dedicated transfer path");
+    assert.match(html, /credentials:"omit",redirect:"error"/, "signed storage uploads must omit cookies and reject redirects");
     assert.match(html, /customerAssetUploadTypes/, "client upload types must include image, video and office document mappings");
     assert.match(html, /uploadStatus|scanStatus/, "asset upload completion must retain verification and scan state");
     assert.ok(html.includes("Current accepted plan"), "customer can review the accepted tariff snapshot");
