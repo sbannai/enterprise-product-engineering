@@ -148,6 +148,15 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await finalizedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         finalizedClient.release();
       }
+      const verificationSession = await repository.getUploadSessionForVerification(
+        tenantId, applicationId, reservedSessionId,
+      );
+      assert.equal(verificationSession?.assetId, reservedAsset.assetId);
+      assert.equal(verificationSession?.providerUploadReference, "opaque-upload:finalized-reservation");
+      assert.equal(await repository.getUploadSessionForVerification(
+        tenantId, otherApplication, reservedSessionId,
+      ), null, "provider verification cannot resolve a session from another application");
+
       const expiryClient = await pool.connect();
       try {
         await expiryClient.query("BEGIN");
@@ -164,6 +173,9 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await expiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         expiryClient.release();
       }
+      assert.equal(await repository.getUploadSessionForVerification(
+        tenantId, applicationId, reservedSessionId,
+      ), null, "expired sessions must not be handed to the provider verifier");
       await assert.rejects(() => repository.completeUpload({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: reservedSessionId, receivedSizeBytes: 2048,
