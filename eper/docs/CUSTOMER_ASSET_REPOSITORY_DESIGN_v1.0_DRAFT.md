@@ -243,3 +243,11 @@ The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `D
 - Retry backoff uses the attempt count read from the persisted leased job, never a worker-supplied request field. Completion and retry mutations both reject expired leases.
 - The API no longer persists a scan result and then separately completes the scan job. It delegates both transitions to the repository transaction.
 - API contract tests verify the worker identity is passed to atomic finalization. These injected-repository tests are not a substitute for live PostgreSQL transaction/concurrency tests; those remain required before declaring the lifecycle production-ready.
+
+
+### Exhausted scan lease recovery update (2026-11-04)
+
+- A worker can crash after consuming the final permitted attempt and before persisting its scan result. When that lease expires, the claim transaction now moves the job to dead-letter and, in the same transaction, moves the still-scanning asset to failed/quarantined and appends a durable failure audit event.
+- Recovery is fenced by tenant/application scope and only updates an asset still in the scanning state. Any asset-state conflict aborts the transaction rather than silently leaving a dead-letter job without corresponding lifecycle evidence.
+- The authenticated claim route supplies the server-configured scanner service identity and audit environment; neither is accepted from the worker request body.
+- This closes the terminal-attempt crash gap in the repository transaction path. Live PostgreSQL crash/restart and competing-worker validation remain outstanding.
