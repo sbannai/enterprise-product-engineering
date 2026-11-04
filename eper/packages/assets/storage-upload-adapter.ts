@@ -19,6 +19,8 @@ export interface StorageUploadGrant {
 }
 
 export interface StorageUploadResult {
+  /** Opaque provider-side upload reference; persist server-side and never return to clients. */
+  providerUploadReference: string;
   url: string;
   method: "PUT" | "POST";
   expiresAt: string;
@@ -62,7 +64,7 @@ export function createStorageUploadAdapter(
     } catch {
       return null;
     }
-    if (!outcome.success || !outcome.value) return null;
+    if (!outcome.success || !outcome.value || typeof outcome.externalReference !== "string" || !outcome.externalReference.trim() || outcome.externalReference.length > 2048) return null;
 
     const grant = outcome.value;
     if (typeof grant.url !== "string" || typeof grant.expiresAt !== "string" ||
@@ -92,6 +94,7 @@ export function createStorageUploadAdapter(
     }
 
     return {
+      providerUploadReference: outcome.externalReference,
       url: url.toString(),
       method: grant.method,
       expiresAt: new Date(expiry).toISOString(),
