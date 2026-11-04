@@ -276,6 +276,16 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
               && requested.applicationId === applicationId
               && requested.capabilityKey === "email.send";
           },
+          async authorizeDelete(requested) {
+            return scopedAccess && requested.tenantId === tenantId
+              && requested.applicationId === applicationId
+              && requested.operationId === atomicFirst.operation.operationId
+              ? { actorType: "system", actorId: "test-retention-worker", source: "job",
+                  environment: auditEnvironment, reasonCode: "RETENTION_EXPIRED",
+                  policyDecisionReference: "test-policy-" + suffix,
+                  correlationId: "test-correlation-" + suffix }
+              : null;
+          },
         },
       );
       assert.deepEqual(await scopedPayloadStore.get(exactPayloadReference), providerPayload);
