@@ -50,10 +50,14 @@ function normalizedScope(input: ProviderPayloadScope): ProviderPayloadScope {
       throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_SCOPE_INVALID");
     }
   }
+  const operationId = input.operationId.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) {
+    throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_SCOPE_INVALID");
+  }
   return {
     tenantId: input.tenantId.trim(),
     applicationId: input.applicationId.trim(),
-    operationId: input.operationId.trim(),
+    operationId,
     capabilityKey: input.capabilityKey.trim(),
   };
 }
