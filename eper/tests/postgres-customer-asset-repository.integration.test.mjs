@@ -251,7 +251,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 12, "two creates, four reservations, one grant finalization, one failed reservation, one link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 13, "two creates, four reservations, one grant finalization, one failed reservation, one link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
