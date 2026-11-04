@@ -163,6 +163,68 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         "another application in the same tenant sees neither an unlinked shared asset nor a restricted asset");
       assert.deepEqual(await repository.listForApplication(otherTenant, applicationId), [],
         "another tenant sees no assets");
+      // Exercise the database policies as the non-login least-privilege role,
+      // not merely through the repository's application-level filters.
+      const restrictedRoleClient = await pool.connect();
+      try {
+        await restrictedRoleClient.query("BEGIN");
+        await restrictedRoleClient.query("SET LOCAL ROLE eper_customer_asset_access");
+        await restrictedRoleClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const sameApplicationAssets = await restrictedRoleClient.query(
+          "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 ORDER BY asset_id",
+          [tenantId],
+        );
+        assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
+          new Set([shared.assetId, restricted.assetId]),
+          "RLS role sees only assets linked to or owned by its current application");
+        const sameApplicationSessions = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
+          [tenantId],
+        );
+        assert.equal(sameApplicationSessions.rows.length, 2,
+          "upload sessions are bound to their creating application");
+        await restrictedRoleClient.query(
+          "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
+        );
+        const crossApplicationAssets = await restrictedRoleClient.query(
+          "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1", [tenantId],
+        );
+        assert.equal(crossApplicationAssets.rows.length, 0,
+          "database RLS denies cross-application asset reads even for direct SQL");
+        const crossApplicationSessions = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
+          [tenantId],
+        );
+        assert.equal(crossApplicationSessions.rows.length, 0,
+          "database RLS denies cross-application upload-session reads");
+        await restrictedRoleClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true)", [otherTenant],
+        );
+        const crossTenantAssets = await restrictedRoleClient.query(
+          "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1", [tenantId],
+        );
+        assert.equal(crossTenantAssets.rows.length, 0,
+          "database RLS denies cross-tenant reads");
+        await restrictedRoleClient.query("SAVEPOINT deny_cross_tenant_asset_insert");
+        await assert.rejects(restrictedRoleClient.query(
+          `INSERT INTO eper_customer_assets (
+            tenant_id, asset_id, repository_scope, display_name, original_file_name,
+            media_category, mime_type, file_extension, size_bytes, storage_adapter_key,
+            storage_object_reference, created_by, updated_by
+          ) VALUES ($1,$2,'customer_shared','Denied','denied.txt','document','text/plain',
+                    'txt',1,'test-adapter','opaque:denied','role-test','role-test')`,
+          [tenantId, randomUUID()],
+        ), /row-level security/i);
+        await restrictedRoleClient.query("ROLLBACK TO SAVEPOINT deny_cross_tenant_asset_insert");
+        await restrictedRoleClient.query("COMMIT");
+      } finally {
+        try { await restrictedRoleClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        restrictedRoleClient.release();
+      }
+
     } finally {
       const client = await pool.connect();
       try {
