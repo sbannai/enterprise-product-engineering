@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PostgresCustomerAssetUploadAuthorizer } from "../dist/packages/assets/customer-asset-upload-authorization.js";
 import { WORKFLOW_ROLE_PERMISSIONS } from "../dist/packages/workflows/postgres-workflow-role-definition-store.js";
+import { PostgresWorkflowActorRoleAssignmentStore } from "../dist/packages/workflows/postgres-workflow-actor-role-assignment-store.js";
 
 test("customer asset upload authorization requires the active application role permission", async () => {
   const calls = [];
@@ -43,4 +44,25 @@ test("customer asset upload authorization fails closed when durable role lookup 
 
 test("durable role definitions expose the customer asset upload permission", () => {
   assert.ok(WORKFLOW_ROLE_PERMISSIONS.includes("customer.asset.upload"));
+});
+
+
+test("PostgreSQL actor-role assignment store accepts customer.asset.upload for active application roles", async () => {
+  const statements = [];
+  const client = {
+    async query(sql, params) {
+      statements.push({ sql: String(sql), params });
+      return { rows: [{ allowed: true }] };
+    },
+    release() {},
+  };
+  const store = new PostgresWorkflowActorRoleAssignmentStore({
+    async connect() { return client; },
+  });
+  assert.equal(await store.hasPermission("tenant-a", "app-a", "actor-a", "asset-manager", "customer.asset.upload"), true);
+  assert.ok(statements.some(entry => entry.sql.includes("SELECT EXISTS")));
+  await assert.rejects(
+    store.hasPermission("tenant-a", "app-a", "actor-a", "asset-manager", "customer.asset.delete"),
+    /WORKFLOW_ROLE_ASSIGNMENT_PERMISSION_INVALID/,
+  );
 });
