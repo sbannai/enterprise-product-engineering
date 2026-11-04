@@ -136,6 +136,25 @@ test("internal scan claim endpoint returns tenant-scoped jobs under configured w
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], { tenantId: "tenant-a", applicationId: "app-a",
       workerId: "eper-malware-scanner:worker-01", limit: 3, leaseMs: 30000 });
+
+    for (const invalidOptions of [
+      { limit: "3", leaseMs: 30000 },
+      { limit: 3, leaseMs: "30000" },
+      { limit: null, leaseMs: 30000 },
+      { limit: 3, leaseMs: null },
+      { limit: 1.5, leaseMs: 30000 },
+    ]) {
+      const invalid = await fetch(url, {
+        method: "POST",
+        headers: { authorization: "Bearer " + process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN,
+          "content-type": "application/json" },
+        body: JSON.stringify({ tenantId: "tenant-a", applicationId: "app-a",
+          workerId: "eper-malware-scanner:worker-01", ...invalidOptions }),
+      });
+      assert.equal(invalid.status, 400);
+      assert.deepEqual(await invalid.json(), { error: "invalid_scan_claim_request" });
+    }
+    assert.equal(calls.length, 1, "invalid numeric inputs never reach the repository");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
