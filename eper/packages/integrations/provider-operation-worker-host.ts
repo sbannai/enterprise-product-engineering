@@ -11,6 +11,7 @@ export interface ProviderQueueWakeSource {
 
 export interface ProviderOperationWorkerHostOptions {
   reconciliationIntervalMs?: number;
+  drainBatchSize?: number;
   onError?: (error: unknown) => void;
 }
 
@@ -36,6 +37,7 @@ const abortableDelay = (ms: number, signal: AbortSignal) => new Promise<void>((r
  */
 export class ProviderOperationWorkerHost {
   private readonly reconciliationIntervalMs: number;
+  private readonly drainBatchSize: number;
 
   constructor(
     private readonly worker: Pick<ProviderOperationWorker, "runOnce">,
@@ -43,6 +45,10 @@ export class ProviderOperationWorkerHost {
     private readonly options: ProviderOperationWorkerHostOptions = {},
   ) {
     this.reconciliationIntervalMs = options.reconciliationIntervalMs ?? 30_000;
+    this.drainBatchSize = options.drainBatchSize ?? 10;
+    if (!Number.isSafeInteger(this.drainBatchSize) || this.drainBatchSize < 1 || this.drainBatchSize > 100) {
+      throw new Error("PROVIDER_WORKER_DRAIN_BATCH_SIZE_INVALID");
+    }
     if (!Number.isSafeInteger(this.reconciliationIntervalMs)
       || this.reconciliationIntervalMs < 1_000
       || this.reconciliationIntervalMs > 300_000) {
@@ -69,7 +75,7 @@ export class ProviderOperationWorkerHost {
         }
         if (signal.aborted) break;
         // A full batch may leave eligible work behind; drain it before sleeping.
-        if (result.claimed >= 100) continue;
+        if (result.claimed >= this.drainBatchSize) continue;
         try {
           await this.wakeSource.wait(this.reconciliationIntervalMs, signal);
         } catch (error) {
