@@ -344,6 +344,45 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string): Promise<{
+    assetId: string; providerUploadReference: string; checksumSha256: string;
+    sizeBytes: number; mimeType: string;
+  } | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(uploadSessionId, "uploadSessionId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<{
+        asset_id: string; provider_upload_reference: string; checksum_sha256: string | null;
+        size_bytes: number | string; mime_type: string;
+      }>(
+        `SELECT s.asset_id, s.provider_upload_reference, a.checksum_sha256,
+          a.size_bytes, a.mime_type
+         FROM eper_customer_asset_upload_sessions s
+         JOIN eper_customer_assets a
+           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
+         WHERE s.tenant_id = $1 AND s.application_id = $2
+           AND s.upload_session_id = $3 AND s.upload_status = 'completed'
+           AND a.upload_status = 'scanning' AND a.scan_status = 'pending'
+           AND a.lifecycle_status = 'active' AND a.checksum_sha256 IS NOT NULL`,
+        [tenantId, applicationId, uploadSessionId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      return row ? {
+        assetId: row.asset_id, providerUploadReference: row.provider_upload_reference,
+        checksumSha256: row.checksum_sha256 as string, sizeBytes: Number(row.size_bytes),
+        mimeType: row.mime_type,
+      } : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async completeUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; uploadSessionId: string; receivedSizeBytes: number;
