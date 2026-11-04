@@ -69,6 +69,38 @@ CREATE TABLE IF NOT EXISTS eper_customer_asset_application_links (
     REFERENCES eper_customer_assets (tenant_id, asset_id)
     ON DELETE RESTRICT
 );
+
+-- Enforce the domain rule at the database boundary too: application links may
+-- reference customer-shared assets only. Application-restricted assets remain
+-- bound to their owner_application_id and are never linkable into another app.
+CREATE OR REPLACE FUNCTION eper_guard_customer_asset_application_link()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE asset_scope varchar(24);
+BEGIN
+  SELECT repository_scope
+    INTO asset_scope
+    FROM eper_customer_assets
+   WHERE tenant_id = NEW.tenant_id
+     AND asset_id = NEW.asset_id;
+
+  IF asset_scope IS DISTINCT FROM 'customer_shared' THEN
+    RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_NOT_LINKABLE'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS eper_customer_asset_application_link_guard
+  ON eper_customer_asset_application_links;
+CREATE TRIGGER eper_customer_asset_application_link_guard
+  BEFORE INSERT OR UPDATE OF tenant_id, application_id, asset_id
+  ON eper_customer_asset_application_links
+  FOR EACH ROW
+  EXECUTE FUNCTION eper_guard_customer_asset_application_link();
+
 CREATE INDEX IF NOT EXISTS eper_customer_asset_links_asset_idx
   ON eper_customer_asset_application_links (tenant_id, asset_id, created_at DESC);
 
