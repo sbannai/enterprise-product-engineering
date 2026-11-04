@@ -6,7 +6,7 @@ test("customer upload reservation requires identity, assignment, provider and du
   const keys = [
     "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
     "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
-    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-route-test-token-000000000001";
@@ -18,6 +18,7 @@ test("customer upload reservation requires identity, assignment, provider and du
   });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
   const events = [];
   const server = createAppServer({
     customerAssetRepository: {
