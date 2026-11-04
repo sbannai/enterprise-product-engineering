@@ -40,6 +40,7 @@ test("internal asset scan requires service bearer token and records only trusted
     const body = JSON.stringify({
       tenantId: "tenant-a", applicationId: "app-a",
       uploadSessionId: "00000000-0000-4000-8000-000000000001",
+      workerId: "eper-malware-scanner:worker-01",
       scanStatus: "clean", scannerServiceId: "attacker-controlled",
     });
     const denied = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
@@ -60,7 +61,7 @@ test("internal asset scan requires service bearer token and records only trusted
     assert.equal(calls[2].input.scannerServiceId, "eper-malware-scanner");
     assert.equal(calls[2].input.scanStatus, "clean");
     assert.equal(calls[2].input.correlationId, "scan-correlation-001");
-    assert.equal(calls[3].input.workerId, "eper-malware-scanner");
+    assert.equal(calls[3].input.workerId, "eper-malware-scanner:worker-01");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
@@ -127,14 +128,14 @@ test("internal scan claim endpoint returns tenant-scoped jobs under configured w
       method: "POST",
       headers: { authorization: "Bearer " + process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN,
         "content-type": "application/json" },
-      body: JSON.stringify({ tenantId: "tenant-a", applicationId: "app-a", limit: 3, leaseMs: 30000 }),
+      body: JSON.stringify({ tenantId: "tenant-a", applicationId: "app-a", workerId: "eper-malware-scanner:worker-01", limit: 3, leaseMs: 30000 }),
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.equal(payload.jobs.length, 1);
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], { tenantId: "tenant-a", applicationId: "app-a",
-      workerId: "eper-malware-scanner", limit: 3, leaseMs: 30000 });
+      workerId: "eper-malware-scanner:worker-01", limit: 3, leaseMs: 30000 });
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
