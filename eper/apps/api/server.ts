@@ -2043,6 +2043,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           tenantId, applicationId, uploadSessionId,
         );
         if (!session) { sendJson(request, response, 404, { error: "scan_job_not_found_or_not_pending" }); return; }
+        const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
+        const workerId = typeof body.workerId === "string" ? body.workerId : "";
+        if (!/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
+            !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128) {
+          sendJson(request, response, 400, { error: "invalid_scan_worker_identity" }); return;
+        }
         const requestId = resolveApiRequestId(request);
         const outcome = await assetMalwareScanResolver({
           tenantId, applicationId, assetId: session.assetId, uploadSessionId,
@@ -2053,12 +2059,6 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         if (!process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ||
             outcome.scannerServiceId !== process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID) {
           sendJson(request, response, 503, { error: "asset_scanner_identity_mismatch" }); return;
-        }
-        const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
-        const workerId = typeof body.workerId === "string" ? body.workerId : "";
-        if (!/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
-            !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128) {
-          sendJson(request, response, 400, { error: "invalid_scan_worker_identity" }); return;
         }
         if (outcome.scanStatus === "error") {
           const attempt = typeof body.attempt === "number" && Number.isInteger(body.attempt) && body.attempt > 0
@@ -2075,7 +2075,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             sendJson(request, response, 202, { scanJob: { state: "pending", retryAfterMs } }); return;
           }
           const failedAsset = await options.customerAssetRepository.recordScanResult({
-            tenantId, applicationId, scannerServiceId: workerId,
+            tenantId, applicationId, scannerServiceId,
             environment: options.adminConfigEnvironment ?? "sandbox",
             correlationId: requestId, uploadSessionId, scanStatus: "error",
           });
