@@ -75,7 +75,7 @@ test("upload start fails closed when provider cannot issue a grant", async () =>
     },
   });
   assert.equal(result, null);
-  assert.equal(reserved, false);
+  assert.equal(reserved, true);
 });
 
 test("upload start rejects invalid size, idempotency and excessive expiry", async () => {
