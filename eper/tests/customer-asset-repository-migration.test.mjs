@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
+const uploadReservationMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_reservation.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -54,4 +55,12 @@ test("scan dispatch migration creates a tenant/application-isolated transactiona
   assert.ok(scanDispatchMigration.includes("FORCE ROW LEVEL SECURITY"));
   assert.ok(scanDispatchMigration.includes("application_id = current_setting('eper.application_id', true)"));
   assert.ok(scanDispatchMigration.includes("GRANT SELECT, INSERT, UPDATE ON eper_customer_asset_scan_jobs TO eper_customer_asset_access"));
+});
+
+
+test("upload reservation migration supports provider-free reservations and a guarded finalization state", () => {
+  assert.ok(uploadReservationMigration.includes("'reserved'"));
+  assert.ok(uploadReservationMigration.includes("'initiated'"));
+  assert.ok(uploadReservationMigration.includes("provider_upload_reference is already nullable"));
+  assert.ok(uploadReservationMigration.includes("WHERE upload_status = 'reserved'"));
 });
