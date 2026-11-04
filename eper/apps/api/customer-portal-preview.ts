@@ -95,20 +95,15 @@ pdf:{mimeType:"application/pdf",category:"document"},docx:{mimeType:"application
 pptx:{mimeType:"application/vnd.openxmlformats-officedocument.presentationml.presentation",category:"document"},
 xlsx:{mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",category:"document"}
 };
-function uploadCustomerFile(upload,file,onProgress){
-return new Promise((resolve,reject)=>{
-const xhr=new XMLHttpRequest();
-xhr.open(upload.method,upload.url,true);
-xhr.withCredentials=false;
-xhr.timeout=Math.max(1000,Math.min(15*60*1000,Date.parse(upload.expiresAt)-Date.now()));
-Object.entries(upload.headers||{}).forEach(([name,value])=>xhr.setRequestHeader(name,value));
-xhr.upload.addEventListener("progress",event=>{if(event.lengthComputable)onProgress(Math.round(event.loaded/event.total*100));});
-xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error("asset_upload_transfer_failed"));
-xhr.onerror=()=>reject(new Error("asset_upload_transfer_failed"));
-xhr.ontimeout=()=>reject(new Error("asset_upload_transfer_timeout"));
-xhr.onabort=()=>reject(new Error("asset_upload_transfer_aborted"));
-xhr.send(file);
+async function uploadCustomerFile(upload,file){
+const target=new URL(upload.url);
+const expiry=Date.parse(upload.expiresAt);
+if(!Number.isFinite(expiry)||expiry<=Date.now()||expiry-Date.now()>15*60*1000)throw new Error("asset_upload_grant_expired");
+const response=await fetch(target.href,{
+method:upload.method,headers:upload.headers||{},body:file,
+credentials:"omit",redirect:"error",mode:"cors",cache:"no-store",referrerPolicy:"no-referrer"
 });
+if(!response.ok)throw new Error("asset_upload_transfer_failed");
 }
 function customerAssetIdempotencyKey(){
 const cryptoApi=window.crypto;
@@ -150,7 +145,7 @@ const upload=started.upload;
 if(!upload||typeof upload.url!=="string"||!["PUT","POST"].includes(upload.method)||typeof upload.uploadSessionId!=="string")throw new Error("asset_upload_grant_invalid");
 if(generation!==sessionGeneration)throw new Error("customer_session_changed");
 fail("Uploading file to the approved storage endpoint…");
-await uploadCustomerFile(upload,file,value=>{if(generation===sessionGeneration&&progress)progress.value=value;});
+if(progress)progress.removeAttribute("value");await uploadCustomerFile(upload,file);if(progress)progress.value=100;
 if(generation!==sessionGeneration)throw new Error("customer_session_changed");
 fail("Verifying the stored object and queuing malware inspection…");
 const completed=await api("/customer/applications/"+encodeURIComponent(applicationId)+"/assets/"+encodeURIComponent(assetId)+"/uploads/"+encodeURIComponent(upload.uploadSessionId)+"/complete",{
