@@ -1993,10 +1993,13 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const body = await readJson(request);
         const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
         const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+        const workerId = typeof body.workerId === "string" ? body.workerId : "";
         const limit = body.limit === undefined ? 10 : body.limit;
         const leaseMs = body.leaseMs === undefined ? 60_000 : body.leaseMs;
         if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(tenantId) ||
             !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+            !/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
+            !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128 ||
             !Number.isInteger(limit) || limit < 1 || limit > 50 ||
             !Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) {
           sendJson(request, response, 400, { error: "invalid_scan_claim_request" }); return;
@@ -2051,7 +2054,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             outcome.scannerServiceId !== process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID) {
           sendJson(request, response, 503, { error: "asset_scanner_identity_mismatch" }); return;
         }
-        const workerId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID;
+        const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
+        const workerId = typeof body.workerId === "string" ? body.workerId : "";
+        if (!/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
+            !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128) {
+          sendJson(request, response, 400, { error: "invalid_scan_worker_identity" }); return;
+        }
         if (outcome.scanStatus === "error") {
           const attempt = typeof body.attempt === "number" && Number.isInteger(body.attempt) && body.attempt > 0
             ? Math.min(body.attempt, 5) : 1;
