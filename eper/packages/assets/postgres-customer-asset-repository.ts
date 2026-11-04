@@ -842,7 +842,7 @@ export class PostgresCustomerAssetRepository {
     await client.query("SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)", [tenantId, applicationId]);
   }
   private validateId(value: string, name: string): void {
-    if (typeof value !== "string" || !/^[a-zA-Z0-9._-]{2,128}$/.test(value)) {
+    if (typeof value !== "string" || !/^[a-zA-Z0-9._:-]{2,128}$/.test(value)) {
       throw new Error("EPER_CUSTOMER_ASSET_INVALID_" + name.toUpperCase());
     }
   }
