@@ -55,12 +55,17 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         [tenantId, applicationId, connectionId],
       );
 
-      const enqueue = (key) => operationRepository.enqueue({
-        tenantId, applicationId, connectionId, capabilityKey: "email.send",
-        capabilityVersion: "1", idempotencyKey: key,
-        correlationId: "operation-" + key, requestDigest: "a".repeat(64),
-        payloadReference: "opaque-payload-" + key, actorId, auditEnvironment,
-      });
+      const enqueue = (key) => {
+        const payload = { to: ["synthetic@example.invalid"], body: "lifecycle-" + key };
+        const requestDigest = createHash("sha256")
+          .update(JSON.stringify(payload), "utf8").digest("hex");
+        return operationRepository.enqueueWithPayload({
+          tenantId, applicationId, connectionId, capabilityKey: "email.send",
+          capabilityVersion: "1", idempotencyKey: key,
+          correlationId: "operation-" + key, requestDigest,
+          actorId, auditEnvironment, payload, payloadStore,
+        });
+      };
 
       const first = await enqueue("lifecycle-" + suffix);
       assert.equal(first.created, true);
