@@ -60,6 +60,7 @@ import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-sch
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import { createStorageUploadAdapter, type StorageUploadGrant } from "../../packages/assets/storage-upload-adapter.js";
+import { createStorageUploadVerificationAdapter, type StorageUploadVerificationRequest, type StorageUploadVerificationResult } from "../../packages/assets/storage-upload-verification-adapter.js";
 import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
 import type { StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
@@ -523,7 +524,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadVerificationPort?: IntegrationPort<StorageUploadVerificationRequest, StorageUploadVerificationResult>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; assetUploadVerificationResolver?: (input: StorageUploadVerificationRequest, requestId: string) => Promise<{ sizeBytes: number; detectedMimeType: string; checksumSha256: string } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -595,6 +596,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   const assetUploadResolver = options.assetUploadResolver ?? (
     options.assetUploadPort && configuredAssetStorageHosts.length > 0
       ? createStorageUploadAdapter(options.assetUploadPort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
+  const assetUploadVerificationResolver = options.assetUploadVerificationResolver ?? (
+    options.assetUploadVerificationPort
+      ? createStorageUploadVerificationAdapter(options.assetUploadVerificationPort)
       : undefined
   );
   const assetAuditWriter: CustomerAssetAuditWriter | undefined = options.assetAuditWriter ?? (
@@ -1957,6 +1963,69 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Direct uploads require durable identity assignments, PostgreSQL reservation/audit,
     // and an injected provider adapter. The signed capability is withheld until reservation commits.
+    const assetUploadCompleteMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{1,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/uploads\\/([a-zA-Z0-9-]{16,64})\\/complete$/.exec(requestUrl.pathname);
+    if (assetUploadCompleteMatch) {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+      }
+      if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" || !assetUploadVerificationResolver) {
+        sendJson(request, response, 503, { error: "asset_upload_verification_unavailable" }); return;
+      }
+      const [applicationId, assetId, uploadSessionId] = [assetUploadCompleteMatch[1], assetUploadCompleteMatch[2], assetUploadCompleteMatch[3]];
+      try {
+        const modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+        const modules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+          ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+        if (!Array.isArray(modules) || !modules.includes("client-assets")) {
+          sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
+        }
+        const tenantAssignments = options.tenantApplicationAssignmentStore
+          ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+          : (() => {
+              const raw = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+              return raw && typeof raw === "object" && !Array.isArray(raw)
+                ? (raw as Record<string, unknown>)[identity.tenantId] : null;
+            })();
+        const actorAssigned = options.actorApplicationAssignmentStore
+          ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+          : identity.applicationIds?.includes(applicationId) === true;
+        if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId) || !actorAssigned) {
+          sendJson(request, response, 404, { error: "application_not_found" }); return;
+        }
+        const session = await options.customerAssetRepository.getUploadSessionForVerification(identity.tenantId, applicationId, uploadSessionId);
+        if (!session || session.assetId !== assetId) { sendJson(request, response, 404, { error: "upload_session_not_found" }); return; }
+        if (session.actorId !== identity.actorId) { sendJson(request, response, 403, { error: "upload_session_actor_mismatch" }); return; }
+        const verified = await assetUploadVerificationResolver({
+          tenantId: identity.tenantId, applicationId, assetId, uploadSessionId,
+          providerUploadReference: session.providerUploadReference,
+          expectedSizeBytes: session.expectedSizeBytes, expectedMimeType: session.expectedMimeType,
+        }, resolveApiRequestId(request));
+        if (!verified) { sendJson(request, response, 503, { error: "asset_upload_provider_verification_failed" }); return; }
+        const asset = await options.customerAssetRepository.completeUpload({
+          tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+          environment: options.adminConfigEnvironment ?? "sandbox",
+          correlationId: resolveApiRequestId(request), uploadSessionId,
+          receivedSizeBytes: verified.sizeBytes, observedMimeType: verified.detectedMimeType,
+          checksumSha256: verified.checksumSha256, scanStatus: "pending",
+        });
+        sendJson(request, response, 200, { asset: {
+          assetId: asset.assetId, uploadStatus: asset.uploadStatus,
+          scanStatus: asset.scanStatus, lifecycleStatus: asset.lifecycleStatus,
+          checksumSha256: asset.checksumSha256,
+        } }); return;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "asset_upload_completion_failed";
+        const status = code.includes("NOT_FOUND") ? 404
+          : code.includes("MISMATCH") || code.includes("EXPIRED") || code.includes("NOT_COMPLETABLE") ? 409
+          : 503;
+        sendJson(request, response, status, { error: status === 503 ? "asset_upload_completion_failed" : code }); return;
+      }
+    }
     const assetUploadMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/uploads$/.exec(requestUrl.pathname);
     if (assetUploadMatch) {
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
