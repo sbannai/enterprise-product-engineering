@@ -627,6 +627,38 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async renewScanJobLease(input: {
+    tenantId: string; applicationId: string; uploadSessionId: string;
+    workerId: string; leaseMs: number;
+  }): Promise<boolean> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    this.validateId(input.workerId, "workerId");
+    if (!Number.isInteger(input.leaseMs) || input.leaseMs < 5_000 || input.leaseMs > 900_000) {
+      throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const renewed = await client.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET lease_expires_at = now() + ($5::bigint * interval '1 millisecond'),
+                updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+          RETURNING upload_session_id`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.leaseMs],
+      );
+      await client.query("COMMIT");
+      return renewed.rowCount === 1;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async retryScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
     errorCode: string; retryAfterMs: number;
