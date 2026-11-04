@@ -42,7 +42,11 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
   const invalid = (): never => { throw new Error("STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID"); };
   if (depth > 8 || !value || typeof value !== "object" || Array.isArray(value)) invalid();
   let serialized: string;
-  try { serialized = JSON.stringify(value); } catch { invalid(); }
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new Error("STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID");
+  }
   if (typeof serialized !== "string" || serialized.length > 16_384) invalid();
   const allowed = new Set([
     "type", "title", "description", "properties", "required",
