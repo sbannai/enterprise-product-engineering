@@ -442,6 +442,27 @@ if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
 
+const assetAuditWriter = auditMode === "postgres" && paymentPool
+  ? async (record: import("./server.js").CustomerAssetAuditRecord): Promise<void> => {
+      await appendAuditEvent(paymentPool, {
+        tenantId: record.tenantId,
+        applicationId: record.applicationId,
+        environment: auditEnvironment as "production" | "uat" | "sandbox",
+        actorType: "human",
+        actorId: record.actorId,
+        action: record.action,
+        outcome: record.outcome,
+        reasonCode: record.outcome === "denied" ? "asset_access_denied" : undefined,
+        resourceType: "customer-asset",
+        resourceId: record.assetId,
+        requestId: record.requestId,
+        source: "api",
+        operationName: "GET /customer/applications/:applicationId/assets/:assetId/download",
+        serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+      });
+    }
+  : undefined;
+
 const agentsEnabled = process.env.EPER_AGENTS_API_ENABLED === "true";
 if (agentsEnabled && (!paymentPool || adminConfigMode !== "postgres" || auditMode !== "postgres")) {
   throw new Error("AGENTS_API_REQUIRES_POSTGRES_CONFIGURATION_AND_DURABLE_AUDIT");
@@ -484,7 +505,7 @@ if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady
 
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
-  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
+  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, assetAuditWriter, customerLifecycleStore,
   agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, customerAssetRepository,
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
