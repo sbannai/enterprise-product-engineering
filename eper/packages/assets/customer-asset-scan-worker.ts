@@ -2,11 +2,17 @@ import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { TrustedMalwareScanOutcome } from "./storage-malware-scan-adapter.js";
 
+/**
+ * Scanner adapters must treat the AbortSignal as part of the execution contract:
+ * stop provider work and settle the returned promise promptly after abort. The
+ * worker fences persistence after shutdown, but cannot forcibly terminate an
+ * adapter that ignores cancellation.
+ */
 export interface CustomerAssetScanner {
   scan(input: {
     tenantId: string; applicationId: string; assetId: string; uploadSessionId: string;
     providerUploadReference: string; checksumSha256: string; sizeBytes: number; mimeType: string;
-  }, requestId: string, signal?: AbortSignal): Promise<TrustedMalwareScanOutcome>;
+  }, requestId: string, signal: AbortSignal): Promise<TrustedMalwareScanOutcome>;
 }
 export interface CustomerAssetScanWorkerOptions {
   repository: PostgresCustomerAssetRepository;
