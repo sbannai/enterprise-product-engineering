@@ -1,0 +1,163 @@
+# EPER Customer Asset Repository Design v1.0 (DRAFT)
+
+- **Status:** Foundation schema committed for review; runtime upload integration is not complete.
+- **Date:** 2026-11-04
+- **Scope:** Customer-wide asset repository and controlled application-level references.
+- **Storage:** Provider-neutral adapter boundary; binary content remains outside PostgreSQL.
+- **Governance:** Additive design; no change to the approved 228 requirements / 38-chapter baseline.
+
+## 1. The three scopes
+
+EPER distinguishes three related but non-interchangeable concepts:
+
+1. **Customer repository asset** — metadata and opaque storage reference owned by one tenant. It can be shared with applications only through explicit links and authorization.
+2. **Application-restricted asset** — asset metadata owned by one tenant and one application. It must not be discoverable through the customer-wide shared repository.
+3. **Application asset reference** — explicit link from an application to a customer-shared asset. A link does not copy the binary object; it grants a governed reference to the same asset.
+
+A shared asset is not automatically visible to every application in a tenant. Customer Admin or another explicitly authorized actor must create a link. Every application read/download rechecks tenant, application, actor and resource authorization.
+
+## 2. Existing implementation discovered
+
+The repository already contains:
+- `GET /customer/assets` metadata manifest with pagination and tenant/application assignment filtering.
+- Safe metadata projection that does not expose opaque storage references.
+- An injected provider-neutral download adapter that requires HTTPS, exact host allowlisting and a short TTL.
+- Download route tests for tenant/application checks and audit-before-response behavior.
+
+Current limitation:
+- The manifest source is `EPER_CUSTOMER_APPLICATION_ASSETS_JSON`, with related workspace-module and assignment configuration.
+- This is configuration-backed fixture/runtime data, not a durable PostgreSQL asset repository.
+- The current manifest is application-centric; customer-shared assets and explicit application links are not represented as a durable domain model.
+- The current adapter supports downloads, not a complete upload lifecycle.
+
+Do not report the existing endpoint as a complete upload repository.
+
+## 3. Durable data model foundation
+
+Migration `021_customer_asset_repository.sql` introduces:
+
+### `eper_customer_assets`
+- Composite tenant + asset identity.
+- Scope: `customer_shared` or `application_restricted`.
+- Owner application only for application-restricted assets.
+- Display and original file names, category, MIME type, extension and size.
+- SHA-256 checksum when computed.
+- Provider adapter key and opaque storage object reference; never a public URL or provider credential.
+- Upload state, scan state and lifecycle state kept separate.
+- Version, actor and timestamps; soft deletion attribution.
+- JSON metadata constrained to an object and reserved for non-sensitive descriptive metadata.
+
+### `eper_customer_asset_application_links`
+- Explicit tenant/application/asset relationship.
+- Actor, reason and idempotency key.
+- Composite foreign key to the tenant-owned asset.
+- No cascading delete; referenced assets cannot disappear underneath application records.
+
+### `eper_customer_asset_upload_sessions`
+- Upload session identity and asset reservation.
+- Expected and received byte counts with database bound.
+- Opaque provider upload reference only.
+- Expiry, state and idempotency key.
+- No provider secrets or binary content in PostgreSQL.
+
+All three tables force row-level security. Tenant context is mandatory; application links additionally require matching application context. Service-layer authorization remains mandatory even when RLS passes.
+
+## 4. Upload lifecycle
+
+1. **Authorize and reserve:** verify tenant, actor, role, customer asset entitlement, allowed scope, quota and application assignment (if application-restricted). Create asset metadata and idempotent upload session in PostgreSQL.
+2. **Issue upload capability:** injected storage adapter returns a narrowly scoped, short-lived upload capability. The API must not expose provider credentials or permanent object URLs.
+3. **Transfer:** use bounded/resumable upload where supported. Enforce configured maximum bytes and permitted extension/MIME combinations before and during transfer.
+4. **Verify:** provider completion is not sufficient. Verify object existence, actual byte count, checksum and detected content type.
+5. **Scan:** quarantine by default until malware/content scanning reports clean. Unknown, failed or unavailable scan results do not become downloadable.
+6. **Publish:** transition asset to available only after verification and policy checks; write durable audit evidence.
+7. **Reference:** authorized Customer Admin or application actor explicitly links a customer-shared asset to an application. Link creation is idempotent and audited.
+8. **Download:** reauthorize every request, issue a short-lived HTTPS grant through the allowlisted provider adapter, and complete audit persistence before returning the grant.
+9. **Delete / retention:** soft-delete or retention transition first. Physical purge is a separate, policy-driven, audited worker action and must respect legal holds and references.
+
+## 5. Supported file categories
+
+The customer requirement includes:
+- Images.
+- Videos.
+- DOCX.
+- PPTX.
+- XLSX.
+
+The runtime must use a configurable allowlist of exact MIME types and extensions. Extension alone is not trusted. The detected content type, filename, declared MIME, file size and scanning outcome must be reconciled. Archive/container formats require decompression-bomb limits and safe parser policies if preview/indexing is later added.
+
+No fixed maximum upload size is approved by this design. Customer-level quotas, per-file size limits, video duration limits and allowed MIME mappings remain explicit configuration decisions; missing policy means reject or leave upload unavailable, not silently permit unbounded uploads.
+
+## 6. Security and tenant isolation
+
+- Tenant identity is derived from authenticated server-side identity.
+- Never accept tenant ID as an authority claim from request JSON.
+- Every operation checks tenant + actor + role + resource scope.
+- Application references require an explicit link and current application authorization.
+- Random asset IDs are identifiers, not bearer permissions.
+- RLS is defense in depth; it does not replace application authorization.
+- Provider object references remain server-side.
+- Upload/download capabilities are short-lived, scoped and never logged.
+- No binary body, provider token, signed URL or secret is placed in audit payloads.
+- Audit events include actor, tenant, asset, action, outcome, reason, request/correlation and policy decision metadata.
+- A failed audit write fails the corresponding security-sensitive action closed.
+- Quarantined, rejected, expired, deleted or not-yet-scanned assets cannot be downloaded.
+
+## 7. API contract to implement
+
+| Operation | Purpose | Required controls |
+|---|---|---|
+| `POST /customer/assets/uploads` | Reserve metadata and upload session | Customer Admin permission, quota, idempotency, MIME/size policy |
+| `POST /customer/assets/uploads/{id}/complete` | Verify transfer and queue scanning | Tenant/session match, checksum and size verification |
+| `GET /customer/assets` | List customer-shared repository | Tenant-scoped pagination and actor authorization |
+| `GET /customer/assets/{id}` | Read safe metadata | Tenant + asset scope |
+| `POST /customer/applications/{appId}/assets/{assetId}/link` | Link shared asset to application | Customer Admin/authorized role, application assignment, idempotency |
+| `DELETE /customer/applications/{appId}/assets/{assetId}/link` | Revoke application reference | Authorization, audit, preserve underlying asset |
+| `GET /customer/applications/{appId}/assets` | List linked and application-restricted assets | Tenant + application + actor authorization |
+| `POST /customer/applications/{appId}/assets/{assetId}/download` | Obtain short-lived download grant | Reauthorize, clean scan state, allowlisted HTTPS, audit-before-response |
+
+The existing `GET /customer/assets` manifest remains compatible while a durable repository-backed path is introduced behind an explicit feature/persistence mode. No silent fallback from PostgreSQL to environment JSON is allowed in durable mode.
+
+## 8. Storage abstraction
+
+The storage port must support provider-neutral operations:
+- Initiate bounded upload / multipart upload.
+- Complete or abort upload.
+- Inspect object metadata and checksum.
+- Create short-lived scoped upload/download grants.
+- Delete an object under an audited purge decision.
+
+Provider configuration belongs to the customer's configured integration settings, but secrets remain in the approved secret-management boundary. Storage provider selection must not leak into domain identifiers or client contracts.
+
+## 9. Functional and security acceptance
+
+1. Customer A cannot list, read, link, download or delete Customer B assets.
+2. Customer-shared asset is not visible inside an application until an explicit link exists.
+3. Application-restricted asset cannot be linked into another application.
+4. Actor with application access cannot automatically enumerate all customer repository assets.
+5. Revoking a link removes application access without deleting the shared asset.
+6. Removing an application assignment immediately blocks its actor's access.
+7. Duplicate upload reservation with same idempotency key returns the same logical session or a conflict if payload differs.
+8. Upload cannot exceed reserved size, tenant quota or configured file policy.
+9. Mismatched MIME, extension, checksum or object size prevents publication.
+10. Pending, quarantined, infected, failed or expired uploads cannot be downloaded.
+11. Provider upload/download grants must be HTTPS, allowlisted and short-lived.
+12. Audit failure prevents upload completion, link mutation and download grant disclosure.
+13. A tenant/application RLS context mismatch returns no rows and cannot mutate records.
+14. Concurrent link/unlink or delete operations do not create dangling references.
+15. Retention/purge respects legal hold and emits durable actor/policy evidence.
+16. No provider secret, signed URL, binary content or raw object reference appears in logs or audit payloads.
+
+## 10. Delivery status and boundaries
+
+| Slice | Status |
+|---|---|
+| Existing application asset manifest and download adapter | Present; configuration-backed manifest |
+| Durable metadata, explicit links and upload-session schema | Migration added in this PR; requires PostgreSQL execution/integration validation |
+| PostgreSQL repository/store implementation | Not implemented |
+| Upload provider adapter and completion verification | Not implemented |
+| Malware scanning and quarantine worker | Not implemented |
+| Customer repository and application UI | Not implemented |
+| Durable audit wiring for all repository operations | Not implemented |
+| Production readiness / Business UAT | Not authorized |
+
+This migration is a foundation, not a complete feature. No upload provider is selected, no external dispatch is enabled, and no cloud infrastructure is provisioned.
