@@ -276,10 +276,11 @@ export class PostgresCustomerAssetRepository {
       const locked = await client.query<{
         upload_session_id: string; asset_id: string; actor_id: string;
         expected_size_bytes: number | string; expires_at: string | Date;
-        upload_status: string; asset_mime_type: string;
+        upload_status: string; asset_mime_type: string; asset_upload_status: string;
       }>(
         `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
-          s.expires_at, s.upload_status, a.mime_type AS asset_mime_type
+          s.expires_at, s.upload_status, a.mime_type AS asset_mime_type,
+          a.upload_status AS asset_upload_status
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
@@ -290,8 +291,12 @@ export class PostgresCustomerAssetRepository {
       );
       const session = locked.rows[0];
       if (!session) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      if (session.actor_id !== input.actorId) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ACTOR_MISMATCH");
       if (session.upload_status !== "initiated" && session.upload_status !== "in_progress") {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_COMPLETABLE");
+      }
+      if (session.asset_upload_status !== "pending") {
+        throw new Error("EPER_CUSTOMER_ASSET_NOT_PENDING_UPLOAD");
       }
       if (new Date(session.expires_at).getTime() <= Date.now()) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
