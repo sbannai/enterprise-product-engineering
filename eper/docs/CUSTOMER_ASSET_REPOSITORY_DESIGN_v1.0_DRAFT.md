@@ -106,7 +106,7 @@ No fixed maximum upload size is approved by this design. Customer-level quotas, 
 
 | Operation | Purpose | Required controls |
 |---|---|---|
-| `POST /customer/assets/uploads` | Reserve metadata and upload session | Customer Admin permission, quota, idempotency, MIME/size policy |
+| `POST /customer/applications/{appId}/assets/{assetId}/uploads` | Issue a short-lived upload grant and reserve the upload session | Authenticated actor, tenant/application assignment, client-assets entitlement, idempotency, provider allowlist, durable audit |
 | `POST /customer/assets/uploads/{id}/complete` | Verify transfer and queue scanning | Tenant/session match, checksum and size verification |
 | `GET /customer/assets` | List customer-shared repository | Tenant-scoped pagination and actor authorization |
 | `GET /customer/assets/{id}` | Read safe metadata | Tenant + asset scope |
@@ -154,7 +154,8 @@ Provider configuration belongs to the customer's configured integration settings
 | Existing application asset manifest and download adapter | Present; configuration-backed manifest |
 | Durable metadata, explicit links and upload-session schema | Migration added in this PR; requires PostgreSQL execution/integration validation |
 | PostgreSQL repository/store implementation | Not implemented |
-| Upload provider adapter and completion verification | Not implemented |
+| Provider-neutral upload capability adapter and audited reservation API | Implemented behind injected provider port; live provider wiring pending |
+| Provider-side object verification and upload completion API | Not implemented |
 | Malware scanning and quarantine worker | Not implemented |
 | Customer repository and application UI | Not implemented |
 | Durable audit wiring for all repository operations | Not implemented |
@@ -182,3 +183,11 @@ The implementation branch now includes a PostgreSQL metadata repository and an e
 This repository does not yet transfer binary bytes, calculate the checksum from the received stream, inspect file signatures/content, issue upload grants, run an antivirus engine, or implement an actual cloud storage adapter. The current completion method validates metadata supplied by its trusted caller. Those provider and streaming controls remain required before production readiness.
 
 The PostgreSQL integration test is opt-in when `EPER_PAYMENT_DATABASE_URL` or `DATABASE_URL` is configured. A skipped integration test is not evidence of database behavior. Static migration checks and API tests using an injected repository are separate evidence classes from a live PostgreSQL integration run.
+
+### Upload reservation API implementation update (2026-11-04)
+
+- Added `POST /customer/applications/{appId}/assets/{assetId}/uploads`. It resolves the authenticated customer identity, verifies the customer asset module and both tenant/application and actor/application assignment, and rejects requests unless PostgreSQL asset persistence, durable audit mode, repository and upload provider are available.
+- Added a provider-neutral upload adapter over `IntegrationPort`. It requires an opaque provider-side upload reference, HTTPS URL, exact configured host allowlist, PUT/POST method, safe headers and a capability lifetime no longer than 15 minutes.
+- Added upload orchestration that issues the provider capability, persists the opaque provider reference and idempotent upload reservation with transactional audit, and only then returns the signed capability to the caller. The provider reference is never returned to the browser.
+- The API is deliberately fail-closed when no upload provider port is injected. The current application bootstrap does not select or configure a real storage vendor, and no external provider or cloud resource has been provisioned. API tests inject a fake provider and repository; they are contract tests, not live provider or PostgreSQL evidence.
+- Upload completion remains a separate trusted-server operation. Client-supplied checksum, MIME or size values must not be treated as provider verification. A provider inspection adapter must verify object existence, actual bytes, checksum and detected content type before calling the repository completion method.
