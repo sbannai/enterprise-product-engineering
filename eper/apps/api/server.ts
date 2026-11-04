@@ -2040,7 +2040,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 400, { error: "invalid_scan_job_reference" }); return;
         }
         const session = await options.customerAssetRepository.getUploadSessionForScanning(
-          tenantId, applicationId, uploadSessionId,
+          tenantId, applicationId, uploadSessionId, workerId,
         );
         if (!session) { sendJson(request, response, 404, { error: "scan_job_not_found_or_not_pending" }); return; }
         const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
