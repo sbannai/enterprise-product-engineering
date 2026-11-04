@@ -25,7 +25,7 @@ export interface CustomerAssetUploadStartInput {
 }
 
 export interface CustomerAssetUploadStartDependencies {
-  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload">;
+  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "finalizeUploadGrant" | "failUploadReservation">;
   issueGrant: (request: StorageUploadRequest, requestId: string) => Promise<{
     providerUploadReference: string;
     url: string;
@@ -54,6 +54,25 @@ export async function startCustomerAssetUpload(
   }
 
   const uploadSessionId = randomUUID();
+  const reservation = {
+    tenantId: input.tenantId,
+    applicationId: input.applicationId,
+    actorId: input.actorId,
+    environment: input.environment,
+    correlationId: input.correlationId,
+    assetId: input.assetId,
+    expectedSizeBytes: input.expectedSizeBytes,
+    idempotencyKey: input.idempotencyKey,
+    uploadSessionId,
+  };
+
+  // Claim the idempotency key durably before asking a provider to mint a
+  // capability. The repository serializes concurrent claims in PostgreSQL.
+  const reservedSessionId = await dependencies.repository.reserveUpload(reservation);
+  if (reservedSessionId !== uploadSessionId) {
+    throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_REPLAY_CONFLICT");
+  }
+
   const request: StorageUploadRequest = {
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -64,33 +83,52 @@ export async function startCustomerAssetUpload(
     mimeType: input.mimeType,
     sizeBytes: input.expectedSizeBytes,
   };
-  const grant = await dependencies.issueGrant(request, input.correlationId);
-  if (!grant) return null;
+
+  let grant: Awaited<ReturnType<CustomerAssetUploadStartDependencies["issueGrant"]>>;
+  try {
+    grant = await dependencies.issueGrant(request, input.correlationId);
+  } catch (error) {
+    await dependencies.repository.failUploadReservation({
+      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+      reason: "provider_error",
+    });
+    throw error;
+  }
+  if (!grant) {
+    await dependencies.repository.failUploadReservation({
+      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+      reason: "provider_unavailable",
+    });
+    return null;
+  }
 
   const expiry = Date.parse(grant.expiresAt);
   const now = (dependencies.now ?? Date.now)();
-  if (!Number.isFinite(expiry) || expiry <= now || expiry - now > 15 * 60_000) return null;
+  if (!Number.isFinite(expiry) || expiry <= now || expiry - now > 15 * 60_000 ||
+      !grant.providerUploadReference?.trim() || grant.providerUploadReference.length > 2048) {
+    await dependencies.repository.failUploadReservation({
+      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+      reason: "invalid_provider_grant",
+    });
+    return null;
+  }
 
-  // Persist the opaque provider reference and audit event before returning the
-  // capability to the browser. If persistence fails, the grant remains undisclosed
-  // and expires naturally at the provider.
-  const reservedSessionId = await dependencies.repository.reserveUpload({
-    tenantId: input.tenantId,
-    applicationId: input.applicationId,
-    actorId: input.actorId,
-    environment: input.environment,
-    correlationId: input.correlationId,
-    assetId: input.assetId,
-    expectedSizeBytes: input.expectedSizeBytes,
-    idempotencyKey: input.idempotencyKey,
-    providerUploadReference: grant.providerUploadReference,
-    expiresAt: grant.expiresAt,
-    uploadSessionId,
-  });
-  if (reservedSessionId !== uploadSessionId) {
-    // A duplicate idempotency key refers to a prior provider session. Never return
-    // a freshly issued capability that does not match the persisted session.
-    throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_REPLAY_CONFLICT");
+  try {
+    await dependencies.repository.finalizeUploadGrant({
+      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+      providerUploadReference: grant.providerUploadReference, expiresAt: grant.expiresAt,
+    });
+  } catch (error) {
+    await dependencies.repository.failUploadReservation({
+      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+      reason: "grant_persistence_failed",
+    });
+    throw error;
   }
 
   return {
