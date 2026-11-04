@@ -389,7 +389,7 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
   const csrfSecret = "customer-asset-full-flow-csrf-secret-000000000000";
   const csrfToken = createCustomerCsrfToken(sessionToken, csrfSecret);
   const mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const uploadSessionId = "00000000-0000-4000-8000-000000000002";
+  let uploadSessionId = "";
   Object.assign(process.env, {
     EPER_CUSTOMER_ASSETS_API_ENABLED: "true",
     EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
@@ -438,7 +438,7 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
         assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-oidc-002"]);
         return { originalFileName: "proposal.docx", mimeType, sizeBytes: 4096 };
       },
-      async reserveUpload(input) { events.push("reservation"); return input.uploadSessionId; },
+      async reserveUpload(input) { events.push("reservation"); uploadSessionId = input.uploadSessionId; return uploadSessionId; },
       async finalizeUploadGrant(input) { events.push("grant-finalized"); assert.equal(input.providerUploadReference, "private-provider-reference"); },
       async failUploadReservation() { events.push("reservation-failed"); },
       async getUploadSessionForVerification(tenantId, applicationId, sessionId) {
