@@ -274,8 +274,43 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.equal(await repository.renewScanJobLease({
         tenantId, applicationId, uploadSessionId: sessionId, workerId: "asset-scanner:other-worker", leaseMs: 60_000,
       }), false, "a different worker cannot renew the lease");
-      const clean = await repository.recordScanResult({
+      // Simulate a worker that finishes after its lease has expired. A replacement
+      // worker must acquire the job; the stale worker must not publish its result.
+      const leaseExpiryClient = await pool.connect();
+      try {
+        await leaseExpiryClient.query("BEGIN");
+        await leaseExpiryClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        await leaseExpiryClient.query(
+          "UPDATE eper_customer_asset_scan_jobs SET lease_expires_at = now() - interval '1 second' WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
+          [tenantId, applicationId, sessionId],
+        );
+        await leaseExpiryClient.query("COMMIT");
+      } finally {
+        try { await leaseExpiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        leaseExpiryClient.release();
+      }
+      assert.equal(await repository.getUploadSessionForScanning(
+        tenantId, applicationId, sessionId, workerId,
+      ), null, "expired lease cannot expose provider object to stale worker");
+      assert.equal(await repository.renewScanJobLease({
+        tenantId, applicationId, uploadSessionId: sessionId, workerId, leaseMs: 60_000,
+      }), false, "expired lease cannot be renewed by stale worker");
+      const replacementWorkerId = "asset-scanner:replacement-worker";
+      const replacementClaims = await repository.claimScanJobs({
+        tenantId, applicationId, workerId: replacementWorkerId, scannerServiceId: "asset-scanner",
+        environment: "uat", limit: 10, leaseMs: 60_000,
+      });
+      assert.ok(replacementClaims.some((job) => job.uploadSessionId === sessionId),
+        "replacement worker reclaims expired scan job");
+      await assert.rejects(() => repository.recordScanResult({
         tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
+        correlationId, uploadSessionId: sessionId, scanStatus: "clean",
+      }), /SCAN_LEASE_LOST/, "stale worker cannot publish a clean result");
+      const clean = await repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId: replacementWorkerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       });
       assert.equal(clean.uploadStatus, "available");
@@ -292,7 +327,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         "another tenant cannot download the asset");
 
       assert.deepEqual(await repository.recordScanResult({
-        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId, environment: "uat",
+        tenantId, applicationId, scannerServiceId: "asset-scanner", workerId: replacementWorkerId, environment: "uat",
         correlationId, uploadSessionId: sessionId, scanStatus: "clean",
       }), clean, "duplicate scanner callback is idempotent");
       await assert.rejects(() => repository.recordScanResult({
