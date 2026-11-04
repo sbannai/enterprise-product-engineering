@@ -19,7 +19,7 @@ test("internal asset scan requires service bearer token and records only trusted
         calls.push({ type: "lookup", tenantId, applicationId, uploadSessionId });
         return {
           assetId: "asset-a", providerUploadReference: "private-object-ref",
-          checksumSha256: "a".repeat(64), sizeBytes: 4096, mimeType: "application/pdf",
+          checksumSha256: "a".repeat(64), sizeBytes: 4096, mimeType: "application/pdf", attempt: 2,
         };
       },
       async recordScanResult(input) {
@@ -41,7 +41,7 @@ test("internal asset scan requires service bearer token and records only trusted
       tenantId: "tenant-a", applicationId: "app-a",
       uploadSessionId: "00000000-0000-4000-8000-000000000001",
       workerId: "eper-malware-scanner:worker-01",
-      scanStatus: "clean", scannerServiceId: "attacker-controlled",
+      scanStatus: "clean", scannerServiceId: "attacker-controlled", attempt: 1,
     });
     const denied = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
     assert.equal(denied.status, 401);
