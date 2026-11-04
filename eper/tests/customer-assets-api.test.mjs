@@ -389,3 +389,73 @@ test("asset downloads enforce durable tenant ownership and actor membership with
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+test("customer asset manifest uses PostgreSQL repository exclusively in durable mode", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON",
+    "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "durable-customer-assets-api-token-0000000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON;
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON;
+  delete process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE;
+  delete process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE;
+  const calls = [];
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: { async listActive(tenantId) {
+      assert.equal(tenantId, "tenant-a"); return ["app-a", "app-b"];
+    } },
+    actorApplicationAssignmentStore: { async listActive(tenantId, actorId) {
+      assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]); return ["app-a"];
+    } },
+    customerAssetRepository: { async listForApplication(tenantId, applicationId) {
+      calls.push([tenantId, applicationId]);
+      return [{
+        tenantId, assetId: "asset-001", scope: "customer_shared", ownerApplicationId: null,
+        displayName: "Approved brief.docx", originalFileName: "brief.docx",
+        mediaCategory: "document", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 4096, checksumSha256: "a".repeat(64),
+        storageAdapterKey: "opaque-adapter", uploadStatus: "available", scanStatus: "clean",
+        lifecycleStatus: "active", version: 2, createdBy: "admin", createdAt: new Date().toISOString(),
+      }];
+    } },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer/assets", {
+      headers: { authorization: "Bearer " + credential },
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.total, 1);
+    assert.equal(body.assets[0].id, "asset-001");
+    assert.equal(body.assets[0].applicationId, "app-a");
+    assert.equal(body.assets[0].name, "Approved brief.docx");
+    assert.equal("storageObjectReference" in body.assets[0], false);
+    assert.deepEqual(calls, [["tenant-a", "app-a"]],
+      "repository reads are limited to the intersection of tenant and actor application assignments");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
+test("customer asset API refuses PostgreSQL mode without its durable repository", () => {
+  const previous = process.env.EPER_CUSTOMER_ASSET_PERSISTENCE;
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  try {
+    assert.throws(() => createAppServer(), /CUSTOMER_ASSET_REPOSITORY_REQUIRED_IN_POSTGRES_MODE/);
+  } finally {
+    if (previous === undefined) delete process.env.EPER_CUSTOMER_ASSET_PERSISTENCE;
+    else process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = previous;
+  }
+});
