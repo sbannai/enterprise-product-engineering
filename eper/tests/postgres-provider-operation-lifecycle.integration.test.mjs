@@ -350,6 +350,50 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       );
       assert.equal(danglingOperation.rows[0].count, 0,
         "the failed operation transaction must not leave a dangling queue row");
+
+      // Retention is fail-closed until an explicit policy is attached. Legal
+      // hold overrides an otherwise expired policy; successful deletion must
+      // detach the operation reference and append an audit event atomically.
+      scopedAccess = true;
+      await assert.rejects(
+        () => scopedPayloadStore.delete(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE",
+      );
+      await pool.query(
+        `UPDATE eper_provider_payloads
+         SET expires_at=NOW()-INTERVAL '1 minute',
+             retention_policy_id=$4, retention_policy_version='v1',
+             legal_hold=TRUE
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+        [tenantId, applicationId, atomicFirst.operation.operationId, "retention-test-" + suffix],
+      );
+      await assert.rejects(
+        () => scopedPayloadStore.delete(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_LEGAL_HOLD_ACTIVE",
+      );
+      await pool.query(
+        `UPDATE eper_provider_payloads SET legal_hold=FALSE
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+        [tenantId, applicationId, atomicFirst.operation.operationId],
+      );
+      assert.equal(await scopedPayloadStore.delete(exactPayloadReference), true);
+      const detachedOperation = await pool.query(
+        `SELECT payload_reference FROM eper_provider_operations
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+        [tenantId, applicationId, atomicFirst.operation.operationId],
+      );
+      assert.equal(detachedOperation.rows[0].payload_reference, null,
+        "retention deletion must detach the operation's reciprocal payload reference");
+      const deletionAudit = await pool.query(
+        `SELECT action FROM eper_audit_events
+         WHERE tenant_id=$1 AND application_id=$2
+           AND resource_type='provider_payload' AND resource_id=$3`,
+        [tenantId, applicationId, exactPayloadReference.reference],
+      );
+      assert.ok(deletionAudit.rows.some(row => row.action === "provider.payload.deleted"),
+        "payload deletion must append an actor-attributed audit event");
+      assert.equal(await scopedPayloadStore.delete(exactPayloadReference), false,
+        "repeated deletion must be idempotent");
     } finally {
       const cleanup = await pool.connect();
       try {
