@@ -143,8 +143,19 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         finalizedClient.release();
       }
 
+      const failedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Failed reservation test file", originalFileName: "failed-reservation.docx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 1536, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-failed-reservation",
+      });
+      assetIds.push(failedAsset.assetId);
       const failedReservationId = await repository.reserveUpload({
-        ...reservationInput, idempotencyKey: "asset-failed-" + randomUUID(),
+        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+        idempotencyKey: "asset-failed-" + randomUUID(),
       });
       await repository.failUploadReservation({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
@@ -266,7 +277,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 15, "three creates, four reservations, one grant finalization, one failed reservation, two application links, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 16, "four creates, four reservations, one grant finalization, one failed reservation, two application links, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
