@@ -277,10 +277,11 @@ export class PostgresCustomerAssetRepository {
         upload_session_id: string; asset_id: string; actor_id: string;
         expected_size_bytes: number | string; expires_at: string | Date;
         upload_status: string; asset_mime_type: string; asset_upload_status: string;
+        session_not_expired: boolean;
       }>(
         `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
-          s.expires_at, s.upload_status, a.mime_type AS asset_mime_type,
-          a.upload_status AS asset_upload_status
+          s.expires_at, s.upload_status, (s.expires_at > now()) AS session_not_expired,
+          a.mime_type AS asset_mime_type, a.upload_status AS asset_upload_status
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
@@ -298,7 +299,7 @@ export class PostgresCustomerAssetRepository {
       if (session.asset_upload_status !== "pending") {
         throw new Error("EPER_CUSTOMER_ASSET_NOT_PENDING_UPLOAD");
       }
-      if (new Date(session.expires_at).getTime() <= Date.now()) {
+      if (!session.session_not_expired) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
       }
       if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
@@ -385,9 +386,6 @@ export class PostgresCustomerAssetRepository {
       const current = locked.rows[0];
       if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
       if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
-      if (current.upload_status !== "scanning" && current.scan_status === "pending") {
-        throw new Error("EPER_CUSTOMER_ASSET_NOT_AWAITING_SCAN");
-      }
       if (current.scan_status !== "pending") {
         if (current.scan_status === input.scanStatus) {
           const existing = await client.query<AssetRow>(
@@ -402,6 +400,9 @@ export class PostgresCustomerAssetRepository {
           return mapAsset(existing.rows[0]);
         }
         throw new Error("EPER_CUSTOMER_ASSET_SCAN_RESULT_CONFLICT");
+      }
+      if (current.upload_status !== "scanning") {
+        throw new Error("EPER_CUSTOMER_ASSET_NOT_AWAITING_SCAN");
       }
       const uploadStatus: CustomerAssetStatus =
         input.scanStatus === "clean" || input.scanStatus === "not_required" ? "available"
