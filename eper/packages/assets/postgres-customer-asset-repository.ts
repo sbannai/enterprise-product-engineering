@@ -352,6 +352,93 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  /**
+   * Records the result returned by a trusted scanner integration. The public
+   * upload-completion path cannot self-assert a clean scan; only this separately
+   * authorized service operation can move a scanning asset to available.
+   */
+  async recordScanResult(input: {
+    tenantId: string; applicationId: string; scannerServiceId: string;
+    environment: AuditEnvironment; correlationId: string; uploadSessionId: string;
+    scanStatus: "clean" | "infected" | "error" | "not_required";
+  }): Promise<CustomerAsset> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.scannerServiceId, "scannerServiceId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const locked = await client.query<{
+        asset_id: string; upload_status: string; scan_status: string;
+        lifecycle_status: string; session_status: string;
+      }>(
+        `SELECT a.asset_id, a.upload_status, a.scan_status, a.lifecycle_status,
+          s.upload_status AS session_status
+         FROM eper_customer_asset_upload_sessions s
+         JOIN eper_customer_assets a
+           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
+         WHERE s.tenant_id = $1 AND s.upload_session_id = $2
+         FOR UPDATE OF s, a`,
+        [input.tenantId, input.uploadSessionId],
+      );
+      const current = locked.rows[0];
+      if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
+      if (current.upload_status !== "scanning" && current.scan_status === "pending") {
+        throw new Error("EPER_CUSTOMER_ASSET_NOT_AWAITING_SCAN");
+      }
+      if (current.scan_status !== "pending") {
+        if (current.scan_status === input.scanStatus) {
+          const existing = await client.query<AssetRow>(
+            `SELECT tenant_id, asset_id, repository_scope, owner_application_id, display_name,
+              original_file_name, media_category, mime_type, file_extension, size_bytes,
+              checksum_sha256, storage_adapter_key, upload_status, scan_status, lifecycle_status,
+              version, created_by, created_at
+             FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2`,
+            [input.tenantId, current.asset_id],
+          );
+          await client.query("COMMIT");
+          return mapAsset(existing.rows[0]);
+        }
+        throw new Error("EPER_CUSTOMER_ASSET_SCAN_RESULT_CONFLICT");
+      }
+      const uploadStatus: CustomerAssetStatus =
+        input.scanStatus === "clean" || input.scanStatus === "not_required" ? "available"
+          : input.scanStatus === "infected" ? "rejected" : "failed";
+      const lifecycleStatus = input.scanStatus === "infected" || input.scanStatus === "error"
+        ? "quarantined" : "active";
+      const updated = await client.query<AssetRow>(
+        `UPDATE eper_customer_assets
+            SET upload_status = $3, scan_status = $4, lifecycle_status = $5,
+                updated_by = $6, updated_at = now(), version = version + 1
+          WHERE tenant_id = $1 AND asset_id = $2
+          RETURNING tenant_id, asset_id, repository_scope, owner_application_id, display_name,
+            original_file_name, media_category, mime_type, file_extension, size_bytes,
+            checksum_sha256, storage_adapter_key, upload_status, scan_status, lifecycle_status,
+            version, created_by, created_at`,
+        [input.tenantId, current.asset_id, uploadStatus, input.scanStatus, lifecycleStatus, input.scannerServiceId],
+      );
+      const row = updated.rows[0];
+      if (!row) throw new Error("EPER_CUSTOMER_ASSET_SCAN_RESULT_UPDATE_FAILED");
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "service", actorId: input.scannerServiceId, action: "customer.asset.scan.complete",
+        outcome: "success", resourceType: "customer-asset", resourceId: current.asset_id,
+        correlationId: input.correlationId, source: "integration",
+        operationName: "customer asset scanner callback",
+        payload: { assetId: current.asset_id, scanStatus: input.scanStatus, resultingAssetStatus: uploadStatus },
+      });
+      await client.query("COMMIT");
+      return mapAsset(row);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async link(input: LinkCustomerAssetInput): Promise<void> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
