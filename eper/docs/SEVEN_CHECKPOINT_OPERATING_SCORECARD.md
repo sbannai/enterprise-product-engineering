@@ -1956,3 +1956,8 @@ The Chromium OIDC/browser workflow [41856413726](https://github.com/sbannai/ente
 - #380 and #385 both carry CW-060; reconcile once, preserving #380's CW-061.
 - PostgreSQL remains the approved target. #389 is an evaluation plan only; no comparative live MySQL/MongoDB benchmark or engine switch is evidenced.
 - No PR was merged, no branch was deleted or force-updated, no repository settings were changed, no chargeable cloud resource was provisioned, and no real external/provider action was triggered. This record does not make a business-acceptance or UAT decision.
+
+
+## Browser evidence correction — 2026-11-04 20:56 IST
+
+The earlier 20:45 snapshot recorded PR #394's Chromium job as in progress. It has since completed successfully on the same exact head 09ee86677a4af5114a479cc9fe232be497fcd0d0. Browser run [41856413726](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41856413726) passed the synthetic-IdP customer OIDC/workspace/support/logout/revocation journey (1/1) and Product Admin application-remediation journey (1/1). A fresh direct check-run read now shows all seven #394 checks completed successfully with head_sha equal to 09ee86677a4af5114a479cc9fe232be497fcd0d0. This does not add a same-commit integrated gate or a dedicated provider-lifecycle run, and it does not configure a real storage/scanner provider. The earlier in-progress statement above is superseded by this correction.
