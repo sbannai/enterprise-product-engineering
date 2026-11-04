@@ -195,8 +195,17 @@ export class PostgresCustomerAssetRepository {
           version, created_by, created_at
          FROM eper_customer_assets
          WHERE tenant_id = $1 AND asset_id = $2
-           AND upload_status = 'pending' AND lifecycle_status = 'active'`,
-        [tenantId, assetId],
+           AND upload_status = 'pending' AND lifecycle_status = 'active'
+           AND (
+             (repository_scope = 'application_restricted' AND owner_application_id = $3)
+             OR (repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = eper_customer_assets.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = eper_customer_assets.asset_id
+             ))
+           )`,
+        [tenantId, assetId, applicationId]
       );
       await client.query("COMMIT");
       return result.rows[0] ? mapAsset(result.rows[0]) : null;
