@@ -1193,6 +1193,30 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const correlationId = resolveApiRequestId(request);
         if (workflowInstanceListRoute) {
           if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+          const applicationId = workflowInstanceListRoute[1];
+          // A valid customer credential alone is not proof of membership in every
+          // application in its tenant. Enforce both tenant and actor assignment
+          // boundaries before asking the workflow store to read any queue rows.
+          const tenantApplications = options.tenantApplicationAssignmentStore
+            ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+            : (() => {
+                try {
+                  const parsed: unknown = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+                  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                    ? (parsed as Record<string, unknown>)[identity.tenantId] : [];
+                } catch { return []; }
+              })();
+          if (!Array.isArray(tenantApplications) || !tenantApplications.includes(applicationId)) {
+            sendApiError(request, response, 404, "APPLICATION_NOT_FOUND", "The application was not found."); return;
+          }
+          const actorAssigned = options.actorApplicationAssignmentStore
+            ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+            : process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" &&
+              identity.applicationIds?.includes(applicationId) === true;
+          if (!actorAssigned) {
+            sendApiError(request, response, 403, "ACTOR_NOT_ASSIGNED_TO_APPLICATION",
+              "The actor is not assigned to this application."); return;
+          }
           const rawLimit = requestUrl.searchParams.get("limit");
           const rawOffset = requestUrl.searchParams.get("offset");
           const limit = rawLimit === null ? 25 : Number(rawLimit);
