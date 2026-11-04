@@ -43,7 +43,7 @@ export function validateCustomerAssetUploadPolicy(
       throw new Error("EPER_CUSTOMER_ASSET_FILE_POLICY_INVALID");
     }
     const entry = value as Record<string, unknown>;
-    if (typeof entry.extension !== "string" || !/^\.[a-z0-9]{1,12}$/.test(entry.extension) ||
+    if (typeof entry.extension !== "string" || !/^\.[a-z0-9]{1,12}$/i.test(entry.extension) ||
         typeof entry.mimeType !== "string" || !/^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/.test(entry.mimeType) ||
         !Number.isSafeInteger(entry.maxSizeBytes) || Number(entry.maxSizeBytes) <= 0) {
       throw new Error("EPER_CUSTOMER_ASSET_FILE_POLICY_INVALID");
