@@ -385,7 +385,7 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
   const keys = [
     "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
     "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
-    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON",
     "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES", "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY",
     "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
   ];
@@ -403,6 +403,7 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
     EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
     EPER_CUSTOMER_WORKSPACE_MODULES_JSON: JSON.stringify({ "tenant-a": ["client-assets"] }),
     EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON: JSON.stringify([mimeType]),
+    EPER_CUSTOMER_ASSET_FILE_POLICY_JSON: JSON.stringify({ files: [{ extension: ".docx", mimeType, maxSizeBytes: 10485760 }] }),
     EPER_CUSTOMER_ASSET_MAX_FILE_BYTES: "10485760",
     EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY: "customer-storage",
     EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON: JSON.stringify(["storage.example.test"]),
@@ -497,8 +498,9 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
       method: "POST", headers,
       body: JSON.stringify({ fileName: "proposal.docx", mimeType, sizeBytes: 4096, idempotencyKey: "oidc-asset-upload-idempotency-001" }),
     });
-    assert.equal(started.status, 201);
-    const grant = (await started.json()).upload;
+    const startedPayload = await started.json();
+    assert.equal(started.status, 201, JSON.stringify(startedPayload));
+    const grant = startedPayload.upload;
     assert.equal(grant.method, "PUT");
     assert.equal(grant.url, "https://storage.example.test/upload?signature=synthetic");
     assert.equal(grant.uploadSessionId, uploadSessionId);
