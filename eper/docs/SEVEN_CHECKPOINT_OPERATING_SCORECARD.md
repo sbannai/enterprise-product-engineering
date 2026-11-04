@@ -1467,3 +1467,23 @@ The previous #386 head's green runs are not reused. The branch is now synchroniz
 The asset migration stack remains separate from the provider payload stack. This #386 clean clone applies customer asset migrations 021/022/023 and the seven migration groups, but it does not include provider payload migrations 021/022 from #379/#390. A combined provider-plus-asset migration candidate is still required. The schema still permits one upload session per tenant/asset; retry after a failed/expired session is not proven and needs an explicit lifecycle decision.
 
 No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
+
+
+## 2026-11-04 14:37 IST — #390 exact-head payload-store regression coverage
+
+Main remains `2c380d79c55c9183a42ed534ffd1a504f7d41316`; approved requirements remain 228 across 38 chapters. This update records a focused test-coverage correction on the owning #390 branch.
+
+A review of #390 found that the prior change had replaced the earlier PostgreSQL payload-store integration test while adapting operation IDs to UUID. The replacement proved orphan rejection but no longer directly proved ciphertext-only database persistence and the database store's exact-scope authorization behavior. Those assertions were restored in the existing PostgreSQL provider-operation lifecycle integration test, using the real `enqueueWithPayload()` transaction so both deferred foreign keys are satisfied.
+
+Current #390 head: `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f`.
+
+Exact-head Actions:
+- Fresh clone [41805934645]: PASS; 1,439 tests / 1,435 passed / 0 failed / 4 skipped; `npm run dev:verify`; all seven migration groups including identity; migration repeatability; disposable backup/restore 76/76.
+- PostgreSQL integration [41805934647]: PASS.
+- EPER CI [41805934653]: PASS.
+- Same-commit integrated validation [41805934725]: PASS; integrated PostgreSQL 1,423 tests / 1,417 passed / 0 failed / 6 skipped; G9 traceability 5/5. The separate 228/38 pilot-matrix job was skipped on this workflow, so no new matrix result is claimed for this head.
+- The fresh-clone log confirms the provider operation lifecycle integration test passed, including ciphertext-only persistence, read/decrypt round-trip, cross-application denial and fail-closed read/create/delete authorization.
+
+The new commit is on #390's owning branch; no mainline code changed. #390 remains stacked on #379. #381/#382 still require synchronization with #390 before the provider stack is integrated. The combined provider-plus-customer-asset migration stack remains unproven in one clean clone.
+
+No approved requirement or chapter changed. No PR was merged, no branch deleted, no chargeable cloud resource provisioned and no real external/provider action triggered.
