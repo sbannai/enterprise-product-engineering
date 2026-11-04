@@ -34,6 +34,89 @@ export interface StorageProviderRegistration {
 }
 
 /**
+ * Enforces the same bounded JSON-schema vocabulary accepted by the durable
+ * provider catalogue. This prevents metadata that passes registration checks
+ * but later fails when persisted.
+ */
+function validateConfigurationSchema(value: Record<string, unknown>, depth = 0): void {
+  const invalid = () => { throw new Error("STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID"); };
+  if (depth > 8 || !value || typeof value !== "object" || Array.isArray(value)) invalid();
+  let serialized: string;
+  try { serialized = JSON.stringify(value); } catch { invalid(); }
+  if (typeof serialized !== "string" || serialized.length > 16_384) invalid();
+  const allowed = new Set([
+    "type", "title", "description", "properties", "required",
+    "additionalProperties", "enum", "items", "minLength", "maxLength",
+    "minimum", "maximum",
+  ]);
+  const keys = Object.keys(value);
+  if (keys.length > 64 || keys.some(key => !allowed.has(key))) invalid();
+  const validTypes = ["object", "array", "string", "number", "integer", "boolean"];
+  if (value.type !== undefined &&
+      (typeof value.type !== "string" || !validTypes.includes(value.type))) invalid();
+  if (value.title !== undefined &&
+      (typeof value.title !== "string" || value.title.length > 160)) invalid();
+  if (value.description !== undefined &&
+      (typeof value.description !== "string" || value.description.length > 512)) invalid();
+
+  let propertyNames = new Set<string>();
+  if (value.properties !== undefined) {
+    if ((value.type !== undefined && value.type !== "object") ||
+        !value.properties || typeof value.properties !== "object" ||
+        Array.isArray(value.properties)) invalid();
+    const properties = value.properties as Record<string, unknown>;
+    const entries = Object.entries(properties);
+    if (entries.length > 64) invalid();
+    for (const [key, child] of entries) {
+      if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key) ||
+          !child || typeof child !== "object" || Array.isArray(child)) invalid();
+      validateConfigurationSchema(child as Record<string, unknown>, depth + 1);
+    }
+    propertyNames = new Set(Object.keys(properties));
+  }
+  if (value.required !== undefined) {
+    if (!Array.isArray(value.required) || value.required.length > 64 ||
+        new Set(value.required).size !== value.required.length ||
+        value.required.some(key => typeof key !== "string" ||
+          !/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(key) || !propertyNames.has(key))) invalid();
+  }
+  if (value.additionalProperties !== undefined &&
+      typeof value.additionalProperties !== "boolean") {
+    const nested = value.additionalProperties;
+    if (!nested || typeof nested !== "object" || Array.isArray(nested)) invalid();
+    validateConfigurationSchema(nested as Record<string, unknown>, depth + 1);
+  }
+  if (value.items !== undefined) {
+    if ((value.type !== undefined && value.type !== "array") ||
+        !value.items || typeof value.items !== "object" || Array.isArray(value.items)) invalid();
+    validateConfigurationSchema(value.items as Record<string, unknown>, depth + 1);
+  }
+  if (value.enum !== undefined &&
+      (!Array.isArray(value.enum) || value.enum.length < 1 || value.enum.length > 100 ||
+       value.enum.some(item => item !== null &&
+         !["string", "number", "boolean"].includes(typeof item)) ||
+       new Set(value.enum.map(item => JSON.stringify(item))).size !== value.enum.length)) invalid();
+
+  for (const key of ["minLength", "maxLength"] as const) {
+    const bound = value[key];
+    if (bound !== undefined &&
+        (!Number.isInteger(bound) || Number(bound) < 0 || Number(bound) > 4096)) invalid();
+  }
+  if ((value.minLength !== undefined || value.maxLength !== undefined) &&
+      (value.type !== undefined && value.type !== "string")) invalid();
+  if (value.minLength !== undefined && value.maxLength !== undefined &&
+      Number(value.minLength) > Number(value.maxLength)) invalid();
+  for (const key of ["minimum", "maximum"] as const) {
+    const bound = value[key];
+    if (bound !== undefined && (typeof bound !== "number" || !Number.isFinite(bound))) invalid();
+  }
+  if ((value.minimum !== undefined || value.maximum !== undefined) &&
+      (value.type !== undefined && value.type !== "number" && value.type !== "integer")) invalid();
+  if (value.minimum !== undefined && value.maximum !== undefined &&
+      Number(value.minimum) > Number(value.maximum)) invalid();
+}
+
+/**
  * Rejects provider registrations that exceed the existing catalogue registries.
  * This keeps this contract composable with ProviderCatalogueRegistries rather
  * than introducing a second mutable registry.
@@ -93,6 +176,7 @@ export function validateStorageProviderRegistration(
       /(?:secret|password|token|private.?key|client.?secret|access.?key)/i.test(serialized)) {
     throw new Error("STORAGE_PROVIDER_SECRET_METADATA_FORBIDDEN");
   }
+  validateConfigurationSchema(schema);
 }
 
 const commonSchema = {
