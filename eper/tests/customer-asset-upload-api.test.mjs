@@ -82,7 +82,7 @@ test("customer upload reservation fails closed when provider or repository confi
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
-  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [token]: { tenantId: "tenant-a", actorId: "actor-a", applicationIds: ["app-a"] } });
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
   const server = createAppServer({ customerAssetRepository: { async getPendingUploadAsset() { throw new Error("must not run"); }, async reserveUpload() { throw new Error("must not run"); } } });
