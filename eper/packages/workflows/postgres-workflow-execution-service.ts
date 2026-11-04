@@ -376,7 +376,7 @@ export class PostgresWorkflowExecutionService {
 
   /** Lists only instances visible to this actor in the requested tenant/application scope. */
   async listVisibleInstances(input: WorkflowExecutionContext & { limit?: number; offset?: number }): Promise<{
-    items: Array<Omit<WorkflowInstanceRecord, "data">>; total: number; limit: number; offset: number;
+    items: Array<Pick<WorkflowInstanceRecord, "instanceId" | "workflowId" | "status" | "currentActivityId" | "businessReference" | "version" | "createdAt" | "updatedAt" | "completedAt">>; total: number; limit: number; offset: number;
   }> {
     validateContext(input);
     const limit = input.limit ?? 25;
@@ -488,12 +488,9 @@ export class PostgresWorkflowExecutionService {
         // personal, financial or otherwise sensitive fields; fetch and expose it
         // only through a separately authorized detail/activity endpoint.
         items: result.rows.map(row => ({
-          instanceId: row.instance_id, tenantId: row.tenant_id, applicationId: row.application_id,
-          workflowId: row.workflow_id, definitionVersion: Number(row.definition_version),
-          definitionDigest: row.definition_digest.trim(), status: row.status,
+          instanceId: row.instance_id, workflowId: row.workflow_id, status: row.status,
           currentActivityId: row.current_activity_id, businessReference: row.business_reference,
-          version: Number(row.version), createdBy: row.created_by,
-          createdAt: new Date(row.created_at).toISOString(),
+          version: Number(row.version), createdAt: new Date(row.created_at).toISOString(),
           updatedAt: new Date(row.updated_at).toISOString(),
           completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
         })),
