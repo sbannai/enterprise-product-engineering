@@ -314,7 +314,7 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
         [scope.tenantId, scope.applicationId, scope.operationId, input.reference],
       );
       if ((detached.rowCount ?? 0) !== 1) {
-        throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_OPERATION_REFERENCE_MISMATCH");
+        throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_SCOPE_MISMATCH");
       }
       const removed = await client.query(
         `DELETE FROM eper_provider_payloads
