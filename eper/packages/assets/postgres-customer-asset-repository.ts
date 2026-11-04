@@ -152,23 +152,45 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const inserted = await client.query<AssetRow>(
+      await client.query(
         `INSERT INTO eper_customer_assets (
           tenant_id, asset_id, repository_scope, owner_application_id, display_name,
           original_file_name, media_category, mime_type, file_extension, size_bytes,
           checksum_sha256, storage_adapter_key, storage_object_reference, upload_status,
           scan_status, lifecycle_status, created_by, updated_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending','pending','active',$14,$14)
-        RETURNING tenant_id, asset_id, repository_scope, owner_application_id, display_name,
-          original_file_name, media_category, mime_type, file_extension, size_bytes,
-          checksum_sha256, storage_adapter_key, upload_status, scan_status, lifecycle_status,
-          version, created_by, created_at`,
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending','pending','active',$14,$14)`,
         [input.tenantId, assetId, input.scope, input.ownerApplicationId ?? null,
           input.displayName, input.originalFileName, input.mediaCategory, input.mimeType,
           input.fileExtension.toLowerCase().replace(/^\\./, ""), input.sizeBytes,
           input.checksumSha256 ?? null, input.storageAdapterKey, input.storageObjectReference, input.actorId],
       );
-      const row = inserted.rows[0];
+      // A shared asset is immediately linked to the application in which it was
+      // created. Other applications receive visibility only through an explicit
+      // later sharing authorization and link operation.
+      if (input.scope === "customer_shared") {
+        await client.query(
+          `INSERT INTO eper_customer_asset_application_links
+            (tenant_id, application_id, asset_id, linked_by, link_reason, idempotency_key)
+           VALUES ($1,$2,$3,$4,'created_in_application',$5)`,
+          [input.tenantId, input.applicationId, assetId, input.actorId, "asset-create-" + randomUUID()],
+        );
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "human", actorId: input.actorId, action: "customer.asset.application.link",
+          outcome: "success", resourceType: "customer-asset", resourceId: assetId,
+          correlationId: input.correlationId, source: "api", operationName: "POST /customer/assets",
+          payload: { assetId, applicationId: input.applicationId, reason: "created_in_application" },
+        });
+      }
+      const selected = await client.query<AssetRow>(
+        `SELECT tenant_id, asset_id, repository_scope, owner_application_id, display_name,
+          original_file_name, media_category, mime_type, file_extension, size_bytes,
+          checksum_sha256, storage_adapter_key, upload_status, scan_status, lifecycle_status,
+          version, created_by, created_at
+         FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2`,
+        [input.tenantId, assetId],
+      );
+      const row = selected.rows[0];
       if (!row) throw new Error("EPER_CUSTOMER_ASSET_CREATE_RETURNED_NO_ROW");
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
