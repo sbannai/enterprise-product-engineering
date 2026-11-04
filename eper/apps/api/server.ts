@@ -2077,7 +2077,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const failedAsset = await options.customerAssetRepository.recordScanResult({
             tenantId, applicationId, scannerServiceId,
             environment: options.adminConfigEnvironment ?? "sandbox",
-            correlationId: requestId, uploadSessionId, scanStatus: "error",
+            correlationId: requestId, uploadSessionId, workerId, scanStatus: "error",
           });
           sendJson(request, response, 200, { scanJob: { state: "dead_letter" }, asset: {
             assetId: failedAsset.assetId, uploadStatus: failedAsset.uploadStatus,
@@ -2087,12 +2087,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const asset = await options.customerAssetRepository.recordScanResult({
           tenantId, applicationId, scannerServiceId,
           environment: options.adminConfigEnvironment ?? "sandbox",
-          correlationId: requestId, uploadSessionId, scanStatus: outcome.scanStatus,
+          correlationId: requestId, uploadSessionId, workerId, scanStatus: outcome.scanStatus,
         });
-        const completed = await options.customerAssetRepository.completeScanJob({
-          tenantId, applicationId, uploadSessionId, workerId,
-        });
-        if (!completed) { sendJson(request, response, 409, { error: "scan_job_lease_lost_after_result" }); return; }
         sendJson(request, response, 200, { scanJob: { state: "completed" }, asset: {
           assetId: asset.assetId, uploadStatus: asset.uploadStatus,
           scanStatus: asset.scanStatus, lifecycleStatus: asset.lifecycleStatus,
