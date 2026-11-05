@@ -488,7 +488,7 @@ const platformAdminCredentialStore = platformAdminCredentialsEnabled && platform
 if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
 
 const server = createAppServer({
-  capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
+  capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled || customerAssetUploadAuthorizationEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
   agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, customerAssetRepository, assetUploadAuthorizer: customerAssetUploadAuthorizer,
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
