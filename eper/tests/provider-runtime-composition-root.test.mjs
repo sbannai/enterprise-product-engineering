@@ -60,3 +60,40 @@ test("provider runtime composition wires registry, scoped credentials, worker an
   assert.equal(typeof composition.worker.runOnce, "function");
   assert.equal(typeof composition.host.run, "function");
 });
+
+test("production composition rejects synthetic adapters and missing operational guardrails", () => {
+  const input = base();
+  input.runtimeEnvironment = "production";
+  input.workerOptions.auditEnvironment = "production";
+  input.hostOptions = { onEvent() {} };
+  assert.throws(() => createProviderRuntimeComposition(input), /PROVIDER_RUNTIME_PRODUCTION_GUARDRAILS_REQUIRED/);
+});
+
+test("production composition requires approved adapter attestation and bounded telemetry only", () => {
+  const input = base();
+  input.runtimeEnvironment = "production";
+  input.workerOptions.auditEnvironment = "production";
+  input.registrations[0].providerKey = "mail-provider";
+  input.registrations[0].adapterKey = "mail-provider.adapter";
+  input.registrations[0].executionClass = "approved";
+  input.allowlist[0].providerKey = "mail-provider";
+  input.allowlist[0].adapterKey = "mail-provider.adapter";
+  input.allowlist[0].executionClass = "approved";
+  input.hostOptions = { onEvent() {} };
+  const composition = createProviderRuntimeComposition(input);
+  assert.ok(composition);
+});
+
+test("production composition rejects raw-error callbacks even with approved adapters", () => {
+  const input = base();
+  input.runtimeEnvironment = "production";
+  input.workerOptions.auditEnvironment = "production";
+  input.registrations[0].providerKey = "mail-provider";
+  input.registrations[0].adapterKey = "mail-provider.adapter";
+  input.registrations[0].executionClass = "approved";
+  input.allowlist[0].providerKey = "mail-provider";
+  input.allowlist[0].adapterKey = "mail-provider.adapter";
+  input.allowlist[0].executionClass = "approved";
+  input.hostOptions = { onEvent() {}, onError() {} };
+  assert.throws(() => createProviderRuntimeComposition(input), /PROVIDER_RUNTIME_PRODUCTION_GUARDRAILS_REQUIRED/);
+});
