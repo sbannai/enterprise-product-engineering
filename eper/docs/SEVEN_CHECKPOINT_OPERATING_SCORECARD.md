@@ -2839,3 +2839,16 @@ PR #399's superseded head `f5216d137fdf20411d1dc03b125ec301e73b97e` had one brow
 - No chargeable cloud resource, production credential or real external/provider action was used in this assessment.
 
 **Owners:** Repository owner for approval-controlled repository settings and requirements disposition; engineering team for code/runtime closure. A named independent second engineer and completed handover are not yet evidenced.
+
+
+## Open-PR inventory delta — 2026-11-05 10:46 IST
+
+A new open draft PR was created after the 10:44 inventory snapshot:
+
+- PR #401 — [PostgreSQL capacity validation plan](https://github.com/sbannai/enterprise-product-engineering/pull/401)
+- Exact head: `f1f901836e28d62dd82cbdce0c33d19487703353`.
+- Base: `integration/asset-provider-stack-validation` at `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e`; compare to current main confirms 167 ahead / 0 behind.
+- Exact-head check-runs: 3/3 success, all `head_sha` values match. Controlled QA [41973770308](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41973770308) reports 1,485 tests / 1,445 passed / 0 failed / 40 skipped; matrix [41973770234](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41973770234) reports 259 passed / 0 failed and 28 HTTP checks; controlled technical simulation [41973770179](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41973770179) reports 74 passed / 0 failed.
+- This is a documentation-only plan. No load harness was run, no pool or runtime configuration changed, and PostgreSQL throughput/concurrency/latency capacity remains NOT MEASURED. The next action is a synthetic workload harness against disposable local PostgreSQL 16, with raw metrics and repeatable stages.
+
+The 10:44 table remains a timestamped snapshot; this delta is the current additional open-PR record. Resolve all future inventories from live GitHub metadata.
