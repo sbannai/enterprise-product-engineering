@@ -90,3 +90,33 @@ test("provider host reconnects its wake source before the next scan", async () =
   assert.deepEqual(state.calls.errors, ["listener disconnected"]);
   assert.equal(state.calls.closed, 1);
 });
+
+
+test("provider host emits bounded lifecycle metrics without forwarding error details", async () => {
+  const state = setup([{
+    recovered: 2, claimed: 3, succeeded: 1, retried: 1, needsAttention: 1, leaseLost: 0,
+  }]);
+  const events = [];
+  const worker = {
+    async runOnce() {
+      if (events.some(event => event.type === "worker_pass_completed")) {
+        state.controller.abort();
+        throw new Error("token=must-not-appear-in-metrics");
+      }
+      return {
+        recovered: 2, claimed: 3, succeeded: 1, retried: 1, needsAttention: 1, leaseLost: 0,
+      };
+    },
+  };
+  const host = new ProviderOperationWorkerHost(worker, state.wakeSource, {
+    onEvent(event) { events.push(event); },
+    onError() { /* raw error deliberately not forwarded to the metrics sink */ },
+  });
+  await host.run(state.controller.signal);
+  assert.deepEqual(events, [
+    { type: "host_started" },
+    { type: "worker_pass_completed", recovered: 2, claimed: 3, succeeded: 1, retried: 1, needsAttention: 1, leaseLost: 0 },
+    { type: "host_stopped" },
+  ]);
+  assert.equal(JSON.stringify(events).includes("must-not-appear"), false);
+});
