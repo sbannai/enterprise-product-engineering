@@ -38,6 +38,12 @@ function dependencies(runtimeRegistry, calls) {
   let claimCount = 0;
   return {
     runtimeRegistry,
+    credentialResolver: {
+      async resolve(selection) {
+        calls.credentials.push(selection);
+        return { token: "synthetic-only-secret" };
+      },
+    },
     repository: {
       async recoverExpiredLeases() { return []; },
       async claimNext() { claimCount += 1; return claimCount === 1 ? operation : null; },
@@ -72,7 +78,7 @@ function dependencies(runtimeRegistry, calls) {
 }
 
 test("worker composition dispatches only through the exact runtime registry identity", async () => {
-  const calls = { dispatches: [], outcomes: [] };
+  const calls = { dispatches: [], outcomes: [], credentials: [] };
   const adapter = {
     providerKey: "synthetic",
     adapterKey: "synthetic.mail",
@@ -105,6 +111,8 @@ test("worker composition dispatches only through the exact runtime registry iden
     adapterVersion: "1.0.0",
     capabilityKey: "email.send",
   });
+  assert.deepEqual(calls.dispatches[0].credentials, { token: "synthetic-only-secret" });
+  assert.equal(calls.credentials.length, 1);
   assert.equal(calls.dispatches[0].idempotencyKey, operation.idempotencyKey);
   assert.equal(calls.dispatches[0].correlationId, operation.correlationId);
   assert.deepEqual(calls.outcomes[0].outcome, "SUCCEEDED");
@@ -124,6 +132,7 @@ test("empty runtime registry parks provider work without consuming retry attempt
   assert.equal(result.needsAttention, 1);
   assert.equal(result.retried, 0);
   assert.equal(calls.dispatches.length, 0);
+  assert.equal(calls.credentials.length, 0);
   assert.equal(calls.outcomes[0].outcome, "NEEDS_ATTENTION");
   assert.equal(calls.outcomes[0].errorCode, "PROVIDER_RUNTIME_ADAPTER_UNAVAILABLE");
 });
