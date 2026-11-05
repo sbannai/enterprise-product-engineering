@@ -117,9 +117,20 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             if (leaseLost || options.signal.aborted) {
               options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return;
             }
-            if (outcome.scannerServiceId !== options.scannerServiceId ||
-                !["clean", "infected", "error"].includes(outcome.scanStatus)) {
+            // Scanner output crosses a provider boundary: validate it as unknown
+            // before reading fields so null, primitives and malformed objects fail closed.
+            const scannerOutcome: unknown = outcome;
+            if (!scannerOutcome || typeof scannerOutcome !== "object" ||
+                !("scannerServiceId" in scannerOutcome) ||
+                scannerOutcome.scannerServiceId !== options.scannerServiceId ||
+                !("scanStatus" in scannerOutcome) ||
+                !["clean", "infected", "error"].includes(String(scannerOutcome.scanStatus))) {
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
+            } else {
+              outcome = {
+                scannerServiceId: options.scannerServiceId,
+                scanStatus: scannerOutcome.scanStatus as TrustedMalwareScanOutcome["scanStatus"],
+              };
             }
             if (outcome.scanStatus === "error") {
               const attempt = Math.max(1, Math.min(session.attempt, 5));
