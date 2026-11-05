@@ -14,12 +14,20 @@ export interface ProviderRuntimeSecretReferenceStore {
     connectionVersion: number;
     capabilityKey: string;
   }): Promise<string>;
+  assertDispatchAuthorization(input: {
+    tenantId: string;
+    applicationId: string;
+    connectionId: string;
+    connectionVersion: number;
+    capabilityKey: string;
+  }): Promise<void>;
 }
 
 export class ProviderRuntimeCredentialError extends Error {
   constructor(readonly code:
     | "PROVIDER_RUNTIME_CREDENTIAL_SCOPE_INVALID"
     | "PROVIDER_RUNTIME_CREDENTIAL_REFERENCE_UNAVAILABLE"
+    | "PROVIDER_RUNTIME_CREDENTIAL_AUTHORIZATION_CHANGED"
     | "PROVIDER_RUNTIME_CREDENTIAL_RESOLUTION_FAILED") {
     super(code);
     this.name = "ProviderRuntimeCredentialError";
@@ -67,9 +75,19 @@ export class ProviderRuntimeCredentialResolver {
       if (credentials === null || credentials === undefined) {
         throw new Error("EMPTY_SECRET");
       }
+      await this.references.assertDispatchAuthorization({
+        tenantId: selection.tenantId,
+        applicationId: selection.applicationId,
+        connectionId: selection.connectionId,
+        connectionVersion: selection.connectionVersion,
+        capabilityKey: selection.capabilityKey,
+      });
       return credentials;
-    } catch {
+    } catch (error) {
       // Provider/secret-manager exception text can contain credential material.
+      if (error instanceof Error && error.message === "PROVIDER_DISPATCH_AUTHORIZATION_CHANGED") {
+        throw new ProviderRuntimeCredentialError("PROVIDER_RUNTIME_CREDENTIAL_AUTHORIZATION_CHANGED");
+      }
       throw new ProviderRuntimeCredentialError("PROVIDER_RUNTIME_CREDENTIAL_RESOLUTION_FAILED");
     }
   }
