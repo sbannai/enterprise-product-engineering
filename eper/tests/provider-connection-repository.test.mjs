@@ -20,6 +20,14 @@ function fixture({ status = "ACTIVE", providerStatus = "ACTIVE", providerAuthMod
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("SELECT c.connection_status, c.version AS connection_version")) {
+        return { rows: [{
+          connection_status: currentStatus,
+          binding_status: "ACTIVE",
+          connection_version: currentVersion,
+          allowed_capabilities: ["email.send"],
+        }], rowCount: 1 };
+      }
       if (sql.includes("SELECT c.secret_reference")) {
         return { rows: [{
           secret_reference: "vault://tenant-a/mail/credential-v1",
@@ -280,4 +288,31 @@ test("dispatch secret-reference lookup rejects inactive connection status", asyn
     tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
     connectionVersion: 7, capabilityKey: "email.send",
   }), /PROVIDER_DISPATCH_CONNECTION_NOT_ACTIVE/);
+});
+
+test("dispatch authorization recheck locks active connection and application binding", async () => {
+  const { repository, calls } = fixture({ version: 7 });
+  await repository.assertDispatchAuthorization({
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    connectionVersion: 7, capabilityKey: "email.send",
+  });
+  assert.ok(calls.some(call => call.sql.includes("FOR SHARE OF c, b")));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("dispatch authorization recheck rejects revoked connections and stale versions", async () => {
+  const stale = fixture({ version: 8 });
+  await assert.rejects(() => stale.repository.assertDispatchAuthorization({
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    connectionVersion: 7, capabilityKey: "email.send",
+  }), /PROVIDER_DISPATCH_AUTHORIZATION_CHANGED/);
+  assert.ok(stale.calls.some(call => call.sql === "ROLLBACK"));
+
+  const revoked = fixture({ status: "REVOKED", version: 7 });
+  await assert.rejects(() => revoked.repository.assertDispatchAuthorization({
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    connectionVersion: 7, capabilityKey: "email.send",
+  }), /PROVIDER_DISPATCH_AUTHORIZATION_CHANGED/);
 });
