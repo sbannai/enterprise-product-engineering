@@ -165,3 +165,10 @@ A companion observer is available as `scripts/postgres-capacity-db-observer.mjs`
 Configure `EPER_CAPACITY_BENCH_OBSERVE_SECONDS` (5–3600; default 600), `EPER_CAPACITY_BENCH_SAMPLE_INTERVAL_MS` (250–10000; default 1000) and `EPER_CAPACITY_BENCH_DB_OUTPUT` (default `artifacts/postgres-capacity/db-observations.json`). It applies the same loopback + `_bench` database guard and rejects connection-string query/fragment overrides.
 
 The observer's counters are cumulative; compare adjacent samples to derive deltas. It does **not** currently expose application pool waiters, query-level latency, CPU, memory or disk I/O. Those require separate application instrumentation and host-level monitoring; do not infer them from these snapshots.
+
+
+### EPER process pool acquisition metrics
+
+The API's PostgreSQL payment pool now exposes `snapshotMetrics()` on its pool handle. The snapshot contains pg.Pool's `totalCount`, `idleCount`, and `waitingCount`, plus process-local connect attempts/failures, in-flight acquisitions, and cumulative/max acquisition duration. Acquisition duration covers both queue wait and new connection establishment; it must not be interpreted as pure queue wait. These are aggregate counters only—no SQL, bind values, credentials, tenant IDs or request IDs.
+
+This snapshot is an internal instrumentation surface, not a public HTTP endpoint. It is not yet wired to a metrics exporter or authenticated operations dashboard, and it does not include worker pools or privileged pools. A future exporter should aggregate each pool separately and apply access controls before exposing snapshots. Do not infer whole-platform connection totals from the API payment pool alone.
