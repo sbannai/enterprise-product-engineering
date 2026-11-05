@@ -3,7 +3,6 @@ import { relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { createApprovedWorkflowOutboxDispatcher, type ApprovedWorkflowOutboxDispatcher } from "../../packages/workflows/workflow-outbox-dispatcher-adapter.js";
-import type { WorkflowOutboxEvent } from "../../packages/workflows/postgres-workflow-outbox-store.js";
 import { runWorkflowOutboxRuntime } from "../../packages/workflows/workflow-outbox-runtime.js";
 import { readWorkflowOutboxWorkerConfig } from "../../packages/workflows/workflow-outbox-worker-config.js";
 
@@ -134,6 +133,7 @@ async function main(): Promise<void> {
   });
   const controller = new AbortController();
   let shuttingDown = false;
+  const signalHandlers = new Map<"SIGINT" | "SIGTERM", () => void>();
 
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
@@ -142,7 +142,9 @@ async function main(): Promise<void> {
     controller.abort(new Error("WORKFLOW_OUTBOX_SHUTDOWN"));
   };
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => shutdown(signal));
+    const handler = () => shutdown(signal);
+    signalHandlers.set(signal, handler);
+    process.once(signal, handler);
   }
 
   try {
@@ -195,8 +197,8 @@ async function main(): Promise<void> {
       },
     }, controller.signal);
   } finally {
-    for (const signal of ["SIGINT", "SIGTERM"] as const) {
-      process.removeAllListeners(signal);
+    for (const [signal, handler] of signalHandlers) {
+      process.removeListener(signal, handler);
     }
     await pool.end();
   }
