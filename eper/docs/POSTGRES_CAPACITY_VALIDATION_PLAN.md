@@ -137,7 +137,7 @@ A guarded, read-only API probe is available at `scripts/postgres-capacity-api-be
 Required environment:
 - `EPER_CAPACITY_BENCH_DATABASE_URL`: disposable PostgreSQL URL; host must be loopback and database name must end in `_bench`.
 - `EPER_CAPACITY_BENCH_API_URL`: local EPER API origin (loopback only).
-- `EPER_CAPACITY_BENCH_PATH`: explicit API route to exercise. `/health` and `/` are refused because they do not prove database-backed work.
+- `EPER_CAPACITY_BENCH_PATH`: an absolute same-origin route path to exercise. Protocol-relative paths, backslashes and control characters are refused; `/health` and `/` are refused because they do not prove database-backed work.
 - Optional `EPER_CAPACITY_BENCH_BEARER_TOKEN` or `EPER_CAPACITY_BENCH_COOKIE`: local test identity only; values are never printed or written to the result.
 - Optional `EPER_CAPACITY_BENCH_CONCURRENCY` (1–100), `EPER_CAPACITY_BENCH_DURATION_SECONDS` (5–3600), `EPER_CAPACITY_BENCH_WARMUP_SECONDS`, `EPER_CAPACITY_BENCH_RAMP_SECONDS`, `EPER_CAPACITY_BENCH_REQUEST_TIMEOUT_MS`, and `EPER_CAPACITY_BENCH_OUTPUT`.
 
@@ -153,6 +153,6 @@ EPER_CAPACITY_BENCH_RAMP_SECONDS=30 \
 npm run bench:postgres-api
 ```
 
-The runner verifies connectivity and database identity against the disposable benchmark database, uses closed-loop concurrent HTTP requests, consumes response bodies, and writes a mode-0600 JSON result with request rate, status counts, error categories and p50/p95/p99 latency. It supports GET/HEAD only; state-changing scenarios require a separately reviewed synthetic-data setup and idempotency/correctness assertions. Do not place credentials in command-line arguments or URLs that may be captured by shell history; use environment injection from a local secret-safe shell.
+The runner accepts only a PostgreSQL URL with a loopback hostname, an `_bench` database name and no query/fragment overrides (including driver-level host overrides); it accepts only a loopback API origin without embedded credentials. It verifies connectivity and database identity against the disposable benchmark database, uses closed-loop concurrent HTTP requests, consumes response bodies, and writes a mode-0600 JSON result with request rate, status counts, error categories and p50/p95/p99 latency. Fail-closed guard tests cover remote hosts, database query overrides, URL credentials, path forms, health-only routes and write methods. It supports GET/HEAD only; state-changing scenarios require a separately reviewed synthetic-data setup and idempotency/correctness assertions. Do not place credentials in command-line arguments or URLs that may be captured by shell history; use environment injection from a local secret-safe shell.
 
 **Important limitation:** the runner cannot independently prove that the running API process uses the same database URL. The operator must start the API with the same disposable database configuration and verify its effective persistence mode before running. The result is an API-route probe, not a PostgreSQL-only benchmark or capacity certification. Correlate it with PostgreSQL server and pool metrics. The current environment has not executed this runner; no performance results are claimed.

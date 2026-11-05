@@ -17,10 +17,21 @@ if (!databaseUrl || !targetText || !path) {
   fail("EPER_CAPACITY_BENCH_DATABASE_URL, EPER_CAPACITY_BENCH_API_URL and EPER_CAPACITY_BENCH_PATH are required.");
 }
 let db, target;
-try { db = new URL(databaseUrl); target = new URL(path, targetText); } catch { fail("EPER_CAPACITY_BENCH_URL_INVALID"); }
+try { db = new URL(databaseUrl); } catch { fail("BENCHMARK_DATABASE_URL_INVALID"); }
+if (!["postgres:", "postgresql:"].includes(db.protocol)) fail("BENCHMARK_DATABASE_PROTOCOL_INVALID");
+// pg-connection-string accepts query overrides such as ?host=...; reject every
+// query/fragment so a remote host cannot bypass the loopback hostname check.
+if (db.search || db.hash) fail("BENCHMARK_DATABASE_QUERY_OPTIONS_UNSUPPORTED");
+if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || /[\u0000-\u001f\u007f]/.test(path)) {
+  fail("BENCHMARK_API_PATH_INVALID");
+}
+try { target = new URL(path, targetText); } catch { fail("BENCHMARK_API_URL_INVALID"); }
 const loopback = (host) => ["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
-const dbName = decodeURIComponent(db.pathname.replace(/^\//, ""));
+let dbName;
+try { dbName = decodeURIComponent(db.pathname.replace(/^\//, "")); } catch { fail("BENCHMARK_DATABASE_NAME_INVALID"); }
+if (!dbName || /[\/\\]/.test(dbName)) fail("BENCHMARK_DATABASE_NAME_INVALID");
 if (!loopback(db.hostname) || !dbName.endsWith("_bench")) fail("BENCHMARK_REFUSED: database must be loopback and its name must end in _bench.");
+if (target.username || target.password) fail("BENCHMARK_API_URL_CREDENTIALS_NOT_ALLOWED");
 if (!loopback(target.hostname) || !["http:", "https:"].includes(target.protocol)) fail("BENCHMARK_REFUSED: API target must be loopback.");
 if (target.pathname === "/health" || target.pathname === "/") fail("BENCHMARK_REFUSED: select a real API route, not a health-only endpoint.");
 if (!["GET", "HEAD"].includes((process.env.EPER_CAPACITY_BENCH_METHOD ?? "GET").toUpperCase())) fail("Only GET and HEAD are currently supported; write workloads require a separately reviewed scenario.");
