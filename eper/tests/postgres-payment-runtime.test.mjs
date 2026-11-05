@@ -93,6 +93,14 @@ test("PostgreSQL pool preserves callback and Promise acquisition used by Pool.qu
     } finally {
       promiseClient.release();
     }
+
+    const metrics = pool.snapshotMetrics();
+    assert.equal(metrics.connectAttempts, 3);
+    assert.equal(metrics.connectFailures, 0);
+    assert.equal(metrics.inFlightAcquisitions, 0);
+    assert.equal(metrics.totalCount >= 1, true);
+    assert.equal(metrics.acquisitionDurationTotalMs > 0, true);
+    assert.equal(metrics.acquisitionDurationMaxMs > 0, true);
   } finally {
     await pool.end();
   }
