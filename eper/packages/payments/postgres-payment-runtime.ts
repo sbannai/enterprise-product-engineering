@@ -21,6 +21,8 @@ export type PostgresPoolConnectCallback = (
 ) => void;
 
 export interface PostgresPoolHandle extends SqlPool {
+  /** Promise acquisition remains the application-facing structural contract. */
+  connect(): Promise<SqlClient>;
   /** Preserve node-postgres' callback overload because Pool.query() uses it internally. */
   connect(callback: PostgresPoolConnectCallback): void;
   end(): Promise<void>;
