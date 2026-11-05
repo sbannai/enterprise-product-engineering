@@ -124,7 +124,8 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                 !("scannerServiceId" in scannerOutcome) ||
                 scannerOutcome.scannerServiceId !== options.scannerServiceId ||
                 !("scanStatus" in scannerOutcome) ||
-                !["clean", "infected", "error"].includes(String(scannerOutcome.scanStatus))) {
+                typeof scannerOutcome.scanStatus !== "string" ||
+                !["clean", "infected", "error"].includes(scannerOutcome.scanStatus)) {
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
             } else {
               outcome = {
