@@ -134,6 +134,50 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  /**
+   * Resolves an asset for a download only when it is available, clean and visible
+   * to the requested application. The opaque object reference never leaves the
+   * server; callers pass it only to the configured storage adapter.
+   */
+  async getDownloadableAsset(
+    tenantId: string, applicationId: string, assetId: string,
+  ): Promise<(CustomerAsset & { storageObjectReference: string }) | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(assetId, "assetId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<AssetRow & { storage_object_reference: string }>(
+        `SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
+          a.display_name, a.original_file_name, a.media_category, a.mime_type, a.file_extension,
+          a.size_bytes, a.checksum_sha256, a.storage_adapter_key, a.upload_status,
+          a.scan_status, a.lifecycle_status, a.version, a.created_by, a.created_at,
+          a.storage_object_reference
+         FROM eper_customer_assets a
+         WHERE a.tenant_id = $1 AND a.asset_id = $3
+           AND a.lifecycle_status = 'active' AND a.upload_status = 'available'
+           AND a.scan_status IN ('clean', 'not_required')
+           AND (
+             (a.repository_scope = 'application_restricted' AND a.owner_application_id = $2)
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id AND l.application_id = $2 AND l.asset_id = a.asset_id
+             ))
+           )
+         LIMIT 1`,
+        [tenantId, applicationId, assetId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      return row ? { ...mapAsset(row), storageObjectReference: row.storage_object_reference } : null;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async getPendingUploadAsset(tenantId: string, applicationId: string, assetId: string): Promise<CustomerAsset | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
