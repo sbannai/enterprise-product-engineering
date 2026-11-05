@@ -6,7 +6,7 @@ import {
 import {
   ProviderRuntimeAdapterRegistry,
 } from "./provider-runtime-adapter-registry.js";
-import type { ProviderRuntimeCredentialResolver } from "./provider-runtime-credential-resolver.js";
+import { ProviderRuntimeCredentialError, type ProviderRuntimeCredentialResolver } from "./provider-runtime-credential-resolver.js";
 
 /**
  * Production composition seam for provider operation dispatch.
@@ -46,7 +46,15 @@ export function createProviderOperationWorkerWithRuntimeRegistry(
       };
       // Check the executable allowlist before touching the secret manager.
       registry.resolve(runtimeSelection);
-      const credentials = await credentialResolver.resolve(input.selection);
+      let credentials: unknown;
+      try {
+        credentials = await credentialResolver.resolve(input.selection);
+      } catch (error) {
+        // Normalize injected resolver failures too; arbitrary exception text can
+        // contain secret references or credential material.
+        if (error instanceof ProviderRuntimeCredentialError) throw error;
+        throw new ProviderRuntimeCredentialError("PROVIDER_RUNTIME_CREDENTIAL_RESOLUTION_FAILED");
+      }
       return registry.dispatch({
       credentials,
       selection: runtimeSelection,
