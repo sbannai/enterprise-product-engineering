@@ -161,16 +161,27 @@ jobs:
           set -euo pipefail
           platform_password="$(openssl rand -hex 32)"
           catalogue_password="$(openssl rand -hex 32)"
+          worker_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$platform_password"
+          echo "::add-mask::$catalogue_password"
+          echo "::add-mask::$worker_password"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_platform_admin_runtime WITH LOGIN PASSWORD '${platform_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_provider_catalogue_runtime WITH LOGIN PASSWORD '${catalogue_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "REVOKE ALL ON TABLE public.eper_audit_events, public.eper_audit_chain_head, public.eper_platform_admin_credentials, public.eper_provider_definitions, public.eper_payment_orders, public.eper_payment_receipts, public.eper_payment_webhook_events, public.eper_provider_connections, public.eper_provider_connection_applications, public.eper_provider_validation_events, public.eper_tenant_provider_defaults, public.eper_application_provider_policies, public.eper_provider_operations, public.eper_provider_webhook_receipts FROM PUBLIC"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_platform_admin_runtime, eper_provider_catalogue_runtime"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_platform_admin_access TO eper_platform_admin_runtime"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_provider_catalogue_access TO eper_provider_catalogue_runtime"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_runtime WITH LOGIN PASSWORD '${worker_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_workflow_outbox_worker_runtime"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker_runtime"
           {
             echo "EPER_PLATFORM_ADMIN_TEST_DATABASE_URL=postgres://eper_platform_admin_runtime:${platform_password}@localhost:5432/eper_test"
             echo "EPER_PROVIDER_CATALOGUE_TEST_DATABASE_URL=postgres://eper_provider_catalogue_runtime:${catalogue_password}@localhost:5432/eper_test"
+            echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL=postgres://eper_workflow_outbox_worker_runtime:${worker_password}@localhost:5432/eper_test"
+            echo "EPER_WORKFLOW_OUTBOX_EXPECTED_DATABASE_ROLE=eper_workflow_outbox_worker_runtime"
           } >> "$GITHUB_ENV"
+      - name: Verify dedicated workflow outbox worker role privileges against PostgreSQL
+        run: node --test tests/workflow-outbox-worker-database.integration.test.mjs
       - name: Verify dedicated PostgreSQL runtime-role privileges
         run: node --test tests/privileged-postgres-role-contract.integration.test.mjs
       - name: Exercise privileged PostgreSQL store operations and audit rollback
