@@ -13,7 +13,10 @@ const base = () => ({
     providerKey: "synthetic", adapterKey: "synthetic.mail", adapterVersion: "1.0.0",
     capabilities: ["email.send"],
   }],
-  secretReferences: { async getDispatchSecretReference() { return "vault://opaque"; } },
+  secretReferences: {
+    async getDispatchSecretReference() { return "vault://opaque"; },
+    async assertDispatchAuthorization() {},
+  },
   secrets: { async resolve() { return { token: "synthetic-secret" }; } },
   workerDependencies: {
     repository: {},
