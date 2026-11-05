@@ -59,6 +59,45 @@ test("PostgreSQL pool rejects invalid or unsafe pool sizing", () => {
   }), /EPER_PG_POOL_MAX_INVALID/);
 });
 
+
+const databaseConfigured = Boolean(process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL);
+
+test("PostgreSQL pool preserves callback and Promise acquisition used by Pool.query", {
+  skip: !databaseConfigured,
+  timeout: 10_000,
+}, async () => {
+  const pool = createPostgresPaymentPool();
+  try {
+    // node-postgres Pool.query() uses the callback overload of Pool.connect() internally.
+    const queryResult = await pool.query("SELECT 1 AS value");
+    assert.equal(queryResult.rows[0]?.value, 1);
+
+    const client = await new Promise((resolve, reject) => {
+      pool.connect((error, acquiredClient) => {
+        if (error) reject(error);
+        else if (!acquiredClient) reject(new Error("POSTGRES_POOL_CALLBACK_CLIENT_REQUIRED"));
+        else resolve(acquiredClient);
+      });
+    });
+    try {
+      const callbackResult = await client.query("SELECT 2 AS value");
+      assert.equal(callbackResult.rows[0]?.value, 2);
+    } finally {
+      client.release();
+    }
+
+    const promiseClient = await pool.connect();
+    try {
+      const promiseResult = await promiseClient.query("SELECT 3 AS value");
+      assert.equal(promiseResult.rows[0]?.value, 3);
+    } finally {
+      promiseClient.release();
+    }
+  } finally {
+    await pool.end();
+  }
+});
+
 test("PostgreSQL pool exposes only aggregate acquisition and pool counters", async () => {
   const pool = createPostgresPaymentPool({ EPER_PAYMENT_DATABASE_URL: TEST_URL });
   try {
