@@ -116,6 +116,7 @@ test("provider host emits bounded lifecycle metrics without forwarding error det
   assert.deepEqual(events, [
     { type: "host_started" },
     { type: "worker_pass_completed", recovered: 2, claimed: 3, succeeded: 1, retried: 1, needsAttention: 1, leaseLost: 0 },
+    { type: "wake_wait_started", timeoutMs: 30_000 },
     { type: "host_stopped" },
   ]);
   assert.equal(JSON.stringify(events).includes("must-not-appear"), false);
