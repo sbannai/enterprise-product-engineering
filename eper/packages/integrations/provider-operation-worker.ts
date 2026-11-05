@@ -2,6 +2,7 @@ import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import { ProviderDispatchConfigurationError, type ProviderDispatchSelection, type ProviderDispatchConfigurationService } from "./provider-dispatch-configuration-service.js";
 import type { ProviderOperation } from "./postgres-provider-operation-repository.js";
 import { ProviderRuntimeRegistryError } from "./provider-runtime-adapter-registry.js";
+import { ProviderRuntimeCredentialError } from "./provider-runtime-credential-resolver.js";
 
 type Repository = {
   claimNext(input: { tenantId: string; applicationId: string; workerId: string; leaseDurationSeconds: number; maxAttempts: number; auditEnvironment: AuditEnvironment }): Promise<ProviderOperation | null>;
@@ -172,7 +173,7 @@ export class ProviderOperationWorker {
       } catch (error) {
         // Registry/allowlist failures are deterministic configuration blockers,
         // not transient provider failures. Park them for an operator decision.
-        if (error instanceof ProviderRuntimeRegistryError) {
+        if (error instanceof ProviderRuntimeRegistryError || error instanceof ProviderRuntimeCredentialError) {
           await this.saveOutcome(operation, "NEEDS_ATTENTION", error.code);
           result.needsAttention += 1;
           return;
