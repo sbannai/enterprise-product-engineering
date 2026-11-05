@@ -2,7 +2,7 @@
 
 **Purpose:** Durable, evidence-led operating model for the seven-checkpoint engineering brief.  
 **Baseline at creation:** `a1b93decff2f292a0a81453c27801607ca5f7946`  
-**Last reviewed:** 2026-11-05 08:04 IST  
+**Last reviewed:** 2026-11-05 (latest exact-head correction appended below)  
 **Approved product baseline:** 228 requirements across 38 chapters.  
 **Authority:** This scorecard operationalizes reporting; it does not change requirements or authorize UAT/production.
 
@@ -2429,9 +2429,9 @@ The live open-PR query returned 19 draft PRs. Each representative workflow below
 
 | PR | Current exact head | Representative exact-head run |
 |---|---|---|
-| #400 | `a66ff2eecbcdf1377751bef3e026055c5016e924` | [Integrated 41957403840](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41957403840) |
+| #400 | `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1` | [Integrated 41959003189](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003189) |
 | #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981) |
-| #398 | `71a66b676683a7762030b731dff6e2e310ac3474` | [Fresh clone 41956096246](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41956096246) |
+| #398 | `f3acd3123041530c3968249f42114625027674f8` | [Fresh clone 41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554) |
 | #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | [Fresh clone 41871265755](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265755) |
 | #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | [Fresh clone 41869040234](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41869040234) |
 | #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | [Fresh clone 41868477584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477584) |
@@ -2486,3 +2486,43 @@ On #399 exact head `a58a47303d2b6c54bbe9793afc8d3775fbfafc74`, `eper/apps/api/ma
 Current main branch metadata reports `protected=false`, required status checks off, and the repository rulesets endpoint returns an empty collection. The charter remains proposed and requires owner review. No branch-protection setting was changed.
 
 No approved requirement or chapter was changed. No PR was merged, no branch was deleted or force-updated, no chargeable cloud resource was provisioned and no real external/provider action was triggered by this refresh.
+
+
+## Exact-head correction — 2026-11-05
+
+This correction supersedes the #398 and #400 rows and the earlier #400 validation block above. Main was resolved again; it remains `2c380d79c55c9183a42ed534ffd1a504f7d41316`. The main-commit check-run endpoint still returns 13 completed successes, all for that exact SHA.
+
+### PR #398 — provider runtime registry
+
+- Current exact head: `f3acd3123041530c3968249f42114625027674f8`; 230 commits ahead of main, 0 behind.
+- Six exact-head workflows completed successfully: fresh clone [41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554), controlled QA [41958996528](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996528), PostgreSQL integration [41958996599](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996599), provider lifecycle [41958996584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996584), requirements matrix [41958996496](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996496) and controlled technical simulation [41958996891](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996891).
+- Fresh-clone log: 1,546 tests / 1,542 passed / 0 failed / 4 skipped; `npm run dev:verify` PASS; seven migration groups repeated; disposable restore 80/80 base tables and seven migration ledgers.
+- Runtime composition still does not start from API `main.ts`; production secret manager, credential/key custody, concrete approved provider adapters, lifecycle supervision and operational observability remain absent. Provider dispatch remains disabled.
+
+### PR #400 — independent workflow outbox worker
+
+- Current exact head: `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1`; 28 commits ahead of main, 0 behind; draft and unmerged.
+- Direct check-run query returned 19 check-runs: 18 success, one skipped duplicate matrix job, 0 failures. Every check-run `head_sha` equals the current PR head.
+- Fresh clone [41959003074](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003074): `npm run dev:verify` PASS; 1,436 tests / 1,431 passed / 0 failed / 5 skipped; all seven migration groups applied and repeated; disposable backup/restore PASS, 75/75 source/restored base tables and seven migration ledgers.
+- PostgreSQL integration [41959003045](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003045) PASS. It applied `015_workflow_outbox_worker_access.sql`, provisioned a disposable login with membership in the NOLOGIN group, and ran the live `assertRestrictedWorkerDatabaseRole` gate: 1 test / 1 passed / 0 failed / 0 skipped.
+- Same-commit integrated gate [41959003189](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003189), CI [41959003230](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003230), G9 [41959003114](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003114), requirements matrix [41959003425](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003425), provider lifecycle [41959003043](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003043), container [41959003431](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003431), release build [41959003221](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003221), six-family HTTP [41959003062](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003062), payment gateway [41959003316](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003316), controlled QA [41959003380](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003380), controlled technical simulation [41959003402](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003402) and workflow configuration [41959003115](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003115) all passed.
+- The migration creates `eper_workflow_outbox_worker_access` as NOLOGIN/NOSUPERUSER/NOBYPASSRLS and grants SELECT on tenant/application assignments and outbox records plus column-scoped UPDATE on the delivery projection only. The disposable login test proves the startup gate checks exact `current_user`, non-superuser/no-BYPASSRLS, ENABLE+FORCE RLS, non-ownership, required column grants, no table-wide UPDATE, and no INSERT/DELETE/TRUNCATE or elevated-role inheritance.
+- The worker command is independently launchable and disabled by default. It requires a deployment-bundled dispatcher with per-event durable approval; denied events are dead-lettered immediately. No concrete production dispatcher is bundled. External process supervision, health endpoint/metrics sink, alert routing, backlog/dead-letter monitoring and independent restart/recovery rehearsal remain unproven. This is a validated worker foundation, not a production-operability declaration.
+
+### Current open-PR inventory correction
+
+The live open-PR query still returns 19 draft PRs. Only the exact heads for #398 and #400 changed since the preceding inventory; the other 17 heads remain as listed above. Current compare results: #398 230 ahead / 0 behind; #400 28 ahead / 0 behind; #377 50 ahead / 0 behind. The current scorecard branch itself remains draft and unmerged.
+
+### Seven-pointer status after this correction
+
+| Pointer | Status | Current boundary |
+|---|---|---|
+| 1. v34-to-228 reconciliation | AMBER | 45 source rows retained; 0 exact full-coverage, 45 partial links, 45 additive draft candidates; owner disposition pending; approved 228/38 unchanged. |
+| 2. Fresh-clone setup | GREEN local/CI | #306 merge is an ancestor of main; #400 current exact-head fresh-clone and restore pass. Independent second-engineer handover remains. |
+| 3. PostgreSQL durability | GREEN local/CI; AMBER operations | Seven groups and repeatability, live PostgreSQL, disposable restore and live restricted worker-role gate pass. Off-host backup, retention, key custody, RPO/RTO and independent restore rehearsal remain. |
+| 4. Identity/OIDC | AMBER | #310 and browser/session successors are merged ancestors; synthetic-IdP browser proof remains. Production IdP onboarding/JWKS rotation, operator credential lifecycle and support-admin OIDC/delegation remain. |
+| 5. Customer workspace/support | AMBER | Ticket journey, tenant/application scope, admin triage/assignment/severity, internal-note visibility and export are tested. SLA automation remains absent; #399 still lacks concrete asset upload/verification/scanning/storage/download ports in the API composition root. |
+| 6. Scheduler/workflow operations | AMBER | Independent outbox executable, restricted role group, live role gate, approval boundary, leases/fencing, retries/dead-letter and structured pass counters are validated. Concrete dispatcher, process supervisor, health/metrics/alerts and independent recovery rehearsal remain. |
+| 7. Release/continuity | RED | Main is still unprotected; rulesets are empty; second-engineer release/rollback and production recovery are not demonstrated. |
+
+No approved requirement or chapter changed. No PR was merged, no branch was deleted or force-updated, no chargeable cloud resource was provisioned and no real external/provider action was triggered by this refresh.
