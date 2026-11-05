@@ -17,7 +17,8 @@
     "dev:verify": "node scripts/dev-verify.mjs",
     "migrate:identity": "node scripts/migrate-identity.mjs",
     "start:campaign-worker": "node dist/apps/worker/campaign-scheduler-main.js",
-    "start:agent-worker": "node dist/apps/worker/agent-worker-main.js"
+    "start:agent-worker": "node dist/apps/worker/agent-worker-main.js",
+    "start:workflow-outbox-worker": "node dist/apps/worker/workflow-outbox-main.js"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
