@@ -47,3 +47,27 @@ PostgreSQL transaction context includes tenant and application identifiers. Vali
 - Real provider adapters and live credential verification.
 - Product Admin provider catalogue UI and Customer Admin connection management UI.
 - Provider webhook signature verification, durable event processing and outbox dispatch.
+
+
+## Provider-operation runtime credential boundary
+
+The provider-operation worker uses a separate server-only credential boundary.
+Immediately before dispatch, the repository rechecks the tenant, application,
+connection, active binding, requested capability and exact connection version
+under PostgreSQL row locks, then returns only the opaque secret reference to
+the credential resolver. The secret resolver returns credential material only
+to the in-process worker; the runtime adapter receives it as transient dispatch
+input. General connection read models and customer API responses remain free of
+secret references and credentials.
+
+The executable adapter allowlist is checked before the secret resolver is
+called. Missing adapters therefore do not trigger secret-manager access.
+Credential lookup or resolution failures are converted to stable redacted
+codes and parked as NEEDS_ATTENTION rather than retried with potentially
+sensitive exception text. No credential value or secret reference is written
+to operation payloads, audit events or logs by this boundary.
+
+A concrete production secret-manager implementation, key custody/rotation
+policy and API composition-root enablement remain deferred. The current
+integration is an injected boundary only; live provider dispatch remains
+disabled and requires separate authorization.
