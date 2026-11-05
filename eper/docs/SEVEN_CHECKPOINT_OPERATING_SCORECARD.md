@@ -2526,3 +2526,100 @@ The live open-PR query still returns 19 draft PRs. Exact heads for #398, #400 an
 | 7. Release/continuity | RED | Main is still unprotected; rulesets are empty; second-engineer release/rollback and production recovery are not demonstrated. |
 
 No approved requirement or chapter changed. No PR was merged, no branch was deleted or force-updated, no chargeable cloud resource was provisioned and no real external/provider action was triggered by this refresh.
+
+
+## Dated operating update — 2026-11-05 08:32 IST
+
+**Current main SHA:** `2c380d79c55c9183a42ed534ffd1a504f7d41316`  
+**Tree SHA:** `0c01985a303e9348e728acd04b0a55a80020f9a9`  
+**Mainline evidence:** 13/13 check-runs completed successfully on this exact SHA; 8/8 push-triggered workflow runs completed successfully on this exact SHA. No current-main test result is inferred from a PR head.  
+**Approved baseline:** 228 requirements across 38 chapters; unchanged.
+
+- Main integrated validation: [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913)
+- Main requirements matrix: [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818)
+- Main G9: [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648)
+- Main CI: [41675875771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771)
+
+### Merged foundation verification
+
+The live PR metadata reports #306 and #310 closed/merged. Their merge commits are ancestors of current main:
+
+| PR | Merge SHA | Delivered foundation |
+|---|---|---|
+| #306 | `6e8dd438e5091b1802d65e4f29951389fe077859` | Reproducible local developer setup, PostgreSQL bootstrap, migration repeatability and disposable backup/restore |
+| #310 | `88b9708d748c19dc80a1a2d7ad4960914451db7e` | Durable identity/session store and provider-neutral OIDC protocol foundation |
+| #324 | `a554990cb7f4969bb218aad7a2e9944aec62fa05` | Browser-bound OIDC transaction guards |
+| #329 | `82a82d92222c613c02e55f01211ecbb32ce63bba` | OIDC browser sessions for customer support journey |
+| #337 | `18315e1654b52f1546936a8fd28daed907cab31e` | Durable OIDC identity and CSRF enforcement |
+| #376 | `9749701bfed527b906183192ca06cc1998e70166` | Customer-admin, workflow and provider-connection foundation integration |
+
+Each merge SHA was compared with current main; the merge commit is the comparison base and current main is ahead with zero commits behind.
+
+### Current open-PR inventory — exact heads resolved for this update
+
+All entries below were returned by the live open-PR query, then individually re-read through PR metadata. Each exact head was queried for Actions runs and compared with current main; every listed comparison is ahead/0-behind. The representative run is associated with the listed exact head. Relevant primary job logs were inspected. No failed exact-head workflow was found. PRs remain draft/unmerged.
+
+| PR | Current exact head | Representative exact-head workflow |
+|---|---|---|
+| #400 | `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1` | [Fresh clone 41959003074](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003074); [PostgreSQL 41959003045](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003045) |
+| #398 | `f3acd3123041530c3968249f42114625027674f8` | [Fresh clone 41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554); [Provider lifecycle 41958996584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996584) |
+| #377 | `74a5c49e4fa12a3951b8a52dccac9660f1bca804` | [Integrated 41957963876](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41957963876) |
+| #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981); [Browser 41898030812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030812) |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | [Fresh clone 41844357369](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357369) |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | [Fresh clone 41868477584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477584) |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | [Fresh clone 41871265755](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265755) |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | [Fresh clone 41786048886](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048886) |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | [Fresh clone 41869040234](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41869040234) |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | [PostgreSQL/integrated 41764308133](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308133) |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | [PostgreSQL/integrated 41763251674](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251674) |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | [Fresh clone 41837639258](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639258) |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | [Fresh clone 41820073308](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073308) |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | [Fresh clone 41833626500](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626500) |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | [Fresh clone 41805934645](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934645) |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | [PostgreSQL/integrated 41795128802](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41795128802) |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | [Fresh clone 41738351740](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351740) |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | [Fresh clone 41784823307](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823307) |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | [Fresh clone 41738299068](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299068) |
+
+### New delivery: independently launchable workflow outbox worker — PR #400
+
+PR [#400](https://github.com/sbannai/enterprise-product-engineering/pull/400) current head is `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1`, ahead of current main with zero behind. All 14 workflow runs returned for this exact head completed successfully, including CI, fresh-clone, PostgreSQL integration, provider lifecycle, requirements matrix, G9, HTTP smoke, container smoke, release build, configuration validation and same-commit integrated validation.
+
+Exact-head evidence:
+
+- Fresh-clone [41959003074](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003074): `npm run dev:verify` PASS; 1,436 tests / 1,431 passed / 0 failed / 5 skipped; all seven PostgreSQL migration groups including identity applied and repeatability passed; disposable PostgreSQL 16 backup/restore PASS with 75/75 source/restored base tables.
+- PostgreSQL integration [41959003045](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003045): migration `015_workflow_outbox_worker_access.sql` applied; CI provisioned a separate ephemeral `eper_workflow_outbox_worker_runtime` LOGIN and granted the NOLOGIN privilege group. The live restricted-role contract test passed 9/9 with zero failures. This is disposable CI evidence, not a production login deployment.
+- Provider operation lifecycle [41959003043](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003043): PASS.
+- Same-commit integrated gate [41959003189](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003189): PASS.
+- Requirements matrix [41959003425](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003425): PASS.
+- G9 [41959003114](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003114): PASS.
+
+Delivered in #400: `start:workflow-outbox-worker` and a standalone process entrypoint; explicit opt-in; PostgreSQL-only dedicated login; startup verification of current_user, non-superuser/no-BYPASSRLS, no elevated or owner membership, ENABLE/FORCE RLS, non-ownership and least-privilege table/column grants; confined dispatcher-module loading; per-event durable approval check; immediate dead-letter for denied approval; bounded runtime settings; structured pass/error counters; SIGINT/SIGTERM shutdown. The worker calls the existing continuous outbox runtime and does not rely on an API timer.
+
+Remaining operational boundary: no approved dispatcher module is supplied or enabled; no real provider dispatch is performed; production DBA login/secret provisioning is not demonstrated; external supervisor, health/metrics sink, alert routing, backlog/dead-letter dashboards and independent restart/recovery rehearsal remain. PR #400 stays draft and unmerged pending owner review and operational handover.
+
+### Provider runtime successor — PR #398
+
+Current exact head `f3acd3123041530c3968249f42114625027674f8`; all six exact-head workflows completed successfully. Fresh-clone [41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554): 1,546 tests / 1,542 passed / 0 failed / 4 skipped; `dev:verify` PASS; disposable restore PASS with 80/80 source/restored base tables. Provider lifecycle [41958996584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996584) PASS. Runtime composition/credential-scope checks are present, but API process activation, concrete production secret manager, approved executable adapter/allowlist, external supervisor and operational metrics remain absent. No provider action is enabled.
+
+### Customer asset boundary — PR #399
+
+Current exact head `a58a47303d2b6c54bbe9793afc8d3775fbfafc74`. Fresh-clone [41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981): 1,517 tests / 1,513 passed / 0 failed / 4 skipped; `dev:verify` PASS; disposable restore 80/80. Browser [41898030812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030812): synthetic-IdP customer OIDC/workspace/support/logout and admin browser checks passed. These tests use synthetic storage/verification adapters. The API composition still does not supply concrete upload, provider-observed verification, malware-scan, storage and download-resolver implementations; actual binary upload-to-authorized-download remains unproven.
+
+### Requirements and seven-pointer disposition
+
+The current main crosswalk preserves all 45 v34 source rows and acceptance criteria: 0 exact full-coverage matches, 45 partial shared-control links, 45 additive draft candidates, 4 approval overlaps, and 0 changes to the approved 228 requirements / 38 chapters. Owner disposition of additive candidates remains pending.
+
+| Pointer | Status | Current evidence and boundary |
+|---|---|---|
+| 1. v34-to-228 reconciliation | AMBER | Technical crosswalk preserved; no fabricated exact chapter mappings. Owner disposition required for additive candidates; baseline unchanged. |
+| 2. Fresh-clone developer setup | GREEN local/CI | #306 merge verified; current #400 `dev:verify` and disposable restore pass. Independent second-engineer handover not witnessed. |
+| 3. PostgreSQL migrations/integration/recovery | GREEN local/CI; AMBER operations | Seven groups including identity, repeatability, live PostgreSQL tests and disposable restore evidenced. Off-host backup, encryption/key custody, retention, RPO/RTO and independent restore rehearsal remain. |
+| 4. Customer identity/OIDC | AMBER | #310 and browser/session successors #324/#329/#337 are merged ancestors. Synthetic-IdP browser E2E covers secure cookies, CSRF, durable session/revocation and tenant/application assignment. Production IdP onboarding, real-provider JWKS/key rotation and operational credential lifecycle remain. |
+| 5. Customer workspace/support | AMBER | Ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note visibility and export have test evidence. SLA deadline/breach/escalation automation remains; actual binary asset lifecycle remains incomplete. |
+| 6. Scheduler/workflow operations | AMBER | Campaign worker remains independently startable; #400 adds independently launchable workflow outbox worker and exact-head tests for continuous runtime, lease/fencing, retries/dead-letter, approval gate and shutdown. Production dispatcher, supervision, health/metrics/alerts and independent recovery rehearsal remain. |
+| 7. Release/continuity | RED | Repository rulesets endpoint returned an empty collection. Branch-protection endpoint returned 403 `Resource not accessible by integration`; effective branch-protection state is NOT ASSESSED in this cycle. The continuity charter remains proposed/owner review required; second-engineer release/rollback path is not evidenced. |
+
+No approved requirement/chapter changed. No PR was merged or closed. No branch was deleted or force-updated. No chargeable cloud resource, deployment or real external/provider action was used. No UAT authorization is made by this scorecard.
+
+**Validation note:** This update is being committed to the existing #377 documentation branch. The prior #377 exact-head checks do not validate the new scorecard commit; rerun required workflows on the resulting new head before treating this refresh as CI-validated.
