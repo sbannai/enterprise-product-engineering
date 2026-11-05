@@ -20,6 +20,15 @@ function fixture({ status = "ACTIVE", providerStatus = "ACTIVE", providerAuthMod
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("SELECT c.secret_reference")) {
+        return { rows: [{
+          secret_reference: "vault://tenant-a/mail/credential-v1",
+          connection_status: currentStatus,
+          binding_status: "ACTIVE",
+          connection_version: currentVersion,
+          allowed_capabilities: ["email.send"],
+        }], rowCount: 1 };
+      }
       if (sql.includes("FROM eper_provider_connections c") && sql.includes("JOIN eper_provider_connection_applications b")) {
         return { rows: [{
           ...row(), binding_status: "ACTIVE", allowed_capabilities: ["email.send"],
@@ -241,4 +250,34 @@ test("revocation refuses to affect a connection shared by multiple applications"
     ...audit, applicationId: "app-a", connectionId: "connection-a", expectedVersion: 1,
   }), /PROVIDER_CONNECTION_SHARED_BINDING_ADMIN_REQUIRED/);
   assert.ok(!calls.some((call) => call.sql.includes("SET connection_status = 'REVOKED'")));
+});
+
+test("dispatch secret-reference lookup requires exact active binding and connection version", async () => {
+  const { repository, calls } = fixture({ version: 7 });
+  const reference = await repository.getDispatchSecretReference({
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    connectionVersion: 7, capabilityKey: "email.send",
+  });
+  assert.equal(reference, "vault://tenant-a/mail/credential-v1");
+  assert.ok(calls.some(call => call.sql.includes("FOR SHARE OF c, b")));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'") && call.values[0] === "tenant-a"));
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.application_id'") && call.values[0] === "app-a"));
+  assert.equal(calls.at(-2).sql, "COMMIT");
+});
+
+test("dispatch secret-reference lookup rejects stale connection versions", async () => {
+  const { repository, calls } = fixture({ version: 8 });
+  await assert.rejects(() => repository.getDispatchSecretReference({
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    connectionVersion: 7, capabilityKey: "email.send",
+  }), /PROVIDER_DISPATCH_CONNECTION_VERSION_STALE/);
+  assert.ok(calls.some(call => call.sql === "ROLLBACK"));
+});
+
+test("dispatch secret-reference lookup rejects inactive connection status", async () => {
+  const { repository } = fixture({ status: "SUSPENDED", version: 7 });
+  await assert.rejects(() => repository.getDispatchSecretReference({
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    connectionVersion: 7, capabilityKey: "email.send",
+  }), /PROVIDER_DISPATCH_CONNECTION_NOT_ACTIVE/);
 });
