@@ -18,7 +18,7 @@ import type { ProviderRuntimeCredentialResolver } from "./provider-runtime-crede
  */
 export type ProviderOperationWorkerRuntimeDependencies =
   Omit<ProviderOperationWorkerDependencies, "dispatch"> & {
-    runtimeRegistry: Pick<ProviderRuntimeAdapterRegistry, "dispatch">;
+    runtimeRegistry: Pick<ProviderRuntimeAdapterRegistry, "dispatch" | "resolve">;
     credentialResolver: Pick<ProviderRuntimeCredentialResolver, "resolve">;
   };
 
@@ -38,15 +38,18 @@ export function createProviderOperationWorkerWithRuntimeRegistry(
   return new ProviderOperationWorker({
     ...workerDependencies,
     dispatch: async input => {
-      const credentials = await credentialResolver.resolve(input.selection);
-      return registry.dispatch({
-      credentials,
-      selection: {
+      const runtimeSelection = {
         providerKey: input.selection.providerKey,
         adapterKey: input.selection.adapterKey,
         adapterVersion: input.selection.adapterVersion,
         capabilityKey: input.selection.capabilityKey,
-      },
+      };
+      // Check the executable allowlist before touching the secret manager.
+      registry.resolve(runtimeSelection);
+      const credentials = await credentialResolver.resolve(input.selection);
+      return registry.dispatch({
+      credentials,
+      selection: runtimeSelection,
       payload: input.payload,
       idempotencyKey: input.idempotencyKey,
       correlationId: input.correlationId,
