@@ -2563,7 +2563,7 @@ All entries below were returned by the live open-PR query, then individually re-
 |---|---|---|
 | #400 | `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1` | [Fresh clone 41959003074](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003074); [PostgreSQL 41959003045](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003045) |
 | #398 | `f3acd3123041530c3968249f42114625027674f8` | [Fresh clone 41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554); [Provider lifecycle 41958996584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996584) |
-| #377 | `74a5c49e4fa12a3951b8a52dccac9660f1bca804` | [Integrated 41957963876](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41957963876) |
+| #377 | `f947eaf97cd932b8c7b36e2d01498f8f13ac380c` (pre-update inventory head) | [Matrix 41959720750](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959720750) / [G9 41959720650](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959720650); same-head CI/integrated were still running |
 | #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981); [Browser 41898030812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030812) |
 | #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | [Fresh clone 41844357369](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357369) |
 | #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | [Fresh clone 41868477584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477584) |
@@ -2622,4 +2622,4 @@ The current main crosswalk preserves all 45 v34 source rows and acceptance crite
 
 No approved requirement/chapter changed. No PR was merged or closed. No branch was deleted or force-updated. No chargeable cloud resource, deployment or real external/provider action was used. No UAT authorization is made by this scorecard.
 
-**Validation note:** This update is being committed to the existing #377 documentation branch. The prior #377 exact-head checks do not validate the new scorecard commit; rerun required workflows on the resulting new head before treating this refresh as CI-validated.
+**Validation note:** The inventory row for #377 records its pre-update head `f947eaf97cd932b8c7b36e2d01498f8f13ac380c`; its matrix and G9 completed, while CI/integrated were still running. The first scorecard refresh created commit `c858ec3a6f251fb6bff16581c2ff0a2f54819a72` on this existing branch. This correction advances the branch again; resolve the resulting new head and treat all prior #377 checks as stale until the new exact-head workflows complete.
