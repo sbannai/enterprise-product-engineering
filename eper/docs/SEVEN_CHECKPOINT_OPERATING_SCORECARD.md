@@ -2431,7 +2431,7 @@ The live open-PR query returned 19 draft PRs. Each representative workflow below
 |---|---|---|
 | #400 | `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1` | [Integrated 41959003189](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003189) |
 | #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981) |
-| #398 | `f3acd3123041530c3968249f42114625027674f8` | [Fresh clone 41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554) |
+| #398 | `d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c` | [Fresh clone 41960471681](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471681) |
 | #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | [Fresh clone 41871265755](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265755) |
 | #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | [Fresh clone 41869040234](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41869040234) |
 | #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | [Fresh clone 41868477584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477584) |
@@ -2623,3 +2623,13 @@ The current main crosswalk preserves all 45 v34 source rows and acceptance crite
 No approved requirement/chapter changed. No PR was merged or closed. No branch was deleted or force-updated. No chargeable cloud resource, deployment or real external/provider action was used. No UAT authorization is made by this scorecard.
 
 **Scorecard self-reference:** Resolve the current #377 head and compare dynamically from PR metadata; do not pin this file's own changing SHA. The preceding head `10afc8b091ada3d2400a32ba3e3d54b773234e14` had 14 exact-head check-runs (13 success, one skipped duplicate matrix), 259 pilot tests and 28 checks passed, G9 5/5, and successful CI/integrated/HTTP/container/release lanes. This file update creates a new head; its exact-head validation is recorded in the PR description after the new head's own workflows complete. The scorecard remains draft and is not part of main.
+
+
+## Latest exact-head correction — provider runtime contract PR #398
+
+Current #398 head: `d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c`, 231 commits ahead of main and 0 behind. The only change since the preceding exact-head snapshot is the added provider runtime process contract document. All six workflows on this exact head passed.
+
+- Fresh clone [41960471681](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471681): 1,547 tests / 1,543 passed / 0 failed / 4 skipped; `npm run dev:verify` PASS; disposable restore 80/80 base tables and seven migration ledgers.
+- PostgreSQL integration [41960471564](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471564): 1,418 tests / 1,412 passed / 0 failed / 6 skipped.
+- Provider lifecycle [41960471550](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471550), requirements matrix [41960471694](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471694), controlled QA [41960471676](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471676) and controlled technical simulation [41960471591](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471591) passed.
+- The added document defines a process contract only; it does not supply a production secret manager, credential resolver or provider dispatcher. PR remains draft.
