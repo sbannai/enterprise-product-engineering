@@ -15,6 +15,8 @@ export type ProviderRuntimeSelection = {
 
 export type ProviderRuntimeDispatchInput = {
   selection: ProviderRuntimeSelection;
+  /** Transient server-only credential material; never persist or log this input. */
+  credentials: unknown;
   payload: unknown;
   idempotencyKey: string;
   correlationId: string;
