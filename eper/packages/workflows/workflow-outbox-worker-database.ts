@@ -54,7 +54,9 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
     }
 
     const privileges = await client.query<{
-      read_assignments: boolean;
+      read_assignment_scope_columns: boolean;
+      read_assignment_table: boolean;
+      read_assignment_metadata: boolean;
       read_events: boolean;
       read_delivery: boolean;
       update_delivery_table: boolean;
@@ -68,7 +70,21 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
       truncate_delivery: boolean;
     }>(`
       SELECT
-        has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'SELECT') AS read_assignments,
+        (
+          has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'tenant_id', 'SELECT')
+          AND has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'application_id', 'SELECT')
+          AND has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'assignment_status', 'SELECT')
+        ) AS read_assignment_scope_columns,
+        has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'SELECT') AS read_assignment_table,
+        (
+          has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'version', 'SELECT')
+          OR has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'assigned_at', 'SELECT')
+          OR has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'assigned_by', 'SELECT')
+          OR has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'revoked_at', 'SELECT')
+          OR has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'revoked_by', 'SELECT')
+          OR has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'updated_at', 'SELECT')
+          OR has_column_privilege(current_user, 'public.eper_tenant_application_assignment', 'updated_by', 'SELECT')
+        ) AS read_assignment_metadata,
         has_table_privilege(current_user, 'public.eper_workflow_outbox_events', 'SELECT') AS read_events,
         has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'SELECT') AS read_delivery,
         has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'UPDATE') AS update_delivery_table,
@@ -95,8 +111,9 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
         has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'TRUNCATE') AS truncate_delivery
     `);
     const grants = privileges.rows[0];
-    if (!grants || !grants.read_assignments || !grants.read_events ||
-        !grants.read_delivery || !grants.update_delivery_columns || grants.update_delivery_table ||
+    if (!grants || !grants.read_assignment_scope_columns || grants.read_assignment_table ||
+        grants.read_assignment_metadata || !grants.read_events || !grants.read_delivery ||
+        !grants.update_delivery_columns || grants.update_delivery_table ||
         grants.write_assignments || grants.write_events ||
         grants.insert_delivery || grants.delete_delivery ||
         grants.truncate_assignments || grants.truncate_events || grants.truncate_delivery) {
