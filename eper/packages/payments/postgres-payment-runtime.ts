@@ -1,8 +1,28 @@
 import { createRequire } from "node:module";
+import { performance } from "node:perf_hooks";
 import type { SqlPool } from "./postgres-payment-store.js";
 
+export interface PostgresPoolMetrics {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+  connectAttempts: number;
+  connectFailures: number;
+  inFlightAcquisitions: number;
+  acquisitionDurationTotalMs: number;
+  acquisitionDurationMaxMs: number;
+}
+
+/** Aggregate, low-cardinality pool snapshot; contains no SQL, credentials or tenant data. */
 export interface PostgresPoolHandle extends SqlPool {
   end(): Promise<void>;
+  snapshotMetrics(): PostgresPoolMetrics;
+}
+
+interface ObservablePgPool extends PostgresPoolHandle {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
 }
 
 /**
@@ -62,7 +82,7 @@ export function createPostgresPaymentPool(
       application_name: string;
     }) => PostgresPoolHandle;
   };
-  return new pg.Pool({
+  const pool = new pg.Pool({
     connectionString,
     max,
     idleTimeoutMillis,
@@ -72,5 +92,42 @@ export function createPostgresPaymentPool(
     lock_timeout: lockTimeout,
     idle_in_transaction_session_timeout: idleInTransactionTimeout,
     application_name: "eper-api",
+  }) as ObservablePgPool;
+
+  // pg.Pool.connect() resolves only when a client is acquired. Its duration includes
+  // connection establishment as well as queue wait; label it accordingly rather than
+  // claiming it is pure queue latency. Snapshot counters remain process-local.
+  let connectAttempts = 0;
+  let connectFailures = 0;
+  let inFlightAcquisitions = 0;
+  let acquisitionDurationTotalMs = 0;
+  let acquisitionDurationMaxMs = 0;
+  const acquire = pool.connect.bind(pool);
+  pool.connect = async () => {
+    connectAttempts += 1;
+    inFlightAcquisitions += 1;
+    const startedAt = performance.now();
+    try {
+      return await acquire();
+    } catch (error) {
+      connectFailures += 1;
+      throw error;
+    } finally {
+      const elapsed = Math.max(0, performance.now() - startedAt);
+      acquisitionDurationTotalMs += elapsed;
+      acquisitionDurationMaxMs = Math.max(acquisitionDurationMaxMs, elapsed);
+      inFlightAcquisitions = Math.max(0, inFlightAcquisitions - 1);
+    }
+  };
+  pool.snapshotMetrics = () => ({
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+    connectAttempts,
+    connectFailures,
+    inFlightAcquisitions,
+    acquisitionDurationTotalMs: Number(acquisitionDurationTotalMs.toFixed(3)),
+    acquisitionDurationMaxMs: Number(acquisitionDurationMaxMs.toFixed(3)),
   });
+  return pool;
 }
