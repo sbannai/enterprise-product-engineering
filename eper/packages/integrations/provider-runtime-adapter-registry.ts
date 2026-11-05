@@ -33,6 +33,8 @@ export type ProviderRuntimeAdapter = {
   adapterKey: string;
   adapterVersion: string;
   capabilities: readonly string[];
+  /** Deployment attestation; production composition accepts only approved adapters. */
+  executionClass?: "synthetic" | "approved";
   dispatch(input: ProviderRuntimeDispatchInput): Promise<ProviderRuntimeDispatchResult>;
 };
 
@@ -41,6 +43,8 @@ export type ProviderRuntimeAllowlistEntry = {
   adapterKey: string;
   adapterVersion: string;
   capabilities: readonly string[];
+  /** Must match the executable adapter's deployment attestation. */
+  executionClass?: "synthetic" | "approved";
 };
 
 export class ProviderRuntimeRegistryError extends Error {
@@ -109,6 +113,7 @@ export class ProviderRuntimeAdapterRegistry {
       if (!adapter || !validIdentity(adapter.providerKey) || !validIdentity(adapter.adapterKey)
         || !/^\d+\.\d+\.\d+$/.test(adapter.adapterVersion)
          || !validCapabilities(adapter.capabilities)
+        || (adapter.executionClass !== undefined && ![\"synthetic\", \"approved\"].includes(adapter.executionClass))
         || typeof adapter.dispatch !== "function") {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
       }
@@ -118,6 +123,7 @@ export class ProviderRuntimeAdapterRegistry {
       }
       const permittedEntry = permitted.get(key);
       if (!permittedEntry || permittedEntry.adapterKey !== adapter.adapterKey
+        || permittedEntry.executionClass !== adapter.executionClass
          || adapter.capabilities.some((capability: string) => !permittedEntry.capabilities.includes(capability))
         || permittedEntry.capabilities.some((capability: string) => !adapter.capabilities.includes(capability))) {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_NOT_ALLOWLISTED");
