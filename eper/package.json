@@ -19,7 +19,8 @@
     "start:campaign-worker": "node dist/apps/worker/campaign-scheduler-main.js",
     "start:agent-worker": "node dist/apps/worker/agent-worker-main.js",
     "start:customer-asset-scan-worker": "node dist/apps/worker/customer-asset-scan-main.js",
-    "bench:postgres-api": "node scripts/postgres-capacity-api-bench.mjs"
+    "bench:postgres-api": "node scripts/postgres-capacity-api-bench.mjs",
+    "observe:postgres-capacity": "node scripts/postgres-capacity-db-observer.mjs"
   },
   "devDependencies": {
     "@types/node": "20.14.15",
