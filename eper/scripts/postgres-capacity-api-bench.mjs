@@ -42,7 +42,9 @@ const rampSeconds = Number(process.env.EPER_CAPACITY_BENCH_RAMP_SECONDS ?? 10);
 if (![concurrency, durationSeconds, warmupSeconds, rampSeconds].every(Number.isFinite) ||
     !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 100 ||
     durationSeconds < 5 || durationSeconds > 3600 || warmupSeconds < 0 || warmupSeconds > 300 ||
-    rampSeconds < 0 || rampSeconds > 300) fail("BENCHMARK_PARAMETERS_INVALID (concurrency 1-100; duration 5-3600s; warmup/ramp 0-300s).");
+    rampSeconds < 0 || rampSeconds > 300 || rampSeconds > durationSeconds) fail("BENCHMARK_PARAMETERS_INVALID (concurrency 1-100; duration 5-3600s; warmup/ramp 0-300s; ramp must not exceed duration).");
+const requestTimeoutMs = Number(process.env.EPER_CAPACITY_BENCH_REQUEST_TIMEOUT_MS ?? 10000);
+if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 100 || requestTimeoutMs > 120000) fail("BENCHMARK_REQUEST_TIMEOUT_INVALID");
 
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 5000, idleTimeoutMillis: 1000 });
 let databaseIdentity;
@@ -63,19 +65,16 @@ const token = process.env.EPER_CAPACITY_BENCH_BEARER_TOKEN;
 if (token) headers.authorization = `Bearer ${token}`;
 const cookie = process.env.EPER_CAPACITY_BENCH_COOKIE;
 if (cookie) headers.cookie = cookie;
-const requestTimeoutMs = Number(process.env.EPER_CAPACITY_BENCH_REQUEST_TIMEOUT_MS ?? 10000);
-if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 100 || requestTimeoutMs > 120000) fail("BENCHMARK_REQUEST_TIMEOUT_INVALID");
-
 const samples = [];
-let completed = 0, failed = 0, inFlight = 0, stopAt = 0;
+let completed = 0, failed = 0, stopAt = 0;
 const errors = new Map();
+const statusCounts = new Map();
 const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 const percentile = (values, p) => values.length ? values[Math.min(values.length - 1, Math.ceil(values.length * p) - 1)] : null;
 const sorted = (values) => [...values].sort((a, b) => a - b);
 
 async function requestOnce(record) {
   const started = performance.now();
-  inFlight++;
   try {
     const response = await fetch(target, { method, headers, signal: AbortSignal.timeout(requestTimeoutMs), redirect: "manual" });
     const elapsed = performance.now() - started;
@@ -83,7 +82,8 @@ async function requestOnce(record) {
     await response.arrayBuffer();
     if (record) {
       samples.push(elapsed);
-      if (response.status >= 200 && response.status < 400) completed++;
+      statusCounts.set(response.status, (statusCounts.get(response.status) ?? 0) + 1);
+      if (response.status >= 200 && response.status < 300) completed++;
       else {
         failed++;
         const key = `http_${response.status}`;
@@ -96,7 +96,7 @@ async function requestOnce(record) {
       const key = error?.name === "TimeoutError" ? "timeout" : "network_error";
       errors.set(key, (errors.get(key) ?? 0) + 1);
     }
-  } finally { inFlight--; }
+  }
 }
 
 console.log("EPER_CAPACITY_BENCH_START");
@@ -140,6 +140,7 @@ const result = {
     p99: percentile(latencies, 0.99) === null ? null : Number(percentile(latencies, 0.99).toFixed(2)),
     max: latencies.length ? Number(latencies.at(-1).toFixed(2)) : null
   },
+  httpStatusCounts: Object.fromEntries([...statusCounts.entries()].map(([status, count]) => [String(status), count])),
   errorCategories: Object.fromEntries(errors),
   note: "API route probe only. Correlate with PostgreSQL and pool telemetry; this is not a standalone database or production-capacity certification."
 };
