@@ -58,3 +58,31 @@ test("PostgreSQL pool rejects invalid or unsafe pool sizing", () => {
     EPER_PAYMENT_DATABASE_URL: TEST_URL, EPER_PG_POOL_MAX: "lots",
   }), /EPER_PG_POOL_MAX_INVALID/);
 });
+
+test("PostgreSQL pool exposes only aggregate acquisition and pool counters", async () => {
+  const pool = createPostgresPaymentPool({ EPER_PAYMENT_DATABASE_URL: TEST_URL });
+  try {
+    const metrics = pool.snapshotMetrics();
+    assert.deepEqual(Object.keys(metrics).sort(), [
+      "acquisitionDurationMaxMs",
+      "acquisitionDurationTotalMs",
+      "connectAttempts",
+      "connectFailures",
+      "idleCount",
+      "inFlightAcquisitions",
+      "totalCount",
+      "waitingCount",
+    ].sort());
+    assert.equal(metrics.totalCount, 0);
+    assert.equal(metrics.idleCount, 0);
+    assert.equal(metrics.waitingCount, 0);
+    assert.equal(metrics.connectAttempts, 0);
+    assert.equal(metrics.connectFailures, 0);
+    assert.equal(metrics.inFlightAcquisitions, 0);
+    assert.equal(metrics.acquisitionDurationTotalMs, 0);
+    assert.equal(metrics.acquisitionDurationMaxMs, 0);
+    assert.equal(JSON.stringify(metrics).includes("password"), false);
+  } finally {
+    await pool.end();
+  }
+});
