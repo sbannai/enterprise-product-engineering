@@ -81,3 +81,14 @@ test("capacity probe refuses write methods before opening a database connection"
 test("capacity probe rejects out-of-range concurrency before opening a database connection", () => {
   assertRefused(runBench({ EPER_CAPACITY_BENCH_CONCURRENCY: "101" }), "BENCHMARK_PARAMETERS_INVALID");
 });
+
+test("capacity probe rejects a ramp longer than the measurement window", () => {
+  assertRefused(runBench({
+    EPER_CAPACITY_BENCH_DURATION_SECONDS: "5",
+    EPER_CAPACITY_BENCH_RAMP_SECONDS: "6",
+  }), "BENCHMARK_PARAMETERS_INVALID");
+});
+
+test("capacity probe validates request timeout before connecting to PostgreSQL", () => {
+  assertRefused(runBench({ EPER_CAPACITY_BENCH_REQUEST_TIMEOUT_MS: "99" }), "BENCHMARK_REQUEST_TIMEOUT_INVALID");
+});
