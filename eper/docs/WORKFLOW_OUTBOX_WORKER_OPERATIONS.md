@@ -41,7 +41,7 @@ GRANT SELECT ON eper_workflow_outbox_events TO eper_workflow_outbox_worker;
 GRANT SELECT, UPDATE ON eper_workflow_outbox_delivery TO eper_workflow_outbox_worker;
 ```
 
-Do not grant ownership, superuser, BYPASSRLS, INSERT or DELETE privileges. The worker's startup gate checks the actual login identity, role elevation, outbox-table RLS, table ownership, required SELECT/UPDATE privileges and absence of broader write grants. It refuses to start when those checks fail.
+Do not grant ownership, superuser, BYPASSRLS, INSERT, DELETE or TRUNCATE privileges. The worker's startup gate checks the actual login identity, role elevation, outbox-table RLS, table ownership, required SELECT/UPDATE privileges and absence of broader write grants. It refuses to start when those checks fail.
 
 The outbox store sets tenant/application RLS context for every claim, lease renewal, acknowledgement and failure update. Context discovery reads only active tenant/application assignments. Keep the worker login out of API credentials and all human/admin roles.
 
