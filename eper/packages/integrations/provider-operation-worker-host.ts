@@ -24,7 +24,8 @@ export interface ProviderOperationWorkerHostOptions {
   drainBatchSize?: number;
   /** Emits bounded, non-sensitive operational facts; never pass raw errors or tenant data. */
   onEvent?: (event: ProviderWorkerHostEvent) => void;
-  onError?: (error: unknown) => void;
+  /** Receives only stable failure categories; raw exceptions are never exposed. */
+  onError?: (code: "WORKER_PASS_FAILED" | "WAKE_SOURCE_WAIT_FAILED" | "WAKE_SOURCE_RECONNECT_FAILED") => void;
 }
 
 const abortableDelay = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
@@ -60,6 +61,10 @@ export class ProviderOperationWorkerHost {
     }
   }
 
+  private reportFailure(code: "WORKER_PASS_FAILED" | "WAKE_SOURCE_WAIT_FAILED" | "WAKE_SOURCE_RECONNECT_FAILED"): void {
+    try { this.options.onError?.(code); } catch { /* callbacks cannot stop queue processing */ }
+  }
+
   constructor(
     private readonly worker: Pick<ProviderOperationWorker, "runOnce">,
     private readonly wakeSource: ProviderQueueWakeSource,
@@ -91,8 +96,8 @@ export class ProviderOperationWorkerHost {
         let result: ProviderOperationWorkerResult;
         try {
           result = await this.worker.runOnce(signal);
-        } catch (error) {
-          this.options.onError?.(error);
+        } catch {
+          this.reportFailure("WORKER_PASS_FAILED");
           this.emit({ type: "worker_pass_failed" });
           if (signal.aborted) break;
           await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
@@ -113,15 +118,15 @@ export class ProviderOperationWorkerHost {
         try {
           this.emit({ type: "wake_wait_started", timeoutMs: this.reconciliationIntervalMs });
           await this.wakeSource.wait(this.reconciliationIntervalMs, signal);
-        } catch (error) {
-          this.options.onError?.(error);
+        } catch {
+          this.reportFailure("WAKE_SOURCE_WAIT_FAILED");
           if (!signal.aborted) {
             try {
               // Re-establish LISTEN before the next queue scan after a disconnect.
               await this.wakeSource.start();
               this.emit({ type: "wake_source_reconnected" });
-            } catch (reconnectError) {
-              this.options.onError?.(reconnectError);
+            } catch {
+              this.reportFailure("WAKE_SOURCE_RECONNECT_FAILED");
               await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
             }
           }
