@@ -121,3 +121,15 @@ test("provider host emits bounded lifecycle metrics without forwarding error det
   ]);
   assert.equal(JSON.stringify(events).includes("must-not-appear"), false);
 });
+
+
+test("provider host continues queue processing when telemetry exporter throws", async () => {
+  const state = setup([]);
+  const host = new ProviderOperationWorkerHost(state.worker, state.wakeSource, {
+    onEvent() { throw new Error("metrics exporter unavailable"); },
+  });
+  await host.run(state.controller.signal);
+  assert.equal(state.calls.passes, 1);
+  assert.equal(state.calls.waits.length, 1);
+  assert.equal(state.calls.closed, 1);
+});
