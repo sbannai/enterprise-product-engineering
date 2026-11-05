@@ -114,7 +114,7 @@ export class ProviderRuntimeAdapterRegistry {
       if (!adapter || !validIdentity(adapter.providerKey) || !validIdentity(adapter.adapterKey)
         || !/^\d+\.\d+\.\d+$/.test(adapter.adapterVersion)
          || !validCapabilities(adapter.capabilities)
-        || (adapter.executionClass !== undefined && ![\"synthetic\", \"approved\"].includes(adapter.executionClass))
+        || (adapter.executionClass !== undefined && !["synthetic", "approved"].includes(adapter.executionClass))
         || typeof adapter.dispatch !== "function") {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
       }
