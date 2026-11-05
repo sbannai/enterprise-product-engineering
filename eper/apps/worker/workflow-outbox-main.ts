@@ -21,6 +21,23 @@ function safeErrorCode(error: unknown): string {
   return /^[A-Z][A-Z0-9_]{1,95}$/.test(message) ? message : "WORKFLOW_OUTBOX_RUNTIME_ERROR";
 }
 
+function createAuditSqlPoolAdapter(pool: Pool): AuditSqlPool {
+  return {
+    async connect(): Promise<AuditSqlClient> {
+      const client = await pool.connect();
+      return {
+        async query<Row = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<AuditSqlResult<Row>> {
+          const result = await client.query(sql, values as never[] | undefined);
+          return { rows: result.rows as Row[], rowCount: result.rowCount };
+        },
+        release() {
+          client.release();
+        },
+      };
+    },
+  };
+}
+
 async function main(): Promise<void> {
   const config = readWorkflowOutboxWorkerConfig(process.env);
   const require = createRequire(import.meta.url);
