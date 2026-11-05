@@ -258,6 +258,15 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.equal(quarantined.lifecycleStatus, "quarantined");
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [clean],
         "infected assets must never appear in the available asset listing");
+      const downloadable = await repository.getDownloadableAsset(tenantId, applicationId, clean.assetId);
+      assert.ok(downloadable?.storageObjectReference, "available clean assets resolve an opaque storage reference for server-side signing");
+      assert.equal(downloadable.assetId, clean.assetId);
+      assert.equal(await repository.getDownloadableAsset(tenantId, applicationId, quarantined.assetId), null,
+        "quarantined assets must never be downloadable");
+      assert.equal(await repository.getDownloadableAsset(tenantId, otherApplication, clean.assetId), null,
+        "application-restricted assets must not be downloadable from another application");
+      assert.equal(await repository.getDownloadableAsset(otherTenant, applicationId, clean.assetId), null,
+        "assets must not be downloadable across tenant boundaries");
 
       const client = await pool.connect();
       try {
