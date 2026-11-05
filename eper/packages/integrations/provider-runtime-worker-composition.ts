@@ -6,6 +6,7 @@ import {
 import {
   ProviderRuntimeAdapterRegistry,
 } from "./provider-runtime-adapter-registry.js";
+import type { ProviderRuntimeCredentialResolver } from "./provider-runtime-credential-resolver.js";
 
 /**
  * Production composition seam for provider operation dispatch.
@@ -18,6 +19,7 @@ import {
 export type ProviderOperationWorkerRuntimeDependencies =
   Omit<ProviderOperationWorkerDependencies, "dispatch"> & {
     runtimeRegistry: Pick<ProviderRuntimeAdapterRegistry, "dispatch">;
+    credentialResolver: Pick<ProviderRuntimeCredentialResolver, "resolve">;
   };
 
 export function createProviderOperationWorkerWithRuntimeRegistry(
@@ -28,11 +30,17 @@ export function createProviderOperationWorkerWithRuntimeRegistry(
   if (!registry || typeof registry.dispatch !== "function") {
     throw new Error("PROVIDER_RUNTIME_REGISTRY_REQUIRED");
   }
+  if (!dependencies.credentialResolver || typeof dependencies.credentialResolver.resolve !== "function") {
+    throw new Error("PROVIDER_RUNTIME_CREDENTIAL_RESOLVER_REQUIRED");
+  }
 
-  const { runtimeRegistry: _runtimeRegistry, ...workerDependencies } = dependencies;
+  const { runtimeRegistry: _runtimeRegistry, credentialResolver, ...workerDependencies } = dependencies;
   return new ProviderOperationWorker({
     ...workerDependencies,
-    dispatch: input => registry.dispatch({
+    dispatch: async input => {
+      const credentials = await credentialResolver.resolve(input.selection);
+      return registry.dispatch({
+      credentials,
       selection: {
         providerKey: input.selection.providerKey,
         adapterKey: input.selection.adapterKey,
@@ -43,6 +51,7 @@ export function createProviderOperationWorkerWithRuntimeRegistry(
       idempotencyKey: input.idempotencyKey,
       correlationId: input.correlationId,
       signal: input.signal,
-    }),
+      });
+    },
   }, options);
 }
