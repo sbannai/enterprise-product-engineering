@@ -51,6 +51,15 @@ export class ProviderOperationWorkerHost {
   private readonly reconciliationIntervalMs: number;
   private readonly drainBatchSize: number;
 
+  /** Telemetry must never become a dependency of queue execution. */
+  private emit(event: ProviderWorkerHostEvent): void {
+    try {
+      this.options.onEvent?.(event);
+    } catch {
+      // Deliberately swallow exporter/callback failures; queue processing continues.
+    }
+  }
+
   constructor(
     private readonly worker: Pick<ProviderOperationWorker, "runOnce">,
     private readonly wakeSource: ProviderQueueWakeSource,
@@ -77,19 +86,19 @@ export class ProviderOperationWorkerHost {
   async run(signal: AbortSignal): Promise<void> {
     try {
       await this.wakeSource.start();
-      this.options.onEvent?.({ type: "host_started" });
+      this.emit({ type: "host_started" });
       while (!signal.aborted) {
         let result: ProviderOperationWorkerResult;
         try {
           result = await this.worker.runOnce(signal);
         } catch (error) {
           this.options.onError?.(error);
-          this.options.onEvent?.({ type: "worker_pass_failed" });
+          this.emit({ type: "worker_pass_failed" });
           if (signal.aborted) break;
           await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
           continue;
         }
-        this.options.onEvent?.({
+        this.emit({
           type: "worker_pass_completed",
           claimed: result.claimed,
           succeeded: result.succeeded,
@@ -102,7 +111,7 @@ export class ProviderOperationWorkerHost {
         // A full batch may leave eligible work behind; drain it before sleeping.
         if (result.claimed >= this.drainBatchSize) continue;
         try {
-          this.options.onEvent?.({ type: "wake_wait_started", timeoutMs: this.reconciliationIntervalMs });
+          this.emit({ type: "wake_wait_started", timeoutMs: this.reconciliationIntervalMs });
           await this.wakeSource.wait(this.reconciliationIntervalMs, signal);
         } catch (error) {
           this.options.onError?.(error);
@@ -110,7 +119,7 @@ export class ProviderOperationWorkerHost {
             try {
               // Re-establish LISTEN before the next queue scan after a disconnect.
               await this.wakeSource.start();
-              this.options.onEvent?.({ type: "wake_source_reconnected" });
+              this.emit({ type: "wake_source_reconnected" });
             } catch (reconnectError) {
               this.options.onError?.(reconnectError);
               await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
@@ -120,7 +129,7 @@ export class ProviderOperationWorkerHost {
       }
     } finally {
       await this.wakeSource.close();
-      this.options.onEvent?.({ type: "host_stopped" });
+      this.emit({ type: "host_stopped" });
     }
   }
 }
