@@ -2673,3 +2673,90 @@ This is a dated evidence snapshot, not a replacement for dynamic resolution. On 
 - PR #399 remains incomplete for real binary transfer. Its API composition root supplies the PostgreSQL asset repository and upload authorizer but does not supply concrete `assetUploadPort`, `assetUploadVerificationPort`, `assetMalwareScanPort`, `assetStoragePort` or `assetDownloadResolver`. The scanner worker still requires a host-provided scanner module. Current tests prove injected/synthetic adapter contracts, not an actual customer file upload, provider-observed object verification, malware scan and authorized download. Keep the branch draft until that lifecycle is integrated and exercised with real file bytes in a disposable local adapter.
 - These are exact-head CI and local PostgreSQL results only. They do not establish a production provider, storage, scanner, supervisor or release operation. No cloud resource or external/provider action was used.
 
+## Dynamic exact-head operating update — 2026-11-05 10:12 IST
+
+This is a time-bounded evidence snapshot. On every subsequent run, resolve `refs/heads/main` and every current `refs/pull/<number>/head` before querying Actions. Do not reuse a head or run from an earlier snapshot.
+
+### Mainline resolution and current-main checks
+
+- Current main SHA: `2c380d79c55c9183a42ed534ffd1a504f7d41316`.
+- Commit date: 2026-11-03 16:36:07 UTC; commit message: `revert: remove unintended provider payload test commit from main`. Main has not advanced since this commit.
+- The eight push workflows returned for this exact SHA all completed successfully: EPER CI [41675875771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771), same-commit integrated validation [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913), 228/38 matrix [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818), G9 [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648), six-family HTTP [41675875652](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875652), container smoke [41675875533](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875533), controlled QA [41675875702](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875702), and release build [41675875533](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875533).
+- Integrated main test job: 1,410 tests; 1,404 passed, 0 failed, 6 skipped. The 228/38 matrix reports 228 requirements across 38 chapters and 228 automated pilot classifications, with no failed chapters. G9 reconciliation is 5/5.
+- The matrix explicitly classifies itself as an automated pilot, not business acceptance or production evidence. Do not promote pending requirements to final closure.
+- Repository metadata currently reports `main.protected=false`; the repository rulesets endpoint returns an empty collection. Required branch protection and status-check enforcement are therefore not active. No repository setting was changed.
+
+### Merged setup and identity foundations
+
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`. The merge commit is an ancestor of current main. It is not open.
+- PR #310 is closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. The merge commit is an ancestor of current main. It delivered the durable identity/session foundation, not the whole production login lifecycle.
+- Browser/session successors are also merged ancestors: #324 `a554990cb7f4969bb218aad7a2e9944aec62fa05`, #329 `82a82d92222c613c02e55f01211ecbb32ce63bba`, #337 `18315e1654b52f1546936a8fd28daed907cab31e`, and consolidation #376 `9749701bfed527b906183192ca06cc1998e70166`.
+- These successors add browser transaction guards, durable OIDC customer workspace/support access, CSRF/session enforcement and customer-admin/workflow/provider foundations. Browser tests use a synthetic identity provider; production IdP onboarding, metadata/JWKS lifecycle, key rotation and operational credential custody remain separate gates.
+
+### Current open PR inventory — dynamically resolved snapshot
+
+Every row below was resolved from current PR metadata. Each listed representative Actions run belongs to the exact head SHA shown in the row. The other returned exact-head workflows for that PR also completed successfully; no failed or pending exact-head workflow was returned. Every listed PR remains draft. Branch bases intentionally form feature stacks; merge only after dependency review.
+
+| PR | Current exact head | Base branch | Representative exact-head Actions |
+|---|---|---|---|
+| #400 | `c445691f27a06ee36b590f374d5f7ddc6a8ab119` | main | [Fresh clone 41960896718](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896718); [PostgreSQL 41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927); [integrated 41960896797](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896797) |
+| #399 | `46ce7442ef5c1ed7f7cfc4852125069d90aab59f` | integration/asset-provider-stack-validation | [Fresh clone 41967430984](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41967430984); [PostgreSQL 41967430999](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41967430999); [browser 41967430987](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41967430987) |
+| #398 | `c2de2c035ab5376f94094f37f4825ce4175a9513` | integration/asset-provider-stack-validation | [Provider lifecycle 41962395345](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41962395345); [fresh clone 41962395373](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41962395373); [PostgreSQL 41962395311](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41962395311) |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | fix/postgres-customer-asset-download-authorization | [Provider lifecycle 41871265677](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265677) |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | integration/asset-provider-stack-validation | [Fresh clone 41869040234](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41869040234) |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | integration/asset-provider-stack-validation | [Browser 41868477503](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477503) |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | fix/customer-asset-upload-idempotency | [Integrated 41844357419](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357419) |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | fix/provider-rls-integrity-stack | [Provider lifecycle 41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | fix/provider-payload-operation-integrity | [Provider lifecycle 41820073247](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073247) |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | feat/postgres-encrypted-provider-payload-store | [PostgreSQL 41805934647](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934647) |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | main | [Integrated 41795128802](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41795128802) |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | main | [Browser 41784823265](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823265) |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | feat/customer-asset-repository-foundation | [Fresh clone 41837639258](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639258) |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | main | [Integrated 41764308133](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308133) |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | main | [Fresh clone 41786048886](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048886) |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | main | [Integrated 41763251674](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251674) |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | feat/provider-payload-encryption-boundary | [Provider lifecycle 41738351657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351657) |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | main | [Provider lifecycle 41738299039](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299039) |
+
+PR #377 is this scorecard branch. Its pre-update head was `1a623d74b824a6d8c05031e7b9fe8fe6afd2c231`; that head's nine returned exact-head workflows passed, but this documentation update creates a new head. Re-resolve PR #377 and validate the new exact head; do not reuse those prior runs as evidence for the new commit.
+
+### Fresh-clone and PostgreSQL evidence
+
+- Main contains `npm run dev:verify` and the seven ordered migration groups: payments, audit, capabilities, ticketing, campaign scheduler, workflows and identity. The developer verification test asserts application and repeatability of all seven groups.
+- PR #400 exact-head fresh-clone [41960896718](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896718): 1,437 tests / 1,432 passed / 0 failed / 5 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; disposable PostgreSQL 16 backup/restore PASS; 75 source/restored base tables and seven migration ledgers.
+- PR #400 PostgreSQL [41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927): migrations 015 and 016 applied; ephemeral dedicated worker login satisfied the live restricted-role gate (1/1). The worker can discover only tenant, application and active-assignment columns; table-wide SELECT and unrelated assignment metadata are denied.
+- PR #399 exact-head fresh-clone [41967430984](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41967430984): 1,520 tests / 1,516 passed / 0 failed / 4 skipped; all seven migration groups repeated; disposable restore PASS; 80 source/restored base tables and seven migration ledgers.
+- PR #399 exact-head PostgreSQL [41967430999](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41967430999): the scheduler pause/dispatch fence race and bounded idempotency tests passed; the full PostgreSQL integration job completed successfully.
+- PR #398 exact-head fresh-clone [41962395373](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41962395373): 1,546 tests / 1,542 passed / 0 failed / 4 skipped; `dev:verify` and disposable restore PASS; 80 source/restored base tables and seven migration ledgers.
+- These exact-head PR checks descend from current main; they are not a fresh-clone run on the exact main SHA. Current-main integrated validation is green, but a fresh-clone workflow record for the exact main SHA was not returned in the current push-run set.
+
+### Identity, customer workspace and support
+
+- Durable customer identity/session foundation #310 and browser/session successors #324/#329/#337 are merged ancestors. The current browser test on #399 exact head passed the PostgreSQL-backed synthetic-IdP customer workspace/support/logout journey (1/1); Product Admin browser remediation also passed (1/1).
+- Current customer support tests cover trusted tenant/actor derivation; application assignment; customer ticket creation, listing, history and replies; idempotency; tenant/application denial; admin queue, triage, status and assignment; severity/P1 rationale; internal-versus-customer-visible replies; and CSV export with formula-cell neutralization. PostgreSQL store tests verify internal notes are filtered at the SQL boundary and customers cannot create internal notes.
+- SLA deadline calculation, breach detection, escalation scheduling and SLA reporting remain unproven; do not infer them from ticket severity or status.
+- PR #399 adds customer asset upload UI, CSRF and durable application-role checks, idempotent upload reservation, scan-result validation and PostgreSQL-authorized download metadata. Its `main.ts` composition still does not supply concrete `assetUploadPort`, `assetUploadVerificationPort`, `assetMalwareScanPort`, `assetStoragePort` or `assetDownloadResolver`. The browser tests use synthetic/injected adapters and do not upload actual file bytes through storage, provider-observed verification, malware scanning and authorized download. The complete binary asset lifecycle is therefore NOT delivered.
+
+### Scheduler, workflow and provider runtime
+
+- Current main campaign scheduler has an independent `start:campaign-worker` entrypoint. Tests cover asynchronous claimed execution, tenant scope, idempotency, bounded retries, lease renewal/loss, cancellation, atomic dispatch fencing and PostgreSQL restart recovery. The worker entrypoint is opt-in, requires PostgreSQL audit, a worker identity and deployment-owned adapter path.
+- PR #400 adds `start:workflow-outbox-worker` and a dedicated process entrypoint. Exact-head tests cover continuous scope draining, lease renewal/fencing, idempotency, bounded retries/dead-letter, graceful SIGINT/SIGTERM, restricted PostgreSQL role and immediate parking of unapproved dispatch. The dispatcher module must be explicitly supplied from the deployment-owned dispatcher directory; no production dispatcher module is supplied in the repository.
+- Worker stdout has bounded lifecycle/pass counters and safe error codes. External supervision, readiness/liveness integration, metrics sink, alert thresholds, restart policy and independent recovery rehearsal remain.
+- PR #398 adds a fail-closed provider adapter registry, transient credential-resolution boundary, inert composition root and event-driven worker host. Its lifecycle tests pass (worker 8/8, host 9/9, queue wake 3/3, PostgreSQL NOTIFY 1/1, keyring 6/6, encrypted payload store 2/2). Production secret-manager/key custody, concrete approved adapters, deployment-owned dispatcher, separate process supervisor and operational telemetry remain.
+- PR #389 is an evaluation plan only. PostgreSQL remains the control candidate; MySQL 8.4 LTS and MongoDB are comparison candidates. No engine replacement, migration or cutover decision is authorized or evidenced. PostgreSQL CI failures must first be classified by root cause, not treated as an automatic engine decision.
+
+### Seven-pointer disposition and continuity
+
+| Pointer | Assessment | Evidence and remaining boundary |
+|---|---|---|
+| 1. v34-to-228 reconciliation | AMBER | 45 source rows preserved; 0 exact full-coverage matches; 45 partial shared-control links; 45 additive v1.6.0 draft candidates; 4 approval overlaps; 0 changes to approved 228 requirements / 38 chapters. Owner disposition remains pending. |
+| 2. Fresh-clone developer setup | GREEN local/CI | #306 merged; `dev:verify`, all seven migration groups and repeatability, live PostgreSQL checks and disposable restore pass on current-main descendant PR heads. Exact-main fresh-clone run and independent second-engineer handover remain unrecorded. |
+| 3. PostgreSQL durability | GREEN local/CI; AMBER operations | Migration repeatability, identity group, live PostgreSQL role/integration tests and disposable restore pass. Off-host backup, encryption/key custody, retention, RPO/RTO and independent restore rehearsal remain. |
+| 4. Customer identity/OIDC | AMBER | Durable sessions, browser routes, secure cookies, CSRF, tenant/application assignment and synthetic-provider browser E2E pass. Real IdP onboarding/JWKS/key rotation and production credential operations remain. |
+| 5. Customer workspace/support | AMBER | Ticket lifecycle/admin/export and browser workspace journey have evidence. SLA automation and actual binary asset lifecycle remain incomplete. |
+| 6. Scheduler/workflow operations | AMBER | Campaign worker recovery and workflow outbox worker executable/lease/fencing/retry/dead-letter/approval boundaries have CI evidence. Production dispatcher, supervisor, health/metrics/alerts and recovery rehearsal remain. |
+| 7. Release/continuity | RED | Main is unprotected and no rulesets are configured. The continuity charter is proposed and requires owner review. Off-host recovery, tested runbooks and a second-engineer release/rollback path are not demonstrated. |
+
+No approved requirement or chapter was changed. No chargeable cloud resource, production deployment, production credential or real external/provider action was used. No merge or branch deletion was performed in this update.
+
+**Next concrete work:** complete the local binary asset adapter and real-bytes upload/verify/scan/download test; then finish the workflow outbox worker's deployment-owned dispatcher contract, external supervision, health/metrics/alerts and restart/recovery evidence. In parallel, obtain owner disposition for the v1.6.0 additive candidates and owner approval for repository protection and the continuity charter.
