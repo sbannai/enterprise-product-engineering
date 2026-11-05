@@ -98,7 +98,8 @@ export class ProviderRuntimeAdapterRegistry {
     for (const entry of allowlist) {
       if (!entry || !validIdentity(entry.providerKey) || !validIdentity(entry.adapterKey)
         || !/^\d+\.\d+\.\d+$/.test(entry.adapterVersion)
-         || !validCapabilities(entry.capabilities)) {
+         || !validCapabilities(entry.capabilities)
+        || (entry.executionClass !== undefined && !["synthetic", "approved"].includes(entry.executionClass))) {
         throw new ProviderRuntimeRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
       }
       const key = registrationKey(entry.providerKey, entry.adapterVersion);
