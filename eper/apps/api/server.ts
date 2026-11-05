@@ -2356,10 +2356,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
         let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
+        const durableAssetMode = process.env.EPER_CUSTOMER_ASSET_PERSISTENCE === "postgres";
         try {
           modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
           if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
-          assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+          if (!durableAssetMode) assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
         } catch { sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return; }
         const objectRecord = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
         const modules = objectRecord(modulesConfig)?.[identity.tenantId];
@@ -2369,13 +2370,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const actorAssigned = options.actorApplicationAssignmentStore
           ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
           : identity.applicationIds?.includes(applicationId) === true;
-        const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
+        const tenantAssets = durableAssetMode ? null : objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
         if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) ||
-            !assignments.includes(applicationId) || !actorAssigned || !tenantAssets) {
+            !assignments.includes(applicationId) || !actorAssigned || (!durableAssetMode && !tenantAssets) ||
+            (durableAssetMode && !options.customerAssetRepository)) {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
-        const applicationAssets = tenantAssets[applicationId];
-        const asset = Array.isArray(applicationAssets) ? applicationAssets.find((item) => item && typeof item === "object" && !Array.isArray(item) && (item as Record<string, unknown>).id === assetId) as Record<string, unknown> | undefined : undefined;
+        let asset: Record<string, unknown> | undefined;
+        if (durableAssetMode) {
+          const durableAsset = await options.customerAssetRepository!.getDownloadableAsset(identity.tenantId, applicationId, assetId);
+          if (durableAsset) asset = {
+            id: durableAsset.assetId, name: durableAsset.originalFileName,
+            mimeType: durableAsset.mimeType, accessReference: durableAsset.storageObjectReference,
+          };
+        } else {
+          const applicationAssets = tenantAssets![applicationId];
+          asset = Array.isArray(applicationAssets) ? applicationAssets.find((item) => item && typeof item === "object" && !Array.isArray(item) && (item as Record<string, unknown>).id === assetId) as Record<string, unknown> | undefined : undefined;
+        }
         if (!asset || typeof asset.accessReference !== "string" || !asset.accessReference.trim() || typeof asset.name !== "string") {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
