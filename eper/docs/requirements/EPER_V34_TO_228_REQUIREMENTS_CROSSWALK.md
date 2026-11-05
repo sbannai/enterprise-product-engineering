@@ -139,3 +139,26 @@ The v1.6.0 register now carries ten owner-directed commercial additions, EPER-CW
 ### Implementation evidence boundary
 
 The commercial requirements are traceable here, but their implementation status must be assessed independently across UI, API, PostgreSQL, audit, authorization and executable tests. In particular, customer lifecycle enforcement is not equivalent to a complete Admin lifecycle-management UI; tariff catalogue publication is not equivalent to metering/deviation monitoring; and tariff acceptance is not complete price-integrity integration through quote, invoice, payment and receipt. Do not infer implementation or operational readiness from this crosswalk.
+
+
+## 8. Owner-directed workflow and customer-settings additions — separate from the 45 v34 source rows
+
+The v1.6.0 draft register also contains four owner-directed additions, EPER-CW-056 through EPER-CW-059. They are **not** additional rows from the original v34 wireframe export. This section records their relationship to reusable 228-baseline controls without inventing exact REQ-463xx…REQ-500xx matches.
+
+| Candidate ID | Additive capability | Supporting baseline controls | Shared capability families | Disposition |
+|---|---|---|---|---|
+| EPER-CW-056 | Tenant/application-scoped configurable workflow Rule Engine | SRS-002, SRS-003, SRS-009, SRS-010, SRS-011, SRS-017; XX01/XX02/XX03/XX04/XX05 | Authoritative records, authorization, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-057 | Versioned visual Workflow Designer with draft, validation, simulation and controlled publication | SRS-002, SRS-003, SRS-009, SRS-010, SRS-011, SRS-017, SRS-018; XX01/XX02/XX03/XX04/XX05/XX06 | Authoritative records, authorization, validation, audit, exceptions, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-058 | Customer-wide alert/video defaults inherited by applications with authorized application overrides | SRS-002, SRS-003, SRS-014, SRS-017, SRS-018; XX01/XX02/XX03/XX04/XX05/XX06 | Authoritative records, authorization, validation, audit, exceptions, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-059 | Central platform/customer policy boundaries over inherited and application-specific alert/video settings | SRS-002, SRS-003, SRS-014, SRS-017, SRS-018, SRS-019; XX02/XX03/XX04/XX05/XX06 | Authorization, validation, audit, exceptions, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+
+### Workflow/settings crosswalk interpretation
+
+1. EPER-CW-056–059 are four separate owner-directed v1.6.0 draft additions. They do not increase or alter the original 45 v34 source rows.
+2. The SRS/XX references identify reusable cross-cutting controls only. They are not exact chapter-level requirement matches and do not establish that the workflow designer, settings UI or provider operations are implemented.
+3. No exact REQ-463xx…REQ-500xx locator is asserted for these additions. The approved 228 requirement IDs, 38 chapters and their acceptance states remain unchanged.
+4. Owner disposition of the additive scope remains pending. Recording these candidates in the crosswalk is traceability work, not owner approval or implementation acceptance.
+
+### Implementation evidence boundary
+
+Implementation must still be assessed independently across customer/admin UI, API, PostgreSQL persistence, tenant/application authorization, audit, workflow execution, provider configuration and executable acceptance tests. In particular, workflow Rule Engine/Designer drafts are not equivalent to a published, supervised runtime; inherited alert/video settings are not equivalent to live provider dispatch. Do not infer feature completion from this crosswalk.

@@ -2949,3 +2949,33 @@ The charter remains a proposed operating control and requires owner review. No c
 6. Integrate the provider-payload integrity stack only after dependency-order review and rerun exact-head plus mainline checks; restore the deleted integration-test coverage through the reviewed branch, not by cherry-picking an orphan test.
 
 No approved requirement or chapter was changed. No merge, production deployment, production credential use, external/provider action or chargeable cloud provisioning occurred in this audit.
+
+
+## Operating update — 2026-11-05 12:53 IST
+
+### Mainline and reconciliation
+- Dynamically resolved main remains `2c380d79c55c9183a42ed534ffd1a504f7d41316` at this audit.
+- The v34 crosswalk now records EPER-CW-056–059 in a separate owner-directed addendum. The original 45 v34 source rows, approved 228 requirement IDs and 38 chapters are unchanged. The v34 mapping remains 0 exact full-coverage matches and 45 partial shared-control links; no exact REQ-463xx…REQ-500xx mapping is invented.
+- EPER-CW-046–055 remain a separate ten-item owner-directed commercial addendum. CW-056–059 are four further additive draft entries. Owner disposition remains pending; no additive candidate is marked accepted or implemented by this documentation update.
+
+### PR #401 — PostgreSQL capacity instrumentation and safety
+- Current exact head: `9b2c8014995bd5fcefbe76df9979607df823ccbc`.
+- Fresh clone [41988064409](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41988064409): `npm run dev:verify` PASS; 1,528 tests / 1,524 passed / 0 failed / 4 skipped; all seven migration groups including identity applied and repeated; disposable PostgreSQL 16 backup/restore PASS, 80/80 source/restored base tables.
+- PostgreSQL integration [41988064240](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41988064240): callback/Promise pool acquisition regression test 7/7; all logged integration groups passed.
+- Provider lifecycle [41988064149](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41988064149): queue 1/1, worker 7/7, host 5/5, wake/reconnect 3/3, PostgreSQL NOTIFY 1/1, keyring 6/6 and payload referential-integrity 2/2 passed.
+- Payment contract [41988064254], requirements matrix [41988064228] and controlled QA [41988064187] passed on the same head.
+- Exact-head failure investigation found that a Promise-only wrapper dropped node-postgres' callback `connect(callback)` overload, which `Pool.query()` uses internally. The owning branch now preserves both overloads and adds a live PostgreSQL regression test. The earlier hang and intermediate typecheck failure are superseded by the passing current head.
+- The benchmark harness itself has not been run against a local EPER API plus disposable database. Throughput, concurrency ceiling, latency percentiles and sustainable capacity remain **NOT MEASURED**.
+
+### Seven-checkpoint position
+| Checkpoint | Status | Current evidence and remaining boundary |
+|---|---|---|
+| 1. v34-to-228 requirements reconciliation | AMBER | CW-056–059 are now separately crosswalked as additive draft scope; owner disposition remains pending. The approved 228/38 baseline and original 45 v34 rows are unchanged. |
+| 2. Fresh-clone developer setup | GREEN for CI/local reproducibility | Current exact-head `npm run dev:verify`, all seven migration groups, repeatability and disposable restore pass. Independent second-engineer handover remains unproven. |
+| 3. PostgreSQL persistence and recovery | GREEN for CI proof; AMBER operationally | Live PostgreSQL integration and 80/80 disposable restore pass. Off-host retention, encryption/key custody, RPO/RTO and independent recovery rehearsal remain. |
+| 4. Provider-neutral identity and access | AMBER | OIDC browser login, durable sessions, secure cookies, CSRF and tenant/application role/assignment checks have synthetic-IdP browser evidence. Production IdP onboarding, metadata/JWKS/key rotation and credential custody remain. |
+| 5. Customer workspace and support | AMBER | Customer OIDC workspace/support browser journey and ticket API/PostgreSQL tests pass. Support-admin browser E2E and owner-defined SLA deadlines/breach/escalation remain. Actual file-byte storage, verification, malware scan and authorized download are not yet proven end to end. |
+| 6. Scheduler/workflow operations | AMBER | Worker core tests cover continuous draining, approval checks, lease/fencing, idempotency, retry/dead-letter and graceful shutdown; restricted worker DB login passes live PostgreSQL integration. Concrete deployment dispatcher, independent process supervision, readiness, metrics/alerts and recovery rehearsal remain. |
+| 7. Release controls and independent handover | RED | Charter remains proposed pending owner review. Branch/ruleset enforcement, off-host recovery and second-engineer release/rollback are not demonstrated. |
+
+No UAT determination is made. No merge, production deployment, production credential use, external/provider action or chargeable cloud provisioning occurred in this update.
