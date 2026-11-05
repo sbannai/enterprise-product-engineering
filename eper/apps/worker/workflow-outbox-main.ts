@@ -1,7 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Pool } from "pg";
+import { createRequire } from "node:module";
+import type { Pool } from "pg";
 import { createApprovedWorkflowOutboxDispatcher, type ApprovedWorkflowOutboxDispatcher } from "../../packages/workflows/workflow-outbox-dispatcher-adapter.js";
 import { runWorkflowOutboxRuntime } from "../../packages/workflows/workflow-outbox-runtime.js";
 import { readWorkflowOutboxWorkerConfig } from "../../packages/workflows/workflow-outbox-worker-config.js";
@@ -124,7 +125,17 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
 
 async function main(): Promise<void> {
   const config = readWorkflowOutboxWorkerConfig(process.env);
-  const pool = new Pool({
+  const require = createRequire(import.meta.url);
+  const pg = require("pg") as {
+    Pool: new (options: {
+      connectionString: string;
+      max: number;
+      connectionTimeoutMillis: number;
+      idleTimeoutMillis: number;
+      application_name: string;
+    }) => Pool;
+  };
+  const pool = new pg.Pool({
     connectionString: config.databaseUrl,
     max: 4,
     connectionTimeoutMillis: 5_000,
