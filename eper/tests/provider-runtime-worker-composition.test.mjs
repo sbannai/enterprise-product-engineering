@@ -120,7 +120,7 @@ test("worker composition dispatches only through the exact runtime registry iden
 });
 
 test("empty runtime registry parks provider work without consuming retry attempts", async () => {
-  const calls = { dispatches: [], outcomes: [] };
+  const calls = { dispatches: [], outcomes: [], credentials: [] };
   const registry = new ProviderRuntimeAdapterRegistry([], []);
   const worker = createProviderOperationWorkerWithRuntimeRegistry(
     dependencies(registry, calls),
