@@ -30,17 +30,12 @@ The worker calls authorization immediately before dispatch. A denied event is de
 
 ## Restricted PostgreSQL login
 
-A DBA should provision the worker login separately from application migrations and inject its credential through the approved secret channel. The intended privilege shape is:
+A DBA should provision the worker login separately from application migrations and inject its credential through the approved secret channel. The migration `015_workflow_outbox_worker_access.sql` creates the NOLOGIN privilege group and grants only the required reads plus column-scoped delivery updates. After that migration, the DBA provisions the separate login and grants it membership:
 
 ```sql
-CREATE ROLE eper_workflow_outbox_worker LOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE eper_workflow_outbox_worker LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
 GRANT CONNECT ON DATABASE eper TO eper_workflow_outbox_worker;
-GRANT USAGE ON SCHEMA public TO eper_workflow_outbox_worker;
-GRANT SELECT ON eper_tenant_application_assignment TO eper_workflow_outbox_worker;
-GRANT SELECT ON eper_workflow_outbox_events TO eper_workflow_outbox_worker;
-GRANT SELECT ON eper_workflow_outbox_delivery TO eper_workflow_outbox_worker;
-GRANT UPDATE (delivery_status, attempts, available_at, locked_at, locked_by, last_error, delivered_at, updated_at)
-  ON eper_workflow_outbox_delivery TO eper_workflow_outbox_worker;
+GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker;
 ```
 
 Do not grant ownership, superuser, BYPASSRLS, INSERT, DELETE or TRUNCATE privileges. The worker's startup gate checks the actual login identity, role elevation, ENABLE and FORCE RLS on both outbox tables, table ownership, required SELECT privileges plus column-scoped delivery UPDATE (status, attempts, availability, lease, error, delivery and timestamp fields), and absence of table-wide UPDATE, INSERT, DELETE or TRUNCATE grants. It refuses to start when those checks fail.
