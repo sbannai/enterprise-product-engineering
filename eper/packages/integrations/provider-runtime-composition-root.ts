@@ -25,6 +25,8 @@ import {
 export type ProviderRuntimeCompositionInput = {
   /** Must be explicitly true; undefined/false always leaves the runtime disabled. */
   enabled?: boolean;
+  /** Production is opt-in and applies stricter adapter and telemetry requirements. */
+  runtimeEnvironment?: "development" | "test" | "production";
   registrations: readonly ProviderRuntimeAdapter[];
   allowlist: readonly ProviderRuntimeAllowlistEntry[];
   secretReferences: ProviderRuntimeSecretReferenceStore;
@@ -46,8 +48,9 @@ export type ProviderRuntimeComposition = {
  * Single fail-closed composition root for the provider runtime.
  * It is inert unless explicitly enabled. Even when enabled, an empty executable
  * adapter set is rejected rather than starting a worker that can never dispatch.
- * This factory performs no network calls and starts no background process;
- * the API/process lifecycle owner must start the returned host deliberately.
+ * Production additionally requires deployment-attested approved adapters,
+ * production audit context and bounded telemetry; raw-error callbacks are barred.
+ * This factory performs no network calls and starts no background process.
  */
 export function createProviderRuntimeComposition(
   input: ProviderRuntimeCompositionInput,
@@ -58,9 +61,24 @@ export function createProviderRuntimeComposition(
     throw new Error("PROVIDER_RUNTIME_EXECUTABLE_ADAPTERS_REQUIRED");
   }
   if (!input.secretReferences || typeof input.secretReferences.getDispatchSecretReference !== "function"
-    || !input.secrets || typeof input.secrets.resolve !== "function"
-    || !input.wakeSource || typeof input.wakeSource.start !== "function") {
+    || typeof input.secrets?.resolve !== "function"
+    || !input.wakeSource || typeof input.wakeSource.start !== "function"
+    || typeof input.wakeSource.wait !== "function" || typeof input.wakeSource.close !== "function") {
     throw new Error("PROVIDER_RUNTIME_COMPOSITION_DEPENDENCIES_REQUIRED");
+  }
+  if (input.runtimeEnvironment !== undefined
+    && !["development", "test", "production"].includes(input.runtimeEnvironment)) {
+    throw new Error("PROVIDER_RUNTIME_ENVIRONMENT_INVALID");
+  }
+  if (input.runtimeEnvironment === "production") {
+    const approved = (entry: { executionClass?: string }) => entry.executionClass === "approved";
+    if (input.workerOptions?.auditEnvironment !== "production"
+      || !input.registrations.every(approved)
+      || !input.allowlist.every(approved)
+      || typeof input.hostOptions?.onEvent !== "function"
+      || input.hostOptions.onError !== undefined) {
+      throw new Error("PROVIDER_RUNTIME_PRODUCTION_GUARDRAILS_REQUIRED");
+    }
   }
 
   const registry = new ProviderRuntimeAdapterRegistry(input.registrations, input.allowlist);
