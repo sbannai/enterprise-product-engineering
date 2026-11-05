@@ -61,12 +61,12 @@ test("provider host reports worker failures and closes cleanly on abort", async 
     },
   };
   const host = new ProviderOperationWorkerHost(worker, state.wakeSource, {
-    onError(error) {
-      state.calls.errors.push(error.message);
+    onError(code) {
+      state.calls.errors.push(code);
     },
   });
   await host.run(state.controller.signal);
-  assert.deepEqual(state.calls.errors, ["synthetic worker failure"]);
+  assert.deepEqual(state.calls.errors, ["WORKER_PASS_FAILED"]);
   assert.equal(state.calls.starts, 1);
   assert.equal(state.calls.closed, 1);
   assert.equal(state.calls.waits.length, 0);
@@ -82,12 +82,12 @@ test("provider host reconnects its wake source before the next scan", async () =
     return "timeout";
   };
   const host = new ProviderOperationWorkerHost(state.worker, state.wakeSource, {
-    onError(error) { state.calls.errors.push(error.message); },
+    onError(code) { state.calls.errors.push(code); },
   });
   await host.run(state.controller.signal);
   assert.equal(state.calls.starts, 2);
   assert.equal(state.calls.passes, 2);
-  assert.deepEqual(state.calls.errors, ["listener disconnected"]);
+  assert.deepEqual(state.calls.errors, ["WAKE_SOURCE_WAIT_FAILED"]);
   assert.equal(state.calls.closed, 1);
 });
 
@@ -110,7 +110,7 @@ test("provider host emits bounded lifecycle metrics without forwarding error det
   };
   const host = new ProviderOperationWorkerHost(worker, state.wakeSource, {
     onEvent(event) { events.push(event); },
-    onError() { /* raw error deliberately not forwarded to the metrics sink */ },
+    onError(code) { state.calls.errors.push(code); },
   });
   await host.run(state.controller.signal);
   assert.deepEqual(events, [
@@ -131,5 +131,34 @@ test("provider host continues queue processing when telemetry exporter throws", 
   await host.run(state.controller.signal);
   assert.equal(state.calls.passes, 1);
   assert.equal(state.calls.waits.length, 1);
+  assert.equal(state.calls.closed, 1);
+});
+
+test("provider host reports only bounded failure codes, never exception messages", async () => {
+  const state = setup([]);
+  const host = new ProviderOperationWorkerHost({
+    async runOnce() {
+      state.controller.abort();
+      throw new Error("password=do-not-leak");
+    },
+  }, state.wakeSource, {
+    onError(code) { state.calls.errors.push(code); },
+  });
+  await host.run(state.controller.signal);
+  assert.deepEqual(state.calls.errors, ["WORKER_PASS_FAILED"]);
+  assert.equal(JSON.stringify(state.calls.errors).includes("do-not-leak"), false);
+});
+
+test("provider host isolates error callback exceptions", async () => {
+  const state = setup([]);
+  const host = new ProviderOperationWorkerHost({
+    async runOnce() {
+      state.controller.abort();
+      throw new Error("private exception");
+    },
+  }, state.wakeSource, {
+    onError() { throw new Error("telemetry unavailable"); },
+  });
+  await host.run(state.controller.signal);
   assert.equal(state.calls.closed, 1);
 });
