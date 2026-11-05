@@ -71,3 +71,18 @@ A concrete production secret-manager implementation, key custody/rotation
 policy and API composition-root enablement remain deferred. The current
 integration is an injected boundary only; live provider dispatch remains
 disabled and requires separate authorization.
+
+The runtime composition root is provided as an explicit, inert factory. It
+returns no runtime unless enabled is exactly true; enabled composition requires
+a non-empty executable adapter registration and matching deployment allowlist,
+a scoped secret-reference store, a secret resolver, worker dependencies and a
+queue wake source. It does not start the worker itself; the process lifecycle
+owner must start and stop the returned host deliberately.
+
+The worker performs a second tenant/application/connection-version/status/
+capability authorization check after secret resolution and before returning
+credential material to the adapter dispatch path. This catches a revoke,
+suspension, version rotation or capability change that races secret retrieval.
+The runtime remains disabled in the API process until its concrete secret
+manager, approved adapters, least-privilege database role and lifecycle wiring
+are independently configured and tested.
