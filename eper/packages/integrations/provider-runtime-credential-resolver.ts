@@ -1,4 +1,5 @@
 import type { ProviderDispatchSelection } from "./provider-dispatch-configuration-service.js";
+import type { ProviderSecretResolver } from "./provider-connection-validation-service.js";
 
 /**
  * Narrow, server-only credential boundary for provider operation dispatch.
@@ -13,10 +14,6 @@ export interface ProviderRuntimeSecretReferenceStore {
     connectionVersion: number;
     capabilityKey: string;
   }): Promise<string>;
-}
-
-export interface ProviderRuntimeSecretResolver {
-  resolve(secretReference: string): Promise<unknown>;
 }
 
 export class ProviderRuntimeCredentialError extends Error {
@@ -36,7 +33,7 @@ export class ProviderRuntimeCredentialError extends Error {
 export class ProviderRuntimeCredentialResolver {
   constructor(
     private readonly references: ProviderRuntimeSecretReferenceStore,
-    private readonly secrets: ProviderRuntimeSecretResolver,
+    private readonly secrets: ProviderSecretResolver,
   ) {}
 
   async resolve(selection: ProviderDispatchSelection): Promise<unknown> {
