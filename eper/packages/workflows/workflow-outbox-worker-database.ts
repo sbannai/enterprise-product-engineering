@@ -126,21 +126,3 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
     client.release();
   }
 }
-
-function createAuditSqlPoolAdapter(pool: Pool): AuditSqlPool {
-  return {
-    async connect(): Promise<AuditSqlClient> {
-      const client = await pool.connect();
-      return {
-        async query<Row = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<AuditSqlResult<Row>> {
-          const result = await client.query(sql, values as never[] | undefined);
-          return { rows: result.rows as Row[], rowCount: result.rowCount };
-        },
-        release() {
-          client.release();
-        },
-      };
-    },
-  };
-}
-
