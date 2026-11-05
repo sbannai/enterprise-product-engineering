@@ -38,10 +38,12 @@ GRANT CONNECT ON DATABASE eper TO eper_workflow_outbox_worker;
 GRANT USAGE ON SCHEMA public TO eper_workflow_outbox_worker;
 GRANT SELECT ON eper_tenant_application_assignment TO eper_workflow_outbox_worker;
 GRANT SELECT ON eper_workflow_outbox_events TO eper_workflow_outbox_worker;
-GRANT SELECT, UPDATE ON eper_workflow_outbox_delivery TO eper_workflow_outbox_worker;
+GRANT SELECT ON eper_workflow_outbox_delivery TO eper_workflow_outbox_worker;
+GRANT UPDATE (delivery_status, attempts, available_at, locked_at, locked_by, last_error, delivered_at, updated_at)
+  ON eper_workflow_outbox_delivery TO eper_workflow_outbox_worker;
 ```
 
-Do not grant ownership, superuser, BYPASSRLS, INSERT, DELETE or TRUNCATE privileges. The worker's startup gate checks the actual login identity, role elevation, ENABLE and FORCE RLS on both outbox tables, table ownership, required SELECT/UPDATE privileges, and absence of INSERT/UPDATE/DELETE/TRUNCATE grants beyond the delivery projection's required UPDATE. It refuses to start when those checks fail.
+Do not grant ownership, superuser, BYPASSRLS, INSERT, DELETE or TRUNCATE privileges. The worker's startup gate checks the actual login identity, role elevation, ENABLE and FORCE RLS on both outbox tables, table ownership, required SELECT privileges plus column-scoped delivery UPDATE (status, attempts, availability, lease, error, delivery and timestamp fields), and absence of table-wide UPDATE, INSERT, DELETE or TRUNCATE grants. It refuses to start when those checks fail.
 
 The outbox store sets tenant/application RLS context for every claim, lease renewal, acknowledgement and failure update. Context discovery reads only active tenant/application assignments. Keep the worker login out of API credentials and all human/admin roles.
 
