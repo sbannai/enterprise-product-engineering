@@ -2852,3 +2852,21 @@ A new open draft PR was created after the 10:44 inventory snapshot:
 - This is a documentation-only plan. No load harness was run, no pool or runtime configuration changed, and PostgreSQL throughput/concurrency/latency capacity remains NOT MEASURED. The next action is a synthetic workload harness against disposable local PostgreSQL 16, with raw metrics and repeatable stages.
 
 The 10:44 table remains a timestamped snapshot; this delta is the current additional open-PR record. Resolve all future inventories from live GitHub metadata.
+
+
+## PostgreSQL capacity harness safety follow-up — 2026-11-05 10:49 IST
+
+The current live head of PR #401 is now `66ed1df3d37d5eae0c56c65835e8b44580800283`, superseding the earlier documentation-only `f1f901836e28d62dd82cbdce0c33d19487703353` and initial harness `95db48643e2a4048f723ba0d7e4f285786416237` snapshots. Its base remains `integration/asset-provider-stack-validation` at `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e`; compare to main is 170 ahead / 0 behind.
+
+The PR now includes `npm run bench:postgres-api`, a read-only closed-loop API route probe, plus nine fail-closed tests. Review found that PostgreSQL URI query parameters could otherwise override the host after the initial URL hostname check. The current implementation rejects all database URI query/fragment options, non-PostgreSQL schemes, non-loopback DB/API hosts, non-`_bench` DB names, API URL userinfo, protocol-relative/backslash/control-character paths, health-only routes, write methods and out-of-range concurrency. The tests verify those refusal paths and that credentials/host strings are not printed.
+
+All seven exact-head check-runs match `66ed1df3d37d5eae0c56c65835e8b44580800283` and passed:
+
+- Fresh clone [41975138961](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138961): 1,519 tests / 1,515 passed / 0 failed / 4 skipped; `npm run dev:verify` PASS; seven migration groups including identity, repeatability and disposable backup/restore PASS; 80/80 source/restored base tables.
+- PostgreSQL integration [41975138727](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138727): all logged test groups passed.
+- Provider lifecycle [41975138693](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138693): queue 1/1, worker 7/7, host 5/5, wake/reconnect 3/3, PostgreSQL NOTIFY 1/1, keyring 6/6 and payload referential integrity 2/2 passed.
+- Controlled QA [41975138801](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138801): 1,495 tests / 1,455 passed / 0 failed / 40 skipped.
+- Matrix [41975138703](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138703): 259 passed / 0 failed, 28 HTTP checks, no failed chapters.
+- Payment contract [41975138808](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138808) and controlled technical simulation [41975138785](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41975138785): success.
+
+The harness has not been run against a live local EPER API and disposable PostgreSQL database. It measures a selected read-only API route, not PostgreSQL alone, and it cannot independently prove that the API uses the same database URL. Therefore throughput, concurrency ceiling, p50/p95/p99, saturation and capacity remain NOT MEASURED. Next action: operator-run synthetic workload on a disposable loopback database and read-only local route, retaining raw metrics. No shared/staging/production database, chargeable cloud resource, production credential or external/provider action was used.
