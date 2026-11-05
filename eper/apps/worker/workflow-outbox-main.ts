@@ -3,6 +3,7 @@ import { relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import type { Pool } from "pg";
+import type { AuditSqlClient, AuditSqlPool, AuditSqlResult } from "../../packages/audit/audit-event-store.js";
 import { createApprovedWorkflowOutboxDispatcher, type ApprovedWorkflowOutboxDispatcher } from "../../packages/workflows/workflow-outbox-dispatcher-adapter.js";
 import { runWorkflowOutboxRuntime } from "../../packages/workflows/workflow-outbox-runtime.js";
 import { readWorkflowOutboxWorkerConfig } from "../../packages/workflows/workflow-outbox-worker-config.js";
@@ -123,6 +124,23 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
   }
 }
 
+function createAuditSqlPoolAdapter(pool: Pool): AuditSqlPool {
+  return {
+    async connect(): Promise<AuditSqlClient> {
+      const client = await pool.connect();
+      return {
+        async query<Row = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<AuditSqlResult<Row>> {
+          const result = await client.query(sql, values as never[] | undefined);
+          return { rows: result.rows as Row[], rowCount: result.rowCount };
+        },
+        release() {
+          client.release();
+        },
+      };
+    },
+  };
+}
+
 async function main(): Promise<void> {
   const config = readWorkflowOutboxWorkerConfig(process.env);
   const require = createRequire(import.meta.url);
@@ -185,7 +203,7 @@ async function main(): Promise<void> {
     }));
 
     await runWorkflowOutboxRuntime({
-      pool,
+      pool: createAuditSqlPoolAdapter(pool),
       dispatcher,
       workerId: config.workerId,
       maxContexts: config.maxContexts,
