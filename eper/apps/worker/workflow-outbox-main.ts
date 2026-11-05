@@ -48,6 +48,8 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
       delivery_table: string | null;
       events_rls: boolean | null;
       delivery_rls: boolean | null;
+      events_force_rls: boolean | null;
+      delivery_force_rls: boolean | null;
       events_owner: string | null;
       delivery_owner: string | null;
     }>(`
@@ -56,6 +58,8 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
              to_regclass('public.eper_workflow_outbox_delivery')::text AS delivery_table,
              (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_events')) AS events_rls,
              (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_delivery')) AS delivery_rls,
+             (SELECT relforcerowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_events')) AS events_force_rls,
+             (SELECT relforcerowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_delivery')) AS delivery_force_rls,
              (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_events')) AS events_owner,
              (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_delivery')) AS delivery_owner
     `);
@@ -64,6 +68,7 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
       throw new Error("WORKFLOW_OUTBOX_SCHEMA_NOT_READY");
     }
     if (tables.events_rls !== true || tables.delivery_rls !== true ||
+        tables.events_force_rls !== true || tables.delivery_force_rls !== true ||
         tables.events_owner === expectedRole || tables.delivery_owner === expectedRole) {
       throw new Error("WORKFLOW_OUTBOX_RLS_BOUNDARY_INVALID");
     }
@@ -77,6 +82,9 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
       write_events: boolean;
       insert_delivery: boolean;
       delete_delivery: boolean;
+      truncate_assignments: boolean;
+      truncate_events: boolean;
+      truncate_delivery: boolean;
     }>(`
       SELECT
         has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'SELECT') AS read_assignments,
@@ -90,13 +98,17 @@ async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRole: stri
           OR has_table_privilege(current_user, 'public.eper_workflow_outbox_events', 'UPDATE')
           OR has_table_privilege(current_user, 'public.eper_workflow_outbox_events', 'DELETE')) AS write_events,
         has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'INSERT') AS insert_delivery,
-        has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'DELETE') AS delete_delivery
+        has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'DELETE') AS delete_delivery,
+        has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'TRUNCATE') AS truncate_assignments,
+        has_table_privilege(current_user, 'public.eper_workflow_outbox_events', 'TRUNCATE') AS truncate_events,
+        has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'TRUNCATE') AS truncate_delivery
     `);
     const grants = privileges.rows[0];
     if (!grants || !grants.read_assignments || !grants.read_events ||
         !grants.read_delivery || !grants.update_delivery ||
         grants.write_assignments || grants.write_events ||
-        grants.insert_delivery || grants.delete_delivery) {
+        grants.insert_delivery || grants.delete_delivery ||
+        grants.truncate_assignments || grants.truncate_events || grants.truncate_delivery) {
       throw new Error("WORKFLOW_OUTBOX_DATABASE_GRANTS_INVALID");
     }
 
