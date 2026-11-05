@@ -4,7 +4,8 @@
  * Catalogue metadata is descriptive only. This registry is the executable
  * allowlist: an adapter can be invoked only when its provider key, adapter
  * version and requested capability match an explicitly supplied registration.
- * It performs no credential resolution, SDK loading, network access or logging.
+ * The registry performs no credential resolution, SDK loading, network access or logging.
+ * The composition boundary supplies transient credentials only after allowlist resolution.
  */
 export type ProviderRuntimeSelection = {
   providerKey: string;
