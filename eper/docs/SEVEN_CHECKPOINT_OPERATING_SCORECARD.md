@@ -2332,3 +2332,79 @@ Exact-head evidence:
 7. **Release/continuity — RED.** Main metadata explicitly reports `protected=false` and required-check enforcement `off`; repository rulesets collection is empty. Production restore, key custody/RPO/RTO and second-engineer build/test/release/rollback remain unproven. The continuity charter remains proposed / owner review required.
 
 No approved requirement or chapter was changed. No PR was merged, no branch was deleted or force-updated, no repository setting was changed, no chargeable cloud resource was provisioned and no real external/provider action was invoked by this refresh.
+
+
+## Dated operating refresh — 2026-11-05 06:07 IST
+
+### Dynamically resolved mainline and exact evidence
+
+- Current `main`: `2c380d79c55c9183a42ed534ffd1a504f7d41316`; tree `0c01985a303e9348e728acd04b0a55a80020f9a9`.
+- Direct commit check-run query: 13/13 completed successfully; every returned check-run `head_sha` equals the main SHA.
+- Same-commit integrated validation [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913): PostgreSQL suite 1,410 tests / 1,404 passed / 0 failed / 6 skipped.
+- 228/38 matrix [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818): 228 requirements, 38 chapters, 259 pilot tests passed / 0 failed; 28 HTTP checks passed.
+- G9 [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648): 5/5 passed. EPER CI [41675875771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771): success.
+- Main branch metadata reports `protected=false`, `protection.enabled=false`, required-check enforcement `off`; repository rulesets endpoint returns an empty collection.
+
+### Merged foundation verification
+
+The following merge commits were re-read from PR metadata and compared against current main. Each is an ancestor of main (zero commits behind):
+
+- PR #306 fresh-clone setup: `6e8dd438e5091b1802d65e4f29951389fe077859`.
+- PR #310 durable identity/OIDC foundation: `88b9708d748c19dc80a1a2d7ad4960914451db7e`.
+- PR #324 browser-bound OIDC transaction guards: `a554990cb7f4969bb218aad7a2e9944aec62fa05`.
+- PR #329 customer workspace browser sessions: `82a82d92222c613c02e55f01211ecbb32ce63bba`.
+- PR #337 durable identity/CSRF enforcement: `18315e1654b52f1546936a8fd28daed907cab31e`.
+- PR #376 consolidated customer/admin/workflow/provider foundations: `9749701bfed527b906183192ca06cc1998e70166`.
+
+### Live open-PR inventory and exact-head Actions
+
+The live query returned 18 open PRs. For each row, the selected Actions run was queried using that PR's current head SHA; the workflow-run detail endpoint independently returned the same `head_sha`, completed with `success`. Relevant job steps/logs were inspected. No failed exact-head run was returned. The listed run is a representative primary lane, not a claim that it is the only workflow for that PR.
+
+| PR | Exact current head | Exact-head run |
+|---|---|---|
+| #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981) |
+| #377 | `8763ebaed81b273ca09532af3ab2b76ae8ca2c5a` | [Integrated 41899757646](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41899757646) |
+| #398 | `f85a7676a12d9ba9a003de6603c34f86460fa2c4` | [Provider lifecycle 41893090220](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41893090220) |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | [Integrated 41844357419](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357419) |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | [PostgreSQL 41868477557](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477557) |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | [Provider lifecycle 41871265677](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41871265677) |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | [Fresh clone 41786048886](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048886) |
+| #395 | `8c6ccf4d0a4ccb85bcc30f58b2521e55de1179f9` | [Provider lifecycle 41869040134](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41869040134) |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | [Integrated 41764308133](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308133) |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | [Integrated 41763251674](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251674) |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | [Fresh clone 41837639258](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639258) |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | [Provider lifecycle 41820073247](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073247) |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | [Provider lifecycle 41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | [Integrated 41805934725](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934725) |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | [Integrated 41795128802](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41795128802) |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | [Provider lifecycle 41738351657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351657) |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | [Integrated 41784823525](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823525) |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | [Provider lifecycle 41738299039](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299039) |
+
+Live comparisons of all 18 heads against current main report zero commits behind. The asset stack remains #384 → #386 → #393, with #394/#395/#396/#398/#399 as dependent or parallel descendants. The provider stack remains #378 → #379 → #390 → #391 → #392. Do not merge a child independently of its required base.
+
+The prior scorecard snapshot recorded #377's head before its latest update; the live head at the start of this refresh was `8763ebaed81b273ca09532af3ab2b76ae8ca2c5a`. This addendum records that pre-refresh head rather than embedding a self-referential commit SHA. The new file commit must receive its own exact-head checks.
+
+### Fresh-clone and PostgreSQL evidence
+
+On #399 exact head `a58a47303d2b6c54bbe9793afc8d3775fbfafc74`, fresh-clone [41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981) reports 1,517 tests / 1,513 passed / 0 failed / 4 skipped; `npm run dev:verify` passed; all seven migration groups including identity applied and repeatability passed; disposable PostgreSQL 16 backup/restore passed with 80/80 source/restored base tables and seven migration ledgers. The job log's expected negative RLS, immutable-ledger and injected-failure cases are covered by passing assertions; they are not workflow failures.
+
+This is local/CI disposable restore evidence, not production recovery certification. Off-host backup, encryption/key custody, retention, recovery objectives and an independent restore rehearsal remain.
+
+### Seven-pointer disposition
+
+1. **v34-to-228 reconciliation — AMBER.** Preserve 45 original v34 source rows and their statements/acceptance criteria. Crosswalk remains 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. Owner disposition remains required; approved 228 requirements / 38 chapters are unchanged.
+2. **Fresh-clone setup — GREEN for local/CI.** #306 merge is verified above. #399's exact-head fresh-clone command and PostgreSQL restore pass. Independent second-engineer handover remains unproven.
+3. **PostgreSQL durability — AMBER.** Seven migration groups including identity, repeatability, live PostgreSQL integration and disposable restore are evidenced. Production recovery controls remain outstanding.
+4. **Identity/OIDC/sessions — AMBER.** #310 and its browser/session successors are merged ancestors of main. Protocol validation, browser routes, secure cookies, CSRF, durable sessions/revocation and tenant/application assignment checks have synthetic-IdP browser evidence. Production IdP onboarding, JWKS rotation and operator credential lifecycle remain unproven.
+5. **Customer workspace/support — AMBER.** Customer ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note visibility and export have test evidence. SLA timers/breach escalation are not evidenced. #399 adds the customer asset upload UI and API contract, but actual binary transfer remains unproven.
+6. **Scheduler/workflow operations — AMBER.** Continuous worker/process logic, lease/fencing, idempotency, retries, dead-letter and recovery tests exist. Main `eper/package.json` has no standalone workflow-outbox worker start command; independent workflow-outbox process launch, restricted worker identity, supervision, metrics/alerts and approved dispatch remain outstanding.
+7. **Release/continuity — RED.** Main protection is disabled and repository rulesets are empty. The continuity charter remains proposed / owner review required. Independent production restore and second-engineer build/test/release/rollback are not evidenced.
+
+### Customer asset and workflow composition blockers
+
+PR #399's current `eper/apps/api/main.ts` creates the PostgreSQL customer asset repository and upload authorizer, then calls `createAppServer` without supplying concrete `assetUploadPort`, `assetUploadVerificationPort`, `assetMalwareScanPort` or download storage port. Its tests use synthetic adapters. Therefore the upload form/API contract is not yet evidence of real binary transfer, provider-observed object verification, malware scanning or clean-scan-gated download. Keep #399 draft until a local provider-neutral adapter is wired and the complete bytes-to-clean-scan-to-download journey is tested.
+
+The workflow outbox has a continuous process class and runtime composition, but the current main package scripts expose no independently launchable workflow-outbox worker entrypoint. Add a dedicated restricted-context executable and supervision/health/metrics contract before describing workflow outbox as independently operable.
+
+No approved requirement or chapter was changed. No PR was merged, no branch was deleted or force-updated, no repository setting was changed, no chargeable cloud resource was provisioned and no real external/provider action was invoked by this refresh.
