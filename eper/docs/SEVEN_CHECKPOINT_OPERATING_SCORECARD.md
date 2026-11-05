@@ -2447,7 +2447,7 @@ The live open-PR query returned 19 draft PRs. Each representative workflow below
 | #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | [Integrated 41763251674](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251674) |
 | #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | [Integrated 41738351629](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351629) |
 | #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | [Integrated 41738299062](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299062) |
-| #377 | `0cbfb462f9ff62ba1c0b77d539d75593c98b0c4f` | [Integrated 41943224745](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41943224745) |
+| #377 | `8698d31488efa47a8c5b618fb60593457d8407a9` | [Integrated 41959466430](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959466430) |
 
 The #398 current head has both fresh-clone [41956096246](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41956096246) and provider lifecycle [41956096308](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41956096308) completed successfully. Its fresh-clone log reports 1,539 tests / 1,535 passed / 0 failed / 4 skipped, disposable restore 80/80 base tables and seven migration ledgers.
 
@@ -2511,7 +2511,7 @@ This correction supersedes the #398 and #400 rows and the earlier #400 validatio
 
 ### Current open-PR inventory correction
 
-The live open-PR query still returns 19 draft PRs. Only the exact heads for #398 and #400 changed since the preceding inventory; the other 17 heads remain as listed above. Current compare results: #398 230 ahead / 0 behind; #400 28 ahead / 0 behind; #377 50 ahead / 0 behind. The current scorecard branch itself remains draft and unmerged.
+The live open-PR query still returns 19 draft PRs. Exact heads for #398, #400 and #377 changed since the preceding inventory; the other 16 heads remain as listed above. Current compare results: #398 230 ahead / 0 behind; #400 28 ahead / 0 behind; #377 51 ahead / 0 behind. The current scorecard branch itself remains draft and unmerged.
 
 ### Seven-pointer status after this correction
 
