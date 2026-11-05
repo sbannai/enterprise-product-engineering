@@ -2562,7 +2562,7 @@ All entries below were returned by the live open-PR query, then individually re-
 | PR | Current exact head | Representative exact-head workflow |
 |---|---|---|
 | #400 | `c445691f27a06ee36b590f374d5f7ddc6a8ab119` | [Fresh clone 41960896718](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896718); [PostgreSQL 41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927); [Integrated 41960896797](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896797) |
-| #398 | `f3acd3123041530c3968249f42114625027674f8` | [Fresh clone 41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554); [Provider lifecycle 41958996584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996584) |
+| #398 | `d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c` | [Fresh clone 41960471681](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471681); [Provider lifecycle 41960471550](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471550); [PostgreSQL 41960471564](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471564) |
 | #377 | Self-reference — resolve the current head from PR metadata; exact-head validation is maintained in the PR description to avoid a changing SHA in its own file |
 | #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981); [Browser 41898030812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030812) |
 | #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | [Fresh clone 41844357369](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357369) |
@@ -2647,3 +2647,17 @@ The worker context-discovery grant was narrowed with additive workflow migration
 - CI [41960896932](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896932), requirements matrix [41960896943](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896943), G9 [41960896979](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896979), provider lifecycle [41960896826](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896826), six-family HTTP [41960896658](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896658), container smoke [41960896816](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896816), release build [41960896651](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896651), workflow configuration [41960896840](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896840) and payment contract [41960896962](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896962): PASS.
 
 The worker still requires a separately provisioned production login and an owner-approved dispatcher module; no dispatcher module is present in the repository. External supervisor, health/metrics/alerts and independent restart/recovery rehearsal remain. This is CI-only, not production deployment.
+
+
+## Provider runtime process-contract follow-up — 2026-11-05
+
+PR #398 current exact head: `d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c`; current main remains `2c380d79c55c9183a42ed534ffd1a504f7d41316`; compare is ahead/0-behind. All six exact-head workflow runs completed successfully.
+
+New document: `eper/docs/PROVIDER_RUNTIME_PROCESS_CONTRACT.md`. It explicitly defines the production startup, static adapter provenance/allowlist, server-side secret custody, durable scoped persistence, wake-listener ordering, readiness/liveness separation, bounded telemetry, signal-driven shutdown, lease recovery and release-evidence gates. It keeps the provider runtime disabled until concrete production secret manager/key custody, statically reviewed adapters, dedicated grants/RLS, process supervisor, health/metrics/alerts, process-level shutdown/recovery tests and second-engineer/owner release evidence exist.
+
+- Fresh-clone [41960471681](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471681): `npm run dev:verify` PASS; 1,546 tests / 1,542 passed / 0 failed / 4 skipped; disposable restore 80/80 base tables; seven migration ledgers.
+- Provider lifecycle [41960471550](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471550): queue-wake 1/1, keyring 6/6, encrypted payload-store 2/2; zero failures.
+- PostgreSQL integration [41960471564](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471564): PASS.
+- Requirements matrix [41960471694](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471694): PASS.
+
+The process contract is design/implementation-gate documentation, not production enablement. No provider dispatch, production credentials, deployment or cloud provisioning is enabled. PR #398 remains draft/unmerged.
