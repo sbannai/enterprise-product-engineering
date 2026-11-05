@@ -86,3 +86,22 @@ suspension, version rotation or capability change that races secret retrieval.
 The runtime remains disabled in the API process until its concrete secret
 manager, approved adapters, least-privilege database role and lifecycle wiring
 are independently configured and tested.
+
+
+## Provider runtime production composition gate
+
+The provider runtime composition root now distinguishes test/development composition
+from an explicitly selected production environment. Production composition fails
+closed unless every executable adapter and its matching deployment allowlist entry
+carry the `executionClass: "approved"` attestation, the worker uses the production
+audit environment, and the host has a bounded `onEvent` telemetry sink. The
+legacy raw-error `onError` callback is rejected in production composition so
+unredacted exception objects cannot be forwarded through that host hook.
+
+Synthetic adapters may still be used by isolated test/development compositions,
+but they cannot satisfy the production gate. The attestation is a deployment
+configuration assertion, not cryptographic proof of code provenance; production
+release governance must still review the adapter implementation, secret-manager
+binding, least-privilege database identity, alerting and shutdown behavior.
+This gate does not itself create a process entrypoint, start a worker, provision
+infrastructure or authorize external dispatch.
