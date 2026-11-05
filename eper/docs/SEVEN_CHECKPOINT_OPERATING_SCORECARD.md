@@ -2561,7 +2561,7 @@ All entries below were returned by the live open-PR query, then individually re-
 
 | PR | Current exact head | Representative exact-head workflow |
 |---|---|---|
-| #400 | `5b59a997d9ee484a5fb6bbea44e64d41961fc4b1` | [Fresh clone 41959003074](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003074); [PostgreSQL 41959003045](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41959003045) |
+| #400 | `c445691f27a06ee36b590f374d5f7ddc6a8ab119` | [Fresh clone 41960896718](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896718); [PostgreSQL 41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927); [Integrated 41960896797](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896797) |
 | #398 | `f3acd3123041530c3968249f42114625027674f8` | [Fresh clone 41958996554](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996554); [Provider lifecycle 41958996584](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41958996584) |
 | #377 | Self-reference — resolve the current head from PR metadata; exact-head validation is maintained in the PR description to avoid a changing SHA in its own file |
 | #399 | `a58a47303d2b6c54bbe9793afc8d3775fbfafc74` | [Fresh clone 41898030981](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030981); [Browser 41898030812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41898030812) |
@@ -2633,3 +2633,17 @@ Current #398 head: `d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c`, 231 commits ahead
 - PostgreSQL integration [41960471564](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471564): 1,418 tests / 1,412 passed / 0 failed / 6 skipped.
 - Provider lifecycle [41960471550](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471550), requirements matrix [41960471694](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471694), controlled QA [41960471676](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471676) and controlled technical simulation [41960471591](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960471591) passed.
 - The added document defines a process contract only; it does not supply a production secret manager, credential resolver or provider dispatcher. PR remains draft.
+
+
+## Security hardening follow-up — 2026-11-05
+
+PR #400 current exact head: `c445691f27a06ee36b590f374d5f7ddc6a8ab119`; current main remains `2c380d79c55c9183a42ed534ffd1a504f7d41316`; compare is ahead/0-behind. All 14 exact-head workflow runs completed successfully.
+
+The worker context-discovery grant was narrowed with additive workflow migration `016_workflow_outbox_assignment_column_grants.sql`: revoke table-wide SELECT from `eper_workflow_outbox_worker_access`, then grant only `tenant_id`, `application_id` and `assignment_status`. The live startup role gate now requires those three column reads, rejects table-wide SELECT and rejects reads of assignment version, actor IDs and lifecycle timestamps. This preserves the worker's active-scope discovery while reducing unnecessary cross-tenant metadata exposure.
+
+- Fresh-clone [41960896718](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896718): `npm run dev:verify` PASS; 1,437 tests / 1,432 passed / 0 failed / 5 skipped; migration contract test passed; disposable PostgreSQL 16 restore PASS, 75/75 source/restored base tables.
+- PostgreSQL integration [41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927): workflow migrations 015 and 016 applied; ephemeral dedicated worker login provisioned; live restricted-role contract passed.
+- Same-commit integrated validation [41960896797](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896797): PASS.
+- CI [41960896932](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896932), requirements matrix [41960896943](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896943), G9 [41960896979](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896979), provider lifecycle [41960896826](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896826), six-family HTTP [41960896658](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896658), container smoke [41960896816](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896816), release build [41960896651](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896651), workflow configuration [41960896840](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896840) and payment contract [41960896962](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896962): PASS.
+
+The worker still requires a separately provisioned production login and an owner-approved dispatcher module; no dispatcher module is present in the repository. External supervisor, health/metrics/alerts and independent restart/recovery rehearsal remain. This is CI-only, not production deployment.
