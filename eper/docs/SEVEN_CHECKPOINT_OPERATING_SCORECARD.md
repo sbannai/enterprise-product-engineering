@@ -3011,3 +3011,16 @@ No UAT determination is made. No merge, production deployment, production creden
 
 ### Self-head validation boundary
 This append changes PR #377's documentation head. Re-resolve the resulting PR head and require fresh exact-head Actions before treating this documentation update as validated. The prior PR #377 runs above belong to pre-update head `526973536f7b3b9907c934e19fb557f4112dc33f`.
+
+
+## Exact-head correction — 2026-11-05 08:16 UTC
+
+PR #401 advanced after the earlier 13:39 IST inventory. The prior #401 head `9b2c8014995bd5fcefbe76df9979607df823ccbc` and its runs are now historical and are not used for current status.
+
+- Current PR #401 head: `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f`.
+- Fresh-clone developer setup [41993032684](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032684): PASS. `npm run dev:verify` reports 1,528 tests, 1,524 passed, zero failed and four skipped. All seven migration groups apply, including identity, and the repeatability loop executes all seven groups.
+- Disposable PostgreSQL 16 backup/restore in the same job: PASS; source and restored base-table counts both 80; seven migration-ledger tables.
+- PostgreSQL payment-store integration [41993032789](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032789): PASS. Dedicated platform-admin and provider-catalogue role lifecycle tests pass; the migration checksum-drift rollback regression passes.
+- Provider-operation PostgreSQL lifecycle [41993032652](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032652): PASS. Live claim/renewal/fencing/retry-exhaustion/recovery test 1/1; provider worker authorization-denial test passes; host shutdown/reconnect tests pass.
+- The PR remains based on the customer-asset integration branch and compares as a descendant of current main (zero commits behind). Its capacity harness is a plan/harness, not a measured benchmark; throughput, latency and concurrency capacity remain NOT MEASURED.
+- This correction does not change the approved 228/38 baseline or authorize any external/provider dispatch.
