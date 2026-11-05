@@ -52,9 +52,8 @@ try {
   const result = await pool.query("SELECT current_database() AS database_name, current_setting('server_version') AS server_version");
   databaseIdentity = result.rows[0];
   if (databaseIdentity.database_name !== dbName) fail("BENCHMARK_DATABASE_IDENTITY_MISMATCH");
-} catch (error) {
-  await pool.end();
-  fail(error instanceof Error ? "BENCHMARK_DATABASE_CONNECTION_FAILED" : "BENCHMARK_DATABASE_CONNECTION_FAILED");
+} catch {
+  throw new Error("BENCHMARK_DATABASE_CONNECTION_FAILED");
 } finally {
   await pool.end();
 }
@@ -77,9 +76,10 @@ async function requestOnce(record) {
   const started = performance.now();
   try {
     const response = await fetch(target, { method, headers, signal: AbortSignal.timeout(requestTimeoutMs), redirect: "manual" });
-    const elapsed = performance.now() - started;
-    // Consume the body to measure full response completion and avoid socket buildup.
+    // Consume the body before stopping the clock; this includes transfer time and
+    // avoids leaving response streams/socket buffers outstanding.
     await response.arrayBuffer();
+    const elapsed = performance.now() - started;
     if (record) {
       samples.push(elapsed);
       statusCounts.set(response.status, (statusCounts.get(response.status) ?? 0) + 1);
