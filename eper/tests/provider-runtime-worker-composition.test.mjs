@@ -143,3 +143,35 @@ test("worker composition requires an explicit registry", () => {
     /PROVIDER_RUNTIME_REGISTRY_REQUIRED/,
   );
 });
+
+test("credential resolution failure is redacted and parked without retry", async () => {
+  const calls = { dispatches: [], outcomes: [], credentials: [] };
+  const adapter = {
+    providerKey: "synthetic",
+    adapterKey: "synthetic.mail",
+    adapterVersion: "1.0.0",
+    capabilities: ["email.send"],
+    async dispatch(input) {
+      calls.dispatches.push(input);
+      return { providerReference: "unexpected" };
+    },
+  };
+  const registry = new ProviderRuntimeAdapterRegistry([adapter], [{
+    providerKey: "synthetic",
+    adapterKey: "synthetic.mail",
+    adapterVersion: "1.0.0",
+    capabilities: ["email.send"],
+  }]);
+  const deps = dependencies(registry, calls);
+  deps.credentialResolver = {
+    async resolve() { throw new Error("token=must-not-leak"); },
+  };
+  const worker = createProviderOperationWorkerWithRuntimeRegistry(deps, options);
+  const result = await worker.runOnce();
+
+  assert.equal(result.needsAttention, 1);
+  assert.equal(result.retried, 0);
+  assert.equal(calls.dispatches.length, 0);
+  assert.equal(calls.outcomes[0].errorCode, "PROVIDER_RUNTIME_CREDENTIAL_RESOLUTION_FAILED");
+  assert.equal(JSON.stringify(calls.outcomes).includes("must-not-leak"), false);
+});
