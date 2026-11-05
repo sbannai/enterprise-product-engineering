@@ -12,9 +12,9 @@ import type { ProviderRuntimeCredentialResolver } from "./provider-runtime-crede
  * Production composition seam for provider operation dispatch.
  *
  * The caller must supply an explicit runtime registry. An empty registry is
- * valid and deliberately parks operations as NEEDS_ATTENTION; this factory
- * never discovers adapters, resolves credentials, loads SDKs or performs
- * external actions by itself.
+ * valid and deliberately parks operations as NEEDS_ATTENTION. Credentials are
+ * resolved only after the exact adapter allowlist check and are passed transiently
+ * to the adapter; this factory never loads SDKs or performs external actions.
  */
 export type ProviderOperationWorkerRuntimeDependencies =
   Omit<ProviderOperationWorkerDependencies, "dispatch"> & {
