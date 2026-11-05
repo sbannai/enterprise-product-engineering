@@ -129,6 +129,8 @@ test("customer asset scan worker retries mismatched scanner identity and malform
   const invalidOutcomes = [
     { scanStatus: "clean", scannerServiceId: "untrusted-scanner" },
     { scanStatus: "unknown", scannerServiceId: "asset-scanner" },
+    null,
+    "malformed-scanner-response",
   ];
   for (const invalidOutcome of invalidOutcomes) {
     const f = fixture("clean");
