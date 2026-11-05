@@ -523,6 +523,73 @@ export class PostgresProviderConnectionRepository {
     }
   }
 
+  /**
+   * Internal worker-only lookup. Unlike listForApplication(), this method
+   * returns the opaque secret reference, never credential material. It
+   * rechecks the active binding, capability and exact connection version
+   * under row locks immediately before the secret manager is called.
+   */
+  async getDispatchSecretReference(input: {
+    tenantId: string;
+    applicationId: string;
+    connectionId: string;
+    connectionVersion: number;
+    capabilityKey: string;
+  }): Promise<string> {
+    this.validateIdentity(input.tenantId, "TENANT");
+    this.validateIdentity(input.applicationId, "APPLICATION_ID");
+    this.validateIdentity(input.connectionId, "CONNECTION_ID");
+    this.validateIdentity(input.capabilityKey, "CAPABILITY");
+    if (!Number.isSafeInteger(input.connectionVersion) || input.connectionVersion < 1) {
+      throw new Error("PROVIDER_DISPATCH_CONNECTION_VERSION_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
+      await this.setApplicationContext(client, input.applicationId);
+      const result = await client.query<{
+        secret_reference: string;
+        connection_status: ProviderConnectionStatus;
+        binding_status: "ACTIVE" | "SUSPENDED" | "REVOKED";
+        connection_version: number | string;
+        allowed_capabilities: string[] | string;
+      }>(
+        `SELECT c.secret_reference, c.connection_status, c.version AS connection_version,
+          b.binding_status, b.allowed_capabilities
+         FROM eper_provider_connections c
+         JOIN eper_provider_connection_applications b
+           ON b.tenant_id = c.tenant_id AND b.connection_id = c.connection_id
+         WHERE c.tenant_id = $1 AND b.application_id = $2 AND c.connection_id = $3
+         FOR SHARE OF c, b`,
+        [input.tenantId, input.applicationId, input.connectionId],
+      );
+      const row = result.rows[0];
+      if (!row) throw new Error("PROVIDER_DISPATCH_CONNECTION_NOT_FOUND");
+      if (row.connection_status !== "ACTIVE" || row.binding_status !== "ACTIVE") {
+        throw new Error("PROVIDER_DISPATCH_CONNECTION_NOT_ACTIVE");
+      }
+      if (Number(row.connection_version) !== input.connectionVersion) {
+        throw new Error("PROVIDER_DISPATCH_CONNECTION_VERSION_STALE");
+      }
+      const capabilities = typeof row.allowed_capabilities === "string"
+        ? JSON.parse(row.allowed_capabilities) as string[] : row.allowed_capabilities;
+      if (!Array.isArray(capabilities) || !capabilities.includes(input.capabilityKey)) {
+        throw new Error("PROVIDER_DISPATCH_CAPABILITY_NOT_BOUND");
+      }
+      if (typeof row.secret_reference !== "string" || !row.secret_reference.trim()) {
+        throw new Error("PROVIDER_DISPATCH_SECRET_REFERENCE_MISSING");
+      }
+      await client.query("COMMIT");
+      return row.secret_reference;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   private async audit(client: AuditSqlClient, input: {
     tenantId: string; applicationId: string; environment: AuditEnvironment; actorId: string;
     action: string; resourceId: string; correlationId: string;
