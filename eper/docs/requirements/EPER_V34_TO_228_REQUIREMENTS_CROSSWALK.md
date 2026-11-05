@@ -101,7 +101,7 @@ The v34 HTML is a prototype and the 45 source rows are wireframe-defined. This c
 
 Initial repository inspection confirms:
 - Customer ticket APIs and PostgreSQL ticket persistence exist, with tenant/actor/application checks and idempotent customer submission paths.
-- The served customer portal is explicitly a preview and uses a server-side configured bearer-credential mapping; it is not yet a production browser authentication/session lifecycle.
+- Customer browser identity has since advanced beyond the initial bearer-mapping baseline: merged PRs #310, #324 and #329 provide durable OIDC login transactions, PostgreSQL browser sessions, host-only Secure/HttpOnly/SameSite cookies, CSRF protection, tenant/application assignment checks, a least-privilege customer role, and a synthetic-IdP Chromium journey covering ticket submission/reply, assigned-application settings, logout and persisted session revocation. This is technical synthetic-IdP evidence, not proof of production IdP onboarding, discovery/JWKS rotation or credential/key lifecycle. The Product Admin/support queue remains bearer-credential authenticated; no support-admin OIDC browser session is evidenced.
 - Scheduler schema, worker code and dispatch controls exist; complete provider dispatch, worker supervision, production operations and end-to-end customer visibility remain to be evidenced.
 - Notification provider topology/secret management, native CRM, KPI data feeds, content/asset management, Help Center and admin ticket operations need feature-by-feature verification; a design or placeholder UI is not implementation evidence.
 
@@ -162,3 +162,24 @@ The v1.6.0 draft register also contains four owner-directed additions, EPER-CW-0
 ### Implementation evidence boundary
 
 Implementation must still be assessed independently across customer/admin UI, API, PostgreSQL persistence, tenant/application authorization, audit, workflow execution, provider configuration and executable acceptance tests. In particular, workflow Rule Engine/Designer drafts are not equivalent to a published, supervised runtime; inherited alert/video settings are not equivalent to live provider dispatch. Do not infer feature completion from this crosswalk.
+
+
+## 9. Later draft reconciliation and implementation evidence correction — 2026-11-05
+
+### CW-060 version conflict
+
+Two cumulative change-control drafts reuse EPER-CW-060 with materially different acceptance criteria:
+
+- **v1.6.0 draft (PR #380):** defines CW-060 as a tenant-isolated customer-level asset repository and adds CW-061 as a separate workflow-driven customer application experience.
+- **v1.7.0 draft (PR #385):** redefines CW-060 to add customer-wide defaults, per-application INHERIT/ALLOW/DENY, role-level permissions, quarantine/malware scanning, retention, legal hold and asynchronous purge.
+
+This is an acceptance-criteria change, not a harmless wording edit. Do not silently merge the two CW-060 definitions, treat them as two distinct IDs, or infer owner approval. Preserve both draft source documents, keep CW-061 separate, and obtain an explicit owner disposition before promoting either definition. This conflict does not change the approved 228 requirements or 38 chapters.
+
+### Current implementation evidence boundary
+
+- Customer OIDC browser login and the customer ticket journey are implemented and browser-tested on merged PR #329 (head `4d4d217bbe56ec9ab1501de58afae82fd55b5328`; browser run `41385533343`). The test uses a synthetic IdP and verifies secure host-only cookies, durable PostgreSQL session state, role/assignment checks, ticket submission/reply, settings access, logout and revocation. It does not prove production IdP onboarding or key/JWKS lifecycle.
+- The support-admin console still accepts a server-issued bearer credential. Ticket triage, status, assignment, severity/P1 rationale, customer-visible versus internal replies, tenant/application scoping and filtered CSV export have API/store/UI tests. The ticket schema does not yet implement first-response/resolution deadlines, SLA breach detection or escalation.
+- Customer asset upload remains an open candidate, not a mainline capability. PR #399 tests inject synthetic upload-grant and verification resolvers; its browser E2E is the OIDC journey and does not upload file bytes. The candidate API composition root does not wire a concrete storage upload/download, verification or malware-scanner adapter. No real storage/scanning provider or cloud resource is configured.
+- Campaign scheduler worker code is a continuous claim/recover/dispatch loop with lease renewal/fencing, retry/dead-letter and a fail-closed policy gate. Its deployment-owned adapter is still required. The independent workflow-outbox process is proposed in open PR #400; it requires an explicit dispatcher module. Independent process supervision, a metrics/alert sink and an operational recovery rehearsal remain unproven.
+
+These corrections update implementation evidence only. They do not mark any additive candidate accepted, alter the approved baseline, enable external dispatch, or authorize UAT.
