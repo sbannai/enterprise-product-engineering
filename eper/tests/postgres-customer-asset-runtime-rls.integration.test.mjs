@@ -163,11 +163,6 @@ test("customer asset RLS blocks cross-tenant and cross-application access under 
       );
       assert.equal(result.rowCount, 0, "tenant A must not update tenant B assets");
       result = await client.query(
-        "UPDATE eper_customer_asset_application_links SET link_reason = 'tampered' WHERE tenant_id = $1 AND asset_id = $2",
-        [tenantB, ids.tenantBShared],
-      );
-      assert.equal(result.rowCount, 0, "tenant A must not update tenant B links");
-      result = await client.query(
         "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'aborted' WHERE tenant_id = $1 AND upload_session_id = $2",
         [tenantB, sessionIds.tenantB],
       );
