@@ -95,3 +95,27 @@ test("cross-application upload expiry uses a tenant-bound definer role without b
   assert.ok(crossApplicationExpiryMigration.includes("TO eper_customer_asset_access"));
   assert.doesNotMatch(crossApplicationExpiryMigration, /\bBYPASSRLS\b|DISABLE ROW LEVEL SECURITY/i);
 });
+
+const uploadExpiryWorkerRoleMigration = await readFile(new URL("../packages/audit/migrations/028_customer_asset_upload_expiry_worker_role.sql", import.meta.url), "utf8");
+
+test("upload expiry worker role can only invoke tenant-bound expiry and append audit", () => {
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("CREATE ROLE eper_customer_asset_upload_expiry_worker_access"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT INSERT ON public.eper_audit_events"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT SELECT ON public.eper_audit_chain_head"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT UPDATE (last_event_hash, updated_at) ON public.eper_audit_chain_head"));
+  assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /GRANT .* ON public\.eper_customer_asset_(assets|application_links|upload_sessions|scan_jobs)/i);
+  assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /eper_payment_|eper_provider_/i);
+});
+
+const uploadExpiryQueueAgeMigration = await readFile(new URL("../packages/audit/migrations/029_customer_asset_upload_expiry_queue_age.sql", import.meta.url), "utf8");
+
+test("expiry routine exposes bounded queue age without widening worker table access", () => {
+  assert.ok(uploadExpiryQueueAgeMigration.includes("DROP FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("expires_at timestamptz"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("RETURNING s.application_id, s.upload_session_id, s.asset_id, s.expires_at"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("FOR UPDATE SKIP LOCKED"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("clock_timestamp()"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("TO eper_customer_asset_access, eper_customer_asset_upload_expiry_worker_access"));
+});

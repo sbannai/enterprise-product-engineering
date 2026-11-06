@@ -101,6 +101,27 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async assertUploadExpiryWorkerReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        expiry_function_execute: boolean;
+      }>(`
+        SELECT coalesce(has_function_privilege(
+          current_user,
+          to_regprocedure('public.eper_expire_customer_asset_upload_sessions(character varying,integer)')::oid,
+          'EXECUTE'
+        ), false) AS expiry_function_execute
+      `);
+      if (!result.rows[0]?.expiry_function_execute) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY") throw error;
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_READINESS_FAILED", { cause: error });
+    } finally { client.release(); }
+  }
+
   async listForApplication(tenantId: string, applicationId: string): Promise<CustomerAsset[]> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
@@ -236,6 +257,7 @@ export class PostgresCustomerAssetRepository {
   async expireStaleUploadSessions(input: {
     tenantId: string; applicationId: string; environment: AuditEnvironment;
     correlationId: string; limit?: number;
+    onMetrics?: (metrics: { expiredCount: number; queueAgeMs: number }) => void;
   }): Promise<number> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
@@ -252,11 +274,19 @@ export class PostgresCustomerAssetRepository {
       // with a tenant-only policy on upload sessions. It can reconcile sessions
       // across applications for this tenant, but cannot cross the tenant boundary.
       const expired = await client.query<{
-        application_id: string; upload_session_id: string; asset_id: string;
+        application_id: string; upload_session_id: string; asset_id: string; expires_at: string | Date;
       }>(
-        "SELECT application_id, upload_session_id, asset_id FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
+        "SELECT application_id, upload_session_id, asset_id, expires_at FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
         [input.tenantId, limit],
       );
+      const oldestExpiredAt = expired.rows.reduce<Date | null>((oldest, row) => {
+        const value = new Date(row.expires_at);
+        return oldest === null || value < oldest ? value : oldest;
+      }, null);
+      input.onMetrics?.({
+        expiredCount: expired.rows.length,
+        queueAgeMs: oldestExpiredAt === null ? 0 : Math.max(0, Date.now() - oldestExpiredAt.getTime()),
+      });
       for (const row of expired.rows) {
         // Audit remains application-scoped. Rebind the RLS context to the
         // originating application for each event; no payload bytes are read.

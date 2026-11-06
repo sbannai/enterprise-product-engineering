@@ -26,7 +26,7 @@ GRANT UPDATE (upload_status, updated_at) ON public.eper_customer_asset_upload_se
   TO eper_customer_asset_upload_expiry_access;
 
 -- This policy is permissive only for the non-login function owner. The tenant
--- predicate is mandatory; the function sets it from its validated argument.
+-- predicate is mandatory; the function requires the caller's existing tenant context.
 -- Existing application policies continue to protect all ordinary app roles.
 DROP POLICY IF EXISTS customer_asset_upload_expiry_tenant_scope
   ON public.eper_customer_asset_upload_sessions;
