@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 const uploadReservationMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_reservation.sql", import.meta.url), "utf8");
+const uploadRetryMigration = await readFile(new URL("../packages/audit/migrations/024_customer_asset_upload_retry_lifecycle.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -63,4 +64,14 @@ test("upload reservation migration supports provider-free reservations and a gua
   assert.ok(uploadReservationMigration.includes("'initiated'"));
   assert.ok(uploadReservationMigration.includes("provider_upload_reference is already nullable"));
   assert.ok(uploadReservationMigration.includes("WHERE upload_status = 'reserved'"));
+});
+
+
+test("upload retry migration preserves terminal history and scopes active sessions and idempotency by application", () => {
+  assert.ok(uploadRetryMigration.includes("DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessions_tenant_id_asset_id_key"));
+  assert.ok(uploadRetryMigration.includes("DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessions_tenant_id_idempotency_key_key"));
+  assert.ok(uploadRetryMigration.includes("(tenant_id, application_id, idempotency_key)"));
+  assert.ok(uploadRetryMigration.includes("(tenant_id, application_id, asset_id)"));
+  assert.ok(uploadRetryMigration.includes("WHERE upload_status IN ('reserved', 'initiated', 'in_progress')"));
+  assert.ok(uploadRetryMigration.includes("ON eper_customer_asset_upload_sessions (expires_at, tenant_id, application_id)"));
 });
