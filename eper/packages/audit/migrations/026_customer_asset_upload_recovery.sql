@@ -5,7 +5,7 @@
 BEGIN;
 
 ALTER TABLE eper_customer_asset_upload_sessions
-  ADD COLUMN IF NOT EXISTS request_fingerprint char(64),
+  ADD COLUMN IF NOT EXISTS request_fingerprint varchar(64),
   ADD COLUMN IF NOT EXISTS request_file_name varchar(255),
   ADD COLUMN IF NOT EXISTS request_mime_type varchar(128),
   ADD COLUMN IF NOT EXISTS provider_outcome varchar(16) NOT NULL DEFAULT 'unknown';
