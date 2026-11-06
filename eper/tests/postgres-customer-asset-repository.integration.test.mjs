@@ -159,7 +159,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId, applicationId],
         );
         const reservedRow = await reservationClient.query(
-          "SELECT upload_status, provider_upload_reference FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          "SELECT upload_status, provider_upload_reference, provider_outcome FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
           [tenantId, reservedSessionId],
         );
         assert.equal(reservedRow.rows[0]?.upload_status, "reserved");
@@ -189,6 +189,8 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(finalizedRow.rows[0]?.upload_status, "initiated");
         assert.equal(finalizedRow.rows[0]?.provider_upload_reference, "opaque-upload:finalized-reservation");
+        assert.equal(finalizedRow.rows[0]?.provider_outcome, "succeeded",
+          "grant finalization must atomically classify the persisted provider outcome as succeeded");
         await finalizedClient.query("COMMIT");
       } finally {
         try { await finalizedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
