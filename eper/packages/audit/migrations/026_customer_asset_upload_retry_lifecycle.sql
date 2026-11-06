@@ -1,6 +1,7 @@
 -- Make customer asset upload reservations retryable without deleting history.
--- Idempotency is scoped to an application; only one live upload may reserve an
--- asset in that application. Terminal attempts remain immutable and queryable.
+-- Idempotency is scoped to an application; one live upload may reserve an asset
+-- across the tenant, including customer-shared assets. Terminal attempts remain
+-- immutable and queryable.
 BEGIN;
 
 ALTER TABLE eper_customer_asset_upload_sessions
@@ -16,7 +17,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_active_asset_uq
   WHERE upload_status IN ('reserved', 'initiated', 'in_progress');
 
 DROP INDEX IF EXISTS eper_customer_asset_upload_expiry_idx;
-DROP INDEX IF EXISTS eper_customer_asset_upload_reserved_idx;
+DROP INDEX IF EXISTS eper_customer_asset_upload_reservations_idx;
 CREATE INDEX eper_customer_asset_upload_expiry_idx
   ON eper_customer_asset_upload_sessions (tenant_id, application_id, expires_at)
   WHERE upload_status IN ('reserved', 'initiated', 'in_progress');
