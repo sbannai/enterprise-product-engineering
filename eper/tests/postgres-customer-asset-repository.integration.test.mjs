@@ -372,7 +372,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
+          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, expiryAsset.assetId]),
           "RLS role sees only assets linked to or owned by its current application");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
