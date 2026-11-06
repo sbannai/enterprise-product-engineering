@@ -29,8 +29,16 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("Assets unavailable"), "asset loading failures trigger a toast");
     assert.match(html, /let pendingCustomerAssetOperationId=""/, "metadata operation ID must survive an uncertain upload result");
     assert.match(html, /clientOperationId:pendingCustomerAssetOperationId/, "metadata create must receive its stable operation ID");
-    assert.match(html, /JSON\.stringify\(metadata\)!==JSON\.stringify\(pendingCustomerAssetMetadata\)/, "an uncertain metadata operation cannot be reused with edited file metadata");
-    assert.ok(html.includes('pendingCustomerAssetOperationId="";\npendingCustomerAssetMetadata=null;'), "successful upload completion clears the pending metadata operation");
+    assert.match(html, /sessionStorage\.getItem\(pendingCustomerAssetStorageKey\)/, "uncertain upload identity must survive a same-tab reload");
+    assert.match(html, /sessionStorage\.setItem\(pendingCustomerAssetStorageKey/, "upload retry identity must be persisted before the first request");
+    assert.match(html, /customerAssetMetadataFingerprint\(metadata\)/, "retry identity must be bound to the unchanged file metadata");
+    assert.match(html, /if\(!window\.crypto\?\.subtle\)throw new Error\("asset_upload_retry_fingerprint_unavailable"\)/, "metadata fingerprinting must fail closed when Web Crypto is unavailable");
+    assert.match(html, /window\.crypto\.subtle\.digest\("SHA-256"/, "only a metadata fingerprint, not customer file metadata, is persisted");
+    assert.match(html, /idempotencyKey:pendingCustomerAssetUploadIdempotencyKey/, "upload reservation retries must reuse the same stable idempotency key");
+    assert.match(html, /clientOperationId:pendingCustomerAssetOperationId/, "metadata create must receive its stable operation ID");
+    assert.match(html, /clearPendingCustomerAssetOperation\(\)/, "successful completion and explicit logout must clear the pending retry state");
+    assert.match(html, /metadataFingerprint!==pendingCustomerAssetMetadataFingerprint/, "an uncertain operation cannot be reused with edited file metadata");
+    assert.match(html, /catch\{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";try\{sessionStorage\.removeItem\(pendingCustomerAssetStorageKey\);\}catch\{\}\}/, "malformed or inaccessible retry state must be cleared from session storage");
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
@@ -82,7 +90,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(path!=="\/customer\/session"&&!authenticated\)throw new Error\("customer_session_disconnected"\)/, "customer API calls must fail closed without an authenticated browser session");
     assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
-    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;pendingCustomerAssetOperationId="";pendingCustomerAssetMetadata=null;authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests, clear pending asset retries and clear customer data");
+    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;clearPendingCustomerAssetOperation\(\);authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests, clear pending asset retries and clear customer data");
     assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
     assert.match(html, /ticketViewSessionGeneration=sessionGeneration/, "ticket view application bootstrap must capture its session");
     assert.match(html, /if\(ticketViewSessionGeneration!==sessionGeneration\)return;const assigned=/, "late assigned-application responses must not mutate a stale ticket view");

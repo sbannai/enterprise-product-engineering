@@ -111,8 +111,48 @@ if(cryptoApi&&typeof cryptoApi.randomUUID==="function")return cryptoApi.randomUU
 const bytes=cryptoApi.getRandomValues(new Uint8Array(16));
 return Array.from(bytes,value=>value.toString(16).padStart(2,"0")).join("");
 }
+const pendingCustomerAssetStorageKey="eper.customerAsset.pendingUpload.v1";
 let pendingCustomerAssetOperationId="";
-let pendingCustomerAssetMetadata=null;
+let pendingCustomerAssetUploadIdempotencyKey="";
+let pendingCustomerAssetMetadataFingerprint="";
+function restorePendingCustomerAssetOperation(){
+try{
+const raw=sessionStorage.getItem(pendingCustomerAssetStorageKey);
+if(!raw)return;
+const value=JSON.parse(raw);
+if(!value||typeof value!=="object"||
+typeof value.operationId!=="string"||!/^[a-f0-9]{32}$/.test(value.operationId)||
+typeof value.uploadIdempotencyKey!=="string"||!/^[a-f0-9]{32}$/.test(value.uploadIdempotencyKey)||
+typeof value.metadataFingerprint!=="string"||!/^[a-f0-9]{64}$/.test(value.metadataFingerprint)){
+sessionStorage.removeItem(pendingCustomerAssetStorageKey);return;
+}
+pendingCustomerAssetOperationId=value.operationId;
+pendingCustomerAssetUploadIdempotencyKey=value.uploadIdempotencyKey;
+pendingCustomerAssetMetadataFingerprint=value.metadataFingerprint;
+}catch{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";try{sessionStorage.removeItem(pendingCustomerAssetStorageKey);}catch{}}
+}
+function persistPendingCustomerAssetOperation(){
+try{
+sessionStorage.setItem(pendingCustomerAssetStorageKey,JSON.stringify({
+operationId:pendingCustomerAssetOperationId,
+uploadIdempotencyKey:pendingCustomerAssetUploadIdempotencyKey,
+metadataFingerprint:pendingCustomerAssetMetadataFingerprint
+}));
+}catch{throw new Error("asset_upload_retry_state_unavailable");}
+}
+function clearPendingCustomerAssetOperation(){
+pendingCustomerAssetOperationId="";
+pendingCustomerAssetUploadIdempotencyKey="";
+pendingCustomerAssetMetadataFingerprint="";
+try{sessionStorage.removeItem(pendingCustomerAssetStorageKey);}catch{}
+}
+async function customerAssetMetadataFingerprint(metadata){
+if(!window.crypto?.subtle)throw new Error("asset_upload_retry_fingerprint_unavailable");
+const bytes=new TextEncoder().encode(JSON.stringify(metadata));
+const digest=await window.crypto.subtle.digest("SHA-256",bytes);
+return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
+}
+restorePendingCustomerAssetOperation();
 async function uploadCustomerAsset(form){
 const generation=sessionGeneration;
 const file=form.querySelector("#assetUploadFile")?.files?.[0];
@@ -130,13 +170,16 @@ if(!policy){fail("Choose an image, video, PDF, DOCX, PPTX or XLSX file.");return
 if(!Number.isSafeInteger(file.size)||file.size<=0){fail("The selected file is empty or has an invalid size.");return;}
 const metadata={applicationId,scope,displayName,originalFileName:file.name,mimeType:policy.mimeType,fileExtension:extension,
 mediaCategory:policy.category,sizeBytes:file.size};
-if(pendingCustomerAssetOperationId&&JSON.stringify(metadata)!==JSON.stringify(pendingCustomerAssetMetadata)){
+const metadataFingerprint=await customerAssetMetadataFingerprint(metadata);
+if(pendingCustomerAssetOperationId&&metadataFingerprint!==pendingCustomerAssetMetadataFingerprint){
 fail("A previous upload has an uncertain result. Re-select the same application and file and keep the metadata unchanged to safely retry it.");
 return;
 }
 if(!pendingCustomerAssetOperationId){
 pendingCustomerAssetOperationId=customerAssetIdempotencyKey();
-pendingCustomerAssetMetadata=metadata;
+pendingCustomerAssetUploadIdempotencyKey=customerAssetIdempotencyKey();
+pendingCustomerAssetMetadataFingerprint=metadataFingerprint;
+persistPendingCustomerAssetOperation();
 }
 if(submit)submit.disabled=true;
 if(progress){progress.hidden=false;progress.value=0;}
@@ -150,7 +193,7 @@ const assetId=created.asset?.assetId;
 if(typeof assetId!=="string"||!assetId)throw new Error("asset_create_response_invalid");
 fail("Requesting a short-lived upload capability…");
 const started=await api("/customer/applications/"+encodeURIComponent(applicationId)+"/assets/"+encodeURIComponent(assetId)+"/uploads",{
-method:"POST",body:JSON.stringify({fileName:file.name,mimeType:policy.mimeType,sizeBytes:file.size,idempotencyKey:customerAssetIdempotencyKey()})
+method:"POST",body:JSON.stringify({fileName:file.name,mimeType:policy.mimeType,sizeBytes:file.size,idempotencyKey:pendingCustomerAssetUploadIdempotencyKey})
 });
 const upload=started.upload;
 if(!upload||typeof upload.url!=="string"||!["PUT","POST"].includes(upload.method)||typeof upload.uploadSessionId!=="string")throw new Error("asset_upload_grant_invalid");
@@ -168,8 +211,7 @@ fail("Upload received and object verification passed. Malware scanning is pendin
 notify("success","Asset uploaded and queued for security scanning.","Upload received");
 form.querySelector("#assetUploadFile").value="";
 form.querySelector("#assetUploadDisplayName").value="";
-pendingCustomerAssetOperationId="";
-pendingCustomerAssetMetadata=null;
+clearPendingCustomerAssetOperation();
 }catch(error){
 if(generation!==sessionGeneration)return;
 const message=String(error?.message||"");
@@ -233,7 +275,7 @@ document.getElementById("refreshTickets").addEventListener("click",loadTickets);
 }
 function applyModules(modules){enabledModules=new Set(Array.isArray(modules)?modules:[]);nav.querySelectorAll("button[data-view]").forEach(button=>{const map={help:"help-center",growth:"growth-hub",apps:"my-applications",assets:"client-assets",tickets:"tickets-feedback",settings:"settings"};const key=map[button.dataset.view];button.hidden=!!key&&!enabledModules.has(key);});}
 async function connect(){const message=document.getElementById("connectResult");const generation=++sessionGeneration;viewLoadSequence++;authenticated=false;enabledModules.clear();message.textContent="Checking your organization session…";try{const session=await api("/customer/session");if(generation!==sessionGeneration)return;authenticated=true;const [context,modules]=await Promise.all([api("/customer/portal/context"),api("/customer/workspace/modules")]);if(generation!==sessionGeneration)return;applyModules(modules.modules);document.querySelector(".preview").textContent="CONNECTED · "+safeText(session.roleKey);document.getElementById("loginButton").hidden=true;document.getElementById("disconnectButton").hidden=false;document.getElementById("description").textContent="Signed in as "+session.actorId+". Workspace navigation and content are filtered by current server-side tenant and application assignments.";message.textContent="Your organization session is active.";notify("success","Customer workspace connected.","Connected");renderCards("home");}catch(error){if(generation!==sessionGeneration)return;authenticated=false;enabledModules.clear();document.getElementById("loginButton").hidden=false;document.getElementById("disconnectButton").hidden=true;document.querySelector(".preview").textContent="NOT CONNECTED";message.textContent=String(error?.message||"").includes("HTTP 401")?"Sign in through your organization to open your workspace.":"Could not verify your customer session. Sign in again or try shortly.";if(!String(error?.message||"").includes("HTTP 401"))notify("error",message.textContent,"Connection unavailable");}}
-document.getElementById("disconnectButton").addEventListener("click",async()=>{const message=document.getElementById("connectResult");try{await api("/customer/auth/logout",{method:"POST",body:"{}"});}catch(error){message.textContent="Could not sign out. Try again shortly.";notify("error",message.textContent,"Sign out unavailable");return;}sessionGeneration++;viewLoadSequence++;pendingCustomerAssetOperationId="";pendingCustomerAssetMetadata=null;authenticated=false;enabledModules.clear();cards.replaceChildren();document.getElementById("loginButton").hidden=false;document.getElementById("disconnectButton").hidden=true;document.querySelector(".preview").textContent="NOT CONNECTED";nav.querySelectorAll("button").forEach(b=>b.hidden=false);message.textContent="You have signed out.";renderCards("home");});
+document.getElementById("disconnectButton").addEventListener("click",async()=>{const message=document.getElementById("connectResult");try{await api("/customer/auth/logout",{method:"POST",body:"{}"});}catch(error){message.textContent="Could not sign out. Try again shortly.";notify("error",message.textContent,"Sign out unavailable");return;}sessionGeneration++;viewLoadSequence++;clearPendingCustomerAssetOperation();authenticated=false;enabledModules.clear();cards.replaceChildren();document.getElementById("loginButton").hidden=false;document.getElementById("disconnectButton").hidden=true;document.querySelector(".preview").textContent="NOT CONNECTED";nav.querySelectorAll("button").forEach(b=>b.hidden=false);message.textContent="You have signed out.";renderCards("home");});
 nav.addEventListener("click",e=>{const button=e.target.closest("button[data-view]");if(button&&!button.hidden){if(!authenticated){apiStatus.textContent="Sign in through your organization before opening modules.";return;}renderCards(button.dataset.view);}});
 cards.addEventListener("submit",async e=>{
 if(e.target?.id==="assetUploadForm"){e.preventDefault();await uploadCustomerAsset(e.target);return;}
