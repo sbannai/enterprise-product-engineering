@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { StorageUploadRequest } from "./storage-upload-adapter.js";
+import type { StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
 
 export interface CustomerAssetUploadGrant {
   uploadSessionId: string;
@@ -25,14 +26,19 @@ export interface CustomerAssetUploadStartInput {
 }
 
 export interface CustomerAssetUploadStartDependencies {
-  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "finalizeUploadGrant" | "failUploadReservation">;
-  issueGrant: (request: StorageUploadRequest, requestId: string) => Promise<{
+  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "finalizeUploadGrant"> &
+    Partial<Pick<PostgresCustomerAssetRepository, "rejectUploadReservation">>;
+  /** Legacy adapter boundary; prefer issueProviderOutcome for typed recovery semantics. */
+  issueGrant?: (request: StorageUploadRequest, requestId: string) => Promise<{
     providerUploadReference: string;
     url: string;
     method: "PUT" | "POST";
     expiresAt: string;
     headers: Record<string, string>;
   } | null>;
+  issueProviderOutcome?: (
+    request: StorageUploadRequest, correlationId: string,
+  ) => Promise<StorageUploadProviderOutcome>;
   now?: () => number;
 }
 
@@ -99,12 +105,39 @@ export async function startCustomerAssetUpload(
     sizeBytes: input.expectedSizeBytes,
   };
 
-  // A thrown provider call, null response, invalid grant, or failed DB
-  // finalization can all occur after the provider created an object. Until a
-  // typed definitive rejection is available, preserve the durable reservation
-  // as outcome-unknown. Never turn an uncertain side effect into terminal
-  // failure or make a fresh provider object eligible on replay.
-  const grant = await dependencies.issueGrant(request, uploadSessionId);
+  if (Boolean(dependencies.issueProviderOutcome) === Boolean(dependencies.issueGrant)) {
+    throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_OPERATION_REQUIRED");
+  }
+
+  // Typed outcomes distinguish definitive rejection from uncertain side effects.
+  // Only a definitive rejection may transition the durable reservation to failed.
+  let grant: {
+    providerUploadReference: string; url: string; method: "PUT" | "POST";
+    expiresAt: string; headers: Record<string, string>;
+  } | null;
+  if (dependencies.issueProviderOutcome) {
+    const outcome = await dependencies.issueProviderOutcome(request, input.correlationId);
+    if (outcome.status === "rejected") {
+      if (!dependencies.repository.rejectUploadReservation) {
+        throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_PERSISTENCE_REQUIRED");
+      }
+      await dependencies.repository.rejectUploadReservation({
+        tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+        environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+        rejectionCode: outcome.code,
+      });
+      return null;
+    }
+    if (outcome.status !== "succeeded") {
+      // unknown, not_found and unavailable are not terminal; retain reservation.
+      return null;
+    }
+    grant = { ...outcome.grant, providerUploadReference: outcome.providerUploadReference };
+  } else {
+    // Legacy adapters retain conservative behavior: null/throw never marks a
+    // reservation failed because the provider may have created an object.
+    grant = await dependencies.issueGrant!(request, uploadSessionId);
+  }
   if (!grant) return null;
 
   const expiry = Date.parse(grant.expiresAt);
