@@ -184,7 +184,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId, applicationId],
         );
         const finalizedRow = await finalizedClient.query(
-          "SELECT upload_status, provider_upload_reference FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          "SELECT upload_status, provider_upload_reference, provider_outcome FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
           [tenantId, reservedSessionId],
         );
         assert.equal(finalizedRow.rows[0]?.upload_status, "initiated");
