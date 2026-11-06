@@ -345,8 +345,9 @@ export class PostgresCustomerAssetRepository {
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
+    requestFingerprint: string; requestFileName: string; requestMimeType: string;
     providerUploadReference?: string; expiresAt?: string; uploadSessionId?: string;
-  }): Promise<string> {
+  }): Promise<{ disposition: "created" | "existing"; uploadSessionId: string; state: string }> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.actorId, "actorId");
@@ -356,6 +357,11 @@ export class PostgresCustomerAssetRepository {
     }
     if (!/^[a-zA-Z0-9._:-]{16,128}$/.test(input.idempotencyKey)) {
       throw new Error("EPER_CUSTOMER_ASSET_IDEMPOTENCY_KEY_INVALID");
+    }
+    if (!/^[a-f0-9]{64}$/.test(input.requestFingerprint) ||
+        !input.requestFileName.trim() || input.requestFileName.length > 255 ||
+        !input.requestMimeType.trim() || input.requestMimeType.length > 128) {
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_REQUEST_FINGERPRINT_INVALID");
     }
     if (input.providerUploadReference !== undefined &&
         (!input.providerUploadReference.trim() || input.providerUploadReference.length > 2048)) {
@@ -374,14 +380,24 @@ export class PostgresCustomerAssetRepository {
         if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey]);
-      const prior = await client.query<{ upload_session_id: string; asset_id: string }>(
-        "SELECT upload_session_id, asset_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE",
+      const prior = await client.query<{
+        upload_session_id: string; asset_id: string; application_id: string; actor_id: string;
+        request_fingerprint: string | null; upload_status: string;
+      }>(
+        `SELECT upload_session_id, asset_id, application_id, actor_id, request_fingerprint, upload_status
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
         [input.tenantId, input.idempotencyKey],
       );
       if (prior.rows[0]) {
-        if (prior.rows[0].asset_id !== input.assetId) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
+        const row = prior.rows[0];
+        if (!row.request_fingerprint || row.request_fingerprint !== input.requestFingerprint ||
+            row.asset_id !== input.assetId || row.application_id !== input.applicationId ||
+            row.actor_id !== input.actorId) {
+          throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
+        }
         await client.query("COMMIT");
-        return prior.rows[0].upload_session_id;
+        return { disposition: "existing", uploadSessionId: row.upload_session_id, state: row.upload_status };
       }
       const asset = await client.query<{ asset_id: string }>(
         "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
@@ -393,12 +409,15 @@ export class PostgresCustomerAssetRepository {
       await client.query(
         `INSERT INTO eper_customer_asset_upload_sessions
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
-           provider_upload_reference, upload_status, idempotency_key, expires_at)
+           provider_upload_reference, upload_status, idempotency_key, expires_at,
+           request_fingerprint, request_file_name, request_mime_type, provider_outcome)
          VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7::varchar IS NULL THEN 'reserved' ELSE 'initiated' END,$8,
-           COALESCE($9::timestamptz, now() + interval '15 minutes'))`,
+           COALESCE($9::timestamptz, now() + interval '15 minutes'),$10,$11,$12,
+           CASE WHEN $7::varchar IS NULL THEN 'unknown' ELSE 'succeeded' END)`,
         [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId, input.expectedSizeBytes,
           input.providerUploadReference ?? null, input.idempotencyKey,
-          expiry === null ? null : new Date(expiry).toISOString()],
+          expiry === null ? null : new Date(expiry).toISOString(),
+          input.requestFingerprint, input.requestFileName, input.requestMimeType],
       );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
@@ -411,7 +430,8 @@ export class PostgresCustomerAssetRepository {
           expiresAt: expiry === null ? null : new Date(expiry).toISOString() },
       });
       await client.query("COMMIT");
-      return sessionId;
+      return { disposition: "created", uploadSessionId: sessionId,
+        state: input.providerUploadReference ? "initiated" : "reserved" };
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
