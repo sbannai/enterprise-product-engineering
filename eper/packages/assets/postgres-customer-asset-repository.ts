@@ -101,6 +101,27 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async assertUploadExpiryWorkerReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        expiry_function_execute: boolean;
+      }>(`
+        SELECT coalesce(has_function_privilege(
+          current_user,
+          to_regprocedure('public.eper_expire_customer_asset_upload_sessions(character varying,integer)')::oid,
+          'EXECUTE'
+        ), false) AS expiry_function_execute
+      `);
+      if (!result.rows[0]?.expiry_function_execute) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY") throw error;
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_READINESS_FAILED", { cause: error });
+    } finally { client.release(); }
+  }
+
   async listForApplication(tenantId: string, applicationId: string): Promise<CustomerAsset[]> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
