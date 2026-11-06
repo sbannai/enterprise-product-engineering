@@ -129,6 +129,9 @@ END $$;
 -- assets are visible only to their owner application. Inserts are tenant-bound and
 -- restricted assets must name the current application as owner.
 DROP POLICY IF EXISTS customer_asset_tenant_isolation ON eper_customer_assets;
+DROP POLICY IF EXISTS customer_asset_application_read ON eper_customer_assets;
+DROP POLICY IF EXISTS customer_asset_application_insert ON eper_customer_assets;
+DROP POLICY IF EXISTS customer_asset_application_update ON eper_customer_assets;
 CREATE POLICY customer_asset_application_read ON eper_customer_assets
   FOR SELECT
   USING (
