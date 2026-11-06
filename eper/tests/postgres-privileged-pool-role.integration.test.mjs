@@ -218,6 +218,44 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       );
       await client.query("ROLLBACK TO SAVEPOINT provider_denied_cross_tenant");
       await client.query("ROLLBACK");
+
+      // The expiry worker can execute only the tenant-bound expiry/queue-age
+      // functions and append audit events; it cannot read session or asset rows.
+      const expiryTenantId = "expiry-role-test-tenant-" + randomUUID();
+      const expiryApplicationId = "expiry-role-test-app";
+      await client.query("BEGIN");
+      await client.query("SET LOCAL ROLE eper_customer_asset_upload_expiry_worker_access");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [expiryTenantId]);
+      await client.query("SELECT set_config('eper.application_id', $1, true)", [expiryApplicationId]);
+      const expiryRows = await client.query(
+        "SELECT * FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
+        [expiryTenantId],
+      );
+      assert.equal(expiryRows.rows.length, 0);
+      const queueAge = await client.query(
+        "SELECT public.eper_customer_asset_upload_expiry_queue_age_ms($1) AS age_ms",
+        [expiryTenantId],
+      );
+      assert.equal(Number(queueAge.rows[0].age_ms), 0);
+      await appendAuditEventInTransaction(client, {
+        tenantId: expiryTenantId, applicationId: expiryApplicationId, environment: "sandbox",
+        actorType: "system", actorId: "expiry-role-test", action: "customer.asset.upload.expiry.role_test",
+        outcome: "success", source: "job", operationName: "customer.asset.upload.expiry.role_test",
+        correlationId: randomUUID(), payload: {},
+      });
+      await client.query("SAVEPOINT expiry_denied_session_read");
+      await assert.rejects(
+        client.query("SELECT upload_session_id FROM eper_customer_asset_upload_sessions LIMIT 1"),
+        /permission denied/i,
+      );
+      await client.query("ROLLBACK TO SAVEPOINT expiry_denied_session_read");
+      await client.query("SAVEPOINT expiry_denied_asset_read");
+      await assert.rejects(
+        client.query("SELECT asset_id FROM eper_customer_assets LIMIT 1"),
+        /permission denied/i,
+      );
+      await client.query("ROLLBACK TO SAVEPOINT expiry_denied_asset_read");
+      await client.query("ROLLBACK");
     } finally {
       client.release();
     }
