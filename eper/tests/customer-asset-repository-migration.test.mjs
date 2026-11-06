@@ -14,6 +14,9 @@ test("customer asset repository migration separates customer assets from applica
   assert.ok(migration.includes("ON DELETE RESTRICT"));
   assert.ok(migration.includes("UNIQUE (tenant_id, application_id, idempotency_key)"));
   assert.ok(migration.includes("UNIQUE (tenant_id, asset_id, repository_scope)"));
+  assert.ok(migration.includes("DROP POLICY IF EXISTS customer_asset_application_read ON eper_customer_assets;"));
+  assert.ok(migration.includes("DROP POLICY IF EXISTS customer_asset_application_insert ON eper_customer_assets;"));
+  assert.ok(migration.includes("DROP POLICY IF EXISTS customer_asset_application_update ON eper_customer_assets;"));
   assert.ok(migration.includes("CREATE POLICY customer_asset_application_read"));
   assert.ok(migration.includes("owner_application_id = current_setting('eper.application_id', true)"));
   assert.ok(migration.includes("l.application_id = current_setting('eper.application_id', true)"));
