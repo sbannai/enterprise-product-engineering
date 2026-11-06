@@ -45,7 +45,7 @@ Do not run multiple processes with the same tenant assignment unless the operato
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_APPLICATION_ID`.
 - Optional `EPER_AUDIT_ENVIRONMENT`: `sandbox`, `uat`, or `production`.
 - Optional pool settings: `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX` (1–5, default 2), `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_CONNECTION_TIMEOUT_MS`, `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_IDLE_TIMEOUT_MS`, `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_STATEMENT_TIMEOUT_MS`, `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUERY_TIMEOUT_MS`, `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_LOCK_TIMEOUT_MS`, and `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_IDLE_TX_TIMEOUT_MS`.
-- Optional work settings: `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS` (100–60,000, default 5,000), `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE` (1–500, default 100).
+- Optional work settings: `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS` (100–60,000, default 5,000), `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE` (1–500, default 100), and `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS` (100–300,000, default 60,000; must be at least the poll interval).
 - Optional alert settings: `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS` (default 900,000) and `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD` (default 3).
 
 Never print the database URI or its parsed username/password. The application logs only redacted event names, counts, durations, queue age and consecutive failure counts.
