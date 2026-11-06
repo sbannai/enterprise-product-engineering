@@ -461,6 +461,7 @@ export class PostgresCustomerAssetRepository {
       const updated = await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET provider_upload_reference = $5, upload_status = 'initiated',
+                provider_outcome = 'succeeded',
                 expires_at = $6, updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND actor_id = $4 AND upload_status = 'reserved' AND provider_upload_reference IS NULL
