@@ -20,6 +20,7 @@ test("customer asset RLS blocks cross-tenant and cross-application access under 
       restrictedA: randomUUID(),
       restrictedB: randomUUID(),
       tenantBRestricted: randomUUID(),
+      tenantBShared: randomUUID(),
     };
     const sessionIds = { appA: randomUUID(), appB: randomUUID(), tenantB: randomUUID() };
 
@@ -70,12 +71,17 @@ test("customer asset RLS blocks cross-tenant and cross-application access under 
       await insertAsset(tenantA, ids.restrictedA, "application_restricted", appA);
       await insertAsset(tenantA, ids.restrictedB, "application_restricted", appB);
       await insertAsset(tenantB, ids.tenantBRestricted, "application_restricted", appA);
+      await insertAsset(tenantB, ids.tenantBShared, "customer_shared");
 
       await pool.query(
         `INSERT INTO eper_customer_asset_application_links (
           tenant_id, application_id, asset_id, linked_by, link_reason, idempotency_key
         ) VALUES ($1,$2,$3,'rls-test','explicit-share',$4)`,
         [tenantA, appB, ids.sharedLinkedB, "rls-link-" + randomUUID()],
+      );
+      await pool.query(
+        "INSERT INTO eper_customer_asset_application_links (tenant_id, application_id, asset_id, linked_by, link_reason, idempotency_key) VALUES ($1,$2,$3,'rls-test','tenant-b-fixture',$4)",
+        [tenantB, appA, ids.tenantBShared, "rls-link-" + randomUUID()],
       );
       await insertSession(tenantA, appA, sessionIds.appA, ids.restrictedA, "app-a");
       await insertSession(tenantA, appB, sessionIds.appB, ids.restrictedB, "app-b");
@@ -98,6 +104,16 @@ test("customer asset RLS blocks cross-tenant and cross-application access under 
         [tenantB],
       );
       assert.equal(result.rowCount, 0, "tenant A context must not read tenant B assets");
+      result = await client.query(
+        "SELECT application_id, asset_id FROM eper_customer_asset_application_links WHERE tenant_id = $1",
+        [tenantB],
+      );
+      assert.equal(result.rowCount, 0, "tenant A context must not read tenant B links");
+      result = await client.query(
+        "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
+        [tenantB],
+      );
+      assert.equal(result.rowCount, 0, "tenant A context must not read tenant B upload sessions");
 
       result = await client.query(
         "SELECT application_id, asset_id FROM eper_customer_asset_application_links WHERE tenant_id = $1",
@@ -141,6 +157,21 @@ test("customer asset RLS blocks cross-tenant and cross-application access under 
         [tenantA, ids.restrictedB],
       );
       assert.equal(result.rowCount, 0, "application A must not update application B's asset");
+      result = await client.query(
+        "UPDATE eper_customer_assets SET display_name = 'tampered' WHERE tenant_id = $1 AND asset_id = $2",
+        [tenantB, ids.tenantBRestricted],
+      );
+      assert.equal(result.rowCount, 0, "tenant A must not update tenant B assets");
+      result = await client.query(
+        "UPDATE eper_customer_asset_application_links SET link_reason = 'tampered' WHERE tenant_id = $1 AND asset_id = $2",
+        [tenantB, ids.tenantBShared],
+      );
+      assert.equal(result.rowCount, 0, "tenant A must not update tenant B links");
+      result = await client.query(
+        "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'aborted' WHERE tenant_id = $1 AND upload_session_id = $2",
+        [tenantB, sessionIds.tenantB],
+      );
+      assert.equal(result.rowCount, 0, "tenant A must not update tenant B upload sessions");
       result = await client.query(
         "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'aborted' WHERE tenant_id = $1 AND upload_session_id = $2",
         [tenantA, sessionIds.appB],
