@@ -11,6 +11,26 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
   async () => {
     const pool = createPostgresPaymentPool();
     const repository = new PostgresCustomerAssetRepository(pool);
+    // Simulate the dedicated worker login-group role for each repository
+    // transaction. The login itself remains operator-provisioned.
+    const workerPool = {
+      async connect() {
+        const client = await pool.connect();
+        let roleApplied = false;
+        return {
+          async query(sql, values) {
+            const result = await client.query(sql, values);
+            if (!roleApplied && typeof sql === "string" && sql.trim().toUpperCase() === "BEGIN") {
+              await client.query("SET LOCAL ROLE eper_customer_asset_upload_expiry_worker_access");
+              roleApplied = true;
+            }
+            return result;
+          },
+          release() { client.release(); },
+        };
+      },
+    };
+    const workerRepository = new PostgresCustomerAssetRepository(workerPool);
     const tenantId = "asset-it-" + randomUUID();
     const otherTenant = "asset-it-" + randomUUID();
     const applicationId = "app-" + randomUUID();
@@ -233,7 +253,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         expiryClient.release();
       }
       const workerExpiryResults = await Promise.all(Array.from({ length: 2 }, () =>
-        repository.expireStaleUploadSessions({
+        workerRepository.expireStaleUploadSessions({
           tenantId, applicationId, environment: "uat", correlationId, limit: 10,
         }),
       ));
@@ -545,6 +565,45 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       } finally {
         try { await restrictedRoleClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         restrictedRoleClient.release();
+      }
+
+      // The dedicated worker role has no direct table access beyond its narrow
+      // function and append-only audit operations.
+      const expiryWorkerRoleClient = await pool.connect();
+      try {
+        await expiryWorkerRoleClient.query("BEGIN");
+        await expiryWorkerRoleClient.query("SET LOCAL ROLE eper_customer_asset_upload_expiry_worker_access");
+        await expiryWorkerRoleClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const workerChainHead = await expiryWorkerRoleClient.query(
+          "SELECT singleton FROM eper_audit_chain_head WHERE singleton = TRUE",
+        );
+        assert.equal(workerChainHead.rows.length, 1,
+          "worker may read the single audit chain head required for append");
+        const workerExpiryNoop = await expiryWorkerRoleClient.query(
+          "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
+          [tenantId],
+        );
+        assert.equal(workerExpiryNoop.rows.length, 0,
+          "worker may invoke only the tenant-bound expiry routine");
+        for (const [savepoint, sql, values] of [
+          ["deny_worker_session_read", "SELECT upload_session_id FROM eper_customer_asset_upload_sessions LIMIT 1", []],
+          ["deny_worker_session_update", "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'expired' WHERE tenant_id = $1 RETURNING upload_session_id", [tenantId]],
+          ["deny_worker_asset_read", "SELECT asset_id FROM eper_customer_assets LIMIT 1", []],
+          ["deny_worker_payment_read", "SELECT id FROM eper_payment_orders LIMIT 1", []],
+          ["deny_worker_provider_read", "SELECT connection_id FROM eper_provider_connections LIMIT 1", []],
+        ]) {
+          await expiryWorkerRoleClient.query("SAVEPOINT " + savepoint);
+          await assert.rejects(expiryWorkerRoleClient.query(sql, values), /permission denied/i,
+            "worker role must not have direct access to " + savepoint);
+          await expiryWorkerRoleClient.query("ROLLBACK TO SAVEPOINT " + savepoint);
+        }
+        await expiryWorkerRoleClient.query("COMMIT");
+      } finally {
+        try { await expiryWorkerRoleClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        expiryWorkerRoleClient.release();
       }
 
     } finally {
