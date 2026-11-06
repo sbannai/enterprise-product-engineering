@@ -233,6 +233,59 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async expireStaleUploadSessions(input: {
+    tenantId: string; applicationId: string; environment: AuditEnvironment;
+    correlationId: string; limit?: number;
+  }): Promise<number> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const expired = await client.query<{ upload_session_id: string; asset_id: string }>(
+        `WITH candidates AS (
+           SELECT tenant_id, application_id, upload_session_id
+             FROM eper_customer_asset_upload_sessions
+            WHERE tenant_id = $1 AND application_id = $2
+              AND upload_status IN ('reserved', 'initiated', 'in_progress')
+              AND expires_at <= clock_timestamp()
+            ORDER BY expires_at, upload_session_id
+            LIMIT $3
+            FOR UPDATE SKIP LOCKED
+         )
+         UPDATE eper_customer_asset_upload_sessions s
+            SET upload_status = 'expired', updated_at = clock_timestamp()
+           FROM candidates c
+          WHERE s.tenant_id = c.tenant_id
+            AND s.application_id = c.application_id
+            AND s.upload_session_id = c.upload_session_id
+          RETURNING s.upload_session_id, s.asset_id`,
+        [input.tenantId, input.applicationId, limit],
+      );
+      for (const row of expired.rows) {
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
+          outcome: "success", resourceType: "customer-asset-upload", resourceId: row.upload_session_id,
+          correlationId: input.correlationId, source: "job",
+          operationName: "customer-asset-upload-expiry-worker",
+          payload: { assetId: row.asset_id, reason: "reservation_expired" },
+        });
+      }
+      await client.query("COMMIT");
+      return expired.rows.length;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
