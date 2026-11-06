@@ -236,6 +236,7 @@ export class PostgresCustomerAssetRepository {
   async expireStaleUploadSessions(input: {
     tenantId: string; applicationId: string; environment: AuditEnvironment;
     correlationId: string; limit?: number;
+    onMetrics?: (metrics: { expiredCount: number; queueAgeMs: number }) => void;
   }): Promise<number> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
@@ -252,11 +253,19 @@ export class PostgresCustomerAssetRepository {
       // with a tenant-only policy on upload sessions. It can reconcile sessions
       // across applications for this tenant, but cannot cross the tenant boundary.
       const expired = await client.query<{
-        application_id: string; upload_session_id: string; asset_id: string;
+        application_id: string; upload_session_id: string; asset_id: string; expires_at: string | Date;
       }>(
-        "SELECT application_id, upload_session_id, asset_id FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
+        "SELECT application_id, upload_session_id, asset_id, expires_at FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
         [input.tenantId, limit],
       );
+      const oldestExpiredAt = expired.rows.reduce<Date | null>((oldest, row) => {
+        const value = new Date(row.expires_at);
+        return oldest === null || value < oldest ? value : oldest;
+      }, null);
+      input.onMetrics?.({
+        expiredCount: expired.rows.length,
+        queueAgeMs: oldestExpiredAt === null ? 0 : Math.max(0, Date.now() - oldestExpiredAt.getTime()),
+      });
       for (const row of expired.rows) {
         // Audit remains application-scoped. Rebind the RLS context to the
         // originating application for each event; no payload bytes are read.
