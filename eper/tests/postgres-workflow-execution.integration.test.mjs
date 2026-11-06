@@ -206,7 +206,7 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
 
       const reclaimedStarted = await outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 });
       assert.equal(reclaimedStarted.length, 1);
-      assert.equal(reclaimedStarted[0].claimToken > byType["workflow.instance.started"].claimToken, true);
+      assert.equal(BigInt(reclaimedStarted[0].claimToken) > BigInt(byType["workflow.instance.started"].claimToken), true);
       await assert.rejects(
         outboxStore.markDelivered(outboxContext, byType["workflow.instance.started"].eventId, "worker-a",
           byType["workflow.instance.started"].claimToken, 60),
