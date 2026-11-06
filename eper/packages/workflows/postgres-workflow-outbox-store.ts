@@ -22,7 +22,12 @@ export interface WorkflowOutboxEvent {
   attempts: number;
 }
 
-export interface WorkflowOutboxClaimedEvents extends Array<WorkflowOutboxEvent> {
+export interface WorkflowOutboxClaimedEvent extends WorkflowOutboxEvent {
+  /** Monotonic per-delivery claim generation; internal fencing value, not dispatch payload. */
+  claimToken: string;
+}
+
+export interface WorkflowOutboxClaimedEvents extends Array<WorkflowOutboxClaimedEvent> {
   /** Rows moved to dead-letter state by this claim pass before new claims were selected. */
   deadLettered: number;
 }
@@ -37,6 +42,8 @@ export interface WorkflowOutboxClaimOptions {
 
 export interface WorkflowOutboxFailureOptions {
   workerId: string;
+  claimToken: string;
+  leaseSeconds: number;
   maxAttempts: number;
   retryDelaySeconds: number;
   error: string;
@@ -56,6 +63,7 @@ export interface WorkflowOutboxDeadLetter {
 type EventRow = {
   event_id: string; tenant_id: string; application_id: string; instance_id: string;
   transition_id: string; event_type: WorkflowOutboxEventType; event_version: number | string;
+  claim_version: number | string;
   payload: Record<string, unknown> | string; occurred_at: string | Date; attempts: number | string;
 };
 
@@ -117,13 +125,13 @@ export class PostgresWorkflowOutboxStore {
                 last_error = COALESCE(last_error, CASE WHEN delivery_status = 'processing'
                   THEN 'WORKFLOW_OUTBOX_LEASE_EXPIRED_MAX_ATTEMPTS'
                   ELSE 'WORKFLOW_OUTBOX_MAX_ATTEMPTS_EXHAUSTED' END),
-                updated_at = NOW()
+                updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2
             AND attempts >= $4::int
             AND (
               delivery_status = 'pending'
               OR (delivery_status = 'processing'
-                  AND locked_at <= NOW() - ($3::int * INTERVAL '1 second'))
+                  AND locked_at <= clock_timestamp() - ($3::int * INTERVAL '1 second'))
             )
           RETURNING event_id`,
         [context.tenantId, context.applicationId, leaseSeconds, maxAttempts],
@@ -134,9 +142,9 @@ export class PostgresWorkflowOutboxStore {
              FROM eper_workflow_outbox_delivery
             WHERE tenant_id = $1 AND application_id = $2
               AND (
-                (delivery_status = 'pending' AND available_at <= NOW() AND attempts < $6::int)
+                (delivery_status = 'pending' AND available_at <= clock_timestamp() AND attempts < $6::int)
                 OR
-                (delivery_status = 'processing' AND locked_at <= NOW() - ($4::int * INTERVAL '1 second') AND attempts < $6::int)
+                (delivery_status = 'processing' AND locked_at <= clock_timestamp() - ($4::int * INTERVAL '1 second') AND attempts < $6::int)
               )
             ORDER BY available_at, event_id
             LIMIT $3
@@ -144,7 +152,8 @@ export class PostgresWorkflowOutboxStore {
          )
          UPDATE eper_workflow_outbox_delivery d
             SET delivery_status = 'processing', attempts = d.attempts + 1,
-                locked_at = NOW(), locked_by = $5, updated_at = NOW()
+                claim_version = d.claim_version + 1,
+                locked_at = clock_timestamp(), locked_by = $5, updated_at = clock_timestamp()
            FROM candidates c
            JOIN eper_workflow_outbox_events e
              ON e.tenant_id = c.tenant_id AND e.application_id = c.application_id
@@ -153,11 +162,11 @@ export class PostgresWorkflowOutboxStore {
             AND d.event_id = c.event_id
          RETURNING e.event_id, e.tenant_id, e.application_id, e.instance_id,
                    e.transition_id, e.event_type, e.event_version, e.payload,
-                   e.occurred_at, d.attempts`,
+                   e.occurred_at, d.attempts, d.claim_version`,
         [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId, maxAttempts],
       );
       await client.query("COMMIT");
-      const claimed = result.rows.map(mapEvent) as WorkflowOutboxClaimedEvents;
+      const claimed = result.rows.map(row => ({ ...mapEvent(row), claimToken: String(row.claim_version) })) as WorkflowOutboxClaimedEvents;
       Object.defineProperty(claimed, "deadLettered", {
         value: swept.rows.length,
         enumerable: false,
@@ -176,6 +185,7 @@ export class PostgresWorkflowOutboxStore {
     context: WorkflowOutboxContext,
     eventId: string,
     workerId: string,
+    claimToken: string,
     leaseSeconds: number,
   ): Promise<boolean> {
     validateUuid(eventId);
@@ -192,9 +202,10 @@ export class PostgresWorkflowOutboxStore {
             SET locked_at = clock_timestamp(), updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $4
-            AND locked_at > clock_timestamp() - ($5::int * INTERVAL '1 second')
+            AND claim_version = $5::bigint
+            AND locked_at > clock_timestamp() - ($6::int * INTERVAL '1 second')
           RETURNING event_id`,
-        [context.tenantId, context.applicationId, eventId, workerId, leaseSeconds],
+        [context.tenantId, context.applicationId, eventId, workerId, claimToken, leaseSeconds],
       );
       await client.query("COMMIT");
       return Boolean(result.rows[0]);
@@ -251,7 +262,7 @@ export class PostgresWorkflowOutboxStore {
     }
   }
 
-  async markDelivered(context: WorkflowOutboxContext, eventId: string, workerId: string): Promise<void> {
+  async markDelivered(context: WorkflowOutboxContext, eventId: string, workerId: string, claimToken: string, leaseSeconds = 3600): Promise<void> {
     validateUuid(eventId);
     validateId(workerId, "workerId");
     const client = await this.pool.connect();
@@ -260,12 +271,14 @@ export class PostgresWorkflowOutboxStore {
       await setRls(client, context);
       const result = await client.query<{ event_id: string }>(
         `UPDATE eper_workflow_outbox_delivery
-            SET delivery_status = 'delivered', delivered_at = NOW(),
-                locked_at = NULL, locked_by = NULL, last_error = NULL, updated_at = NOW()
+            SET delivery_status = 'delivered', delivered_at = clock_timestamp(),
+                locked_at = NULL, locked_by = NULL, last_error = NULL, updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $4
+            AND claim_version = $5::bigint
+            AND locked_at > clock_timestamp() - ($6::int * INTERVAL '1 second')
           RETURNING event_id`,
-        [context.tenantId, context.applicationId, eventId, workerId],
+        [context.tenantId, context.applicationId, eventId, workerId, claimToken, leaseSeconds],
       );
       if (!result.rows[0]) throw new Error("WORKFLOW_OUTBOX_LEASE_NOT_HELD");
       await client.query("COMMIT");
@@ -302,12 +315,14 @@ export class PostgresWorkflowOutboxStore {
                 available_at = CASE WHEN attempts >= $5::int THEN available_at
                                     ELSE NOW() + ($6::int * INTERVAL '1 second') END,
                 locked_at = NULL, locked_by = NULL, last_error = $4::varchar(2000),
-                updated_at = NOW()
+                updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $7
+            AND claim_version = $8::bigint
+            AND locked_at > clock_timestamp() - ($9::int * INTERVAL '1 second')
           RETURNING delivery_status, attempts`,
         [context.tenantId, context.applicationId, eventId, options.error.slice(0, 2000),
-          options.maxAttempts, options.retryDelaySeconds, options.workerId],
+          options.maxAttempts, options.retryDelaySeconds, options.workerId, options.claimToken, options.leaseSeconds],
       );
       if (!result.rows[0]) throw new Error("WORKFLOW_OUTBOX_LEASE_NOT_HELD");
       await client.query("COMMIT");
