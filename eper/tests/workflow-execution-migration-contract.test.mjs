@@ -135,3 +135,22 @@ test("workflow outbox worker role is a restricted non-login group with column-sc
   assert.doesNotMatch(sql, /GRANT (?:INSERT|DELETE|TRUNCATE) ON/);
   assert.doesNotMatch(sql, /GRANT UPDATE ON eper_workflow_outbox_delivery/);
 });
+
+
+test("workflow outbox claim fencing persists a monotonic generation and grants only its required column", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/017_workflow_outbox_claim_fencing.sql", import.meta.url), "utf8");
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS claim_version bigint NOT NULL DEFAULT 0/);
+  assert.match(sql, /CHECK \(claim_version >= 0\)/);
+  assert.match(sql, /GRANT UPDATE \(claim_version\)/);
+  assert.match(sql, /eper_workflow_outbox_worker_access/);
+  const store = await readFile(new URL("../packages/workflows/postgres-workflow-outbox-store.ts", import.meta.url), "utf8");
+  assert.match(store, /claim_version = d\.claim_version \+ 1/);
+  assert.match(store, /claim_version/);
+  assert.match(store, /claim_version = \$5::bigint/);
+  assert.match(store, /claim_version = \$8::bigint/);
+  assert.match(store, /locked_at > clock_timestamp\(\) - \(\$6::int \* INTERVAL '1 second'\)/);
+  assert.match(store, /locked_at > clock_timestamp\(\) - \(\$9::int \* INTERVAL '1 second'\)/);
+  const worker = await readFile(new URL("../packages/workflows/workflow-outbox-worker.ts", import.meta.url), "utf8");
+  assert.match(worker, /event\.claimToken/);
+  assert.match(worker, /claimToken: _claimToken, \.\.\.dispatchEvent/);
+});
