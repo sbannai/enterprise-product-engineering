@@ -264,13 +264,17 @@ export class PostgresCustomerAssetRepository {
         );
         if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
       }
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey]);
-      const prior = await client.query<{ upload_session_id: string; asset_id: string }>(
-        "SELECT upload_session_id, asset_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE",
-        [input.tenantId, input.idempotencyKey],
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.applicationId + ":" + input.idempotencyKey]);
+      const prior = await client.query<{ upload_session_id: string; asset_id: string; actor_id: string; expected_size_bytes: number | string }>(
+        "SELECT upload_session_id, asset_id, actor_id, expected_size_bytes FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3 FOR UPDATE",
+        [input.tenantId, input.applicationId, input.idempotencyKey],
       );
       if (prior.rows[0]) {
-        if (prior.rows[0].asset_id !== input.assetId) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
+        if (prior.rows[0].asset_id !== input.assetId ||
+            prior.rows[0].actor_id !== input.actorId ||
+            Number(prior.rows[0].expected_size_bytes) !== input.expectedSizeBytes) {
+          throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
+        }
         await client.query("COMMIT");
         return prior.rows[0].upload_session_id;
       }
@@ -279,6 +283,30 @@ export class PostgresCustomerAssetRepository {
         [input.tenantId, input.assetId],
       );
       if (!asset.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
+
+      // Expire stale attempts while holding the asset row lock. This closes the
+      // gap where an abandoned reservation remains "active" forever and blocks
+      // a new attempt. clock_timestamp() is evaluated after any lock wait.
+      const expired = await client.query<{ upload_session_id: string }>(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET upload_status = 'expired', updated_at = clock_timestamp()
+          WHERE tenant_id = $1 AND application_id = $2 AND asset_id = $3
+            AND upload_status IN ('reserved', 'initiated', 'in_progress')
+            AND expires_at <= clock_timestamp()
+          RETURNING upload_session_id`,
+        [input.tenantId, input.applicationId, input.assetId],
+      );
+      for (const row of expired.rows) {
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
+          outcome: "success", resourceType: "customer-asset-upload", resourceId: row.upload_session_id,
+          correlationId: input.correlationId, source: "worker",
+          operationName: "customer-asset-upload-expiry-reconciliation",
+          payload: { assetId: input.assetId, reason: "reservation_expired_before_retry" },
+        });
+      }
+
       const sessionId = input.uploadSessionId ?? randomUUID();
       this.validateId(sessionId, "uploadSessionId");
       await client.query(
