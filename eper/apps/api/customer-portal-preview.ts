@@ -129,7 +129,7 @@ sessionStorage.removeItem(pendingCustomerAssetStorageKey);return;
 pendingCustomerAssetOperationId=value.operationId;
 pendingCustomerAssetUploadIdempotencyKey=value.uploadIdempotencyKey;
 pendingCustomerAssetMetadataFingerprint=value.metadataFingerprint;
-}catch{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";}
+}catch{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";try{sessionStorage.removeItem(pendingCustomerAssetStorageKey);}catch{}}
 }
 function persistPendingCustomerAssetOperation(){
 try{
