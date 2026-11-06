@@ -35,7 +35,7 @@ let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log("EPER customer asset upload expiry worker shutting down");
+  console.log(JSON.stringify({ event: "customer_asset_upload_expiry_worker_stopping" }));
   controller.abort();
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdown);
@@ -45,7 +45,7 @@ try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
   await assertAuditStoreReady(pool);
-  console.log("EPER customer asset upload expiry worker started");
+  const queueAgeAlertMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS", 900_000, 1_000, 86_400_000);\n  const failureAlertThreshold = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD", 3, 1, 100);\n  console.log(JSON.stringify({ event: "customer_asset_upload_expiry_worker_ready", poolMax: Number(process.env.EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX ?? 2) }));
   await runCustomerAssetUploadExpiryWorker({
     repository, tenantId, applicationId, environment, correlationId: randomUUID(),
     signal: controller.signal,
