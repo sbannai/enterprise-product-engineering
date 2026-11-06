@@ -4,6 +4,7 @@ export interface CustomerAssetUploadExpiryRepository {
   expireStaleUploadSessions(input: {
     tenantId: string; applicationId: string; environment: AuditEnvironment;
     correlationId: string; limit?: number;
+    onMetrics?: (metrics: { expiredCount: number; queueAgeMs: number }) => void;
   }): Promise<number>;
 }
 
@@ -17,7 +18,7 @@ export interface CustomerAssetUploadExpiryWorkerOptions {
   pollIntervalMs?: number;
   batchSize?: number;
   onError?: (error: unknown) => void;
-  onBatch?: (expiredCount: number, durationMs: number) => void;
+  onBatch?: (expiredCount: number, durationMs: number, queueAgeMs: number) => void;
 }
 
 const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
@@ -45,14 +46,16 @@ export async function runCustomerAssetUploadExpiryWorker(
   while (!options.signal.aborted) {
     try {
       const batchStartedAt = Date.now();
+      let queueAgeMs = 0;
       const expiredCount = await options.repository.expireStaleUploadSessions({
         tenantId: options.tenantId,
         applicationId: options.applicationId,
         environment: options.environment,
         correlationId: options.correlationId,
         limit: batchSize,
+        onMetrics(metrics) { queueAgeMs = metrics.queueAgeMs; },
       });
-      options.onBatch?.(expiredCount, Math.max(0, Date.now() - batchStartedAt));
+      options.onBatch?.(expiredCount, Math.max(0, Date.now() - batchStartedAt), queueAgeMs);
       // Drain full batches immediately; otherwise wait before the next bounded pass.
       if (expiredCount < batchSize && !options.signal.aborted) {
         await sleep(pollIntervalMs, options.signal);
