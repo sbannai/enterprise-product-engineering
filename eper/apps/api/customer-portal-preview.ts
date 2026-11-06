@@ -173,7 +173,6 @@ return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0
 }
 async function uploadCustomerAsset(form){
 const generation=sessionGeneration;
-if(!authenticated||!verifiedCustomerIdentityFingerprint){if(status)status.textContent="Verify your organization session before uploading.";return;}
 const file=form.querySelector("#assetUploadFile")?.files?.[0];
 const applicationId=form.querySelector("#assetUploadApplication")?.value||"";
 const displayName=form.querySelector("#assetUploadDisplayName")?.value.trim()||"";
@@ -182,6 +181,7 @@ const status=form.querySelector("#assetUploadStatus");
 const progress=form.querySelector("#assetUploadProgress");
 const submit=form.querySelector('button[type="submit"]');
 const fail=message=>{if(status)status.textContent=message;};
+if(!authenticated||!verifiedCustomerIdentityFingerprint){fail("Verify your organization session before uploading.");return;}
 if(!file||!applicationId||!displayName){fail("Choose an assigned application, a file and a display name.");return;}
 const extension=file.name.split(".").pop()?.toLowerCase()||"";
 const policy=customerAssetUploadTypes[extension];
