@@ -166,16 +166,46 @@ test("concurrent retries reserve one session and only the winning request mints 
   assert.equal(finalized, 1);
 });
 
-test("provider failure marks a durable reservation failed", async () => {
-  let failedReason;
+test("provider null outcome preserves the reservation for recovery", async () => {
+  let failedCalls = 0;
   const result = await startCustomerAssetUpload(input, {
     repository: {
       reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-provider-failure-01", state: "reserved" }),
       finalizeUploadGrant: async () => {},
-      failUploadReservation: async (failure) => { failedReason = failure.reason; },
+      failUploadReservation: async () => { failedCalls += 1; },
     },
     issueGrant: async () => null,
   });
   assert.equal(result, null);
-  assert.equal(failedReason, "provider_unavailable");
+  assert.equal(failedCalls, 0, "an ambiguous provider result must not become terminal failure");
+});
+
+test("provider timeout preserves reservation because object creation may have succeeded", async () => {
+  let failedCalls = 0;
+  await assert.rejects(() => startCustomerAssetUpload(input, {
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-provider-timeout-01", state: "reserved" }),
+      finalizeUploadGrant: async () => {},
+      failUploadReservation: async () => { failedCalls += 1; },
+    },
+    issueGrant: async () => { throw new Error("simulated response lost after provider create"); },
+  }), /simulated response lost/);
+  assert.equal(failedCalls, 0, "timeout must remain recoverable, not terminal failed");
+});
+
+test("grant persistence failure preserves reservation because provider object may exist", async () => {
+  let failedCalls = 0;
+  await assert.rejects(() => startCustomerAssetUpload(input, {
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-persist-fail-01", state: "reserved" }),
+      finalizeUploadGrant: async () => { throw new Error("database commit outcome uncertain"); },
+      failUploadReservation: async () => { failedCalls += 1; },
+    },
+    issueGrant: async () => ({
+      providerUploadReference: "provider-object-may-exist",
+      url: "https://storage.example.test/upload", method: "PUT",
+      expiresAt: new Date(Date.now() + 30_000).toISOString(), headers: {},
+    }),
+  }), /database commit outcome uncertain/);
+  assert.equal(failedCalls, 0, "database failure must not erase an already-created provider object");
 });
