@@ -7,7 +7,7 @@ BEGIN;
 ALTER TABLE eper_customer_asset_upload_sessions
   DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessions_tenant_id_asset_id_key;
 ALTER TABLE eper_customer_asset_upload_sessions
-  DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessions_tenant_id_idempotency_key_key;
+  DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessio_tenant_id_idempotency_key_key;
 
 CREATE UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_application_idempotency_uq
   ON eper_customer_asset_upload_sessions (tenant_id, application_id, idempotency_key);
