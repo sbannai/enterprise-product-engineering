@@ -66,7 +66,8 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
         has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_asset_application_links', 'SELECT') AS expiry_link_select,
         has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_asset_scan_jobs', 'SELECT') AS expiry_scan_job_select,
         has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_payment_orders', 'SELECT') AS expiry_payment_select,
-        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_provider_payloads', 'SELECT') AS expiry_provider_payload_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_provider_connections', 'SELECT') AS expiry_provider_connection_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_provider_definitions', 'SELECT') AS expiry_provider_definition_select,
         has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'INSERT') AS expiry_audit_insert,
         has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'SELECT') AS expiry_audit_select,
         has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'UPDATE') AS expiry_audit_update,
@@ -87,7 +88,7 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       "provider_key_update", "provider_definition_delete", "provider_credential_read",
       "platform_audit_update", "provider_chain_singleton_update",
       "expiry_session_select", "expiry_session_update", "expiry_asset_select", "expiry_link_select",
-      "expiry_scan_job_select", "expiry_payment_select", "expiry_provider_payload_select",
+      "expiry_scan_job_select", "expiry_payment_select", "expiry_provider_connection_select", "expiry_provider_definition_select",
       "expiry_audit_select", "expiry_audit_update", "expiry_audit_delete", "expiry_chain_singleton_update",
     ]) assert.equal(g[key], false, key);
     for (const key of ["expiry_function_execute", "expiry_audit_insert", "expiry_chain_hash_update"]) {
@@ -243,6 +244,7 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
         ["expiry_denied_asset_read", "SELECT asset_id FROM eper_customer_assets LIMIT 1"],
         ["expiry_denied_link_read", "SELECT asset_id FROM eper_customer_asset_application_links LIMIT 1"],
         ["expiry_denied_scan_job_read", "SELECT upload_session_id FROM eper_customer_asset_scan_jobs LIMIT 1"],
+        ["expiry_denied_provider_read", "SELECT connection_id FROM eper_provider_connections LIMIT 1"],
       ]) {
         await client.query("SAVEPOINT " + savepoint);
         await assert.rejects(client.query(sql), /permission denied/i);
