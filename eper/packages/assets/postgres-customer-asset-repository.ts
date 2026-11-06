@@ -461,6 +461,7 @@ export class PostgresCustomerAssetRepository {
       const updated = await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET provider_upload_reference = $5, upload_status = 'initiated',
+                provider_outcome = 'succeeded',
                 expires_at = $6, updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND actor_id = $4 AND upload_status = 'reserved' AND provider_upload_reference IS NULL
@@ -476,6 +477,46 @@ export class PostgresCustomerAssetRepository {
         correlationId: input.correlationId, source: "api",
         operationName: "POST /customer/assets/:assetId/uploads",
         payload: { uploadSessionId: input.uploadSessionId, expiresAt: new Date(expiry).toISOString() },
+      });
+      await client.query("COMMIT");
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Persists only a provider's definitive rejection; uncertain outcomes must not call this method. */
+  async rejectUploadReservation(input: {
+    tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
+    correlationId: string; uploadSessionId: string; rejectionCode: string;
+  }): Promise<void> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(input.rejectionCode)) {
+      throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_CODE_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const updated = await client.query(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET upload_status = 'failed', provider_outcome = 'rejected', updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND actor_id = $4 AND upload_status = 'reserved'
+            AND provider_upload_reference IS NULL AND provider_outcome = 'unknown'`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId],
+      );
+      if (updated.rowCount !== 1) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RESERVATION_NOT_REJECTABLE");
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "human", actorId: input.actorId, action: "customer.asset.upload.provider.reject",
+        outcome: "failure", resourceType: "customer-asset-upload", resourceId: input.uploadSessionId,
+        correlationId: input.correlationId, source: "api",
+        operationName: "POST /customer/assets/:assetId/uploads",
+        payload: { uploadSessionId: input.uploadSessionId, rejectionCode: input.rejectionCode },
       });
       await client.query("COMMIT");
     } catch (error) {

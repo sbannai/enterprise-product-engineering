@@ -159,7 +159,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId, applicationId],
         );
         const reservedRow = await reservationClient.query(
-          "SELECT upload_status, provider_upload_reference FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          "SELECT upload_status, provider_upload_reference, provider_outcome FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
           [tenantId, reservedSessionId],
         );
         assert.equal(reservedRow.rows[0]?.upload_status, "reserved");
@@ -184,11 +184,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId, applicationId],
         );
         const finalizedRow = await finalizedClient.query(
-          "SELECT upload_status, provider_upload_reference FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          "SELECT upload_status, provider_upload_reference, provider_outcome FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
           [tenantId, reservedSessionId],
         );
         assert.equal(finalizedRow.rows[0]?.upload_status, "initiated");
         assert.equal(finalizedRow.rows[0]?.provider_upload_reference, "opaque-upload:finalized-reservation");
+        assert.equal(finalizedRow.rows[0]?.provider_outcome, "succeeded",
+          "grant finalization must atomically classify the persisted provider outcome as succeeded");
         await finalizedClient.query("COMMIT");
       } finally {
         try { await finalizedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -232,6 +234,46 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       } finally {
         try { await failedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         failedClient.release();
+      }
+
+      const rejectedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Definitive provider rejection test file", originalFileName: "provider-rejected.docx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 1536, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-provider-rejected",
+      });
+      assetIds.push(rejectedAsset.assetId);
+      const rejectedReservation = await repository.reserveUpload({
+        ...reservationInput, assetId: rejectedAsset.assetId, expectedSizeBytes: 1536,
+        idempotencyKey: "asset-rejected-" + randomUUID(),
+        requestFingerprint: "e".repeat(64), requestFileName: "provider-rejected.docx",
+        requestMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      await repository.rejectUploadReservation({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: rejectedReservation.uploadSessionId, rejectionCode: "policy_denied",
+      });
+      const rejectedClient = await pool.connect();
+      try {
+        await rejectedClient.query("BEGIN");
+        await rejectedClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const rejectedRow = await rejectedClient.query(
+          "SELECT upload_status, provider_outcome FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, rejectedReservation.uploadSessionId],
+        );
+        assert.equal(rejectedRow.rows[0]?.upload_status, "failed");
+        assert.equal(rejectedRow.rows[0]?.provider_outcome, "rejected",
+          "only a definitive provider rejection is persisted as rejected");
+        await rejectedClient.query("COMMIT");
+      } finally {
+        try { await rejectedClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        rejectedClient.release();
       }
 
       await Promise.all(Array.from({ length: 5 }, () => repository.link({
@@ -344,10 +386,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(sessions.rows.length, 1);
         const audit = await client.query(
-          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
+          "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.upload.provider.reject', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 16, "five creates, four reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 19, "seven creates, five reservations, one grant finalization, one failed reservation, one definitive provider rejection, one application link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -376,14 +418,14 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([metadataCreated.assetId, shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
-          "RLS role sees only assets linked to or owned by its current application");
+          new Set([metadataCreated.assetId, shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, rejectedAsset.assetId]),
+          "RLS role sees only assets linked to or owned by its current application, including a definitive-rejection test asset");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 4,
-          "all initiated, reserved and failed upload sessions remain bound to their creating application");
+        assert.equal(sameApplicationSessions.rows.length, 5,
+          "all visible initiated, reserved and failed upload sessions remain bound to their creating application; definitive-rejection sessions are intentionally excluded by the upload-session policy");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
         );

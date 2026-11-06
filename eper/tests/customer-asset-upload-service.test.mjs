@@ -166,16 +166,105 @@ test("concurrent retries reserve one session and only the winning request mints 
   assert.equal(finalized, 1);
 });
 
-test("provider failure marks a durable reservation failed", async () => {
-  let failedReason;
+test("provider null outcome preserves the reservation for recovery", async () => {
+  let failedCalls = 0;
   const result = await startCustomerAssetUpload(input, {
     repository: {
       reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-provider-failure-01", state: "reserved" }),
       finalizeUploadGrant: async () => {},
-      failUploadReservation: async (failure) => { failedReason = failure.reason; },
+      failUploadReservation: async () => { failedCalls += 1; },
     },
     issueGrant: async () => null,
   });
   assert.equal(result, null);
-  assert.equal(failedReason, "provider_unavailable");
+  assert.equal(failedCalls, 0, "an ambiguous provider result must not become terminal failure");
+});
+
+test("provider timeout preserves reservation because object creation may have succeeded", async () => {
+  let failedCalls = 0;
+  await assert.rejects(() => startCustomerAssetUpload(input, {
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-provider-timeout-01", state: "reserved" }),
+      finalizeUploadGrant: async () => {},
+      failUploadReservation: async () => { failedCalls += 1; },
+    },
+    issueGrant: async () => { throw new Error("simulated response lost after provider create"); },
+  }), /simulated response lost/);
+  assert.equal(failedCalls, 0, "timeout must remain recoverable, not terminal failed");
+});
+
+test("grant persistence failure preserves reservation because provider object may exist", async () => {
+  let failedCalls = 0;
+  await assert.rejects(() => startCustomerAssetUpload(input, {
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-persist-fail-01", state: "reserved" }),
+      finalizeUploadGrant: async () => { throw new Error("database commit outcome uncertain"); },
+      failUploadReservation: async () => { failedCalls += 1; },
+    },
+    issueGrant: async () => ({
+      providerUploadReference: "provider-object-may-exist",
+      url: "https://storage.example.test/upload", method: "PUT",
+      expiresAt: new Date(Date.now() + 30_000).toISOString(), headers: {},
+    }),
+  }), /database commit outcome uncertain/);
+  assert.equal(failedCalls, 0, "database failure must not erase an already-created provider object");
+});
+
+
+test("typed definitive provider rejection is persisted and never returned as a grant", async () => {
+  const calls = [];
+  const result = await startCustomerAssetUpload(input, {
+    issueProviderOutcome: async (request, correlationId) => {
+      assert.equal(request.uploadSessionId, "upload-session-rejected-0001");
+      assert.equal(correlationId, input.correlationId);
+      return { status: "rejected", code: "policy_denied" };
+    },
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-rejected-0001", state: "reserved" }),
+      finalizeUploadGrant: async () => { calls.push("finalize"); },
+      rejectUploadReservation: async (rejection) => {
+        calls.push("reject");
+        assert.equal(rejection.uploadSessionId, "upload-session-rejected-0001");
+        assert.equal(rejection.rejectionCode, "policy_denied");
+      },
+    },
+  });
+  assert.equal(result, null);
+  assert.deepEqual(calls, ["reject"]);
+});
+
+test("typed uncertain provider outcome preserves reservation without terminal rejection", async () => {
+  let rejectionCalls = 0;
+  const result = await startCustomerAssetUpload(input, {
+    issueProviderOutcome: async () => ({ status: "unknown", code: "provider_outcome_unknown" }),
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-unknown-0001", state: "reserved" }),
+      finalizeUploadGrant: async () => {},
+      rejectUploadReservation: async () => { rejectionCalls += 1; },
+    },
+  });
+  assert.equal(result, null);
+  assert.equal(rejectionCalls, 0, "uncertain provider outcomes must remain recoverable");
+});
+
+test("typed successful provider outcome finalizes the exact provider reference", async () => {
+  let finalized;
+  const sessionId = "upload-session-typed-success-01";
+  const result = await startCustomerAssetUpload(input, {
+    now: () => 1_700_000_000_000,
+    issueProviderOutcome: async () => ({
+      status: "succeeded",
+      providerUploadReference: "opaque-typed-provider-object",
+      grant: {
+        url: "https://storage.example.test/typed", method: "PUT",
+        expiresAt: new Date(1_700_000_060_000).toISOString(), headers: {},
+      },
+    }),
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: sessionId, state: "reserved" }),
+      finalizeUploadGrant: async (value) => { finalized = value; },
+    },
+  });
+  assert.equal(result.uploadSessionId, sessionId);
+  assert.equal(finalized.providerUploadReference, "opaque-typed-provider-object");
 });

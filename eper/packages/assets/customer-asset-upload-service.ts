@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { StorageUploadRequest } from "./storage-upload-adapter.js";
+import type { StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
 
 export interface CustomerAssetUploadGrant {
   uploadSessionId: string;
@@ -25,14 +26,19 @@ export interface CustomerAssetUploadStartInput {
 }
 
 export interface CustomerAssetUploadStartDependencies {
-  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "finalizeUploadGrant" | "failUploadReservation">;
-  issueGrant: (request: StorageUploadRequest, requestId: string) => Promise<{
+  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "finalizeUploadGrant"> &
+    Partial<Pick<PostgresCustomerAssetRepository, "rejectUploadReservation">>;
+  /** Legacy adapter boundary; prefer issueProviderOutcome for typed recovery semantics. */
+  issueGrant?: (request: StorageUploadRequest, requestId: string) => Promise<{
     providerUploadReference: string;
     url: string;
     method: "PUT" | "POST";
     expiresAt: string;
     headers: Record<string, string>;
   } | null>;
+  issueProviderOutcome?: (
+    request: StorageUploadRequest, correlationId: string,
+  ) => Promise<StorageUploadProviderOutcome>;
   now?: () => number;
 }
 
@@ -99,52 +105,53 @@ export async function startCustomerAssetUpload(
     sizeBytes: input.expectedSizeBytes,
   };
 
-  let grant: Awaited<ReturnType<CustomerAssetUploadStartDependencies["issueGrant"]>>;
-  try {
-    grant = await dependencies.issueGrant(request, uploadSessionId);
-  } catch (error) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "provider_error",
-    });
-    throw error;
+  if (Boolean(dependencies.issueProviderOutcome) === Boolean(dependencies.issueGrant)) {
+    throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_OPERATION_REQUIRED");
   }
-  if (!grant) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "provider_unavailable",
-    });
-    return null;
+
+  // Typed outcomes distinguish definitive rejection from uncertain side effects.
+  // Only a definitive rejection may transition the durable reservation to failed.
+  let grant: {
+    providerUploadReference: string; url: string; method: "PUT" | "POST";
+    expiresAt: string; headers: Record<string, string>;
+  } | null;
+  if (dependencies.issueProviderOutcome) {
+    const outcome = await dependencies.issueProviderOutcome(request, input.correlationId);
+    if (outcome.status === "rejected") {
+      if (!dependencies.repository.rejectUploadReservation) {
+        throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_PERSISTENCE_REQUIRED");
+      }
+      await dependencies.repository.rejectUploadReservation({
+        tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+        environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+        rejectionCode: outcome.code,
+      });
+      return null;
+    }
+    if (outcome.status !== "succeeded") {
+      // unknown, not_found and unavailable are not terminal; retain reservation.
+      return null;
+    }
+    grant = { ...outcome.grant, headers: outcome.grant.headers ?? {}, providerUploadReference: outcome.providerUploadReference };
+  } else {
+    // Legacy adapters retain conservative behavior: null/throw never marks a
+    // reservation failed because the provider may have created an object.
+    grant = await dependencies.issueGrant!(request, uploadSessionId);
   }
+  if (!grant) return null;
 
   const expiry = Date.parse(grant.expiresAt);
   const now = (dependencies.now ?? Date.now)();
   if (!Number.isFinite(expiry) || expiry <= now || expiry - now > 15 * 60_000 ||
       !grant.providerUploadReference?.trim() || grant.providerUploadReference.length > 2048) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "invalid_provider_grant",
-    });
     return null;
   }
 
-  try {
-    await dependencies.repository.finalizeUploadGrant({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      providerUploadReference: grant.providerUploadReference, expiresAt: grant.expiresAt,
-    });
-  } catch (error) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "grant_persistence_failed",
-    });
-    throw error;
-  }
+  await dependencies.repository.finalizeUploadGrant({
+    tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+    environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+    providerUploadReference: grant.providerUploadReference, expiresAt: grant.expiresAt,
+  });
 
   return {
     uploadSessionId,
