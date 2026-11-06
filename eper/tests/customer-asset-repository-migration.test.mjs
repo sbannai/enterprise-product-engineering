@@ -95,3 +95,29 @@ test("cross-application upload expiry uses a tenant-bound definer role without b
   assert.ok(crossApplicationExpiryMigration.includes("TO eper_customer_asset_access"));
   assert.doesNotMatch(crossApplicationExpiryMigration, /\bBYPASSRLS\b|DISABLE ROW LEVEL SECURITY/i);
 });
+
+
+const uploadExpiryWorkerRoleMigration = await readFile(new URL("../packages/audit/migrations/028_customer_asset_upload_expiry_worker_access.sql", import.meta.url), "utf8");
+const uploadExpiryQueueAgeMigration = await readFile(new URL("../packages/audit/migrations/029_customer_asset_upload_expiry_queue_age.sql", import.meta.url), "utf8");
+
+test("upload expiry worker role is separate and limited to expiry function and audit append", () => {
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("CREATE ROLE eper_customer_asset_upload_expiry_worker_access"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT INSERT ON public.eper_audit_events"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT SELECT ON public.eper_audit_chain_head"));
+  assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT UPDATE (last_event_hash, updated_at) ON public.eper_audit_chain_head"));
+  assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /GRANT (SELECT|UPDATE|DELETE|INSERT) ON public\.eper_customer_asset_upload_sessions/i);
+  assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /eper_payment|eper_provider|BYPASSRLS/i);
+});
+
+test("upload expiry queue-age metric is tenant-bound and returns no customer identifiers", () => {
+  assert.ok(uploadExpiryQueueAgeMigration.includes("eper_customer_asset_upload_expiry_queue_age_ms"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("SECURITY DEFINER"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("current_setting('eper.tenant_id', true) IS DISTINCT FROM p_tenant_id"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("set_config('eper.application_id', '', true)"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("min(s.expires_at)"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("RETURNS bigint"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("TO eper_customer_asset_upload_expiry_worker_access"));
+  assert.doesNotMatch(uploadExpiryQueueAgeMigration, /RETURNS TABLE|upload_session_id|asset_id/i);
+});
