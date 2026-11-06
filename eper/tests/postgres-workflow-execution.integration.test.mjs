@@ -204,7 +204,12 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         throw error;
       } finally { expiryClient.release(); }
 
-      const reclaimedStarted = await outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 });
+      const [staleRenewal, reclaimedStarted] = await Promise.all([
+        outboxStore.renewLease(outboxContext, byType["workflow.instance.started"].eventId,
+          "worker-a", byType["workflow.instance.started"].claimToken, 60),
+        outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 }),
+      ]);
+      assert.equal(staleRenewal, false, "an expired lease must not be revived while another claim reclaims it");
       assert.equal(reclaimedStarted.length, 1);
       assert.equal(BigInt(reclaimedStarted[0].claimToken) > BigInt(byType["workflow.instance.started"].claimToken), true);
       await assert.rejects(
@@ -219,11 +224,6 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         }),
         /WORKFLOW_OUTBOX_LEASE_NOT_HELD/,
       );
-      assert.equal(await outboxStore.renewLease(
-        outboxContext, byType["workflow.instance.started"].eventId, "worker-a",
-        byType["workflow.instance.started"].claimToken, 60,
-      ), false);
-
       await outboxStore.markDelivered(outboxContext, reclaimedStarted[0].eventId, "worker-a",
         reclaimedStarted[0].claimToken, 60);
       await outboxStore.markDelivered(outboxContext, byType["workflow.instance.completed"].eventId, "worker-a",
