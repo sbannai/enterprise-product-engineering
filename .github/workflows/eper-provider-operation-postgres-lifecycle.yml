@@ -94,6 +94,7 @@ jobs:
           node --test tests/customer-asset-repository-migration.test.mjs
           node --test tests/customer-asset-repository-readiness.test.mjs
           node --test tests/customer-asset-upload-service.test.mjs
+          node --test tests/storage-upload-provider-contract.test.mjs
           node --test tests/postgres-migration-runner.integration.test.mjs
           node --test tests/postgres-customer-asset-repository.integration.test.mjs
       - name: Exercise durable provider-operation concurrency, fencing and recovery
