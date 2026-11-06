@@ -45,16 +45,36 @@ try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
   await assertAuditStoreReady(pool);
-  const queueAgeAlertMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS", 900_000, 1_000, 86_400_000);\n  const failureAlertThreshold = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD", 3, 1, 100);\n  console.log(JSON.stringify({ event: "customer_asset_upload_expiry_worker_ready", poolMax: Number(process.env.EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX ?? 2) }));
+  const queueAgeAlertMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS", 900_000, 1_000, 86_400_000);
+  const failureAlertThreshold = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD", 3, 1, 100);
+  const poolMax = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX", 2, 1, 5);
+  console.log(JSON.stringify({
+    event: "customer_asset_upload_expiry_worker_ready",
+    poolMax,
+  }));
   await runCustomerAssetUploadExpiryWorker({
     repository, tenantId, applicationId, environment, correlationId: randomUUID(),
     signal: controller.signal,
     pollIntervalMs: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS", 5_000, 100, 60_000),
     batchSize: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE", 100, 1, 500),
-    // Do not emit tenant identifiers, session identifiers or database/provider details.
-    onError() { console.error("EPER customer asset upload expiry worker operation failed"); },
-    onBatch(count) { if (count > 0) console.log("EPER customer asset upload expiry batch", count); },
+    maxBackoffMs: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS", 60_000, 100, 300_000),
+    // Never emit tenant identifiers, session identifiers or raw database errors.
+    onError(_error, consecutiveFailures) {
+      console.error(JSON.stringify({
+        event: "customer_asset_upload_expiry_batch_failed",
+        consecutiveFailures,
+        alert: consecutiveFailures >= failureAlertThreshold,
+      }));
+    },
+    onBatch(metrics) {
+      console.log(JSON.stringify({
+        event: "customer_asset_upload_expiry_batch_completed",
+        ...metrics,
+        queueAgeAlert: metrics.queueAgeMs >= queueAgeAlertMs,
+      }));
+    },
   });
 } finally {
   await pool.end();
+  console.log(JSON.stringify({ event: "customer_asset_upload_expiry_worker_stopped" }));
 }
