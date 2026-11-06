@@ -127,3 +127,32 @@ test("existing session identity mismatch is rejected before provider invocation"
   );
   assert.equal(calls, 0);
 });
+
+test("definitive provider rejection remains distinct from an uncertain outcome", async () => {
+  let creates = 0;
+  const provider = {
+    capabilities,
+    create: async () => {
+      creates += 1;
+      return { status: "rejected", code: "policy_denied" };
+    },
+    lookupByUploadSessionId: async () => ({ status: "not_found" }),
+    renewGrantForExistingReference: async () => ({ status: "unknown", code: "provider_outcome_unknown" }),
+  };
+  const result = await issueOrRecoverStorageUploadGrant(provider, request, "corr-009");
+  assert.deepEqual(result, { status: "rejected", code: "policy_denied" });
+  assert.equal(creates, 1);
+});
+
+test("lookup uncertainty is preserved and does not trigger a create fallback", async () => {
+  let creates = 0;
+  const provider = {
+    capabilities: { ...capabilities, idempotentCreateByUploadSessionId: false },
+    create: async () => { creates += 1; return { status: "succeeded", providerUploadReference: "new-object", grant }; },
+    lookupByUploadSessionId: async () => ({ status: "unknown", code: "provider_outcome_unknown" }),
+    renewGrantForExistingReference: async () => ({ status: "unknown", code: "provider_outcome_unknown" }),
+  };
+  const result = await issueOrRecoverStorageUploadGrant(provider, request, "corr-010");
+  assert.deepEqual(result, { status: "unknown", code: "provider_outcome_unknown" });
+  assert.equal(creates, 0);
+});
