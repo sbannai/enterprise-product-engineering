@@ -265,7 +265,7 @@ export class PostgresCustomerAssetRepository {
         if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload-key:" + input.tenantId + ":" + input.applicationId + ":" + input.idempotencyKey]);
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload-asset:" + input.tenantId + ":" + input.applicationId + ":" + input.assetId]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload-asset:" + input.tenantId + ":" + input.assetId]);
       const prior = await client.query<{ upload_session_id: string; asset_id: string; actor_id: string; expected_size_bytes: number | string }>(
         "SELECT upload_session_id, asset_id, actor_id, expected_size_bytes FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3 FOR UPDATE",
         [input.tenantId, input.applicationId, input.idempotencyKey],
@@ -291,7 +291,7 @@ export class PostgresCustomerAssetRepository {
         [input.tenantId, input.applicationId, input.assetId],
       );
       const asset = await client.query<{ asset_id: string }>(
-        "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
+        "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' AND upload_status = 'pending' FOR UPDATE",
         [input.tenantId, input.assetId],
       );
       if (!asset.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
@@ -352,6 +352,11 @@ export class PostgresCustomerAssetRepository {
       return sessionId;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      const databaseError = error as { code?: string; constraint?: string };
+      if (databaseError.code === "23505" &&
+          databaseError.constraint === "eper_customer_asset_upload_active_asset_uq") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE", { cause: error });
+      }
       throw error;
     } finally { client.release(); }
   }
