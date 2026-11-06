@@ -80,9 +80,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdo
 const pool = createPostgresCustomerAssetUploadExpiryPool();
 try {
   const repository = new PostgresCustomerAssetRepository(pool);
+  // Liveness is available during startup; readiness remains 503 until both
+  // the asset schema and append-only audit chain pass their checks.
+  await listen();
   await repository.assertReady();
   await assertAuditStoreReady(pool);
-  await listen();
   ready = true;
   console.log(JSON.stringify({
     event: "customer_asset_upload_expiry_ready",
