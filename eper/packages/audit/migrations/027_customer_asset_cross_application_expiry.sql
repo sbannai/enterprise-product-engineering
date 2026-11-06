@@ -58,9 +58,12 @@ BEGIN
     RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_EXPIRY_LIMIT_INVALID';
   END IF;
 
-  -- Clear any caller-supplied application context. This function's owner role
-  -- receives only the tenant-scoped policy above.
-  PERFORM pg_catalog.set_config('eper.tenant_id', p_tenant_id, true);
+  -- Never let the caller use this function to switch tenant context.
+  -- The caller must already be bound to the same tenant by the normal RLS
+  -- context setup; only the application scope is cleared for tenant-wide expiry.
+  IF pg_catalog.current_setting('eper.tenant_id', true) IS DISTINCT FROM p_tenant_id THEN
+    RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_EXPIRY_TENANT_CONTEXT_MISMATCH';
+  END IF;
   PERFORM pg_catalog.set_config('eper.application_id', '', true);
 
   RETURN QUERY
