@@ -21,6 +21,50 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
     try {
       await repository.assertReady();
 
+      const metadataOperationId = randomUUID().replace(/-/g, "");
+      const metadataInput = {
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        clientOperationId: metadataOperationId,
+        scope: "application_restricted" as const, ownerApplicationId: applicationId,
+        displayName: "Idempotent metadata file", originalFileName: "idempotent.docx",
+        mediaCategory: "document" as const,
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 3072, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:metadata-idempotency-first",
+      };
+      const metadataCreated = await repository.create(metadataInput);
+      assetIds.push(metadataCreated.assetId);
+      const metadataRetries = await Promise.all(Array.from({ length: 5 }, (_, index) =>
+        repository.create({ ...metadataInput, storageObjectReference: "opaque:metadata-idempotency-retry-" + index }),
+      ));
+      assert.deepEqual(new Set(metadataRetries.map(asset => asset.assetId)), new Set([metadataCreated.assetId]),
+        "concurrent metadata retries must return the same asset");
+      await assert.rejects(() => repository.create({
+        ...metadataInput, displayName: "Changed request payload",
+      }), /METADATA_IDEMPOTENCY_CONFLICT/);
+      const metadataAuditClient = await pool.connect();
+      try {
+        await metadataAuditClient.query("BEGIN");
+        await metadataAuditClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const operationCount = await metadataAuditClient.query(
+          "SELECT count(*)::int AS count FROM eper_customer_asset_metadata_operations WHERE tenant_id = $1 AND application_id = $2 AND actor_id = $3 AND client_operation_id = $4",
+          [tenantId, applicationId, actorId, metadataOperationId],
+        );
+        const auditCount = await metadataAuditClient.query(
+          "SELECT count(*)::int AS count FROM eper_audit_events WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3 AND action = 'customer.asset.metadata.create'",
+          [tenantId, applicationId, metadataCreated.assetId],
+        );
+        assert.equal(operationCount.rows[0]?.count, 1);
+        assert.equal(auditCount.rows[0]?.count, 1, "one logical metadata operation must append one metadata-create audit event");
+        await metadataAuditClient.query("COMMIT");
+      } finally {
+        try { await metadataAuditClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        metadataAuditClient.release();
+      }
+
       const shared = await repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         scope: "customer_shared", displayName: "Shared brief", originalFileName: "brief.docx",
