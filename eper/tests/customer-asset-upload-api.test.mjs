@@ -483,7 +483,7 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
     const created = await fetch(base + "/customer/assets", {
       method: "POST", headers,
       body: JSON.stringify({ applicationId: "app-a", scope: "application_restricted", displayName: "Client proposal",
-        originalFileName: "proposal.docx", mimeType, fileExtension: "docx", mediaCategory: "document", sizeBytes: 4096 }),
+        originalFileName: "proposal.docx", mimeType, fileExtension: "docx", mediaCategory: "document", sizeBytes: 4096, clientOperationId: "b".repeat(32) }),
     });
     assert.equal(created.status, 201);
     assert.equal((await created.json()).asset.assetId, "asset-oidc-002");
