@@ -22,6 +22,7 @@ test("PostgreSQL migration runner supports incremental upgrade, idempotent rerun
     const first = join(directory, "001_fixture_base.sql");
     const second = join(directory, "002_fixture_upgrade.sql");
     const client = new Client({ connectionString, connectionTimeoutMillis: 5_000 });
+    let clientConnected = false;
 
     try {
       await mkdir(directory, { recursive: true });
@@ -42,6 +43,7 @@ test("PostgreSQL migration runner supports incremental upgrade, idempotent rerun
       });
 
       await client.connect();
+      clientConnected = true;
       const rows = await client.query(`SELECT id FROM public.${table} ORDER BY id`);
       const ledgerRows = await client.query(
         `SELECT migration_name FROM public.${ledger} ORDER BY migration_name`,
@@ -60,10 +62,10 @@ test("PostgreSQL migration runner supports incremental upgrade, idempotent rerun
         new RegExp("EPER_PAYMENT_MIGRATION_CHECKSUM_MISMATCH:001_fixture_base\\.sql"),
       );
     } finally {
-      if (!client._connected) {
-        try { await client.connect(); } catch { /* database setup failure */ }
+      if (!clientConnected) {
+        try { await client.connect(); clientConnected = true; } catch { /* database setup failure */ }
       }
-      if (client._connected) {
+      if (clientConnected) {
         try { await client.query(`DROP TABLE IF EXISTS public.${table}`); } catch { /* cleanup best effort */ }
         try { await client.query(`DROP TABLE IF EXISTS public.${ledger}`); } catch { /* cleanup best effort */ }
         await client.end();
