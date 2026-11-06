@@ -27,9 +27,11 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
     },
   };
   const dispatched = [];
+  const dispatchedEvents = [];
   const worker = new WorkflowOutboxWorker(store, {
     async dispatch(event) {
       dispatched.push(event.eventId);
+      dispatchedEvents.push(event);
       if (event.eventType !== "workflow.instance.started") throw new Error("temporary receiver failure");
     },
   }, { workerId: "worker-01", maxAttempts: 2, baseRetryDelaySeconds: 3, maxRetryDelaySeconds: 30 });
@@ -37,6 +39,8 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 10);
   assert.deepEqual(result, { claimed: 3, delivered: 1, retried: 1, deadLettered: 1, leaseLost: 0, interrupted: 0 });
   assert.equal(dispatched.length, 3);
+  assert.equal(dispatchedEvents.every(event => !Object.hasOwn(event, "claimToken")), true,
+    "internal fencing identity must not be exposed to dispatch adapters");
   assert.equal(calls.filter(call => call.method === "delivered").length, 1);
   const failures = calls.filter(call => call.method === "failed");
   assert.equal(failures.length, 2);
