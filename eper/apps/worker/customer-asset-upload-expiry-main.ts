@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
+import { createCustomerAssetUploadExpiryPool } from "../../packages/assets/customer-asset-upload-expiry-runtime.js";
 import { assertAuditStoreReady, type AuditEnvironment } from "../../packages/audit/audit-event-store.js";
 import { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
 import { runCustomerAssetUploadExpiryWorker } from "../../packages/assets/customer-asset-upload-expiry-worker.js";
@@ -40,7 +40,7 @@ function shutdown(): void {
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdown);
 
-const pool = createPostgresPaymentPool();
+const pool = createCustomerAssetUploadExpiryPool();
 try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
