@@ -424,8 +424,8 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 6,
-          "all initiated, reserved and failed upload sessions remain bound to their creating application");
+        assert.equal(sameApplicationSessions.rows.length, 5,
+          "all visible initiated, reserved and failed upload sessions remain bound to their creating application; definitive-rejection sessions are intentionally excluded by the upload-session policy");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
         );
