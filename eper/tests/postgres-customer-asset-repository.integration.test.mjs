@@ -232,11 +232,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await expiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         expiryClient.release();
       }
-      const workerExpiredCount = await repository.expireStaleUploadSessions({
-        tenantId, applicationId, environment: "uat", correlationId, limit: 10,
-      });
-      assert.equal(workerExpiredCount, 1,
-        "the dedicated bounded expiry operation expires stale sessions for its application");
+      const workerExpiryResults = await Promise.all(Array.from({ length: 2 }, () =>
+        repository.expireStaleUploadSessions({
+          tenantId, applicationId, environment: "uat", correlationId, limit: 10,
+        }),
+      ));
+      assert.equal(workerExpiryResults.reduce((total, count) => total + count, 0), 1,
+        "concurrent expiry workers claim and audit one stale session exactly once");
       const afterWorkerRetryId = await repository.reserveUpload({
         ...reservationInput, assetId: expiryAsset.assetId, expectedSizeBytes: 256,
         idempotencyKey: "asset-after-worker-expiry-" + randomUUID(),
