@@ -515,3 +515,32 @@ PR #348 contains current main as an ancestor and the corrected shared tariff pol
 5. Finish restricted worker identity, independent supervision, alerts, backup/recovery runbooks and second-engineer release demonstration.
 
 No approved requirement or chapter was edited. No branch was deleted, no merge was performed, no chargeable cloud resource was provisioned, and no real external/provider action was triggered.
+
+## Dated operating update — 2026-11-05 03:33 UTC
+
+**Dynamically resolved main SHA:** 2c380d79c55c9183a42ed534ffd1a504f7d41316. This update does not claim that main's own workflow set has been validated at this SHA.
+**Provider-runtime candidate:** PR [#398](https://github.com/sbannai/enterprise-product-engineering/pull/398), exact head d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c.
+**Customer asset workspace candidate:** PR [#399](https://github.com/sbannai/enterprise-product-engineering/pull/399), exact head a58a47303d2b6c54bbe9793afc8d3775fbfafc74.
+**Approved baseline:** 228 requirements across 38 chapters; unchanged.
+
+### Exact-head evidence
+
+PR #398 has **6/6 PR-triggered workflows completed successfully** on exact head d8f0ad73dd4ea2b37a1d6802251d50ecfe1c916c: Fresh-Clone Developer Setup (run 41960471681), 228 Requirement Pilot Test Matrix (41960471694), RE-EXEC-001 Controlled QA Re-Execution (41960471676), REEXEC-002 Controlled UAT Technical Simulation (41960471591), Provider Operation PostgreSQL Lifecycle (41960471550), and PostgreSQL payment-store integration (41960471564). Fresh-clone job steps confirm lockfile install, documented one-command verification, PostgreSQL 16 backup/restore and container cleanup succeeded.
+
+PR #399 remains at a58a47303d2b6c54bbe9793afc8d3775fbfafc74 with 7/7 previously verified exact-head workflows. Its OIDC browser E2E validates the workspace/support/logout/revocation journey, not real customer binary transfer. No provider URL, cloud credentials or live object transfer is used.
+
+### Seven-checkpoint delta
+
+| Checkpoint | Assessment | New evidence / boundary |
+|---|---|---|
+| 1. Product USP and positioning | AMBER | Customer asset upload workspace UI and provider runtime foundations are represented in draft PRs. A real storage/scanning/download journey is not yet delivered. Approved 228/38 baseline remains unchanged. |
+| 2. CI and persistence foundations | GREEN for the PR #398 exact-head local/CI scope; AMBER operationally | Six exact-head workflows passed, including fresh-clone and PostgreSQL lifecycle/payment integration. Production backup retention, key custody, RPO/RTO and independent restore rehearsal remain open. Main SHA post-merge CI is not assessed by this PR-triggered run lookup. |
+| 3. Architecture and execution boundaries | AMBER | Runtime registry, deployment allowlist, tenant/application connection checks and server-only opaque secret-reference resolution are implemented and tested. Production secret manager/key custody, least-privilege worker role and independently verified adapter provenance remain. |
+| 4. Workflow execution design and schema | AMBER | Pinned adapter key/version, fail-closed dispatch resolution, second authorization check, bounded host telemetry and redacted error categories are covered. Standalone supervised process entrypoint and production dependency composition remain absent. |
+| 5. Integrated validation | GREEN for the six PR #398 workflow lanes; AMBER overall | All six named exact-head workflows passed. Technical simulation and pilot matrix are not Business UAT or complete customer acceptance. |
+| 6. PR consolidation and governance | AMBER | #398 and #399 remain draft/open; #399 is stacked on the asset/provider integration base and must not be merged independently. Dependency order and base/head reconciliation remain required. |
+| 7. Workflow publisher/runtime implementation | AMBER | Registry/credential boundary and host error/telemetry hardening are CI-validated. Production dispatch remains disabled pending approved adapters, secret custody, restricted DB role, supervisor, readiness/liveness, alerts and process-level shutdown/recovery evidence. |
+
+### Explicit release boundary
+
+Do not merge either draft PR, enable production provider runtime, perform live dispatch, provision cloud resources, use production credentials, or authorize Business UAT. The current deployment executionClass=approved is a deployment configuration assertion, not cryptographic provenance. Re-check CI after every subsequent head change.

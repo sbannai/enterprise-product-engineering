@@ -1,0 +1,68 @@
+import {
+  ProviderOperationWorker,
+  type ProviderOperationWorkerDependencies,
+  type ProviderOperationWorkerOptions,
+} from "./provider-operation-worker.js";
+import {
+  ProviderRuntimeAdapterRegistry,
+} from "./provider-runtime-adapter-registry.js";
+import { ProviderRuntimeCredentialError, type ProviderRuntimeCredentialResolver } from "./provider-runtime-credential-resolver.js";
+
+/**
+ * Production composition seam for provider operation dispatch.
+ *
+ * The caller must supply an explicit runtime registry. An empty registry is
+ * valid and deliberately parks operations as NEEDS_ATTENTION. Credentials are
+ * resolved only after the exact adapter allowlist check and are passed transiently
+ * to the adapter; this factory never loads SDKs or performs external actions.
+ */
+export type ProviderOperationWorkerRuntimeDependencies =
+  Omit<ProviderOperationWorkerDependencies, "dispatch"> & {
+    runtimeRegistry: Pick<ProviderRuntimeAdapterRegistry, "dispatch" | "resolve">;
+    credentialResolver: Pick<ProviderRuntimeCredentialResolver, "resolve">;
+  };
+
+export function createProviderOperationWorkerWithRuntimeRegistry(
+  dependencies: ProviderOperationWorkerRuntimeDependencies,
+  options: ProviderOperationWorkerOptions,
+): ProviderOperationWorker {
+  const registry = dependencies?.runtimeRegistry;
+  if (!registry || typeof registry.dispatch !== "function") {
+    throw new Error("PROVIDER_RUNTIME_REGISTRY_REQUIRED");
+  }
+  if (!dependencies.credentialResolver || typeof dependencies.credentialResolver.resolve !== "function") {
+    throw new Error("PROVIDER_RUNTIME_CREDENTIAL_RESOLVER_REQUIRED");
+  }
+
+  const { runtimeRegistry: _runtimeRegistry, credentialResolver, ...workerDependencies } = dependencies;
+  return new ProviderOperationWorker({
+    ...workerDependencies,
+    dispatch: async input => {
+      const runtimeSelection = {
+        providerKey: input.selection.providerKey,
+        adapterKey: input.selection.adapterKey,
+        adapterVersion: input.selection.adapterVersion,
+        capabilityKey: input.selection.capabilityKey,
+      };
+      // Check the executable allowlist before touching the secret manager.
+      registry.resolve(runtimeSelection);
+      let credentials: unknown;
+      try {
+        credentials = await credentialResolver.resolve(input.selection);
+      } catch (error) {
+        // Normalize injected resolver failures too; arbitrary exception text can
+        // contain secret references or credential material.
+        if (error instanceof ProviderRuntimeCredentialError) throw error;
+        throw new ProviderRuntimeCredentialError("PROVIDER_RUNTIME_CREDENTIAL_RESOLUTION_FAILED");
+      }
+      return registry.dispatch({
+      credentials,
+      selection: runtimeSelection,
+      payload: input.payload,
+      idempotencyKey: input.idempotencyKey,
+      correlationId: input.correlationId,
+      signal: input.signal,
+      });
+    },
+  }, options);
+}

@@ -11,10 +11,21 @@ export interface ProviderQueueWakeSource {
   close(): Promise<void>;
 }
 
+export type ProviderWorkerHostEvent =
+  | { type: "host_started" }
+  | { type: "worker_pass_completed"; claimed: number; succeeded: number; retried: number; needsAttention: number; leaseLost: number; recovered: number }
+  | { type: "worker_pass_failed" }
+  | { type: "wake_wait_started"; timeoutMs: number }
+  | { type: "wake_source_reconnected" }
+  | { type: "host_stopped" };
+
 export interface ProviderOperationWorkerHostOptions {
   reconciliationIntervalMs?: number;
   drainBatchSize?: number;
-  onError?: (error: unknown) => void;
+  /** Emits bounded, non-sensitive operational facts; never pass raw errors or tenant data. */
+  onEvent?: (event: ProviderWorkerHostEvent) => void;
+  /** Receives only stable failure categories; raw exceptions are never exposed. */
+  onError?: (code: "WORKER_PASS_FAILED" | "WAKE_SOURCE_WAIT_FAILED" | "WAKE_SOURCE_RECONNECT_FAILED") => void;
 }
 
 const abortableDelay = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
@@ -40,6 +51,19 @@ const abortableDelay = (ms: number, signal: AbortSignal) => new Promise<void>((r
 export class ProviderOperationWorkerHost {
   private readonly reconciliationIntervalMs: number;
   private readonly drainBatchSize: number;
+
+  /** Telemetry must never become a dependency of queue execution. */
+  private emit(event: ProviderWorkerHostEvent): void {
+    try {
+      this.options.onEvent?.(event);
+    } catch {
+      // Deliberately swallow exporter/callback failures; queue processing continues.
+    }
+  }
+
+  private reportFailure(code: "WORKER_PASS_FAILED" | "WAKE_SOURCE_WAIT_FAILED" | "WAKE_SOURCE_RECONNECT_FAILED"): void {
+    try { this.options.onError?.(code); } catch { /* callbacks cannot stop queue processing */ }
+  }
 
   constructor(
     private readonly worker: Pick<ProviderOperationWorker, "runOnce">,
@@ -67,29 +91,42 @@ export class ProviderOperationWorkerHost {
   async run(signal: AbortSignal): Promise<void> {
     try {
       await this.wakeSource.start();
+      this.emit({ type: "host_started" });
       while (!signal.aborted) {
         let result: ProviderOperationWorkerResult;
         try {
           result = await this.worker.runOnce(signal);
-        } catch (error) {
-          this.options.onError?.(error);
+        } catch {
+          this.reportFailure("WORKER_PASS_FAILED");
+          this.emit({ type: "worker_pass_failed" });
           if (signal.aborted) break;
           await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
           continue;
         }
+        this.emit({
+          type: "worker_pass_completed",
+          claimed: result.claimed,
+          succeeded: result.succeeded,
+          retried: result.retried,
+          needsAttention: result.needsAttention,
+          leaseLost: result.leaseLost,
+          recovered: result.recovered,
+        });
         if (signal.aborted) break;
         // A full batch may leave eligible work behind; drain it before sleeping.
         if (result.claimed >= this.drainBatchSize) continue;
         try {
+          this.emit({ type: "wake_wait_started", timeoutMs: this.reconciliationIntervalMs });
           await this.wakeSource.wait(this.reconciliationIntervalMs, signal);
-        } catch (error) {
-          this.options.onError?.(error);
+        } catch {
+          this.reportFailure("WAKE_SOURCE_WAIT_FAILED");
           if (!signal.aborted) {
             try {
               // Re-establish LISTEN before the next queue scan after a disconnect.
               await this.wakeSource.start();
-            } catch (reconnectError) {
-              this.options.onError?.(reconnectError);
+              this.emit({ type: "wake_source_reconnected" });
+            } catch {
+              this.reportFailure("WAKE_SOURCE_RECONNECT_FAILED");
               await abortableDelay(Math.min(this.reconciliationIntervalMs, 5_000), signal);
             }
           }
@@ -97,6 +134,7 @@ export class ProviderOperationWorkerHost {
       }
     } finally {
       await this.wakeSource.close();
+      this.emit({ type: "host_stopped" });
     }
   }
 }

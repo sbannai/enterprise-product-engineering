@@ -1,6 +1,8 @@
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import { ProviderDispatchConfigurationError, type ProviderDispatchSelection, type ProviderDispatchConfigurationService } from "./provider-dispatch-configuration-service.js";
 import type { ProviderOperation } from "./postgres-provider-operation-repository.js";
+import { ProviderRuntimeRegistryError } from "./provider-runtime-adapter-registry.js";
+import { ProviderRuntimeCredentialError } from "./provider-runtime-credential-resolver.js";
 
 type Repository = {
   claimNext(input: { tenantId: string; applicationId: string; workerId: string; leaseDurationSeconds: number; maxAttempts: number; auditEnvironment: AuditEnvironment }): Promise<ProviderOperation | null>;
@@ -149,7 +151,9 @@ export class ProviderOperationWorker {
       if (selection.tenantId !== operation.tenantId
         || selection.applicationId !== operation.applicationId
         || selection.connectionId !== operation.connectionId
-        || selection.capabilityKey !== operation.capabilityKey) {
+        || selection.capabilityKey !== operation.capabilityKey
+        || typeof selection.adapterKey !== "string" || !selection.adapterKey.trim()
+        || typeof selection.adapterVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(selection.adapterVersion)) {
         await this.saveOutcome(operation, "NEEDS_ATTENTION", "PROVIDER_OPERATION_ROUTE_MISMATCH");
         result.needsAttention += 1;
         return;
@@ -160,10 +164,22 @@ export class ProviderOperationWorker {
         reference: operation.payloadReference, digest: operation.requestDigest,
       });
       if (controller.signal.aborted) return;
-      const dispatched = await this.dependencies.dispatch({
-        selection, payload, idempotencyKey: operation.idempotencyKey,
-        correlationId: operation.correlationId, signal: controller.signal,
-      });
+      let dispatched: ProviderDispatchResult;
+      try {
+        dispatched = await this.dependencies.dispatch({
+          selection, payload, idempotencyKey: operation.idempotencyKey,
+          correlationId: operation.correlationId, signal: controller.signal,
+        });
+      } catch (error) {
+        // Registry/allowlist failures are deterministic configuration blockers,
+        // not transient provider failures. Park them for an operator decision.
+        if (error instanceof ProviderRuntimeRegistryError || error instanceof ProviderRuntimeCredentialError) {
+          await this.saveOutcome(operation, "NEEDS_ATTENTION", error.code);
+          result.needsAttention += 1;
+          return;
+        }
+        throw error;
+      }
       if (controller.signal.aborted) return;
       if (heartbeat) clearInterval(heartbeat);
       if (renewal) await renewal;

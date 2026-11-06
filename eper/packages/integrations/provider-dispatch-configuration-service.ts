@@ -6,6 +6,10 @@ import type {
   EffectiveProviderPolicy,
   PostgresTenantProviderDefaultsRepository,
 } from "./postgres-tenant-provider-defaults-repository.js";
+import type {
+  ProviderDefinition,
+  PostgresProviderCatalogueRepository,
+} from "./postgres-provider-catalogue-repository.js";
 
 export type ProviderDispatchSelection = {
   tenantId: string;
@@ -13,6 +17,8 @@ export type ProviderDispatchSelection = {
   capabilityKey: string;
   connectionId: string;
   providerKey: string;
+  adapterKey: string;
+  adapterVersion: string;
   connectionVersion: number;
   policy: Record<string, unknown>;
   policySource: EffectiveProviderPolicy["source"];
@@ -23,7 +29,11 @@ export class ProviderDispatchConfigurationError extends Error {
   constructor(readonly code:
     | "PROVIDER_DISPATCH_NO_ACTIVE_BINDING"
     | "PROVIDER_DISPATCH_AMBIGUOUS_BINDING"
-    | "PROVIDER_DISPATCH_POLICY_INVALID") {
+    | "PROVIDER_DISPATCH_POLICY_INVALID"
+    | "PROVIDER_DISPATCH_CATALOGUE_UNAVAILABLE"
+    | "PROVIDER_DISPATCH_CATALOGUE_INACTIVE"
+    | "PROVIDER_DISPATCH_CATALOGUE_INVALID"
+    | "PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED") {
     super(code);
     this.name = "ProviderDispatchConfigurationError";
   }
@@ -44,6 +54,7 @@ export class ProviderDispatchConfigurationService {
   constructor(
     private readonly connections: Pick<PostgresProviderConnectionRepository, "listForApplication">,
     private readonly policies: Pick<PostgresTenantProviderDefaultsRepository, "resolveEffectivePolicy">,
+    private readonly catalogue: Pick<PostgresProviderCatalogueRepository, "get">,
   ) {}
 
   async resolve(input: {
@@ -72,6 +83,21 @@ export class ProviderDispatchConfigurationService {
     }
 
     const selected = candidates[0];
+    const definition: ProviderDefinition | null = await this.catalogue.get(selected.providerKey);
+    if (!definition) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CATALOGUE_UNAVAILABLE");
+    }
+    if (definition.status !== "ACTIVE") {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CATALOGUE_INACTIVE");
+    }
+    if (typeof definition.adapterKey !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(definition.adapterKey)
+      || typeof definition.adapterVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(definition.adapterVersion)) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CATALOGUE_INVALID");
+    }
+    if (!definition.capabilities.includes(input.capabilityKey)) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_CAPABILITY_UNSUPPORTED");
+    }
+
     const effective = await this.policies.resolveEffectivePolicy({
       tenantId: input.tenantId,
       applicationId: input.applicationId,
@@ -87,6 +113,8 @@ export class ProviderDispatchConfigurationService {
       capabilityKey: input.capabilityKey,
       connectionId: selected.connectionId,
       providerKey: selected.providerKey,
+      adapterKey: definition.adapterKey,
+      adapterVersion: definition.adapterVersion,
       connectionVersion: selected.version,
       policy: effective.policy,
       policySource: effective.source,
