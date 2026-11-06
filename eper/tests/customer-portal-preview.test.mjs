@@ -32,7 +32,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /sessionStorage\.getItem\(pendingCustomerAssetStorageKey\)/, "uncertain upload identity must survive a same-tab reload");
     assert.match(html, /sessionStorage\.setItem\(pendingCustomerAssetStorageKey/, "upload retry identity must be persisted before the first request");
     assert.match(html, /customerAssetMetadataFingerprint\(metadata\)/, "retry identity must be bound to the unchanged file metadata");
-    assert.match(html, /window\.crypto\?\.subtle\.digest\("SHA-256"/, "only a metadata fingerprint, not customer file metadata, is persisted");
+    assert.match(html, /if\(!window\.crypto\?\.subtle\)throw new Error\("asset_upload_retry_fingerprint_unavailable"\)/, "metadata fingerprinting must fail closed when Web Crypto is unavailable");
+    assert.match(html, /window\.crypto\.subtle\.digest\("SHA-256"/, "only a metadata fingerprint, not customer file metadata, is persisted");
     assert.match(html, /idempotencyKey:pendingCustomerAssetUploadIdempotencyKey/, "upload reservation retries must reuse the same stable idempotency key");
     assert.match(html, /clientOperationId:pendingCustomerAssetOperationId/, "metadata create must receive its stable operation ID");
     assert.match(html, /clearPendingCustomerAssetOperation\(\)/, "successful completion and explicit logout must clear the pending retry state");
