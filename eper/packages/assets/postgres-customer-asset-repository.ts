@@ -91,11 +91,32 @@ export class PostgresCustomerAssetRepository {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null; metadataOperations: string | null }>(
-        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\", to_regclass('public.eper_customer_asset_metadata_operations')::text AS \"metadataOperations\"",
+      const result = await client.query<{
+        assets: string | null; links: string | null; sessions: string | null;
+        scanJobs: string | null; metadataOperations: string | null;
+        uploadRecoveryColumns: boolean; uploadRecoveryIndex: string | null;
+      }>(
+        `SELECT
+          to_regclass('public.eper_customer_assets')::text AS assets,
+          to_regclass('public.eper_customer_asset_application_links')::text AS links,
+          to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions,
+          to_regclass('public.eper_customer_asset_scan_jobs')::text AS "scanJobs",
+          to_regclass('public.eper_customer_asset_metadata_operations')::text AS "metadataOperations",
+          (
+            SELECT count(*) = 4
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'eper_customer_asset_upload_sessions'
+              AND column_name = ANY($1::text[])
+          ) AS "uploadRecoveryColumns",
+          to_regclass('public.eper_customer_asset_upload_recovery_idx')::text AS "uploadRecoveryIndex"`,
+        [["request_fingerprint", "request_file_name", "request_mime_type", "provider_outcome"]],
       );
       const row = result.rows[0];
-      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs || !row.metadataOperations) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
+      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs || !row.metadataOperations ||
+          !row.uploadRecoveryColumns || !row.uploadRecoveryIndex) {
+        throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
+      }
     } catch (error) {
       if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED") throw error;
       throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_READINESS_FAILED", { cause: error });
