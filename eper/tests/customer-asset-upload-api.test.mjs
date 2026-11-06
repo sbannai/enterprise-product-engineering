@@ -347,7 +347,7 @@ test("durable customer asset upload mutations require CSRF and current applicati
     const body = {
       applicationId: "app-a", scope: "application_restricted", displayName: "Client proposal",
       originalFileName: "proposal.docx", mimeType, fileExtension: "docx",
-      mediaCategory: "document", sizeBytes: 4096, tenantId: "attacker-controlled",
+      mediaCategory: "document", sizeBytes: 4096, clientOperationId: "a".repeat(32), tenantId: "attacker-controlled",
     };
     const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
     const missingCsrf = await fetch(endpoint, {
