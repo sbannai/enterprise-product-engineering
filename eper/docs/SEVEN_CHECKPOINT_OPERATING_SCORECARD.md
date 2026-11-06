@@ -3203,3 +3203,99 @@ The live `/branches/main` response reports `protected=false`, `protection.enable
 6. Finish worker supervision, dispatcher approval, metrics/alerts, off-host backup/restore and second-engineer release/rollback demonstration.
 
 No PR was merged, no branch was deleted, no chargeable cloud resource was provisioned, and no real external/provider action was triggered in this update.
+
+
+## Dated operating update — 2026-11-06 15:08 IST
+
+**Current main SHA:** `2c380d79c55c9183a42ed534ffd1a504f7d41316`  
+**Main commit time:** 2026-11-03 16:36:07 UTC  
+**Main commit:** `revert: remove unintended provider payload test commit from main`  
+**Approved baseline:** 228 requirements across 38 chapters; unchanged.
+
+### Current-main evidence
+
+All listed Actions runs are attached to the exact current main SHA:
+
+- EPER CI [41675875771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875771) — success.
+- Same-commit integrated validation [41675875913](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875913) — success.
+- 228 requirement / 38 chapter matrix [41675875818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875818) — 228 requirements, 38 chapters, 28 passed checks, zero failed tests and no failed chapters.
+- G9 reconciliation [41675875648](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875648) — 5/5 passed.
+- Six-family HTTP smoke [41675875652](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875652) — success.
+- Container runtime smoke [41675875533](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875533) — success.
+- Controlled QA technical re-execution [41675875702](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41675875702) — success.
+
+The current main run set contains no fresh-clone `npm run dev:verify` or Chromium customer-browser run. Do not transfer candidate-branch evidence to main.
+
+### Merged foundations confirmed on current main
+
+GitHub PR metadata and commit comparisons confirm these merge commits are ancestors of current main (each comparison is ahead/0-behind from the merge commit to current main):
+
+- PR #306 fresh-clone/PostgreSQL foundation — `6e8dd438e5091b1802d65e4f29951389fe077859` (653 commits ahead).
+- PR #310 durable identity/OIDC protocol foundation — `88b9708d748c19dc80a1a2d7ad4960914451db7e` (652 ahead).
+- PR #324 browser OIDC routes/session/CSRF — `a554990cb7f4969bb218aad7a2e9944aec62fa05` (639 ahead).
+- PR #326 isolated campaign worker process — `6041d08b0de233bc7ffbe643d126b3f75b6b8b97` (620 ahead).
+- PR #329 customer workspace/support OIDC journey — `82a82d92222c613c02e55f01211ecbb32ce63bba` (505 ahead).
+- PR #337 durable identity/CSRF enforcement for tariff route — `18315e1654b52f1546936a8fd28daed907cab31e` (454 ahead).
+- PR #300 claim-time dead-letter metrics — `2ba8d1f3b5302c59fbb15537d665e5cc451cdfb3` (663 ahead).
+- PR #301 tenant/application-scoped audited outbox administration — `b33ca6daba19c8629cfbe199db1391368d9b4148` (662 ahead).
+
+PR #306 and #310 are merged foundations, not open work. PR #329 and #337 also remain in current main ancestry. The OIDC browser tests use a synthetic local identity provider; production IdP onboarding, JWKS/key custody and customer-admin delegation are not established by those tests.
+
+### Seven-checkpoint assessment
+
+| Checkpoint | Status | Delivered capability and exact evidence | Remaining blocker | Next action |
+|---|---|---|---|---|
+| 1. Product USP and positioning | AMBER | Customer OIDC workspace/support browser journey passes on current PR #399 head [42176208027](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176208027). Customer asset upload controls and workflow-role permission are implemented in the draft stack. | The API composition root on #399 does not inject concrete upload, object-verification or malware-scan ports. Real customer bytes have not been shown through storage, scan and authorized download. Support SLA targets and timers are not evidenced. | Complete the real-byte asset lifecycle and define/test support first-response, resolution, breach and escalation behavior. |
+| 2. CI and persistence foundations | AMBER | PR #306 is merged. On exact #399 head `ef9f85c775b41fc7ec8316eb51578e036cec8a64`, fresh-clone [42176208018](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176208018) ran `npm run dev:verify`: 1,521 tests, 1,517 passed, 0 failed, 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`. Seven migration groups including identity applied and repeatability passed. Disposable PostgreSQL 16 backup/restore passed: 81 source/restored base tables and 7 migration ledgers. PostgreSQL integration [42176208105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176208105) passed. | The exact current-main SHA has no fresh-clone verification run. Off-host encrypted backup, retention/key custody, RPO/RTO and independent restore rehearsal are not evidenced. | Run the clean-clone verification against current main; separately establish and rehearse off-host recovery controls. |
+| 3. Architecture and execution boundaries | AMBER | Merged #310/#324/#329/#337 provide provider-neutral OIDC protocol, browser login/callback/logout, durable PostgreSQL sessions, secure cookies, CSRF and tenant/application assignment checks. Exact #399 browser run [42176208027](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176208027) passed 1/1. | Browser evidence uses a synthetic IdP. Production IdP onboarding/JWKS rotation and credential custody are not demonstrated. Customer-admin delegation/role elevation and support-admin browser identity remain incomplete; OIDC claims do not grant roles. | Complete the owner-approved role/delegation path and support-admin OIDC browser journey; retain fail-closed behavior. |
+| 4. Workflow execution design and schema | AMBER | Current main includes the campaign worker entrypoint and PostgreSQL scheduler fence. PR #400 adds a separate workflow-outbox worker process with bounded polling, restricted DB login checks, lease renewal/fencing, idempotency, retry/dead-letter behavior and approved-dispatch gating. Exact #400 PostgreSQL run [41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927) passed its restricted-worker role contracts; provider lifecycle [41960896826](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896826) passed. | A deployment-owned dispatcher module is required and is not supplied. Independent process supervision, metrics sink, alert routing and restart/recovery rehearsal are absent. | Supply a reviewed dispatcher module contract/implementation and prove supervised restart, backlog/dead-letter observability and recovery without external dispatch. |
+| 5. Integrated validation | AMBER | Current main CI, integrated validation, 228/38 matrix, G9, six-family HTTP and container smoke all pass on `2c380d79`. Current candidate exact-head runs also pass; #399 fresh-clone and browser evidence are recorded above. | Main does not yet have current-SHA fresh-clone or browser E2E. Candidate green results do not substitute for main evidence. | Add fresh-clone and customer-browser verification to the current-main validation set. |
+| 6. PR consolidation and governance | RED | The current open-PR inventory below was resolved from GitHub live metadata. Every listed Actions run was queried by its current PR head SHA; no stale-head green result was reused. | All listed work remains draft/stacked. Main branch metadata reports `protected=false`, `protection.enabled=false`, and required-status-check enforcement `off`; repository rulesets endpoint returns an empty list. CW-060 is duplicated/redefined between #380 and #385. | Obtain owner approval for required checks/merge controls; reconcile the CW-060 candidate once and preserve CW-061 separately; consolidate dependent stacks only after review. |
+| 7. Workflow publisher/runtime implementation | AMBER | Merged #300/#301 supply claim-time dead-letter metrics and audited tenant/application-scoped inspection/replay. Main campaign worker has a separate process entrypoint. #400 adds `start:workflow-outbox-worker` and a standalone continuous runtime. | Neither worker is operationally independent until its approved dispatcher/adapter is supplied and a supervisor, metrics/alerts and recovery procedure are proven. No production provider delivery is demonstrated. | Complete worker hosting/supervision, approved dispatcher, metrics/alerts and failure-injection/restart rehearsal. |
+
+### Current open-PR inventory and exact-head Actions
+
+The following is the live open-PR list as of this assessment. Every workflow run cited below was fetched with the listed current `head_sha`; all returned runs completed successfully. Relevant job logs were inspected. The integrated workflow's matrix subjob is skipped on some documentation PRs, but each such PR has a separate exact-head pilot-matrix workflow that passed.
+
+| PR | Current exact head | Exact-head evidence | Capability / remaining blocker |
+|---|---|---|---|
+| #399 | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | Fresh clone [42176208018], PostgreSQL [42176208105], browser [42176208027], provider lifecycle [42176207998], matrix [42176207995] | Customer upload UI and OIDC authorization contracts. Synthetic adapters only; API composition root lacks concrete storage, verification and scanner ports. |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | Fresh clone [41837639258], PostgreSQL [41837639319], browser [41837639329], provider lifecycle [41837639531], matrix [41837639192] | Tenant-scoped upload idempotency reservation. Failed/expired-session re-upload semantics remain unresolved. |
+| #377 | `e644a534aec205118a41cc1822707be14a2fa9b2` | Integrated [42184411826], release build [42184411827], matrix [42184411835], G9 [42184411844], CI [42184411861] | Scorecard/crosswalk governance documentation. This assessment is being appended on its owning branch; the resulting new head must receive fresh exact-head checks. |
+| #395 | `baa6151a5ef4b9b4f460b72bd8a26aa9326ceeb8` | Fresh clone [42156557469], PostgreSQL [42156557498], provider lifecycle [42156557499], matrix [42156557530] | Provider-neutral storage catalogue metadata only; no executable storage/scanner drivers or credential resolution. |
+| #400 | `c445691f27a06ee36b590f374d5f7ddc6a8ab119` | Fresh clone [41960896718], PostgreSQL [41960896927], provider lifecycle [41960896826], integrated [41960896797], workflow config [41960896840], release [41960896651], matrix [41960896943], G9 [41960896979] | Independent workflow-outbox worker foundation. Dispatcher module, supervisor, metrics/alerts and recovery rehearsal remain. |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | Fresh clone [41868477584], PostgreSQL [41868477557], browser [41868477503], matrix [41868477299] | PostgreSQL-backed asset-download authorization. Concrete object-storage bytes and scanner/provider integration remain absent. |
+| #398 | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | Fresh clone [42159145998], PostgreSQL [42159145775], provider lifecycle [42159145776], matrix [42159145753] | Fail-closed provider runtime registry; concrete provider drivers and credential custody remain absent. |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | Fresh clone [41871265755], PostgreSQL [41871265396], provider lifecycle [41871265677], matrix [41871265459] | Independent exhausted-scan recovery contracts. Concrete scanner/provider and independent host supervision remain absent. |
+| #401 | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | Fresh clone [41993032684], PostgreSQL [41993032789], provider lifecycle [41993032652], matrix [41993032650] | PostgreSQL capacity-validation plan and guarded harness; no workload benchmark has been executed. |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | Fresh clone [41833626500], PostgreSQL [41833626430], provider lifecycle [41833626478], workflow config [41833626448], matrix [41833626441] | Provider worker/payload-integrity stack. Production key custody/rotation, independent supervision and operational telemetry remain unproven. |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | Fresh clone [41786048886], PostgreSQL [41786048950], browser [41786049023], provider lifecycle [41786048922], integrated [41786048948], release [41786048936], matrix [41786048963], G9 [41786048971] | Tenant-isolated asset metadata/RLS and scan-worker foundation. No concrete storage/scanner provider or binary lifecycle. |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | Fresh clone [41844357369], PostgreSQL [41844357332], provider lifecycle [41844357288], integrated [41844357419], workflow config [41844357320], matrix [41844357424] | Provider/asset stack integration base. Concrete provider drivers and full binary upload/scan/download remain absent. |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Fresh clone [41738299068], PostgreSQL [41738298973], provider lifecycle [41738299039], integrated [41738299062], workflow config [41738299290], release [41738299009], matrix [41738298906], G9 [41738298972] | Encrypted payload boundary/codec. Production key custody and provider dispatch remain absent. |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657], integrated [41738351629], matrix [41738351607] | Durable encrypted PostgreSQL payload store. Production key management, retention/purge operations and provider dispatch remain. |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | Integrated [41764308133], release [41764308139], matrix [41764308125], G9 [41764308165], CI [41764331361] | Additive customer-asset requirements draft. Its CW-060 definition conflicts with the candidate in #380; owner disposition required. |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | Integrated [41763251674], release [41763251809], matrix [41763251774], G9 [41763251777], CI [41763251702] | Customer asset repository and workflow-driven application UX requirements. CW-060 must be reconciled with #385; retain CW-061 separately. |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | Fresh clone [41805934645], PostgreSQL [41805934647], provider lifecycle [41805934711], integrated [41805934725], matrix [41805934646] | Migration-level reciprocal payload/operation referential integrity and live PostgreSQL regression coverage. Remains part of the dependent provider stack. |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | Fresh clone [41820073308], provider lifecycle [41820073247], matrix [41820073834] | Restricted-role/RLS reconciliation. Keep stacked with the provider payload-integrity successor. |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | Integrated [41795128802], release [41795128773], matrix [41795128670], G9 [41795128672], CI [41795128689] | PostgreSQL/MySQL/MongoDB evaluation plan only; comparative load/capacity results do not exist. |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | Fresh clone [41784823307], PostgreSQL [41784823446], browser [41784823265], integrated [41784823525], release [41784823333], matrix [41784823273], G9 [41784823256] | Actor/application-scoped customer workflow-instance read API. Full work-queue UI, detail/activity journey and SLA remain incomplete. |
+
+### Requirements reconciliation and continuity
+
+The v34 crosswalk retains the original 45 source rows: 0 exact full-coverage matches, 45 partial shared-control links and 45 additive v1.6.0 draft candidates. These are mappings, not feature acceptance. The approved 228 requirements and 38 chapters remain unchanged.
+
+CW-060 is defined in both #380 and #385 with overlapping but non-identical acceptance criteria. Reconcile it once through owner disposition; preserve CW-061 as a distinct workflow-driven customer application UX candidate. Do not promote either candidate into the approved baseline without a versioned owner-approved register change.
+
+The continuity charter remains **Proposed operating charter — requires owner review**. Current main branch metadata reports `protected=false`, `protection.enabled=false`, required-status-check enforcement `off`; the repository rulesets endpoint returns an empty list. The independent second-engineer release/rollback path, off-host recovery rehearsal and owner-approved runbooks are not demonstrated.
+
+### Next concrete actions
+
+1. Enable owner-approved main protection and required checks; keep merge controls explicit.
+2. Run fresh-clone `npm run dev:verify` and Chromium customer OIDC/support E2E on the exact current main SHA.
+3. Finish concrete storage, object verification, malware scanning and authorized binary download on the existing asset stack; do not create duplicate PRs or bypass ancestry.
+4. Resolve CW-060 once, retain CW-061 separately, and preserve the 228/38 approved baseline.
+5. Complete support-admin OIDC, export semantics and service-level timers/escalation.
+6. Complete the workflow-outbox dispatcher, independent process supervision, metrics/alerts and restart/recovery rehearsal.
+7. Establish off-host backup/restore, tested runbooks and a second-engineer release/rollback demonstration.
+
+No merge, chargeable cloud provisioning or real external/provider action was performed in this assessment.
