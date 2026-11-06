@@ -386,14 +386,14 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         const crossApplicationAssets = await restrictedRoleClient.query(
           "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1", [tenantId],
         );
-        assert.equal(crossApplicationAssets.rows.length, 0,
-          "database RLS denies cross-application asset reads even for direct SQL");
+        assert.deepEqual(crossApplicationAssets.rows.map((row) => row.asset_id), [otherAppAsset.assetId],
+          "database RLS exposes only the explicitly linked shared asset to the other application");
         const crossApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(crossApplicationSessions.rows.length, 0,
-          "database RLS denies cross-application upload-session reads");
+        assert.deepEqual(crossApplicationSessions.rows.map((row) => row.upload_session_id), [otherAppSessionId],
+          "database RLS exposes only the other application's own upload session");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.tenant_id', $1, true)", [otherTenant],
         );
