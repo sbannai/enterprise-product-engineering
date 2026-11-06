@@ -111,6 +111,8 @@ if(cryptoApi&&typeof cryptoApi.randomUUID==="function")return cryptoApi.randomUU
 const bytes=cryptoApi.getRandomValues(new Uint8Array(16));
 return Array.from(bytes,value=>value.toString(16).padStart(2,"0")).join("");
 }
+let pendingCustomerAssetOperationId="";
+let pendingCustomerAssetMetadata=null;
 async function uploadCustomerAsset(form){
 const generation=sessionGeneration;
 const file=form.querySelector("#assetUploadFile")?.files?.[0];
@@ -126,13 +128,22 @@ const extension=file.name.split(".").pop()?.toLowerCase()||"";
 const policy=customerAssetUploadTypes[extension];
 if(!policy){fail("Choose an image, video, PDF, DOCX, PPTX or XLSX file.");return;}
 if(!Number.isSafeInteger(file.size)||file.size<=0){fail("The selected file is empty or has an invalid size.");return;}
+const metadata={applicationId,scope,displayName,originalFileName:file.name,mimeType:policy.mimeType,fileExtension:extension,
+mediaCategory:policy.category,sizeBytes:file.size};
+if(pendingCustomerAssetOperationId&&JSON.stringify(metadata)!==JSON.stringify(pendingCustomerAssetMetadata)){
+fail("A previous upload has an uncertain result. Re-select the same application and file and keep the metadata unchanged to safely retry it.");
+return;
+}
+if(!pendingCustomerAssetOperationId){
+pendingCustomerAssetOperationId=customerAssetIdempotencyKey();
+pendingCustomerAssetMetadata=metadata;
+}
 if(submit)submit.disabled=true;
 if(progress){progress.hidden=false;progress.value=0;}
 try{
-fail("Creating the customer asset record…");
+fail("Creating or recovering the customer asset record…");
 const created=await api("/customer/assets",{method:"POST",body:JSON.stringify({
-applicationId,scope,displayName,originalFileName:file.name,mimeType:policy.mimeType,fileExtension:extension,
-mediaCategory:policy.category,sizeBytes:file.size
+...metadata,clientOperationId:pendingCustomerAssetOperationId
 })});
 if(generation!==sessionGeneration)throw new Error("customer_session_changed");
 const assetId=created.asset?.assetId;
@@ -157,6 +168,8 @@ fail("Upload received and object verification passed. Malware scanning is pendin
 notify("success","Asset uploaded and queued for security scanning.","Upload received");
 form.querySelector("#assetUploadFile").value="";
 form.querySelector("#assetUploadDisplayName").value="";
+pendingCustomerAssetOperationId="";
+pendingCustomerAssetMetadata=null;
 }catch(error){
 if(generation!==sessionGeneration)return;
 const message=String(error?.message||"");
