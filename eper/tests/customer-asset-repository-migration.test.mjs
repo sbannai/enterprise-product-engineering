@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 const uploadReservationMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_reservation.sql", import.meta.url), "utf8");
-const uploadRetryMigration = await readFile(new URL("../packages/audit/migrations/024_customer_asset_upload_retry_lifecycle.sql", import.meta.url), "utf8");
+const uploadRetryMigration = await readFile(new URL("../packages/audit/migrations/026_customer_asset_upload_retry_lifecycle.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
