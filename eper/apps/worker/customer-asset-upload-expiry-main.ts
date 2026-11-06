@@ -30,6 +30,14 @@ const applicationId = required("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_APPLICATION_ID
 const environment = (process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox") as AuditEnvironment;
 if (!["production", "uat", "sandbox"].includes(environment)) throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
 
+const queueAgeAlertMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS", 900_000, 1_000, 86_400_000);
+const failureAlertThreshold = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD", 3, 1, 100);
+const poolMax = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX", 2, 1, 5);
+const pollIntervalMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS", 5_000, 100, 60_000);
+const batchSize = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE", 100, 1, 500);
+const maxBackoffMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS", 60_000, 100, 300_000);
+if (maxBackoffMs < pollIntervalMs) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS_OUT_OF_RANGE");
+
 const controller = new AbortController();
 let shuttingDown = false;
 function shutdown(): void {
@@ -45,19 +53,10 @@ try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
   await assertAuditStoreReady(pool);
-  const queueAgeAlertMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS", 900_000, 1_000, 86_400_000);
-  const failureAlertThreshold = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD", 3, 1, 100);
-  const poolMax = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX", 2, 1, 5);
-  console.log(JSON.stringify({
-    event: "customer_asset_upload_expiry_worker_ready",
-    poolMax,
-  }));
+  console.log(JSON.stringify({ event: "customer_asset_upload_expiry_worker_ready", poolMax }));
   await runCustomerAssetUploadExpiryWorker({
     repository, tenantId, applicationId, environment, correlationId: randomUUID(),
-    signal: controller.signal,
-    pollIntervalMs: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS", 5_000, 100, 60_000),
-    batchSize: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE", 100, 1, 500),
-    maxBackoffMs: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS", 60_000, 100, 300_000),
+    signal: controller.signal, pollIntervalMs, batchSize, maxBackoffMs,
     // Never emit tenant identifiers, session identifiers or raw database errors.
     onError(_error, consecutiveFailures) {
       console.error(JSON.stringify({
