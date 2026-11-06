@@ -488,6 +488,12 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(crossTenantExpiry.rows.length, 0,
           "the tenant-bound expiry routine cannot return another tenant's sessions");
+        const permittedTenantExpiry = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
+          [tenantId],
+        );
+        assert.equal(permittedTenantExpiry.rows.length, 0,
+          "the customer-asset runtime role may invoke the narrow expiry routine for its bound tenant");
         await restrictedRoleClient.query("SAVEPOINT deny_cross_tenant_asset_insert");
         await assert.rejects(restrictedRoleClient.query(
           `INSERT INTO eper_customer_assets (
