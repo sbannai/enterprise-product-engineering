@@ -248,29 +248,21 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const expired = await client.query<{ upload_session_id: string; asset_id: string }>(
-        `WITH candidates AS (
-           SELECT tenant_id, application_id, upload_session_id
-             FROM eper_customer_asset_upload_sessions
-            WHERE tenant_id = $1 AND application_id = $2
-              AND upload_status IN ('reserved', 'initiated', 'in_progress')
-              AND expires_at <= clock_timestamp()
-            ORDER BY expires_at, upload_session_id
-            LIMIT $3
-            FOR UPDATE SKIP LOCKED
-         )
-         UPDATE eper_customer_asset_upload_sessions s
-            SET upload_status = 'expired', updated_at = clock_timestamp()
-           FROM candidates c
-          WHERE s.tenant_id = c.tenant_id
-            AND s.application_id = c.application_id
-            AND s.upload_session_id = c.upload_session_id
-          RETURNING s.upload_session_id, s.asset_id`,
-        [input.tenantId, input.applicationId, limit],
+      // The SECURITY DEFINER routine is owned by a NOLOGIN, NOBYPASSRLS role
+      // with a tenant-only policy on upload sessions. It can reconcile sessions
+      // across applications for this tenant, but cannot cross the tenant boundary.
+      const expired = await client.query<{
+        application_id: string; upload_session_id: string; asset_id: string;
+      }>(
+        "SELECT application_id, upload_session_id, asset_id FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
+        [input.tenantId, limit],
       );
       for (const row of expired.rows) {
+        // Audit remains application-scoped. Rebind the RLS context to the
+        // originating application for each event; no payload bytes are read.
+        await this.setContext(client, input.tenantId, row.application_id);
         await appendAuditEventInTransaction(client as AuditSqlClient, {
-          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          tenantId: input.tenantId, applicationId: row.application_id, environment: input.environment,
           actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
           outcome: "success", resourceType: "customer-asset-upload", resourceId: row.upload_session_id,
           correlationId: input.correlationId, source: "job",
