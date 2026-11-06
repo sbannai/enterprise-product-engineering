@@ -170,7 +170,7 @@ test("provider failure marks a durable reservation failed", async () => {
   let failedReason;
   const result = await startCustomerAssetUpload(input, {
     repository: {
-      reserveUpload: async (reservation) => reservation.uploadSessionId,
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-provider-failure-01", state: "reserved" }),
       finalizeUploadGrant: async () => {},
       failUploadReservation: async (failure) => { failedReason = failure.reason; },
     },
