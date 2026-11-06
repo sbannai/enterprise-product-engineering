@@ -129,9 +129,13 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
 export function validateStorageProviderRegistration(
   registration: StorageProviderRegistration,
   registries: {
-    adapterKeys: readonly string[];
-    capabilityKeys: readonly string[];
-    authModes: readonly string[];
+    /** Provider-keyed allowlist binds each provider to one exact adapter/version. */
+    providers: Readonly<Record<string, {
+      adapterKey: string;
+      adapterVersion: string;
+      capabilities: readonly string[];
+      authModes: readonly string[];
+    }>>;
   },
 ): void {
   if (!registration || typeof registration !== "object") {
@@ -144,15 +148,28 @@ export function validateStorageProviderRegistration(
       typeof registration.adapterKey !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(registration.adapterKey) ||
       typeof registration.adapterVersion !== "string" ||
-      !/^\d+\.\d+\.\d+$/.test(registration.adapterVersion)) {
+      !/^\\d+\\.\\d+\\.\\d+$/.test(registration.adapterVersion)) {
     throw new Error("STORAGE_PROVIDER_IDENTITY_INVALID");
+  }
+  const providerAllowlist = registries && registries.providers;
+  if (!providerAllowlist || typeof providerAllowlist !== "object" ||
+      !Object.prototype.hasOwnProperty.call(providerAllowlist, registration.providerKey)) {
+    throw new Error("STORAGE_PROVIDER_PROVIDER_NOT_REGISTERED");
+  }
+  const allowedProvider = providerAllowlist[registration.providerKey];
+  if (!allowedProvider || typeof allowedProvider !== "object" ||
+      allowedProvider.adapterKey !== registration.adapterKey ||
+      allowedProvider.adapterVersion !== registration.adapterVersion ||
+      !Array.isArray(allowedProvider.capabilities) ||
+      !Array.isArray(allowedProvider.authModes)) {
+    throw new Error("STORAGE_PROVIDER_PROVIDER_BINDING_MISMATCH");
   }
   if (!Array.isArray(registration.capabilities) || !registration.capabilities.length ||
       registration.capabilities.some(value => typeof value !== "string") ||
       new Set(registration.capabilities).size !== registration.capabilities.length ||
       registration.capabilities.some(value =>
         !(STORAGE_CAPABILITIES as readonly string[]).includes(value) ||
-        !Array.isArray(registries.capabilityKeys) || !registries.capabilityKeys.includes(value))) {
+        !allowedProvider.capabilities.includes(value))) {
     throw new Error("STORAGE_PROVIDER_CAPABILITIES_INVALID");
   }
   if (!Array.isArray(registration.authModes) || !registration.authModes.length ||
@@ -160,12 +177,8 @@ export function validateStorageProviderRegistration(
       new Set(registration.authModes).size !== registration.authModes.length ||
       registration.authModes.some(value =>
         !(STORAGE_AUTH_MODES as readonly string[]).includes(value) ||
-        !Array.isArray(registries.authModes) || !registries.authModes.includes(value))) {
+        !allowedProvider.authModes.includes(value))) {
     throw new Error("STORAGE_PROVIDER_AUTH_MODES_INVALID");
-  }
-  if (!Array.isArray(registries.adapterKeys) ||
-      !registries.adapterKeys.includes(registration.adapterKey)) {
-    throw new Error("STORAGE_PROVIDER_ADAPTER_NOT_REGISTERED");
   }
   const schema = registration.configurationSchema;
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
