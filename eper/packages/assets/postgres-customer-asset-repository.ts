@@ -264,7 +264,8 @@ export class PostgresCustomerAssetRepository {
         );
         if (!expiryCheck.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
       }
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.applicationId + ":" + input.idempotencyKey]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload-key:" + input.tenantId + ":" + input.applicationId + ":" + input.idempotencyKey]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload-asset:" + input.tenantId + ":" + input.applicationId + ":" + input.assetId]);
       const prior = await client.query<{ upload_session_id: string; asset_id: string; actor_id: string; expected_size_bytes: number | string }>(
         "SELECT upload_session_id, asset_id, actor_id, expected_size_bytes FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3 FOR UPDATE",
         [input.tenantId, input.applicationId, input.idempotencyKey],
@@ -278,25 +279,42 @@ export class PostgresCustomerAssetRepository {
         await client.query("COMMIT");
         return prior.rows[0].upload_session_id;
       }
+      // Lock any prior active attempt before locking the asset row. Completion
+      // uses the same session -> asset order, preventing reservation/complete
+      // deadlocks while the asset advisory lock serializes different idempotency keys.
+      const active = await client.query<{ upload_session_id: string; expires_at: string | Date }>(
+        `SELECT upload_session_id, expires_at
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND application_id = $2 AND asset_id = $3
+            AND upload_status IN ('reserved', 'initiated', 'in_progress')
+          FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.assetId],
+      );
       const asset = await client.query<{ asset_id: string }>(
         "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
         [input.tenantId, input.assetId],
       );
       if (!asset.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
 
-      // Expire stale attempts while holding the asset row lock. This closes the
-      // gap where an abandoned reservation remains "active" forever and blocks
-      // a new attempt. clock_timestamp() is evaluated after any lock wait.
-      const expired = await client.query<{ upload_session_id: string }>(
-        `UPDATE eper_customer_asset_upload_sessions
-            SET upload_status = 'expired', updated_at = clock_timestamp()
-          WHERE tenant_id = $1 AND application_id = $2 AND asset_id = $3
-            AND upload_status IN ('reserved', 'initiated', 'in_progress')
-            AND expires_at <= clock_timestamp()
-          RETURNING upload_session_id`,
-        [input.tenantId, input.applicationId, input.assetId],
-      );
-      for (const row of expired.rows) {
+      if (input.expiresAt !== undefined) {
+        const expiryCheckAfterLocks = await client.query<{ future: boolean }>(
+          "SELECT $1::timestamptz > clock_timestamp() AS future", [input.expiresAt],
+        );
+        if (!expiryCheckAfterLocks.rows[0]?.future) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_INVALID");
+      }
+
+      if (active.rows[0]) {
+        const expired = await client.query<{ upload_session_id: string }>(
+          `UPDATE eper_customer_asset_upload_sessions
+              SET upload_status = 'expired', updated_at = clock_timestamp()
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND upload_status IN ('reserved', 'initiated', 'in_progress')
+              AND expires_at <= clock_timestamp()
+            RETURNING upload_session_id`,
+          [input.tenantId, input.applicationId, active.rows[0].upload_session_id],
+        );
+        if (expired.rows.length === 0) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE");
+        for (const row of expired.rows) {
         await appendAuditEventInTransaction(client as AuditSqlClient, {
           tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
           actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
@@ -526,30 +544,33 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const locked = await client.query<{
+      const lockedSession = await client.query<{
         upload_session_id: string; asset_id: string; actor_id: string;
         expected_size_bytes: number | string; expires_at: string | Date;
-        upload_status: string; asset_mime_type: string; asset_upload_status: string;
-        session_not_expired: boolean;
+        upload_status: string; session_not_expired: boolean;
       }>(
-        `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
-          s.expires_at, s.upload_status, (s.expires_at > now()) AS session_not_expired,
-          a.mime_type AS asset_mime_type, a.upload_status AS asset_upload_status
-         FROM eper_customer_asset_upload_sessions s
-         JOIN eper_customer_assets a
-           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         WHERE s.tenant_id = $1 AND s.upload_session_id = $2
-           AND a.lifecycle_status = 'active'
-         FOR UPDATE OF s, a`,
-        [input.tenantId, input.uploadSessionId],
+        `SELECT upload_session_id, asset_id, actor_id, expected_size_bytes,
+          expires_at, upload_status, (expires_at > clock_timestamp()) AS session_not_expired
+         FROM eper_customer_asset_upload_sessions
+         WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+         FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
       );
-      const session = locked.rows[0];
+      const session = lockedSession.rows[0];
       if (!session) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const lockedAsset = await client.query<{ mime_type: string; upload_status: string }>(
+        `SELECT mime_type, upload_status FROM eper_customer_assets
+          WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active'
+          FOR UPDATE`,
+        [input.tenantId, session.asset_id],
+      );
+      const asset = lockedAsset.rows[0];
+      if (!asset) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
       if (session.actor_id !== input.actorId) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ACTOR_MISMATCH");
       if (session.upload_status !== "initiated" && session.upload_status !== "in_progress") {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_COMPLETABLE");
       }
-      if (session.asset_upload_status !== "pending") {
+      if (asset.upload_status !== "pending") {
         throw new Error("EPER_CUSTOMER_ASSET_NOT_PENDING_UPLOAD");
       }
       if (!session.session_not_expired) {
@@ -558,7 +579,7 @@ export class PostgresCustomerAssetRepository {
       if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SIZE_MISMATCH");
       }
-      if (session.asset_mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
+      if (asset.mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_MIME_MISMATCH");
       }
       // Upload completion is not a scanner attestation. Always hold the asset
