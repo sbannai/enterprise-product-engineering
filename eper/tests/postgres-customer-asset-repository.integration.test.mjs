@@ -400,16 +400,34 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         try { await expireClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         expireClient.release();
       }
-      const recovered = await Promise.all([
+      // Race recovery against a stale scanner callback and a second recovery
+      // process. All three operations contend for the same session/asset/job
+      // rows; the canonical lock order must avoid a deadlock and allow exactly
+      // one terminal recovery transition.
+      const concurrentLifecycle = await Promise.allSettled([
         repository.recoverExhaustedScanJobs({
           tenantId, applicationId, scannerServiceId: "asset-scan-recovery", environment: "uat", limit: 10,
         }),
         repository.recoverExhaustedScanJobs({
           tenantId, applicationId, scannerServiceId: "asset-scan-recovery", environment: "uat", limit: 10,
+        }),
+        repository.recordScanResult({
+          tenantId, applicationId, scannerServiceId: "asset-scanner", workerId: exhaustedWorker,
+          environment: "uat", correlationId, uploadSessionId: exhaustedSession, scanStatus: "clean",
         }),
       ]);
-      assert.equal(recovered.reduce((sum, count) => sum + count, 0), 1,
-        "concurrent independent sweeps finalize an exhausted lease exactly once");
+      const recovered = concurrentLifecycle.slice(0, 2)
+        .filter((result) => result.status === "fulfilled")
+        .reduce((sum, result) => sum + result.value, 0);
+      assert.equal(recovered, 1,
+        "concurrent recovery sweeps finalize an exhausted lease exactly once");
+      assert.equal(concurrentLifecycle[2].status, "rejected",
+        "an expired scanner callback cannot publish a result during exhausted recovery");
+      if (concurrentLifecycle[2].status === "rejected") {
+        assert.match(String(concurrentLifecycle[2].reason?.message),
+          /SCAN_LEASE_LOST|SCAN_RESULT_CONFLICT|NOT_AWAITING_SCAN/,
+          "the stale scanner callback is rejected after contending on the lifecycle locks");
+      }
       assert.equal(await repository.recoverExhaustedScanJobs({
         tenantId, applicationId, scannerServiceId: "asset-scan-recovery", environment: "uat", limit: 10,
       }), 0, "repeated recovery sweep is idempotent");
