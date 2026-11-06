@@ -11,15 +11,15 @@ const events = [
   ...event, tenantId: "tenant-01", applicationId: "app-01",
   instanceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   transitionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-  eventVersion: 1, payload: {}, occurredAt: "2026-10-31T12:00:00.000Z",
+  eventVersion: 1, payload: {}, occurredAt: "2026-10-31T12:00:00.000Z", claimToken: "1",
 }));
 
 test("outbox worker dispatches, retries transient failures and dead-letters exhausted events", async () => {
   const calls = [];
   const store = {
     async claim(context, options) { calls.push({ method: "claim", context, options }); return events; },
-    async renewLease(context, eventId, workerId, leaseSeconds) { calls.push({ method: "renew", eventId, workerId, leaseSeconds }); return true; },
-    async markDelivered(context, eventId, workerId) { calls.push({ method: "delivered", eventId, workerId }); },
+    async renewLease(context, eventId, workerId, claimToken, leaseSeconds) { calls.push({ method: "renew", eventId, workerId, claimToken, leaseSeconds }); return true; },
+    async markDelivered(context, eventId, workerId, claimToken, leaseSeconds) { calls.push({ method: "delivered", eventId, workerId, claimToken, leaseSeconds }); },
     async markFailed(context, eventId, options) {
       calls.push({ method: "failed", eventId, options });
       return { status: options.maxAttempts <= events.find(event => event.eventId === eventId).attempts ? "dead_letter" : "pending",
@@ -42,7 +42,7 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   assert.equal(failures.length, 2);
   assert.equal(failures[0].options.retryDelaySeconds, 3);
   assert.equal(failures[1].options.retryDelaySeconds, 6);
-  assert.equal(failures.every(call => call.options.workerId === "worker-01"), true);
+  assert.equal(failures.every(call => call.options.workerId === "worker-01" && call.options.claimToken === "1" && call.options.leaseSeconds === 60), true);
   assert.equal(calls.find(call => call.method === "claim").options.maxAttempts, 2);
 });
 
@@ -79,8 +79,8 @@ test("outbox worker renews a lease while a slow dispatch is running", async () =
   const event = events[0];
   const store = {
     async claim() { return [event]; },
-    async renewLease(context, eventId, workerId, leaseSeconds) {
-      calls.push({ eventId, workerId, leaseSeconds });
+    async renewLease(context, eventId, workerId, claimToken, leaseSeconds) {
+      calls.push({ eventId, workerId, claimToken, leaseSeconds });
       return true;
     },
     async markDelivered() { calls.push("delivered"); },
@@ -100,7 +100,7 @@ test("outbox worker renews a lease while a slow dispatch is running", async () =
   const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1);
   assert.equal(calls.length >= 1, true, "long dispatch must renew its lease");
   assert.deepEqual(calls[0], {
-    eventId: event.eventId, workerId: "worker-01", leaseSeconds: 10,
+    eventId: event.eventId, workerId: "worker-01", claimToken: "1", leaseSeconds: 10,
   });
   assert.deepEqual(result, { claimed: 1, delivered: 1, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 });
 });
