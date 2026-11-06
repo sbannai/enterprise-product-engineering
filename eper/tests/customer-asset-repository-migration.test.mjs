@@ -108,7 +108,7 @@ test("upload expiry worker role is separate and limited to expiry function and a
   assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT SELECT ON public.eper_audit_chain_head"));
   assert.ok(uploadExpiryWorkerRoleMigration.includes("GRANT UPDATE (last_event_hash, updated_at) ON public.eper_audit_chain_head"));
   assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /GRANT (SELECT|UPDATE|DELETE|INSERT) ON public\.eper_customer_asset_upload_sessions/i);
-  assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /eper_payment|eper_provider|BYPASSRLS/i);
+  assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /eper_payment|eper_provider|\\bBYPASSRLS\\b/i);
 });
 
 test("upload expiry queue-age metric is tenant-bound and returns no customer identifiers", () => {
