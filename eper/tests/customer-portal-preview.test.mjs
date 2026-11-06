@@ -38,7 +38,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /clientOperationId:pendingCustomerAssetOperationId/, "metadata create must receive its stable operation ID");
     assert.match(html, /clearPendingCustomerAssetOperation\(\)/, "successful completion and explicit logout must clear the pending retry state");
     assert.match(html, /metadataFingerprint!==pendingCustomerAssetMetadataFingerprint/, "an uncertain operation cannot be reused with edited file metadata");
-    assert.match(html, /catch\{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";try\{sessionStorage\.removeItem\(pendingCustomerAssetStorageKey\);\}catch\{\}\}/, "malformed or inaccessible retry state must be cleared from session storage");
+    assert.match(html, /catch\{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";pendingCustomerAssetIdentityFingerprint="";try\{sessionStorage\.removeItem\(pendingCustomerAssetStorageKey\);\}catch\{\}\}/, "malformed or inaccessible retry state must be cleared from session storage");
 
     assert.match(html, /let verifiedCustomerIdentityFingerprint=""/, "retry restoration must wait for verified customer identity");
     assert.match(html, /restorePendingCustomerAssetOperation\(identityFingerprint\)/, "retry state must be restored only after server session verification");
