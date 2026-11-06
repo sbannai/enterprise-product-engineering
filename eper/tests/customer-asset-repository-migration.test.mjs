@@ -108,3 +108,14 @@ test("upload expiry worker role can only invoke tenant-bound expiry and append a
   assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /GRANT .* ON public\.eper_customer_asset_(assets|application_links|upload_sessions|scan_jobs)/i);
   assert.doesNotMatch(uploadExpiryWorkerRoleMigration, /eper_payment_|eper_provider_/i);
 });
+
+const uploadExpiryQueueAgeMigration = await readFile(new URL("../packages/audit/migrations/029_customer_asset_upload_expiry_queue_age.sql", import.meta.url), "utf8");
+
+test("expiry routine exposes bounded queue age without widening worker table access", () => {
+  assert.ok(uploadExpiryQueueAgeMigration.includes("DROP FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("expires_at timestamptz"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("RETURNING s.application_id, s.upload_session_id, s.asset_id, s.expires_at"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("FOR UPDATE SKIP LOCKED"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("clock_timestamp()"));
+  assert.ok(uploadExpiryQueueAgeMigration.includes("TO eper_customer_asset_access, eper_customer_asset_upload_expiry_worker_access"));
+});
