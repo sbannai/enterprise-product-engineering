@@ -148,7 +148,7 @@ export function validateStorageProviderRegistration(
       typeof registration.adapterKey !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(registration.adapterKey) ||
       typeof registration.adapterVersion !== "string" ||
-      !/^\\d+\\.\\d+\\.\\d+$/.test(registration.adapterVersion)) {
+      !/^\d+\.\d+\.\d+$/.test(registration.adapterVersion)) {
     throw new Error("STORAGE_PROVIDER_IDENTITY_INVALID");
   }
   const providerAllowlist = registries && registries.providers;
