@@ -61,6 +61,7 @@ Optional bounded settings:
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX`: 1–10, default 2
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS`: 100–60,000, default 5,000
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE`: 1–500, default 100
+- `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS`: 100–300,000, default 60,000; must be at least the poll interval
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_HEALTH_PORT`: 1–65,535, default 8081
 - Dedicated pool connection, idle, statement, query, lock and idle-in-transaction timeouts are bounded by the runtime factory.
 
@@ -76,12 +77,15 @@ Run under an external process supervisor with restart-on-failure and bounded res
 
 ## Metrics and alerts
 
+The worker retries failed cycles with bounded exponential backoff, starting at the poll interval and capping at `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS`. A successful batch resets the consecutive-failure counter.
+
 Structured logs include only:
 - scope index (not tenant/application identifiers)
 - expired count
 - oldest processed expiry queue age in milliseconds
 - batch duration in milliseconds
-- cumulative failure count
+- cumulative and consecutive failure counts
+- queue-age and repeated-failure threshold flags
 
 They do not include database error text, provider details, customer payload, session identifiers, or credentials.
 
