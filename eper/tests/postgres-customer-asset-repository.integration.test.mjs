@@ -114,21 +114,28 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       const reserveInput = {
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         assetId: shared.assetId, expectedSizeBytes: 4096, idempotencyKey,
+        requestFingerprint: "a".repeat(64), requestFileName: "shared-brief.docx", requestMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         providerUploadReference: "opaque-upload:test-session", expiresAt: expiry,
       };
       await assert.rejects(() => repository.reserveUpload({
         ...reserveInput, idempotencyKey: "asset-expired-" + randomUUID(),
         expiresAt: new Date(Date.now() - 60_000).toISOString(),
       }), /UPLOAD_EXPIRY_INVALID/);
-      const sessionId = await repository.reserveUpload(reserveInput);
-      assert.equal(await repository.reserveUpload(reserveInput), sessionId);
+      const firstReservation = await repository.reserveUpload(reserveInput);
+      assert.equal(firstReservation.disposition, "created");
+      const sessionId = firstReservation.uploadSessionId;
+      const replayReservation = await repository.reserveUpload(reserveInput);
+      assert.equal(replayReservation.disposition, "existing");
+      assert.equal(replayReservation.uploadSessionId, sessionId);
+      await assert.rejects(() => repository.reserveUpload({ ...reserveInput, requestFingerprint: "b".repeat(64) }), /UPLOAD_IDEMPOTENCY_CONFLICT/);
 
       const linkKey = "asset-link-" + randomUUID();
       const concurrentReservations = await Promise.all(
         Array.from({ length: 5 }, () => repository.reserveUpload(reserveInput)),
       );
-      assert.deepEqual(new Set(concurrentReservations), new Set([sessionId]),
+      assert.deepEqual(new Set(concurrentReservations.map(item => item.uploadSessionId)), new Set([sessionId]),
         "concurrent retries for the same tenant/idempotency key must converge on one session");
+      assert.ok(concurrentReservations.every(item => item.disposition === "existing"));
 
       // Exercise the provider-free reservation path used before a storage
       // provider is allowed to mint a capability.
@@ -136,13 +143,14 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       const reservationInput = {
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         assetId: reservedAsset.assetId, expectedSizeBytes: 2048, idempotencyKey: reservedKey,
+        requestFingerprint: "c".repeat(64), requestFileName: "reservation.xlsx", requestMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
       const reservationIds = await Promise.all(
         Array.from({ length: 5 }, () => repository.reserveUpload(reservationInput)),
       );
-      assert.equal(new Set(reservationIds).size, 1,
+      assert.equal(new Set(reservationIds.map(item => item.uploadSessionId)).size, 1,
         "concurrent provider-free reservations must converge on one durable session");
-      const reservedSessionId = reservationIds[0];
+      const reservedSessionId = reservationIds[0].uploadSessionId;
       const reservationClient = await pool.connect();
       try {
         await reservationClient.query("BEGIN");
@@ -197,10 +205,12 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         storageObjectReference: "opaque:test-failed-reservation",
       });
       assetIds.push(failedAsset.assetId);
-      const failedReservationId = await repository.reserveUpload({
+      const failedReservation = await repository.reserveUpload({
         ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
         idempotencyKey: "asset-failed-" + randomUUID(),
+        requestFingerprint: "d".repeat(64), requestFileName: "failed-reservation.docx", requestMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
+      const failedReservationId = failedReservation.uploadSessionId;
       await repository.failUploadReservation({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: failedReservationId, reason: "provider_unavailable",
@@ -229,13 +239,14 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         idempotencyKey: linkKey, assetId: shared.assetId, reason: "integration-test",
       })));
 
-      const restrictedSessionId = await repository.reserveUpload({
+      const restrictedReservation = await repository.reserveUpload({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         assetId: restricted.assetId, expectedSizeBytes: 1024,
         idempotencyKey: "asset-upload-" + randomUUID(),
         providerUploadReference: "opaque-upload:restricted-session",
         expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       });
+      const restrictedSessionId = restrictedReservation.uploadSessionId;
       await assert.rejects(() => repository.completeUpload({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: sessionId, receivedSizeBytes: 1,
