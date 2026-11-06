@@ -156,6 +156,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
         applicationId: "app-a", scope: "customer_shared", displayName: "Project brief",
         originalFileName: "brief.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         fileExtension: "docx", mediaCategory: "document", sizeBytes: 4096,
+        clientOperationId: "a".repeat(32),
         tenantId: "attacker-controlled-tenant",
       }),
     });
@@ -170,6 +171,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
     assert.equal(created.ownerApplicationId, undefined);
     assert.match(created.storageObjectReference, /^pending-upload:/);
     assert.equal(created.correlationId, "asset-create-correlation-001");
+    assert.equal(created.clientOperationId, "a".repeat(32));
     assert.equal("tenantId" in body.asset, false);
   } finally {
     await new Promise((resolve) => server.close(resolve));
