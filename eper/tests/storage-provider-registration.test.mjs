@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  STORAGE_CAPABILITIES,
   STORAGE_PROVIDER_CATALOGUE,
   validateStorageProviderRegistration,
 } from "../dist/packages/integrations/storage-provider-registration.js";
@@ -97,6 +96,26 @@ test("storage registration rejects cross-provider adapter and version pairings",
       provider.providerKey,
     );
   }
+});
+
+test("storage registration rejects capabilities outside the provider binding", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE.find(item => item.providerKey === "aws-s3");
+  const registries = {
+    providers: {
+      ...explicitProviderAllowlist.providers,
+      "aws-s3": {
+        ...explicitProviderAllowlist.providers["aws-s3"],
+        capabilities: ["storage.upload"],
+      },
+    },
+  };
+  assert.throws(
+    () => validateStorageProviderRegistration({
+      ...provider,
+      capabilities: ["storage.delete"],
+    }, registries),
+    /STORAGE_PROVIDER_CAPABILITIES_INVALID/,
+  );
 });
 
 test("storage registration rejects authentication modes outside the provider binding", () => {
