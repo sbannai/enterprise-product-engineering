@@ -38,7 +38,16 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /clientOperationId:pendingCustomerAssetOperationId/, "metadata create must receive its stable operation ID");
     assert.match(html, /clearPendingCustomerAssetOperation\(\)/, "successful completion and explicit logout must clear the pending retry state");
     assert.match(html, /metadataFingerprint!==pendingCustomerAssetMetadataFingerprint/, "an uncertain operation cannot be reused with edited file metadata");
-    assert.match(html, /catch\{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";try\{sessionStorage\.removeItem\(pendingCustomerAssetStorageKey\);\}catch\{\}\}/, "malformed or inaccessible retry state must be cleared from session storage");
+    assert.match(html, /catch\{pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";pendingCustomerAssetIdentityFingerprint="";try\{sessionStorage\.removeItem\(pendingCustomerAssetStorageKey\);\}catch\{\}\}/, "malformed or inaccessible retry state must be cleared from session storage");
+
+    assert.match(html, /let verifiedCustomerIdentityFingerprint=""/, "retry restoration must wait for verified customer identity");
+    assert.match(html, /restorePendingCustomerAssetOperation\(identityFingerprint\)/, "retry state must be restored only after server session verification");
+    assert.match(html, /value.identityFingerprint!==identityFingerprint/, "retry state from another tenant/customer identity must be discarded");
+    assert.match(html, /identityFingerprint:pendingCustomerAssetIdentityFingerprint/, "retry state must persist its non-secret verified identity fingerprint");
+    assert.match(html, /const currentSession=await api\("\/customer\/session"\)/, "upload retry must revalidate the current server session before replay");
+    assert.match(html, /try\{\s*const currentSession=await api/, "session preflight failures must be handled by the upload error boundary");
+    assert.match(html, /currentIdentityFingerprint!==verifiedCustomerIdentityFingerprint/, "a changed customer session must clear the pending retry");
+    assert.match(html, /const identity=\{tenantId:session.tenantId,actorId:session.actorId,roleKey:session.roleKey\}/, "identity fingerprint must use server-derived tenant, actor and role values");
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
