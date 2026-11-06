@@ -73,5 +73,5 @@ test("upload retry migration preserves terminal history and scopes active sessio
   assert.ok(uploadRetryMigration.includes("(tenant_id, application_id, idempotency_key)"));
   assert.ok(uploadRetryMigration.includes("(tenant_id, asset_id)"));
   assert.ok(uploadRetryMigration.includes("WHERE upload_status IN ('reserved', 'initiated', 'in_progress')"));
-  assert.ok(uploadRetryMigration.includes("ON eper_customer_asset_upload_sessions (expires_at, tenant_id, application_id)"));
+  assert.ok(uploadRetryMigration.includes("ON eper_customer_asset_upload_sessions (tenant_id, application_id, expires_at)"));
 });
