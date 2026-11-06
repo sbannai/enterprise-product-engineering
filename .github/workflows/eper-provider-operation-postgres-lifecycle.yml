@@ -13,6 +13,7 @@ on:
       - "eper/tests/postgres-customer-asset-repository.integration.test.mjs"
       - "eper/tests/customer-asset-repository-migration.test.mjs"
       - "eper/tests/customer-asset-repository-readiness.test.mjs"
+      - "eper/tests/customer-asset-upload-service.test.mjs"
       - "eper/tests/postgres-migration-runner.integration.test.mjs"
       - "eper/packages/assets/**"
       - "eper/tests/provider-operation-worker.test.mjs"
@@ -36,6 +37,7 @@ on:
       - "eper/tests/postgres-customer-asset-repository.integration.test.mjs"
       - "eper/tests/customer-asset-repository-migration.test.mjs"
       - "eper/tests/customer-asset-repository-readiness.test.mjs"
+      - "eper/tests/customer-asset-upload-service.test.mjs"
       - "eper/tests/postgres-migration-runner.integration.test.mjs"
       - "eper/packages/assets/**"
       - "eper/tests/provider-operation-worker.test.mjs"
@@ -91,6 +93,7 @@ jobs:
         run: |
           node --test tests/customer-asset-repository-migration.test.mjs
           node --test tests/customer-asset-repository-readiness.test.mjs
+          node --test tests/customer-asset-upload-service.test.mjs
           node --test tests/postgres-migration-runner.integration.test.mjs
           node --test tests/postgres-customer-asset-repository.integration.test.mjs
       - name: Exercise durable provider-operation concurrency, fencing and recovery
