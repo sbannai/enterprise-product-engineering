@@ -86,6 +86,8 @@ test("cross-application upload expiry uses a tenant-bound definer role without b
   assert.ok(crossApplicationExpiryMigration.includes("tenant_id = current_setting('eper.tenant_id', true)"));
   assert.ok(crossApplicationExpiryMigration.includes("SECURITY DEFINER"));
   assert.ok(crossApplicationExpiryMigration.includes("set_config('eper.application_id', '', true)"));
+  assert.ok(crossApplicationExpiryMigration.includes("current_setting('eper.tenant_id', true) IS DISTINCT FROM p_tenant_id"));
+  assert.ok(crossApplicationExpiryMigration.includes("EPER_CUSTOMER_ASSET_EXPIRY_TENANT_CONTEXT_MISMATCH"));
   assert.ok(crossApplicationExpiryMigration.includes("FOR UPDATE SKIP LOCKED"));
   assert.ok(crossApplicationExpiryMigration.includes("clock_timestamp()"));
   assert.ok(crossApplicationExpiryMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
