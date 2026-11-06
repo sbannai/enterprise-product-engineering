@@ -323,6 +323,7 @@ export class PostgresCustomerAssetRepository {
           operationName: "customer-asset-upload-expiry-reconciliation",
           payload: { assetId: input.assetId, reason: "reservation_expired_before_retry" },
         });
+        }
       }
 
       const sessionId = input.uploadSessionId ?? randomUUID();
@@ -332,7 +333,7 @@ export class PostgresCustomerAssetRepository {
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
            provider_upload_reference, upload_status, idempotency_key, expires_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7::varchar IS NULL THEN 'reserved' ELSE 'initiated' END,$8,
-           COALESCE($9::timestamptz, now() + interval '15 minutes'))`,
+           COALESCE($9::timestamptz, clock_timestamp() + interval '15 minutes'))`,
         [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId, input.expectedSizeBytes,
           input.providerUploadReference ?? null, input.idempotencyKey,
           expiry === null ? null : new Date(expiry).toISOString()],
@@ -375,10 +376,10 @@ export class PostgresCustomerAssetRepository {
       const updated = await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET provider_upload_reference = $5, upload_status = 'initiated',
-                expires_at = $6, updated_at = now()
+                expires_at = $6, updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND actor_id = $4 AND upload_status = 'reserved' AND provider_upload_reference IS NULL
-            AND $6::timestamptz > now()`,
+            AND $6::timestamptz > clock_timestamp()`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId,
           input.providerUploadReference, new Date(expiry).toISOString()],
       );
