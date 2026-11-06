@@ -36,6 +36,7 @@ on:
       - "eper/tests/postgres-customer-asset-repository.integration.test.mjs"
       - "eper/tests/customer-asset-repository-migration.test.mjs"
       - "eper/tests/customer-asset-repository-readiness.test.mjs"
+      - "eper/tests/postgres-migration-runner.integration.test.mjs"
       - "eper/packages/assets/**"
       - "eper/tests/provider-operation-worker.test.mjs"
       - "eper/tests/provider-operation-worker-host.test.mjs"
