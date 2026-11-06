@@ -16,8 +16,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_active_asset_uq
   WHERE upload_status IN ('reserved', 'initiated', 'in_progress');
 
 DROP INDEX IF EXISTS eper_customer_asset_upload_expiry_idx;
+DROP INDEX IF EXISTS eper_customer_asset_upload_reserved_idx;
 CREATE INDEX eper_customer_asset_upload_expiry_idx
-  ON eper_customer_asset_upload_sessions (expires_at, tenant_id, application_id)
+  ON eper_customer_asset_upload_sessions (tenant_id, application_id, expires_at)
   WHERE upload_status IN ('reserved', 'initiated', 'in_progress');
 
 COMMIT;
