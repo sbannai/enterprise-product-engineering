@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ProviderRuntimeAdapterRegistry } from "../packages/integrations/provider-runtime-adapter-registry.ts";
+import { ProviderRuntimeAdapterRegistry } from "../dist/packages/integrations/provider-runtime-adapter-registry.js";
 import {
   resolveStorageAssetRuntimeSelection,
   StorageProviderRuntimeBindingError,
-} from "../packages/integrations/provider-runtime-storage-binding.ts";
+} from "../dist/packages/integrations/provider-runtime-storage-binding.js";
 
 const catalogue = [
   { providerKey: "aws-s3", adapterKey: "storage.aws-s3", adapterVersion: "1.0.0",
