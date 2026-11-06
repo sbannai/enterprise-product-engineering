@@ -319,7 +319,7 @@ export class PostgresCustomerAssetRepository {
           tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
           actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
           outcome: "success", resourceType: "customer-asset-upload", resourceId: row.upload_session_id,
-          correlationId: input.correlationId, source: "worker",
+          correlationId: input.correlationId, source: "job",
           operationName: "customer-asset-upload-expiry-reconciliation",
           payload: { assetId: input.assetId, reason: "reservation_expired_before_retry" },
         });
