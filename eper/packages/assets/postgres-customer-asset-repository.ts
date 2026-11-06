@@ -278,6 +278,27 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async getStaleUploadQueueAgeMs(input: {
+    tenantId: string; applicationId: string;
+  }): Promise<number> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const result = await client.query<{ queue_age_ms: number | string }>(
+        "SELECT public.eper_customer_asset_upload_expiry_queue_age_ms($1) AS queue_age_ms",
+        [input.tenantId],
+      );
+      await client.query("COMMIT");
+      return Math.max(0, Number(result.rows[0]?.queue_age_ms ?? 0));
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
