@@ -84,10 +84,13 @@ test("upload expiry worker exposes liveness/readiness and shuts down cleanly on 
     const live = await fetch("http://127.0.0.1:" + port + "/health/live");
     assert.equal(live.status, 200);
     child.kill("SIGTERM");
-    const [code, signal] = await Promise.race([
-      once(child, "exit"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("worker SIGTERM shutdown timed out")), 10_000)),
-    ]);
+    let shutdownTimer;
+    const exitPromise = once(child, "exit");
+    const timeoutPromise = new Promise((_, reject) => {
+      shutdownTimer = setTimeout(() => reject(new Error("worker SIGTERM shutdown timed out")), 10_000);
+    });
+    const [code, signal] = await Promise.race([exitPromise, timeoutPromise]);
+    clearTimeout(shutdownTimer);
     assert.equal(signal, null);
     assert.equal(code, 0, stderr);
     assert.doesNotMatch(stdout + stderr, new RegExp(tenantId));
