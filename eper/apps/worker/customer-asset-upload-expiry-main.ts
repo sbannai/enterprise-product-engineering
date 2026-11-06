@@ -33,6 +33,10 @@ const batchSize = boundedInteger(
   "EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE", 100, 1, 500,
 );
 const healthPort = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_HEALTH_PORT", 8081, 1, 65_535);
+const maxBackoffMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS", 60_000, 100, 300_000);
+const queueAgeAlertMs = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_QUEUE_AGE_ALERT_MS", 900_000, 1_000, 86_400_000);
+const failureAlertThreshold = boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_FAILURE_ALERT_THRESHOLD", 3, 1, 100);
+if (maxBackoffMs < pollIntervalMs) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS_OUT_OF_RANGE");
 
 const controller = new AbortController();
 let ready = false;
@@ -84,6 +88,7 @@ try {
   // the asset schema and append-only audit chain pass their checks.
   await listen();
   await repository.assertReady();
+  await repository.assertUploadExpiryWorkerReady();
   await assertAuditStoreReady(pool);
   ready = true;
   console.log(JSON.stringify({
@@ -100,11 +105,14 @@ try {
       signal: controller.signal,
       pollIntervalMs,
       batchSize,
-      onError() {
+      maxBackoffMs,
+      onError(_error, consecutiveFailures) {
         failures += 1;
         console.error(JSON.stringify({
           event: "customer_asset_upload_expiry_failure",
           failures,
+          consecutive_failures: consecutiveFailures,
+          alert: consecutiveFailures >= failureAlertThreshold,
           scope_index: scopeIndex,
         }));
       },
@@ -115,6 +123,7 @@ try {
           expired_count: expiredCount,
           batch_duration_ms: durationMs,
           queue_age_ms: queueAgeMs,
+          queue_age_alert: queueAgeMs >= queueAgeAlertMs,
           failures,
         }));
       },
