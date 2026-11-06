@@ -1,0 +1,117 @@
+name: EPER CI
+
+# Focused CI lane: schema/migration safety, capability conformance, and UAT preflight.
+# Full-suite and same-commit end-to-end validation live in eper-integrated-validation.yml.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "eper/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: ["main", "reconcile/payment-153-168-integration", "feat/provider-payload-encryption-boundary", "feat/postgres-encrypted-provider-payload-store", "test/provider-payload-rls-role-proof"]
+    paths:
+      - "eper/**"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_ci_password
+          POSTGRES_DB: eper_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://eper:eper_ci_password@localhost:5432/eper_test
+      EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: postgres://eper:eper_ci_password@localhost:5432/eper_test
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Workflow rules, capability composition and tariff entitlement unit regressions
+        run: node --test tests/workflow-rule-engine.test.mjs tests/capability-composition.test.mjs tests/postgres-module-entitlement-service.test.mjs
+      - name: Apply payment schema migrations to ephemeral CI database
+        run: npm run migrate:payments
+      - name: Apply audit and admin-configuration migrations to ephemeral CI database
+        run: npm run migrate:audit
+      - name: Apply workflow execution, publication and role migrations to ephemeral CI database
+        run: npm run migrate:workflows
+      - name: Verify workflow migrations are safely repeatable
+        run: npm run migrate:workflows
+      - name: Live PostgreSQL workflow execution integration
+        run: node --test tests/postgres-workflow-execution.integration.test.mjs
+      - name: Live PostgreSQL tenant and actor application assignment integration
+        env:
+          EPER_IDENTITY_ASSIGNMENT_LIVE_TESTS: "1"
+        run: node --test tests/postgres-application-assignment-live.integration.test.mjs
+      - name: Live PostgreSQL commercial tariff access guard integration
+        run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
+      - name: Apply campaign scheduler migrations to ephemeral CI database
+        run: npm run migrate:campaign-scheduler
+      - name: Apply capability persistence migrations to ephemeral CI database
+        run: npm run migrate:capabilities
+      - name: Apply ticketing persistence migrations to ephemeral CI database
+        run: npm run migrate:ticketing
+      - name: Verify ticketing migrations are safely repeatable
+        run: npm run migrate:ticketing
+      - name: Verify capability migrations are safely repeatable
+        run: npm run migrate:capabilities
+      # The same-commit integrated-validation workflow owns the full EPER
+      # suite and payment/receipt contracts. Keep capability-specific live
+      # PostgreSQL conformance here because it is unique to this CI lane.
+      - name: Initialize CI diagnostic evidence
+        if: always()
+        run: mkdir -p reexec-evidence/ci-logs
+      - name: Live PostgreSQL capability conformance (RLS, audit immutability, rollback)
+        env:
+          EPER_CAPABILITY_LIVE_TESTS: "1"
+        run: |
+          set -o pipefail
+          node --test tests/postgres-capability-live.integration.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-capability-live.log
+      - name: UAT preflight regression tests
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s uat/tests -p 'test_*.py' -v 2>&1 | tee reexec-evidence/ci-logs/uat-preflight.log
+      - name: Read-only business UAT readiness audit
+        run: |
+          python3 uat/scripts/b01_readiness_audit.py > /tmp/b01-readiness.json
+          python3 -c "import json; d=json.load(open('/tmp/b01-readiness.json')); print(json.dumps({'readiness': d['readiness'], 'counts': d['counts'], 'blockers': [{'gate': b['gate'], 'count': b['count']} for b in d['blockers']], 'integrityErrors': d['integrityErrors']}, indent=2))"
+
+      - name: Upload CI diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-CI-DIAGNOSTICS-${{ github.run_id }}
+          path: eper/reexec-evidence/ci-logs/
+          if-no-files-found: warn
+          retention-days: 14

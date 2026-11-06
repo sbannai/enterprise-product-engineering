@@ -1,0 +1,7 @@
+change_control,requirement_id,srs_id,trc_id,proposed_source,proposed_disposition,design_authority_disposition,domain_owner_role,domain_owner_disposition,exact_source_locator,source_version_status,positive_oracle,negative_oracle,boundary_oracle,policy_or_configuration_values,exact_hld_locator,exact_lld_locator,data_schema_owner_locator,api_event_contract_version_locator,approved_na_rationale,evidence_uri,reviewer_identity,decision_date,overall_status
+B01-CH463-CC-001,REQ-46301,SRS-FR-2323,TRC-46301,Chapter 463 BRD §463.46(3)-(5) and §463.47(3)(6)(7)(9)(11),PROPOSED,,,,,,,,,,,,,,,,,,HOLD
+B01-CH463-CC-001,REQ-46302,SRS-FR-2324,TRC-46302,Chapter 463 BRD §463.46(2)(3)(6) and §463.47(6)(8)(12)(13),PROPOSED,,,,,,,,,,,,,,,,,,HOLD
+B01-CH463-CC-001,REQ-46303,SRS-FR-2325,TRC-46303,Chapter 463 BRD §463.46(1)(2)(4) and §463.47(1)(3)(5)(7)(8)(9)(10),PROPOSED,,,,,,,,,,,,,,,,,,HOLD
+B01-CH463-CC-001,REQ-46304,SRS-FR-2326,TRC-46304,Chapter 463 BRD §463.46(1)(3) and §463.47(5)(6)(12),PROPOSED,,,,,,,,,,,,,,,,,,HOLD
+B01-CH463-CC-001,REQ-46305,SRS-FR-2327,TRC-46305,Chapter 463 BRD §463.46(2)(6) and §463.47(4)(10)(13)(14),PROPOSED,,,,,,,,,,,,,,,,,,HOLD
+B01-CH463-CC-001,REQ-46306,SRS-FR-2328,TRC-46306,Chapter 463 BRD §463.46(1)(3)(5) and §463.47(1)(5)(10)(11),PROPOSED,,,,,,,,,,,,,,,,,,HOLD

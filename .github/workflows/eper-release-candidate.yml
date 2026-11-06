@@ -1,0 +1,127 @@
+name: EPER Release Candidate Build
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-release-candidate.yml"
+  push:
+    branches:
+      - "release/**"
+    paths:
+      - "eper/**"
+      - ".github/workflows/eper-release-candidate.yml"
+  workflow_dispatch:
+
+jobs:
+  release-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: eper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build release candidate
+        run: npm run build
+
+      - name: Build UAT container image (no push)
+        run: |
+          docker build \
+            --build-arg EPER_BUILD_ID="$GITHUB_SHA" \
+            --tag "eper-uat:$GITHUB_SHA" \
+            --file Dockerfile .
+
+      - name: Smoke-test container health and build identity
+        env:
+          EXPECTED_BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          container_name="eper-uat-smoke-$GITHUB_RUN_ID"
+          cleanup() {
+            docker logs "$container_name" || true
+            docker rm -f "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run -d --name "$container_name" \
+            -e EPER_BUILD_ID="$GITHUB_SHA" \
+            -p 127.0.0.1:18080:8080 "eper-uat:$GITHUB_SHA"
+
+          ready=0
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --fail http://127.0.0.1:18080/health >/tmp/eper-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const body = JSON.parse(fs.readFileSync("/tmp/eper-health.json", "utf8"));
+            if (body.status !== "ok" || body.service !== "eper-api" || body.buildId !== process.env.EXPECTED_BUILD_ID) {
+              console.error("Unexpected health response:", body);
+              process.exit(1);
+            }
+            console.log("Container health and build identity verified:", body.buildId);
+          '
+
+          status_code="$(curl --silent --output /dev/null --write-out "%{http_code}" http://127.0.0.1:18080/not-a-route)"
+          test "$status_code" = "404"
+
+      - name: Package immutable release candidate
+        run: |
+          mkdir -p release-candidate
+          tar -czf release-candidate/eper-0.1.0-rc1.tgz package.json package-lock.json dist
+          (cd release-candidate && sha256sum eper-0.1.0-rc1.tgz > eper-0.1.0-rc1.tgz.sha256)
+          (cd release-candidate && sha256sum -c eper-0.1.0-rc1.tgz.sha256)
+
+      - name: Record release metadata
+        run: |
+          {
+            echo "program=EPER"
+            echo "scope=EM-OPS-463-500"
+            echo "population=228 requirements / 38 chapters"
+            echo "classification=RELEASE CANDIDATE BUILD — NOT RELEASED / NOT PRODUCTION"
+            echo "commit=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "workflow=$GITHUB_WORKFLOW"
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "runner_os=$RUNNER_OS"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > release-candidate/release-metadata.txt
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-0.1.0-RC1-${{ github.sha }}
+          path: eper/release-candidate/*
+          if-no-files-found: error
+          retention-days: 90

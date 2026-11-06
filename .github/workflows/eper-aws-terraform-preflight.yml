@@ -1,0 +1,111 @@
+name: EPER AWS Terraform Preflight
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "eper/infra/aws/terraform/**"
+      - "eper/infra/aws/scripts/**"
+      - ".github/workflows/eper-aws-terraform-preflight.yml"
+  workflow_dispatch:
+
+jobs:
+  terraform-preflight:
+    name: Validate Terraform without provisioning
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.6"
+          terraform_wrapper: false
+
+      - name: Test read-only inventory script with mocked AWS CLI
+        run: bash eper/infra/aws/scripts/test-read-only-inventory.sh
+
+      - name: Check formatting
+        working-directory: eper/infra/aws/terraform
+        run: terraform fmt -check -diff -recursive
+
+      - name: Initialize without backend
+        working-directory: eper/infra/aws/terraform
+        run: terraform init -backend=false -input=false
+
+      - name: Validate configuration
+        working-directory: eper/infra/aws/terraform
+        run: terraform validate -no-color
+
+      - name: Verify UAT security invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          main = Path("eper/infra/aws/terraform/main.tf").read_text()
+          variables = Path("eper/infra/aws/terraform/variables.tf").read_text()
+          checks = {
+              "immutable ECR tags": (main, r'image_tag_mutability\s*=\s*"IMMUTABLE"'),
+              "private Fargate tasks": (main, r'assign_public_ip\s*=\s*false'),
+              "matching image/build identity": (main, r'var\.image_tag\s*==\s*var\.build_id'),
+              "explicit VPC selection": (main, r'data\s+"aws_vpc"\s+"selected"'),
+              "VPC ID input": (variables, r'variable\s+"vpc_id"'),
+              "at least two ALB subnets": (variables, r'length\(var\.alb_subnet_ids\)\s*>=\s*2'),
+              "no unrestricted tester CIDR": (variables, r'cidr\s*!=\s*"0\.0\.0\.0/0"'),
+              "ALB egress scoped to tasks": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"alb_to_tasks"'),
+              "ALB egress restricted to task subnet CIDRs": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"alb_to_tasks"\s*\{[^}]*for_each\s*=\s*data\.aws_subnet\.tasks[^}]*cidr_ipv4\s*=\s*each\.value\.cidr_block'),
+              "task egress scoped to interface endpoints": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"tasks_to_interface_endpoints"'),
+              "task egress scoped to S3": (main, r'resource\s+"aws_vpc_security_group_egress_rule"\s+"tasks_to_s3"'),
+              "ECR API endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"ecr_api"'),
+              "ECR Docker endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"ecr_dkr"'),
+              "CloudWatch Logs endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"logs"'),
+              "S3 gateway endpoint": (main, r'resource\s+"aws_vpc_endpoint"\s+"s3"'),
+              "S3 prefix-list egress": (main, r'prefix_list_id\s*=\s*aws_vpc_endpoint\.s3\.prefix_list_id'),
+              "ALB subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"alb"'),
+              "internet gateway default-route destination": (main, r'destination_cidr_block\s*==\s*"0\.0\.0\.0/0"'),
+              "internet gateway target check": (main, r'can\(regex\("\^igw-",\s*route\.gateway_id\)\)'),
+              "task subnet-associated route tables": (main, r'data\s+"aws_route_table"\s+"tasks"'),
+              "task subnets reject direct IGW default routes": (main, r'Fargate task subnets must not use an internet gateway as their default route'),
+              "S3 endpoint route tables derived from task subnets": (main, r'route_table_ids\s*=\s*distinct\(\[for route_table in values\(data\.aws_route_table\.tasks\) : route_table\.id\]\)'),
+          }
+          failed = []
+          security_group_count = len(re.findall(r'resource\s+"aws_security_group"\s+"[^"]+"', main))
+          empty_egress_count = len(re.findall(r'egress\s*=\s*\[\s*\]', main))
+          if security_group_count != 3:
+              failed.append("exactly three reviewed security groups")
+          if empty_egress_count != security_group_count:
+              failed.append("all security groups disable provider-default egress")
+          if re.search(r'cidr_blocks\s*=\s*\[\s*"0\.0\.0\.0/0"\s*\]', main):
+              failed.append("no unrestricted security-group ingress")
+          for name, (source, pattern) in checks.items():
+              if not re.search(pattern, source, re.S):
+                  failed.append(name)
+          if re.search(r'default\s*=\s*true', main):
+              failed.append("no implicit default-VPC assumption")
+          if re.search(r"referenced_security_group_id\s*=\s*aws_security_group\.tasks\.id", main):
+              failed.append("no reciprocal ALB-to-task security-group reference cycle")
+          if failed:
+              print("Failed security invariants:")
+              for name in failed:
+                  print(f"- {name}")
+              raise SystemExit(1)
+          print(f"All {len(checks) + 1} UAT security invariants passed.")
+          PY
+
+      - name: Verify deployment remains gated
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f eper/infra/aws/terraform/main.tf
+          test -f eper/infra/aws/terraform/variables.tf
+          ! grep -RInE '(^|[[:space:]])(apply|destroy)[[:space:]]' .github/workflows/eper-aws-terraform-preflight.yml
+          echo "Preflight only: no plan, apply, AWS credentials, or provisioning performed."

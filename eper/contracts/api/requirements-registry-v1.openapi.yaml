@@ -1,0 +1,117 @@
+openapi: 3.1.0
+info:
+  title: EPER Read-only Requirement Registry API
+  version: 1.0.0
+  description: >
+    Opt-in, bearer-protected read-only access to the canonical 228-requirement
+    registry in the application. This does not expose the separate closure
+    snapshot and does not provide write-back.
+servers:
+  - url: /
+    description: Relative to the configured EPER API origin.
+security:
+  - bearerAuth: []
+paths:
+  /v1/requirements:
+    get:
+      operationId: listRequirements
+      summary: List and filter canonical requirement bindings
+      parameters:
+        - name: chapter
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: capability
+          in: query
+          schema: { type: string }
+        - name: pattern
+          in: query
+          schema: { type: string, enum: [XX01, XX02, XX03, XX04, XX05, XX06] }
+        - name: srs
+          in: query
+          schema: { type: string }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+          description: Case-insensitive substring search across identifiers, service and contract names.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: A page of requirement bindings and total matching count.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiVersion, source, total, limit, offset, requirements]
+                properties:
+                  apiVersion: { type: string, const: '1.0.0' }
+                  source: { type: string, const: requirement-registry }
+                  total: { type: integer, minimum: 0 }
+                  limit: { type: integer, minimum: 1, maximum: 100 }
+                  offset: { type: integer, minimum: 0 }
+                  requirements:
+                    type: array
+                    items: { $ref: '#/components/schemas/RequirementBinding' }
+        '400':
+          description: Invalid pagination or filter parameters.
+        '401':
+          description: Missing or invalid bearer token.
+        '404':
+          description: API is disabled by configuration.
+        '503':
+          description: API is enabled but token configuration is missing or too short.
+  /v1/requirements/{requirementId}:
+    get:
+      operationId: getRequirement
+      summary: Get one canonical requirement binding
+      parameters:
+        - name: requirementId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^REQ-[0-9]{5}$' }
+      responses:
+        '200':
+          description: Exact registry binding.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiVersion, source, requirement]
+                properties:
+                  apiVersion: { type: string, const: '1.0.0' }
+                  source: { type: string, const: requirement-registry }
+                  requirement: { $ref: '#/components/schemas/RequirementBinding' }
+        '400':
+          description: Invalid URL encoding.
+        '401':
+          description: Missing or invalid bearer token.
+        '404':
+          description: API is disabled or requirement ID is unknown.
+        '503':
+          description: API is enabled but token configuration is missing or too short.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque token
+  schemas:
+    RequirementBinding:
+      type: object
+      required: [id, brd, srs, chapter, sequence, pattern, capability, service, dataContract, apiContract, eventContract]
+      properties:
+        id: { type: string }
+        brd: { type: string }
+        srs: { type: string }
+        chapter: { type: integer, minimum: 1 }
+        sequence: { type: integer, minimum: 1, maximum: 6 }
+        pattern: { type: string, enum: [XX01, XX02, XX03, XX04, XX05, XX06] }
+        capability: { type: string }
+        service: { type: string }
+        dataContract: { type: string }
+        apiContract: { type: string }
+        eventContract: { type: string }

@@ -1,0 +1,39 @@
+name: EPER B01 UAT Technical Preflight
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'eper/chapter-46*-pilot-v0.1.0/**'
+      - 'eper/chapter-470-pilot-v0.1.0/**'
+      - 'eper/scripts/run-b01-technical-preflight.mjs'
+      - '.github/workflows/eper-b01-uat-preflight.yml'
+  push:
+    paths:
+      - 'eper/chapter-46*-pilot-v0.1.0/**'
+      - 'eper/chapter-470-pilot-v0.1.0/**'
+      - 'eper/scripts/run-b01-technical-preflight.mjs'
+      - '.github/workflows/eper-b01-uat-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b01-technical-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Execute B01 pilot suites and create evidence
+        run: node eper/scripts/run-b01-technical-preflight.mjs
+      - name: Upload B01 technical preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-B01-TECHNICAL-PREFLIGHT-${{ github.run_id }}
+          path: eper/uat-evidence/B01/
+          if-no-files-found: error
+          retention-days: 90

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EPER Agent Tools — Wireframe</title>
+<style>
+:root{--forest:#214d3b;--sage:#dce8dc;--ivory:#fbf8ef;--gold:#b99a4b;--ink:#24342b;--line:#cbd6c8}
+*{box-sizing:border-box}body{margin:0;background:var(--ivory);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{background:var(--forest);color:white;padding:22px clamp(16px,4vw,44px)}header small{color:#dce8dc}
+main{max-width:1100px;margin:auto;padding:24px 16px;display:grid;gap:18px}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}nav a{color:white;border:1px solid #91b29f;border-radius:8px;padding:7px 10px;text-decoration:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}
+section{background:white;border:1px solid var(--line);border-radius:14px;padding:18px}
+h1,h2{margin:0 0 8px}h2{font-size:1.1rem;color:var(--forest)}p{margin:8px 0}
+label{display:block;font-weight:600;margin:10px 0 4px}input,select,textarea{width:100%;padding:10px;border:1px solid #aebdaf;border-radius:7px;background:#fff;color:var(--ink)}
+.check{display:flex;gap:8px;align-items:center;font-weight:400}.check input{width:auto}
+button{border:0;border-radius:8px;padding:10px 14px;background:var(--forest);color:white;cursor:pointer;margin:8px 6px 0 0}button.secondary{background:var(--sage);color:var(--forest);border:1px solid var(--line)}
+.note{background:#f4edda;border-left:4px solid var(--gold);padding:10px 12px;border-radius:5px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f5f0;padding:12px;border-radius:8px}
+.tag{display:inline-block;background:var(--sage);padding:3px 8px;border-radius:99px;font-size:.8rem}
+footer{font-size:.9rem;color:#526457}
+</style></head>
+<body>
+<header><small>EPER · Product wireframe / Botanical theme</small><h1>Agent Tools & Channel Configuration</h1><p>Tenant-scoped controls for CRM, Sales, Marketing and WhatsApp draft workflows.</p><nav><a href="#scope">Scope</a><a href="#agents">Agent drafts</a><a href="#tools">Tool settings</a><a href="#whatsapp">WhatsApp</a><a href="#review">Review queue</a><a href="#audit">Audit trail</a></nav></header>
+<main>
+<div class="note"><strong>Wireframe / prototype only.</strong> This page is a static interaction mock-up. It does not save configuration, call live agents, publish posts, write to CRM, or send WhatsApp messages. Live sending remains disabled.</div>
+<section id="scope"><h2>1. Tenant and application scope</h2><div class="grid">
+<div><label for="tenant">Tenant / client ID</label><input id="tenant" placeholder="e.g. tenant-demo"></div>
+<div><label for="app">Application</label><select id="app"><option value="school-erp">School ERP</option><option value="college-erp">College ERP</option><option value="growth-hub">Growth Hub</option><option value="corporate-erp">Corporate ERP</option></select></div>
+<div><label for="env">Environment</label><select id="env"><option>sandbox</option><option>uat</option><option>production</option></select></div></div></section>
+<div class="grid">
+<section id="agents"><h2>2. Agent draft workflows</h2><label for="agent">Capability</label><select id="agent"><option>CRM</option><option>Sales</option><option>Marketing</option></select><label for="intent">Draft intent</label><select id="intent"><option>lead-qualification</option><option>contact-summary</option><option>next-action</option><option>follow-up</option><option>opportunity-plan</option><option>proposal-outline</option><option>campaign-brief</option><option>email-copy</option><option>social-copy</option></select><label for="objective">Objective / brief</label><textarea id="objective" rows="3" placeholder="Describe the business objective; avoid sensitive personal data."></textarea><button type="button" id="makeDraft">Preview draft request</button><pre id="draftPreview">No preview created.</pre></section>
+<section id="tools"><h2>3. Tool controls</h2><label class="check"><input id="alerts" type="checkbox"> Enable lead alerts</label><label for="threshold">Lead score threshold</label><input id="threshold" type="number" min="1" max="100" value="70"><label for="alertChannel">Alert channel</label><select id="alertChannel"><option>in-app</option><option>email-draft</option><option>whatsapp-draft</option></select><label class="check"><input id="campaigns" type="checkbox" checked> Enable campaign drafts</label><label for="channels">Content channels</label><select id="channels" multiple><option>LinkedIn</option><option>Instagram</option><option>Facebook</option><option>Website</option><option>WhatsApp</option></select><label class="check"><input id="reports" type="checkbox" checked> Enable report previews</label><label for="cadence">Report cadence</label><select id="cadence"><option>manual</option><option>daily</option><option>weekly</option><option>monthly</option></select><label class="check"><input id="materialize" type="checkbox"> Enable lead materialization (requires server policy)</label><label class="check"><input id="duplicate" type="checkbox" checked> Duplicate check required</label><label class="check"><input id="consent" type="checkbox" checked> Consent check required</label></section>
+</div>
+<section id="whatsapp"><h2>4. WhatsApp post configuration</h2><span class="tag">Sending disabled</span><div class="grid">
+<div><label for="waProvider">Provider</label><select id="waProvider"><option value="meta-cloud-api">Meta WhatsApp Cloud API</option><option value="twilio">Twilio (adapter required)</option><option value="provider-neutral">Provider-neutral adapter</option></select><label for="waBusiness">Business Account ID</label><input id="waBusiness" placeholder="Non-secret identifier"><label for="waPhone">Phone Number ID</label><input id="waPhone" placeholder="Non-secret identifier"></div>
+<div><label for="waTemplate">Approved template name</label><input id="waTemplate" placeholder="Approved template name"><label for="waMode">Mode</label><select id="waMode"><option value="draft-only">Draft only</option><option value="template-preview">Approved template preview</option></select><label class="check"><input id="waOptIn" type="checkbox" checked> Recipient opt-in required</label><label class="check"><input id="waHuman" type="checkbox" checked> Human approval required</label><label class="check"><input id="waAudit" type="checkbox" checked> Audit record required</label></div></div><p class="note">Never enter access tokens, app secrets or webhook signing/verification secrets here. Store them server-side in a managed secret store. WhatsApp provider connection and live sending are not implemented.</p></section>
+<section id="review"><h2>5. Review & approval</h2><p>Draft queue states: <span class="tag">Pending approval</span> <span class="tag">Approved</span> <span class="tag">Rejected</span></p><p>A different authorized reviewer must approve or reject a draft. Approval changes the draft status only; it does not publish, send, or write to CRM.</p><label for="principal">Reviewer principal (mock-up only)</label><input id="principal" placeholder="reviewer-id"><button type="button" class="secondary" id="configPreview">Generate configuration preview</button><button type="button" class="secondary" id="copyConfig">Copy preview JSON</button><pre id="configOutput">Configuration preview not generated.</pre></section>
+<section id="audit"><h2>6. Audit trail & activity evidence</h2>
+<p class="note"><strong>Mandatory cross-cutting control.</strong> This is a UI concept only. The screen below does not query stored audit events, and must not be presented as a live audit console until server-side search, permissions and retention are implemented.</p>
+<div class="grid">
+<div><label for="auditFrom">From (UTC)</label><input id="auditFrom" type="datetime-local"></div>
+<div><label for="auditTo">To (UTC)</label><input id="auditTo" type="datetime-local"></div>
+<div><label for="auditActor">Actor ID</label><input id="auditActor" placeholder="Principal or service ID"></div>
+<div><label for="auditAction">Action</label><input id="auditAction" placeholder="e.g. agent.draft.approve"></div>
+<div><label for="auditOutcome">Outcome</label><select id="auditOutcome"><option value="">All outcomes</option><option>success</option><option>denied</option><option>failure</option></select></div>
+<div><label for="auditCorrelation">Correlation / request ID</label><input id="auditCorrelation" placeholder="Trace or request ID"></div>
+</div>
+<label for="auditResource">Resource ID</label><input id="auditResource" placeholder="Draft, receipt, payment or configuration ID">
+<label class="check"><input id="auditIncludeDenied" type="checkbox" checked> Include denied and failed actions</label>
+<button type="button" id="auditPreview">Preview audit query</button>
+<button type="button" class="secondary" id="auditExport">Preview export request</button>
+<pre id="auditOutput">No audit query preview created. No events are fetched or exported by this wireframe.</pre>
+<h3>Event detail — required fields</h3>
+<div class="grid">
+<div><p><strong>Actor & scope</strong><br>Actor type/ID, effective roles, tenant, application, environment</p><p><strong>Action & result</strong><br>Action, outcome, reason code, resource type/ID</p></div>
+<div><p><strong>Traceability</strong><br>Occurred-at UTC, operation/correlation/request IDs, source, build version</p><p><strong>Integrity</strong><br>Event ID, schema version, previous hash, event hash, integrity status</p></div>
+</div>
+<p class="note">Access to audit search/export must itself be audited. Enforce tenant scope and role-based access on the server; redact secrets and unnecessary personal data. Export requires explicit authorization, reason, bounded filters and an audit event. Integrity status must come from server verification, never a browser-calculated claim.</p>
+</section>
+<footer>EPER requirements delta: proposed additions only. Preserve 228 approved requirements, 38 chapters and six capability families. This wireframe is not evidence of backend persistence or UAT completion.</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+$('makeDraft').addEventListener('click',()=>{$('draftPreview').textContent=JSON.stringify({agent:$('agent').value.toLowerCase(),intent:$('intent').value,input:{objective:$('objective').value},previewOnly:true,externalActionsEnabled:false},null,2)});
+$('configPreview').addEventListener('click',()=>{const channels=[...$('channels').selectedOptions].map(o=>o.value);const data={schemaVersion:1,tenantId:$('tenant').value.trim(),applicationId:$('app').value,environment:$('env').value,tools:{alerts:{enabled:$('alerts').checked,leadScoreThreshold:Number($('threshold').value),channel:$('alertChannel').value},posts:{enabled:$('campaigns').checked,channels,approvalRequired:true,whatsapp:{enabled:channels.includes('WhatsApp'),provider:$('waProvider').value,businessAccountId:$('waBusiness').value.trim(),phoneNumberId:$('waPhone').value.trim(),templateName:$('waTemplate').value.trim(),mode:$('waMode').value,recipientOptInRequired:$('waOptIn').checked,humanApprovalRequired:$('waHuman').checked,auditRequired:$('waAudit').checked,sendingEnabled:false}},reports:{enabled:$('reports').checked,cadence:$('cadence').value},leadMaterialization:{enabled:$('materialize').checked,duplicateCheckRequired:$('duplicate').checked,consentCheckRequired:$('consent').checked},externalActionsEnabled:false},previewOnly:true};$('configOutput').textContent=JSON.stringify(data,null,2)});
+$('auditPreview').addEventListener('click',()=>{$('auditOutput').textContent=JSON.stringify({operation:'audit.search.preview',tenantId:$('tenant').value.trim(),applicationId:$('app').value,environment:$('env').value,filters:{fromUtc:$('auditFrom').value||null,toUtc:$('auditTo').value||null,actorId:$('auditActor').value.trim()||null,action:$('auditAction').value.trim()||null,outcome:$('auditOutcome').value||null,correlationOrRequestId:$('auditCorrelation').value.trim()||null,resourceId:$('auditResource').value.trim()||null,includeDeniedAndFailed:$('auditIncludeDenied').checked},previewOnly:true,eventsFetched:false},null,2)});
+$('auditExport').addEventListener('click',()=>{$('auditOutput').textContent=JSON.stringify({operation:'audit.export.preview',tenantId:$('tenant').value.trim(),applicationId:$('app').value,environment:$('env').value,requiresServerAuthorization:true,requiresExportReason:true,requiresAuditOfExport:true,previewOnly:true,exportCreated:false},null,2)});
+$('copyConfig').addEventListener('click',()=>{const value=$('configOutput').textContent;if(!value||value==='Configuration preview not generated.')return;const area=document.createElement('textarea');area.value=value;document.body.appendChild(area);area.select();document.execCommand('copy');area.remove()});
+</script></body></html>

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: eper-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eper}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eper_local_only_password}
+      POSTGRES_DB: ${POSTGRES_DB:-eper_test_local}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - eper-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eper} -d ${POSTGRES_DB:-eper_test_local}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  eper-postgres-data:

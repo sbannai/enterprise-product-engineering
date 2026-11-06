@@ -1,0 +1,52 @@
+name: EPER B01 Six-Wave UAT Evidence Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'eper/scripts/run-b01-technical-preflight.mjs'
+      - 'eper/scripts/build-b01-wave-evidence.mjs'
+      - 'eper/uat/**'
+      - '.github/workflows/eper-b01-uat-evidence-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  b01-evidence-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Execute B01 controlled technical suites
+        id: preflight
+        continue-on-error: true
+        run: node eper/scripts/run-b01-technical-preflight.mjs
+      - name: Build six-wave evidence bundle
+        run: node eper/scripts/build-b01-wave-evidence.mjs
+      - name: Record bridge metadata
+        run: |
+          {
+            printf 'program=EPER-B01-SIX-WAVE-EVIDENCE-BRIDGE\n'
+            printf 'classification=CONTROLLED AUTOMATED EXECUTION EVIDENCE — NOT BUSINESS ACCEPTANCE\n'
+            printf 'repository=%s\n' "$GITHUB_REPOSITORY"
+            printf 'commit=%s\n' "$GITHUB_SHA"
+            printf 'run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'run_number=%s\n' "$GITHUB_RUN_NUMBER"
+            printf 'preflight_outcome=%s\n' "${{ steps.preflight.outcome }}"
+            printf 'business_uat=NOT_EXECUTED\n'
+            printf 'business_acceptance=PENDING\n'
+            printf 'g9=NOT_FROZEN\n'
+            printf 'g10=NOT_ISSUED\n'
+          } > eper/uat-evidence/B01/waves/bridge-metadata.txt
+      - name: Upload B01 six-wave evidence bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-B01-SIX-WAVE-EVIDENCE-${{ github.run_id }}
+          path: eper/uat-evidence/B01/
+          if-no-files-found: error
+          retention-days: 90

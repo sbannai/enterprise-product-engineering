@@ -1,0 +1,47 @@
+name: Workflow Configuration Validation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-workflow-yaml:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install YAML parser
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Parse every workflow file
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          files = sorted(Path(".github/workflows").glob("*.yml"))
+          if not files:
+              raise SystemExit("No workflow YAML files found")
+          for path in files:
+              with path.open(encoding="utf-8") as stream:
+                  yaml.safe_load(stream)
+              print(f"YAML PASS: {path}")
+          print(f"Validated {len(files)} workflow YAML files.")
+          PY

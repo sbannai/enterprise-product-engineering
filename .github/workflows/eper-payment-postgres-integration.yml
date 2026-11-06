@@ -1,0 +1,204 @@
+# Re-run this gate on the reconciled payment/receipt branch before integration sign-off.
+name: EPER PostgreSQL payment-store integration
+
+# Keep this gate enabled on both payment persistence and generic receipt-contract branches.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["fix/payment-production-persistence-guard", "feat/generic-transaction-receipt-contract", "reconcile/payment-153-168-integration", "reconcile/payment-stack-with-receipt-contract"]
+  pull_request:
+    paths:
+      - ".github/workflows/eper-payment-postgres-integration.yml"
+      - ".github/workflows/eper-local-developer-setup.yml"
+      - "eper/packages/identity/**"
+      - "eper/packages/integrations/**"
+      - "eper/tests/provider-*-*.test.mjs"
+      - "eper/tests/tenant-provider-defaults-repository.test.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
+      - "eper/packages/workflows/**"
+      - "eper/packages/audit/**"
+      - "eper/apps/api/platform-customer-admin-provisioning-route.ts"
+      - "eper/tests/postgres-platform-customer-admin-provisioning.integration.test.mjs"
+      - "eper/tests/postgres-platform-application-remediation.integration.test.mjs"
+      - "eper/tests/postgres-workflow-role-delegation.integration.test.mjs"
+      - "eper/tests/privileged-postgres-role-contract.integration.test.mjs"
+      - "eper/tests/privileged-postgres-role-operations.integration.test.mjs"
+      - "eper/docs/PRIVILEGED_POSTGRES_ROLE_CONTRACT.md"
+      - "eper/tests/platform-customer-admin-provisioning-store.test.mjs"
+      - "eper/tests/platform-customer-admin-provisioning-route.test.mjs"
+      - "eper/packages/payments/**"
+      - "eper/packages/pricing/**"
+      - "eper/packages/audit/migrations/**"
+      - "eper/packages/campaign-scheduler/**"
+      - "eper/scripts/migrate-audit.mjs"
+      - "eper/scripts/migrate-campaign-scheduler.mjs"
+      - "eper/scripts/select-campaign-scheduler-database-url.mjs"
+      - "eper/tests/campaign-scheduler-*.test.mjs"
+      - "eper/tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs"
+      - "eper/apps/api/main.ts"
+      - "eper/apps/api/server.ts"
+      - "eper/apps/api/payments.ts"
+      - "eper/Dockerfile"
+      - "eper/scripts/migrate-payments.mjs"
+      - "eper/tests/postgres-payment-store.integration.test.mjs"
+      - "eper/tests/customer-lifecycle-store.integration.test.mjs"
+      - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
+      - "eper/tests/postgres-module-entitlement-service.integration.test.mjs"
+      - "eper/tests/postgres-payment-store.test.mjs"
+      - "eper/tests/postgres-payment-api-route.test.mjs"
+      - "eper/tests/postgres-legacy-order-snapshot-gate.test.mjs"
+      - "eper/tests/postgres-payment-runtime.test.mjs"
+      - "eper/tests/payment-production-guard.test.mjs"
+      - "eper/tests/payment-gateway.test.mjs"
+      - "eper/tests/payment-readiness.test.mjs"
+      - "eper/tests/invoice-amount-authority.test.mjs"
+      - "eper/tests/http-invoice-amount-source.test.mjs"
+      - "eper/tests/http-transaction-snapshot-source.test.mjs"
+      - "eper/tests/transaction-receipt-contract.test.mjs"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/tsconfig.json"
+  workflow_dispatch:
+
+jobs:
+  postgres-payment-store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: eper
+          POSTGRES_PASSWORD: eper_test_password
+          POSTGRES_DB: eper_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eper -d eper_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://eper:eper_test_password@localhost:5432/eper_test
+    defaults:
+      run:
+        working-directory: eper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: eper/package-lock.json
+      - name: Initialize diagnostic evidence
+        if: always()
+        run: mkdir -p reexec-evidence/ci-logs
+      - run: npm ci
+      - run: npm run build
+      - name: Test market price-book contract
+        run: |
+          set -o pipefail
+          node --test tests/market-price-book.test.mjs 2>&1 | tee reexec-evidence/ci-logs/market-price-book.log
+      - name: Test PostgreSQL runtime pool configuration
+        run: |
+          set -o pipefail
+          node --test tests/postgres-payment-runtime.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-payment-runtime.log
+      - name: Test PostgreSQL-backed payment and receipt API flow
+        run: |
+          set -o pipefail
+          node --test tests/postgres-payment-api-route.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-payment-api-route.log
+      - name: Test legacy orders without immutable transaction snapshots fail closed
+        run: |
+          set -o pipefail
+          node --test tests/postgres-legacy-order-snapshot-gate.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-legacy-order-snapshot-gate.log
+      - name: Test payment-store validation and transaction rollback cases
+        run: |
+          set -o pipefail
+          node --test tests/postgres-payment-store.test.mjs 2>&1 | tee reexec-evidence/ci-logs/postgres-payment-store.log
+      - name: Test production payment routes remain fail-closed
+        run: |
+          set -o pipefail
+          node --test tests/payment-production-guard.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-production-guard.log
+      - name: Test payment readiness blockers and production review gate
+        run: |
+          set -o pipefail
+          node --test tests/payment-readiness.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-readiness.log
+      - name: Test gateway signature and receipt safety regressions
+        run: |
+          set -o pipefail
+          node --test tests/payment-gateway.test.mjs 2>&1 | tee reexec-evidence/ci-logs/payment-gateway.log
+      - name: Test trusted invoice amount authority contract
+        run: |
+          set -o pipefail
+          node --test tests/invoice-amount-authority.test.mjs 2>&1 | tee reexec-evidence/ci-logs/invoice-amount-authority.log
+      - name: Test HTTP invoice authority response validation
+        run: |
+          set -o pipefail
+          node --test tests/http-invoice-amount-source.test.mjs 2>&1 | tee reexec-evidence/ci-logs/http-invoice-amount-source.log
+      - name: Test generic transaction and receipt contract
+        run: |
+          set -o pipefail
+          node --test tests/transaction-receipt-contract.test.mjs 2>&1 | tee reexec-evidence/ci-logs/transaction-receipt-contract.log
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Apply all payment migrations through the deployment runner
+        run: npm run migrate:payments
+      - name: Apply durable audit schema migrations
+        run: npm run migrate:audit
+      - name: Apply identity schema migrations
+        run: npm run migrate:identity
+      - name: Apply workflow schema migrations
+        run: npm run migrate:workflows
+      - name: Apply campaign scheduler migrations
+        run: npm run migrate:campaign-scheduler
+      - name: Provision isolated least-privilege runtime roles for contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform_password="$(openssl rand -hex 32)"
+          catalogue_password="$(openssl rand -hex 32)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_platform_admin_runtime WITH LOGIN PASSWORD '${platform_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_provider_catalogue_runtime WITH LOGIN PASSWORD '${catalogue_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "REVOKE ALL ON TABLE public.eper_audit_events, public.eper_audit_chain_head, public.eper_platform_admin_credentials, public.eper_provider_definitions, public.eper_payment_orders, public.eper_payment_receipts, public.eper_payment_webhook_events, public.eper_provider_connections, public.eper_provider_connection_applications, public.eper_provider_validation_events, public.eper_tenant_provider_defaults, public.eper_application_provider_policies, public.eper_provider_operations, public.eper_provider_webhook_receipts FROM PUBLIC"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_platform_admin_runtime, eper_provider_catalogue_runtime"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_platform_admin_access TO eper_platform_admin_runtime"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_provider_catalogue_access TO eper_provider_catalogue_runtime"
+          {
+            echo "EPER_PLATFORM_ADMIN_TEST_DATABASE_URL=postgres://eper_platform_admin_runtime:${platform_password}@localhost:5432/eper_test"
+            echo "EPER_PROVIDER_CATALOGUE_TEST_DATABASE_URL=postgres://eper_provider_catalogue_runtime:${catalogue_password}@localhost:5432/eper_test"
+          } >> "$GITHUB_ENV"
+      - name: Verify dedicated PostgreSQL runtime-role privileges
+        run: node --test tests/privileged-postgres-role-contract.integration.test.mjs
+      - name: Exercise privileged PostgreSQL store operations and audit rollback
+        run: node --test tests/privileged-postgres-role-operations.integration.test.mjs
+      - name: Exercise real PostgreSQL transactions and constraints
+        run: node --test tests/postgres-payment-store.integration.test.mjs
+      - name: Exercise PostgreSQL customer lifecycle and audit atomicity
+        run: node --test tests/customer-lifecycle-store.integration.test.mjs
+      - name: Exercise PostgreSQL customer tariff enforcement at protected access checks
+        run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
+      - name: Exercise PostgreSQL module and add-on tariff lifecycle
+        run: node --test tests/postgres-module-entitlement-service.integration.test.mjs
+      - name: Exercise PostgreSQL role delegation, application scope and last-admin concurrency
+        run: node --test tests/postgres-workflow-role-delegation.integration.test.mjs
+      - name: Exercise platform Customer Admin provisioning and recovery transactions
+        run: node --test tests/postgres-platform-customer-admin-provisioning.integration.test.mjs
+      - name: Exercise platform application remediation transaction, tenant isolation and audit rollback
+        run: node --test tests/postgres-platform-application-remediation.integration.test.mjs
+      - name: Exercise PostgreSQL campaign dispatch race and event idempotency
+        env:
+          EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: node --test tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs
+
+      - name: Upload payment diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPER-PAYMENT-POSTGRES-DIAGNOSTICS-${{ github.run_id }}
+          path: eper/reexec-evidence/ci-logs/
+          if-no-files-found: warn
+          retention-days: 14

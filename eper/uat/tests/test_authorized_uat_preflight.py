@@ -1,0 +1,100 @@
+import contextlib, io, json, os, tempfile, unittest, urllib.error
+from unittest import mock
+from uat.scripts import authorized_uat_preflight as preflight
+BASE_ENV={"UAT_ALLOWED_HOST":"uat.example.test","UAT_BASE_URL":"https://uat.example.test","UAT_HEALTH_PATH":"/health","UAT_EXPECTED_BUILD_ID":"abc123","UAT_BUILD_ID_JSON_FIELD":"buildId"}
+class FakeResponse:
+    def __init__(self,body,status=200,content_type="application/json"): self.status,self.headers,self.body=status,{"Content-Type":content_type},body
+    def __enter__(self): return self
+    def __exit__(self,*args): return False
+    def read(self,size=-1): return self.body[:size]
+class FakeOpener:
+    def __init__(self,response=None,error=None): self.response,self.error,self.calls=response,error,[]
+    def open(self,request,timeout):
+        self.calls.append((request,timeout))
+        if self.error: raise self.error
+        return self.response
+class SequenceOpener:
+    def __init__(self, outcomes): self.outcomes,self.calls=list(outcomes),[]
+    def open(self,request,timeout):
+        self.calls.append((request,timeout))
+        outcome=self.outcomes.pop(0)
+        if isinstance(outcome,BaseException): raise outcome
+        return outcome
+class AuthorizedUatPreflightTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory(); self.cwd=os.getcwd(); os.chdir(self.temp.name)
+        self.redirect=contextlib.redirect_stdout(io.StringIO()); self.redirect.__enter__()
+    def tearDown(self):
+        self.redirect.__exit__(None,None,None); os.chdir(self.cwd); self.temp.cleanup()
+    def run_check(self,env=None,opener=None):
+        with mock.patch.object(preflight.urllib.request,"build_opener",return_value=opener) as build:
+            code=preflight.run_preflight(dict(BASE_ENV if env is None else env))
+        with open(preflight.RESULT_PATH,encoding="utf-8") as f: result=json.load(f)
+        return code,result,build
+    def test_success_requires_exact_build_identity(self):
+        opener=FakeOpener(FakeResponse(b'{"buildId":"abc123"}')); code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,0); self.assertEqual(result["status"],"PASS"); self.assertEqual(result["checks"]["buildIdentity"]["status"],"PASS")
+        self.assertEqual(opener.calls[0][1],preflight.TIMEOUT_SECONDS); self.assertEqual(opener.calls[0][0].full_url,"https://uat.example.test/health")
+    def test_retries_transient_network_failure_then_passes(self):
+        opener=SequenceOpener([urllib.error.URLError("temporary"),FakeResponse(b'{"buildId":"abc123"}')])
+        with mock.patch.object(preflight.time,"sleep") as sleep:
+            code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,0); self.assertEqual(result["attempts"],2); self.assertEqual(len(opener.calls),2)
+        self.assertEqual(result["status"],"PASS"); sleep.assert_called_once_with(1)
+    def test_retries_http_503_then_passes(self):
+        unavailable=urllib.error.HTTPError("https://uat.example.test/health",503,"Unavailable",{},None)
+        opener=SequenceOpener([unavailable,FakeResponse(b'{"buildId":"abc123"}')])
+        with mock.patch.object(preflight.time,"sleep") as sleep:
+            code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,0); self.assertEqual(result["attempts"],2); self.assertEqual(len(opener.calls),2)
+        sleep.assert_called_once_with(1)
+    def test_transient_failure_stops_after_max_attempts(self):
+        opener=SequenceOpener([urllib.error.URLError("temporary") for _ in range(preflight.MAX_ATTEMPTS)])
+        with mock.patch.object(preflight.time,"sleep"):
+            code,result,_=self.run_check(opener=opener)
+        self.assertEqual(code,1); self.assertEqual(result["attempts"],preflight.MAX_ATTEMPTS)
+        self.assertEqual(len(opener.calls),preflight.MAX_ATTEMPTS)
+        self.assertIn("after bounded retries",result["checks"]["healthResponse"]["reason"])
+    def test_rejects_host_not_on_allowlist_without_network_call(self):
+        code,result,build=self.run_check(dict(BASE_ENV,UAT_BASE_URL="https://attacker.example.test"),FakeOpener())
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["targetValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_rejects_base_url_with_path(self):
+        code,result,build=self.run_check(dict(BASE_ENV,UAT_BASE_URL="https://uat.example.test/unapproved"),FakeOpener())
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["targetValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_rejects_external_health_path(self):
+        code,result,build=self.run_check(dict(BASE_ENV,UAT_HEALTH_PATH="//attacker.example.test/health"),FakeOpener())
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthPathValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_rejects_backslash_in_health_path(self):
+        code,result,build=self.run_check(dict(BASE_ENV,UAT_HEALTH_PATH="/safe\\other"),FakeOpener())
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthPathValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_build_mismatch_fails(self):
+        code,result,_=self.run_check(opener=FakeOpener(FakeResponse(b'{"buildId":"different"}')))
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["buildIdentity"]["status"],"FAIL")
+    def test_redirect_is_not_followed(self):
+        err=urllib.error.HTTPError("https://uat.example.test/health",302,"Found",{},None)
+        code,result,_=self.run_check(opener=FakeOpener(error=err))
+        self.assertEqual(code,1); self.assertEqual(result["httpStatus"],302); self.assertIn("redirect",result["checks"]["healthResponse"]["reason"])
+    def test_invalid_json_fails_without_echoing_payload(self):
+        code,result,_=self.run_check(opener=FakeOpener(FakeResponse(b"private payload")))
+        self.assertEqual(code,1); self.assertEqual(result["status"],"FAIL"); self.assertNotIn("private payload",json.dumps(result))
+    def test_missing_allowlist_fails_before_network(self):
+        code,result,build=self.run_check(dict(BASE_ENV,UAT_ALLOWED_HOST=""),FakeOpener())
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["allowlist"]["status"],"FAIL"); build.assert_not_called()
+    def test_rejects_http_userinfo_query_and_fragment_before_network(self):
+        for url in ("http://uat.example.test", "https://user@uat.example.test", "https://uat.example.test?x=1", "https://uat.example.test#fragment"):
+            with self.subTest(url=url):
+                code,result,build=self.run_check(dict(BASE_ENV,UAT_BASE_URL=url),FakeOpener())
+                self.assertEqual(code,1); self.assertEqual(result["checks"]["targetValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_missing_expected_build_or_json_field_fails_before_network(self):
+        for changes in ({"UAT_EXPECTED_BUILD_ID":""}, {"UAT_BUILD_ID_JSON_FIELD":""}):
+            with self.subTest(changes=changes):
+                code,result,build=self.run_check(dict(BASE_ENV,**changes),FakeOpener())
+                self.assertEqual(code,1); self.assertEqual(result["checks"]["buildInputValidation"]["status"],"FAIL"); build.assert_not_called()
+    def test_non_object_json_root_fails(self):
+        code,result,_=self.run_check(opener=FakeOpener(FakeResponse(b'["abc123"]')))
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthResponse"]["status"],"FAIL")
+    def test_oversized_health_response_fails(self):
+        body=b"x"*(preflight.MAX_RESPONSE_BYTES+1)
+        code,result,_=self.run_check(opener=FakeOpener(FakeResponse(body)))
+        self.assertEqual(code,1); self.assertEqual(result["checks"]["healthResponse"]["status"],"FAIL")
+if __name__=="__main__": unittest.main()

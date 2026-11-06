@@ -1,0 +1,5 @@
+EPER-REEXEC-002
+Controlled UAT technical simulation trigger marker.
+Classification: NEW CONTROLLED UAT TECHNICAL SIMULATION — NOT BUSINESS UAT / NOT HISTORICAL EVIDENCE
+Population: 228 requirements / 38 chapters
+Business acceptance remains pending.

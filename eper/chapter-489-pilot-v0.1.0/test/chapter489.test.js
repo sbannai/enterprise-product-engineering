@@ -1,0 +1,8 @@
+import test from "node:test";import assert from "node:assert/strict";import{RecordRepository,AuthorizationError,ValidationError,STATES}from "../src/domain.js";
+const c={principalId:"u1",tenantId:"t1",permissions:["record:create","record:read","record:transition","report:read"]};const o={principalId:"u2",tenantId:"t2",permissions:["record:read"]};
+test("REQ-48901/SRS-FR-2479 lifecycle",()=>{const r=new RecordRepository();r.create(c,{id:"r1",tenantId:"t1",reference:"R1",category:"C"});assert.equal(r.transition(c,"r1",STATES.ACTIVE,"activate").state,"ACTIVE");});
+test("REQ-48902/SRS-FR-2480 authorization",()=>{const r=new RecordRepository();r.create(c,{id:"r1",tenantId:"t1",reference:"R1",category:"C"});assert.throws(()=>r.get(o,"r1"),AuthorizationError);});
+test("REQ-48903/SRS-FR-2481 validation",()=>{const r=new RecordRepository();assert.throws(()=>r.validateMaterialChange({approvalConfirmed:true,preconditionsMet:false}),ValidationError);});
+test("REQ-48904/SRS-FR-2482 audit",()=>{const r=new RecordRepository();r.create(c,{id:"r1",tenantId:"t1",reference:"R1",category:"C"});assert.equal(r.auditLog[0].event,"RECORD_CREATED");});
+test("REQ-48905/SRS-FR-2483 exception",()=>{const r=new RecordRepository();assert.equal(r.controlledException("EX1","review",c,"r1").status,"OPEN");});
+test("REQ-48906/SRS-FR-2484 reporting",()=>{const r=new RecordRepository();r.create(c,{id:"r1",tenantId:"t1",reference:"R1",category:"C"});assert.deepEqual(r.report(c),{DRAFT:1});});

@@ -1,0 +1,126 @@
+# Chapter 463 six-row source-to-contract closure matrix
+
+**Status:** Evidence reconciliation aid — not an approval record.  
+**Scope:** REQ-46301–REQ-46306 / SRS-FR-2323–SRS-FR-2328 / Chapters 463.  
+**Controlled baseline:** `EM-BRD-001_Detailed_Chapters-461-470_v1.0.docx`, Chapter 463 §463.21 “Initial Requirement Register”, rows BRD-001-REQ-46301–46306; baseline decision `B01-BASELINE-APPROVAL-001` (2026-10-11). This confirms requirement identity/locator only, not domain acceptance criteria.  
+**Domain source:** `EM-BRD-001_Volume-XIII_Chapter-463_Enterprise-Procurement-and-Source-to-Pay-Strategic-Sourcing-RFQ-RFP-RFI-Supplier-Selection-Purchase-Requisitions-Purchase-Orders-Contracts-Catalogs-Approvals-and-Procurement-Compliance-Traceability-Matrix_v1.0.docx`. Its §§463.7–463.25 describe procurement operations, approvals, sourcing, supplier evaluation, contracts, purchase orders, compliance and commitments. **Source identity/precedence is resolved** by `B01-CH463-SOURCE-CORRECTION-DECISION-001` (Option A, approved 2026-10-12): Volume XIII Chapter 463 — Enterprise Procurement & Source-to-Pay is canonical; the conflicting legacy “Enterprise Event & Message Management” heading is document-control correction debt. The domain source is still marked In Development, so these sections do not, by themselves, establish which generic requirement intends which procurement operation or approve requirement-specific acceptance criteria.
+
+## Requirement-level disposition
+
+| Requirement / SRS | Candidate capability | Procurement-domain evidence to reconcile | Existing code evidence | Exact approved HLD/LLD binding | DATA/API/EVENT specification | Acceptance oracle | Disposition |
+|---|---|---|---|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 | authoritative-records / XX01 | §§463.7–463.8, 463.16, 463.18, 463.21–463.23 | `AuthoritativeRecordService`; create/get/update/delete and expected-version conflict; registry IDs only | OPEN — candidate HLD-463-CAP-01; LLD-02/03 are not approved locators | OPEN — `DATA:authoritative-domain`, `API:capability-resource`, `EVENT:material-lifecycle` are descriptors, not full contracts | OPEN — record types, lifecycle, required fields, uniqueness, history and measurable outcomes need approved source | SOURCE PRECEDENCE RESOLVED; REQUIREMENT-TO-DOMAIN JOIN AND ACCEPTANCE OPEN |
+| REQ-46302 / SRS-FR-2324 | authorization / XX02 | §§463.3, 463.8, 463.14, 463.16, 463.24–463.25 | Deny precedence/default deny; policy implementation is not the approved role matrix | OPEN — candidate HLD-463-CAP-02; LLD-05 not approved locator | OPEN — `DATA:identity-policy`, `API:secured-capability`, `EVENT:authorization-audit` are descriptors | OPEN — actor × role × tenant × resource × action matrix; denied side effects and audit behavior | SOURCE PRECEDENCE RESOLVED; REQUIREMENT-TO-DOMAIN JOIN, POLICY AND ACCEPTANCE OPEN |
+| REQ-46303 / SRS-FR-2325 | business-validation / XX03 | §§463.7–463.8, 463.15–463.16, 463.21–463.25, 463.27 | Registered rules execute; ERROR issues invalidate result | OPEN — candidate HLD-463-CAP-03; LLD-02/06 not approved locators | OPEN — `DATA:domain-rules`, `API:validated-command`, `EVENT:validation-outcome` are descriptors | OPEN — approved rule catalogue, boundary values, error semantics and state invariants | SOURCE PRECEDENCE RESOLVED; REQUIREMENT-TO-DOMAIN JOIN, RULES AND ACCEPTANCE OPEN |
+| REQ-46304 / SRS-FR-2326 | audit-evidence / XX04 | §§463.3, 463.14–463.16, 463.18, 463.22, 463.24 | Append/retrieve/list audit evidence and SHA-256 integrity check | OPEN — candidate HLD-463-CAP-04; LLD-09 not approved locator | OPEN — `DATA:audit-record`, `API:audit-retrieval`, `EVENT:audit-material-event` are descriptors | OPEN — material event coverage, required fields, access, retention, integrity and retrieval oracle | SOURCE PRECEDENCE RESOLVED; REQUIREMENT-TO-DOMAIN JOIN, AUDIT POLICY AND ACCEPTANCE OPEN |
+| REQ-46305 / SRS-FR-2327 | exception-handling / XX05 | §§463.3, 463.8, 463.14–463.16, 463.22–463.25, 463.27 | Idempotency and controlled exception state transitions; no evidence here of scheduler/backoff/escalation delivery | OPEN — candidate HLD-463-CAP-05; LLD-06/07 not approved locators | OPEN — `DATA:workflow-exception`, `API:recovery-command`, `EVENT:exception-lifecycle` are descriptors | OPEN — exception taxonomy, retry limits/backoff, compensation, escalation, terminal states and no-duplicate effects | SOURCE PRECEDENCE RESOLVED; REQUIREMENT-TO-DOMAIN JOIN, RECOVERY POLICY AND ACCEPTANCE OPEN |
+| REQ-46306 / SRS-FR-2328 | governed-reporting / XX06 | §§463.12, 463.15–463.16, 463.24–463.25 | Tenant/report-scoped query, filters and limit | OPEN — candidate HLD-463-CAP-06; LLD-08/09 not approved locators | OPEN — `DATA:derived-reporting`, `API:report-query`, `EVENT:report-refresh` are descriptors | OPEN — approved report catalogue, formulas, source lineage, filters, freshness and expected totals | SOURCE PRECEDENCE RESOLVED; REQUIREMENT-TO-DOMAIN JOIN, REPORT DEFINITIONS AND ACCEPTANCE OPEN |
+
+## How to use this matrix
+
+1. Treat the requirement-register locator and baseline approval as confirmed identity evidence only.
+2. Review the detailed procurement BRD against each generic requirement row. Record an exact domain-source section only when it truly defines that requirement’s intended behavior; otherwise mark `CLARIFICATION_REQUIRED`. Do not infer that every capability pattern maps to a procurement process just because it is plausible.
+3. Replace candidate HLD/LLD references only with exact locators from the designated, approved design register and record the approval/version/reference. Current candidate labels are not approvals.
+4. Expand each DATA/API/EVENT registry descriptor into a versioned contract, or record an explicitly approved N/A. Registry IDs and passing code tests are not full contract definitions.
+5. Define measurable positive, negative and boundary oracles from approved sources before authorizing business UAT.
+
+**Gate decision:** SRC-003/G3 remains OPEN / NO-GO. Business UAT remains NOT AUTHORIZED. No baseline requirements or chapter identities were changed; no AWS resources or deployment are involved.
+
+
+## Closure execution queue — reconciled 2026-10-17
+
+This queue translates the existing six-row evidence matrix and D1–D10 decision register into the next actionable evidence requests. It does **not** mark any approval complete.
+
+| Row | Evidence that can be carried forward now | Exact missing closure item | Existing decision dependency | Next verification action |
+|---|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 | Requirement identity; Option A source precedence; observed generic authoritative-record service and version-conflict tests | Approved procurement object/field catalogue, lifecycle/state model, exact approved HLD/LLD pair and DATA/API/EVENT contract or approved N/A | D1, D2, D7, D8, D9 | Reconcile candidate requisition/PO entities to approved source; record exact versioned section/schema/operation/event locators only after approval |
+| REQ-46302 / SRS-FR-2324 | Requirement identity; observed deny precedence/default-deny technical behavior | Approved actor × role × tenant × resource × action matrix, delegation and SoD rules; exact design/contract locators | D1, D3, D4, D7, D8, D9 | Compare implementation behavior against an approved authority matrix; do not treat default-deny tests as proof that the business matrix is approved |
+| REQ-46303 / SRS-FR-2325 | Requirement identity; observed registered-rule execution and ERROR invalidation | Approved validation rule catalogue, requiredness/conditionality, boundary values, stable error semantics and transaction invariants | D1, D2, D5, D7, D8, D9 | Convert source-listed candidate fields into an approved field-level catalogue; leave requiredness/threshold values open until approved |
+| REQ-46304 / SRS-FR-2326 | Requirement identity; observed append/retrieve/list and SHA-256 integrity checks | Approved material-event coverage, mandatory audit fields, access/retention/failure policy and exact contracts | D4, D7, D8, D9 | Map each approved material event to the audit envelope, retention/access rules and a reproducible retrieval oracle |
+| REQ-46305 / SRS-FR-2327 | Requirement identity; observed idempotency and controlled exception state transitions | Approved exception taxonomy, retry/backoff/compensation/escalation policy, terminal-state semantics and exact contracts | D2, D3, D5, D7, D8, D9 | Trace each exception class to approved owner, allowed transitions, retry/recovery behavior and duplicate-effect test |
+| REQ-46306 / SRS-FR-2328 | Requirement identity; observed tenant/report-scoped query, filters and limit | Approved report catalogue, KPI formulas, source lineage, as-of/freshness semantics, reconciliation tolerances and exact contracts | D6, D7, D8, D9 | Bind each report to approved source fields/formula, access scope, freshness target and expected-total oracle |
+
+### Cross-row release conditions
+
+1. **D1–D6:** capture source-backed business decisions in the existing decision register with approval reference, approver/role, effective version/date and controlled evidence locator. A blank field or inferred role is not approval.
+2. **D7:** record exact approved HLD and LLD section/module locators for each row; generic pattern references and candidate labels do not count.
+3. **D8–D9:** record exact approved DATA/API/EVENT contract IDs, versions and source locators, or an explicitly authorized N/A with rationale.
+4. **Acceptance:** create measurable positive, negative and boundary oracles from approved decisions, then tie test results to exact commit/build and archived evidence.
+5. **D10:** only after the preceding evidence is complete, issue the controlled BRD/SRS/HLD/LLD/test baseline and update traceability.
+6. **Gate separation:** green CI and technical simulation are engineering evidence; they do not authorize Business UAT, freeze G9, or issue G10.
+
+**Current disposition unchanged:** D1–D10 OPEN; exact approved HLD/LLD bindings 0/6; six acceptance oracles BLOCKED; Business UAT NOT AUTHORIZED / NOT EXECUTED; G9 NOT FROZEN; G10 NOT ISSUED. No requirements, IDs, baseline counts, UI journeys, or architecture boundaries are changed.
+
+
+## Authoritative locator intake reconciliation — 2026-10-17
+
+Reviewed against the existing Library intake artifacts:
+- `B01_CH463_AUTHORITATIVE_HLD_LLD_SOURCE_INTAKE_v0.1.docx`: explicitly reports 0/6 exact HLD and 0/6 exact LLD locators captured; all six rows HOLD.
+- `B01_CH463_LOCATOR_CAPTURE_AND_PROMOTION_DELTA_v0.1.csv`: records candidate anchors per requirement, but classifies all as **Supporting only**, with exact HLD/LLD locators and HLD/LLD pair **NOT EVIDENCED / NOT VALIDATED**.
+- `B01_CH463_Business_Rule_and_Acceptance_Register_v0.5.xlsx`: confirms the source-listed procurement themes are useful evidence, but approved field/state catalogue, policy thresholds, authority/SoD matrix, audit control, exception policy and KPI formula contract remain absent from reviewed sources.
+
+### Candidate anchors found (do not promote)
+
+| Requirement | Candidate HLD anchor | Candidate LLD anchor | Intake disposition |
+|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | HLD-CAP-001 / HLD-463-CAP-01 | LLD-CMP-008 / LLD-CMP-007 | Supporting only; HOLD |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | HLD-CAP-002 / HLD-463-CAP-02 | LLD-CMP-003 / LLD-CMP-004 / LLD-CMP-005 | Supporting only; HOLD |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | HLD-CAP-003 / HLD-463-CAP-03 | LLD-CMP-007 / LLD-CMP-010 | Supporting only; HOLD |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | HLD-CAP-004 / HLD-463-CAP-04 | LLD-CMP-017 | Supporting only; HOLD |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | HLD-CAP-005 / HLD-463-CAP-05 | LLD-CMP-009 / LLD-CMP-010 | Supporting only; HOLD |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | HLD-CAP-006 / HLD-463-CAP-06 | LLD-CMP-016 / LLD-CMP-014 | Supporting only; HOLD |
+
+### Reconciliation result
+
+This closes the **search/reconciliation task** for the currently reviewed locator-intake artifacts, but does not close D7 or promote design traceability. The existing candidate anchor set is now explicitly visible beside each requirement in this matrix; no exact approved binding is evidenced. D7 can move only when the design authority provides an approved final HLD/LLD source or publishes requirement-specific design content through controlled change, with exact REQ/SRS/TRC links and baseline approval. Missing evidence is not an approved N/A.
+
+**Status:** D7 remains OPEN; exact approved HLD/LLD pairs 0/6; all six rows HOLD. Business UAT remains NOT AUTHORIZED / NOT EXECUTED. No requirement IDs, baseline counts, or architectural boundaries changed.
+
+
+## DATA/API/EVENT source reconciliation — 2026-10-17
+
+Reviewed the existing `B01_CH463_DATA_API_EVENT_APPLICABILITY_MATRIX_v0.1.md` and `SRC-003_CH463_AUTHORITATIVE_DESIGN_EVIDENCE_RESPONSE_TRACKER.csv` on the current branch.
+
+- The applicability matrix confirms platform source packages `EM-DATA-001`, `EM-API-001`, and `EM-EVT-001` exist, but says the exact requirement-level join is open and contract-test evidence is not established.
+- The matrix marks DATA/API/EVENT applicability for each REQ-46301–REQ-46306 as **CLARIFICATION REQUIRED**; generic platform entities, endpoints and event types are candidates only.
+- The response tracker has six requirement rows, but required HLD/LLD locators, pairing, DATA/API/EVENT contract-or-approved-N/A fields, approval authority/reference, effective date, source version and owner fields are blank; response status remains PENDING and verification NOT_VERIFIED for all six rows.
+
+### Row-level next action
+
+For each requirement, retain the generic platform source as supporting evidence only. The accountable design/data/API/event owners must supply the exact source version and locator, declare applicability or explicitly approve N/A with rationale, and provide approval reference/effective date. Do not turn blank fields into inferred contract names or N/A decisions.
+
+| Requirement | DATA/API/EVENT state from existing matrix | Tracker disposition |
+|---|---|---|
+| REQ-46301 / SRS-FR-2323 | Clarification required: procurement aggregate, lifecycle operations and event producer/consumer binding unverified | Pending / not verified |
+| REQ-46302 / SRS-FR-2324 | Clarification required: procurement actor/resource/tenant authorization join and security-event applicability unverified | Pending / not verified |
+| REQ-46303 / SRS-FR-2325 | Clarification required: approved procurement rule model, validation operation and rule-published event applicability unverified | Pending / not verified |
+| REQ-46304 / SRS-FR-2326 | Clarification required: audit field schema, procurement audit operation and event payload/scope unverified | Pending / not verified |
+| REQ-46305 / SRS-FR-2327 | Clarification required: exception/recovery schema, command and lifecycle event binding unverified | Pending / not verified |
+| REQ-46306 / SRS-FR-2328 | Clarification required: reporting read model, query contract and refresh event applicability unverified | Pending / not verified |
+
+**Disposition unchanged:** D8–D9 remain OPEN. No DATA/API/EVENT contract is VERIFIED, and no approved N/A is evidenced. Exact approved HLD/LLD locators remain 0/6; Business UAT remains NOT AUTHORIZED / NOT EXECUTED.
+
+
+## Source-to-acceptance-oracle reconciliation — 2026-10-17
+
+This reconciliation uses the existing `B01_CH463_SOURCE_VERIFIED_ACCEPTANCE_CRITERIA_INTAKE.md`, `B01_CH463_BRD_ACCEPTANCE_SOURCE_AUDIT_v0.1.md`, and `B01_CH463_CANDIDATE_ACCEPTANCE_ORACLE_PACK.md`. It carries forward source-supported domain themes rather than sending already-documented source facts back for confirmation. The procurement BRD remains **In Development**; these are proposed mappings, not approved row-level traceability or executable UAT cases.
+
+| Requirement / SRS / TRC | Source-supported criterion/check candidates | Candidate positive oracle | Candidate negative/boundary oracle | Unresolved measurable parameters / gate |
+|---|---|---|---|---|
+| REQ-46301 / SRS-FR-2323 / TRC-46301 | §463.46 criteria 3–5; §463.47 checks 3, 6–9, 11: retain evaluation/award rationale, link approved terms, maintain transaction lineage | For an owner-selected procurement object and approved transition, verify persisted state plus retrievable lifecycle/history and linked evidence | For an owner-approved invalid transition or duplicate replay, verify no unauthorized state mutation or duplicate business effect | Canonical object/system of record, states/transitions, required fields, uniqueness/idempotency and history retention; D1/D2/D7/D8/D9 |
+| REQ-46302 / SRS-FR-2324 / TRC-46302 | §§463.3, 463.8; §463.46 criterion 2; §463.47 checks 8, 12: delegated authority, approval controls, SoD/security | Authorized actor performs an explicitly approved procurement action; decision and approval evidence are retrievable | Unauthorized/conflicting-duty actor is denied and protected business state remains unchanged | Role × action × tenant/entity matrix, delegation/substitution, thresholds, denial semantics; D3/D7/D8/D9 |
+| REQ-46303 / SRS-FR-2325 / TRC-46303 | §§463.7–463.8; §463.47 checks 8, 10: budget/category/policy, threshold/exception/maverick controls | Transaction satisfying approved mandatory conditions is accepted and reaches the specified state | Violation of an approved rule and approved boundary values produce the specified rejection/exception without mutation | Rule catalogue, required fields, currency/entity/category semantics, thresholds/tolerances, validation order and override; D1/D2/D5/D7/D8/D9 |
+| REQ-46304 / SRS-FR-2326 / TRC-46304 | §463.46 criteria 1, 3; §463.47 checks 5, 6, 12: auditable evaluation, award rationale and security evidence | Approved evaluation/award/approval evidence is recorded and retrievable with actor/time/version/correlation evidence required by the approved audit contract | Missing required evidence or unauthorized alteration is rejected/controlled; retained evidence remains consistent with the approved integrity policy | Material-event catalogue, mandatory audit fields, immutability/correction, retention/access and retrieval SLA; D4/D7/D8/D9 |
+| REQ-46305 / SRS-FR-2327 / TRC-46305 | §§463.7–463.8; §463.47 checks 4, 10, 13, 14: controlled exceptions, deadline/confidentiality, AI human review, continuity | Approved exception follows its authorized disposition; retry/recovery preserves transaction lineage | Unauthorized exception and repeated request after simulated failure follow approved denial/compensation and cause no duplicate award/order | Exception taxonomy, approval/justification, retry/backoff, idempotency, compensation, terminal state/escalation; D2/D3/D5/D7/D8/D9 |
+| REQ-46306 / SRS-FR-2328 / TRC-46306 | §463.46 criteria 1, 3, 5; §463.47 checks 1, 5, 10, 11: auditable evaluation, compliance, transaction lineage and financial reporting | Report output over an approved seeded dataset reconciles to authoritative procurement/receiving/AP/finance records | Unauthorized report access is denied; stale/inconsistent data is handled according to the approved freshness/reconciliation rule | Report catalogue, KPI formulas, source lineage, filters/access, as-of/freshness SLA and reconciliation tolerance; D6/D7/D8/D9 |
+
+### What this reconciliation establishes
+
+- Source-supported candidate themes are now aligned beside all six retained REQ/SRS/TRC IDs.
+- The source describes an **advisory-only AI boundary**: AI cannot independently award suppliers or commit enterprise funds; human approval is required for supplier selection, award, contract commitment and material commercial decisions (§§463.33, 463.44–463.47). Treat this as a source-stated domain constraint, while still verifying the controlled final baseline and implementation binding.
+- The source names reporting/KPI areas but does not itself establish every formula, threshold, tolerance, freshness SLA, or row-level mapping.
+- The matrix does not convert candidate scenarios into executable tests and does not change the existing baseline approval.
+
+### Remaining gate
+
+The source-to-oracle reconciliation task is complete as a **proposal**. Promotion still requires controlled source status/approval, per-row mapping disposition, measurable owner-approved values, exact HLD/LLD pairs and approved DATA/API/EVENT contracts or separately authorized N/A. D1–D10 remain OPEN; exact approved HLD/LLD pairs 0/6; DATA/API/EVENT verified 0/18; all six oracles remain non-executable; Business UAT remains NOT AUTHORIZED / NOT EXECUTED. Keep `EPER_UAT_API_ENABLED=false`; no chargeable AWS resources.

@@ -1,0 +1,9 @@
+stateDiagram-v2
+[*] --> Requested
+Requested --> Approved
+Approved --> Provisioning
+Provisioning --> Active
+Active --> Suspended
+Suspended --> Active
+Active --> Archived
+Archived --> Decommissioned
