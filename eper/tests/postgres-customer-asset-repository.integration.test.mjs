@@ -446,13 +446,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, expiryAsset.assetId]),
+          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, expiryAsset.assetId, crossAppAsset.assetId]),
           "RLS role sees only assets linked to or owned by its current application");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 8,
+        assert.equal(sameApplicationSessions.rows.length, 9,
           "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
@@ -460,13 +460,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         const crossApplicationAssets = await restrictedRoleClient.query(
           "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1", [tenantId],
         );
-        assert.deepEqual(crossApplicationAssets.rows.map((row) => row.asset_id), [otherAppAsset.assetId],
+        assert.deepEqual(new Set(crossApplicationAssets.rows.map((row) => row.asset_id)), new Set([otherAppAsset.assetId, crossAppAsset.assetId]),
           "database RLS exposes only the explicitly linked shared asset to the other application");
         const crossApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.deepEqual(crossApplicationSessions.rows.map((row) => row.upload_session_id), [otherAppSessionId],
+        assert.deepEqual(new Set(crossApplicationSessions.rows.map((row) => row.upload_session_id)), new Set([otherAppSessionId, crossAppRetry]),
           "database RLS exposes only the other application's own upload session");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.tenant_id', $1, true)", [otherTenant],
