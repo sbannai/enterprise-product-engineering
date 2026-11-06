@@ -32,7 +32,7 @@ test("customer upload reservation requires identity, assignment, provider and du
         assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-001"]);
         return { originalFileName: "proposal.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: 8192 };
       },
-      async reserveUpload(input) { events.push({ type: "reservation", input }); return input.uploadSessionId; },
+      async reserveUpload(input) { events.push({ type: "reservation", input }); return { disposition: "created", uploadSessionId: "upload-session-route-001", state: "reserved" }; },
       async finalizeUploadGrant(input) { events.push({ type: "finalization", input }); },
       async failUploadReservation(input) { events.push({ type: "failure", input }); },
     },
@@ -446,7 +446,7 @@ test("durable OIDC asset upload completes metadata, grant and verification only 
         assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-oidc-002"]);
         return { originalFileName: "proposal.docx", mimeType, sizeBytes: 4096 };
       },
-      async reserveUpload(input) { events.push("reservation"); uploadSessionId = input.uploadSessionId; return uploadSessionId; },
+      async reserveUpload(input) { events.push("reservation"); uploadSessionId = "upload-session-oidc-002"; return { disposition: "created", uploadSessionId, state: "reserved" }; },
       async finalizeUploadGrant(input) { events.push("grant-finalized"); assert.equal(input.providerUploadReference, "private-provider-reference"); },
       async failUploadReservation() { events.push("reservation-failed"); },
       async getUploadSessionForVerification(tenantId, applicationId, sessionId) {

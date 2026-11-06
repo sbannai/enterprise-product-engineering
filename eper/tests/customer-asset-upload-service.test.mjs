@@ -13,13 +13,14 @@ const input = {
 test("upload start persists provider reference before returning capability", async () => {
   const order = [];
   let stored;
+  const sessionId = "upload-session-00000001";
   const result = await startCustomerAssetUpload(input, {
     now: () => 1_700_000_000_000,
     issueGrant: async (request, requestId) => {
       order.push("provider");
       assert.equal(request.assetId, input.assetId);
       assert.equal(request.sizeBytes, input.expectedSizeBytes);
-      assert.equal(requestId, input.correlationId);
+      assert.equal(requestId, sessionId);
       return {
         providerUploadReference: "opaque-provider-object-001",
         url: "https://storage.example.test/upload?signature=secret",
@@ -32,20 +33,22 @@ test("upload start persists provider reference before returning capability", asy
       reserveUpload: async (reservation) => {
         order.push("reserve");
         stored = reservation;
-        assert.equal(reservation.uploadSessionId.length, 36);
-        return reservation.uploadSessionId;
+        assert.match(reservation.requestFingerprint, /^[a-f0-9]{64}$/);
+        assert.equal(reservation.requestFileName, input.fileName);
+        assert.equal(reservation.requestMimeType, input.mimeType);
+        return { disposition: "created", uploadSessionId: sessionId, state: "reserved" };
       },
       finalizeUploadGrant: async (finalization) => {
         order.push("finalize");
         assert.equal(finalization.providerUploadReference, "opaque-provider-object-001");
-        assert.equal(finalization.uploadSessionId, stored.uploadSessionId);
+        assert.equal(finalization.uploadSessionId, sessionId);
       },
       failUploadReservation: async () => { order.push("fail"); },
     },
   });
   assert.deepEqual(order, ["reserve", "provider", "finalize"]);
   assert.equal(result.method, "PUT");
-  assert.equal(result.uploadSessionId, stored.uploadSessionId);
+  assert.equal(result.uploadSessionId, sessionId);
   assert.equal(Object.hasOwn(result, "providerUploadReference"), false);
 });
 
@@ -73,7 +76,7 @@ test("upload start never returns a capability if grant finalization fails", asyn
       expiresAt: new Date(Date.now() + 30_000).toISOString(), headers: {},
     }),
     repository: {
-      reserveUpload: async (reservation) => reservation.uploadSessionId,
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-test-0001", state: "reserved" }),
       finalizeUploadGrant: async () => { throw new Error("audit transaction failed"); },
       failUploadReservation: async () => {},
     },
@@ -85,7 +88,7 @@ test("upload start fails closed when provider cannot issue a grant", async () =>
   const result = await startCustomerAssetUpload(input, {
     issueGrant: async () => null,
     repository: {
-      reserveUpload: async (reservation) => { reserved = true; return reservation.uploadSessionId; },
+      reserveUpload: async () => { reserved = true; return { disposition: "created", uploadSessionId: "upload-session-test-0002", state: "reserved" }; },
       finalizeUploadGrant: async () => {},
       failUploadReservation: async () => {},
     },
@@ -103,7 +106,7 @@ test("upload start rejects invalid size, idempotency and excessive expiry", asyn
       expiresAt: new Date(1_700_001_000_000).toISOString(), headers: {},
     }),
     repository: {
-      reserveUpload: async (reservation) => reservation.uploadSessionId,
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-test-0003", state: "reserved" }),
       finalizeUploadGrant: async () => {},
       failUploadReservation: async () => {},
     },
@@ -122,11 +125,11 @@ test("upload start never returns a fresh grant for an existing idempotency sessi
       expiresAt: new Date(Date.now() + 30_000).toISOString(), headers: {},
     }),
     repository: {
-      reserveUpload: async () => "prior-session-id-00000000",
+      reserveUpload: async () => ({ disposition: "existing", uploadSessionId: "prior-session-id-00000000", state: "reserved" }),
       finalizeUploadGrant: async () => {},
       failUploadReservation: async () => {},
     },
-  }), /IDEMPOTENCY_REPLAY_CONFLICT/);
+  }), /UPLOAD_RECOVERY_PENDING/);
 });
 
 
@@ -136,8 +139,8 @@ test("concurrent retries reserve one session and only the winning request mints 
   let finalized = 0;
   const repository = {
     reserveUpload: async (reservation) => {
-      if (!claimed) { claimed = reservation.uploadSessionId; return claimed; }
-      return claimed;
+      if (!claimed) { claimed = "upload-session-concurrent-0001"; return { disposition: "created", uploadSessionId: claimed, state: "reserved" }; }
+      return { disposition: "existing", uploadSessionId: claimed, state: "reserved" };
     },
     finalizeUploadGrant: async () => { finalized += 1; },
     failUploadReservation: async () => {},
@@ -167,7 +170,7 @@ test("provider failure marks a durable reservation failed", async () => {
   let failedReason;
   const result = await startCustomerAssetUpload(input, {
     repository: {
-      reserveUpload: async (reservation) => reservation.uploadSessionId,
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-provider-failure-01", state: "reserved" }),
       finalizeUploadGrant: async () => {},
       failUploadReservation: async (failure) => { failedReason = failure.reason; },
     },

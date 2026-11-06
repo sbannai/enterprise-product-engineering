@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { StorageUploadRequest } from "./storage-upload-adapter.js";
@@ -53,7 +53,18 @@ export async function startCustomerAssetUpload(
     throw new Error("EPER_CUSTOMER_ASSET_IDEMPOTENCY_KEY_INVALID");
   }
 
-  const uploadSessionId = randomUUID();
+  const normalizedFileName = input.fileName.normalize("NFC").trim();
+  const normalizedMimeType = input.mimeType.trim().toLowerCase();
+  if (!normalizedFileName || normalizedFileName.length > 255 ||
+      !normalizedMimeType || normalizedMimeType.length > 128) {
+    throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_METADATA_INVALID");
+  }
+  const providerPolicy = "direct-upload-v1";
+  const requestFingerprint = createHash("sha256").update(JSON.stringify({
+    tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+    assetId: input.assetId, expectedSizeBytes: input.expectedSizeBytes,
+    fileName: normalizedFileName, mimeType: normalizedMimeType, providerPolicy,
+  })).digest("hex");
   const reservation = {
     tenantId: input.tenantId,
     applicationId: input.applicationId,
@@ -63,14 +74,18 @@ export async function startCustomerAssetUpload(
     assetId: input.assetId,
     expectedSizeBytes: input.expectedSizeBytes,
     idempotencyKey: input.idempotencyKey,
-    uploadSessionId,
+    requestFingerprint,
+    requestFileName: normalizedFileName,
+    requestMimeType: normalizedMimeType,
   };
 
-  // Claim the idempotency key durably before asking a provider to mint a
-  // capability. The repository serializes concurrent claims in PostgreSQL.
-  const reservedSessionId = await dependencies.repository.reserveUpload(reservation);
-  if (reservedSessionId !== uploadSessionId) {
-    throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_REPLAY_CONFLICT");
+  // The durable tenant/key lock returns the canonical session. Matching
+  // existing sessions are not sent to the provider until a recovery-capable
+  // provider contract can prove idempotent lookup/renewal.
+  const reservationResult = await dependencies.repository.reserveUpload(reservation);
+  const uploadSessionId = reservationResult.uploadSessionId;
+  if (reservationResult.disposition === "existing") {
+    throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RECOVERY_PENDING");
   }
 
   const request: StorageUploadRequest = {
@@ -79,14 +94,14 @@ export async function startCustomerAssetUpload(
     applicationId: input.applicationId,
     assetId: input.assetId,
     uploadSessionId,
-    fileName: input.fileName,
-    mimeType: input.mimeType,
+    fileName: normalizedFileName,
+    mimeType: normalizedMimeType,
     sizeBytes: input.expectedSizeBytes,
   };
 
   let grant: Awaited<ReturnType<CustomerAssetUploadStartDependencies["issueGrant"]>>;
   try {
-    grant = await dependencies.issueGrant(request, input.correlationId);
+    grant = await dependencies.issueGrant(request, uploadSessionId);
   } catch (error) {
     await dependencies.repository.failUploadReservation({
       tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,

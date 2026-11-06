@@ -10,6 +10,12 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-encrypted-provider-payload-store.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-repository.integration.test.mjs"
+      - "eper/tests/customer-asset-repository-migration.test.mjs"
+      - "eper/tests/customer-asset-repository-readiness.test.mjs"
+      - "eper/tests/customer-asset-upload-service.test.mjs"
+      - "eper/tests/postgres-migration-runner.integration.test.mjs"
+      - "eper/packages/assets/**"
       - "eper/tests/provider-operation-worker.test.mjs"
       - "eper/tests/provider-operation-worker-host.test.mjs"
       - "eper/tests/postgres-provider-queue-wake-source.test.mjs"
@@ -28,6 +34,12 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-encrypted-provider-payload-store.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-repository.integration.test.mjs"
+      - "eper/tests/customer-asset-repository-migration.test.mjs"
+      - "eper/tests/customer-asset-repository-readiness.test.mjs"
+      - "eper/tests/customer-asset-upload-service.test.mjs"
+      - "eper/tests/postgres-migration-runner.integration.test.mjs"
+      - "eper/packages/assets/**"
       - "eper/tests/provider-operation-worker.test.mjs"
       - "eper/tests/provider-operation-worker-host.test.mjs"
       - "eper/tests/postgres-provider-queue-wake-source.test.mjs"
@@ -77,6 +89,13 @@ jobs:
         run: npm run migrate:payments
       - name: Apply provider and audit migrations, including payload references and leases
         run: npm run migrate:audit
+      - name: Verify customer asset migration contract and PostgreSQL repository lifecycle
+        run: |
+          node --test tests/customer-asset-repository-migration.test.mjs
+          node --test tests/customer-asset-repository-readiness.test.mjs
+          node --test tests/customer-asset-upload-service.test.mjs
+          node --test tests/postgres-migration-runner.integration.test.mjs
+          node --test tests/postgres-customer-asset-repository.integration.test.mjs
       - name: Exercise durable provider-operation concurrency, fencing and recovery
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
       - name: Exercise bounded provider worker authorization, routing and outcome handling
