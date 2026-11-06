@@ -70,6 +70,7 @@ test("upload reservation migration supports provider-free reservations and a gua
 test("upload retry migration preserves terminal history and scopes active sessions and idempotency by application", () => {
   assert.ok(uploadRetryMigration.includes("DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessions_tenant_id_asset_id_key"));
   assert.ok(uploadRetryMigration.includes("DROP CONSTRAINT IF EXISTS eper_customer_asset_upload_sessions_tenant_id_idempotency_key_key"));
+  assert.ok(uploadRetryMigration.includes("DROP INDEX IF EXISTS eper_customer_asset_upload_reservations_idx"));
   assert.ok(uploadRetryMigration.includes("(tenant_id, application_id, idempotency_key)"));
   assert.ok(uploadRetryMigration.includes("(tenant_id, asset_id)"));
   assert.ok(uploadRetryMigration.includes("WHERE upload_status IN ('reserved', 'initiated', 'in_progress')"));
