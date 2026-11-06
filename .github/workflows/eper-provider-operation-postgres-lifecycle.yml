@@ -9,7 +9,9 @@ on:
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-runtime-rls.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-replay.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-runtime-rls.integration.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -68,5 +70,7 @@ jobs:
         run: npm run migrate:audit
       - name: Prove customer asset migration 021 is replay-safe on PostgreSQL 16
         run: node --test tests/postgres-customer-asset-migration-replay.integration.test.mjs
+      - name: Prove customer asset tenant and application isolation under runtime role
+        run: node --test tests/postgres-customer-asset-runtime-rls.integration.test.mjs
       - name: Exercise durable provider-operation concurrency, fencing and recovery
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
