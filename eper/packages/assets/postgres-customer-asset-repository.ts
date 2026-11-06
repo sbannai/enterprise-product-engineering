@@ -666,38 +666,70 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const exhausted = await client.query<{
+      // Candidate discovery is deliberately unlocked. Each candidate is then
+      // locked in the repository-wide order: session -> asset -> scan job.
+      // SKIP LOCKED at every stage lets a concurrent finalizer/recovery pass
+      // without creating a job/asset lock cycle.
+      const candidates = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
       }>(
-        `WITH candidates AS (
-           SELECT tenant_id, application_id, upload_session_id
-             FROM eper_customer_asset_scan_jobs
-            WHERE tenant_id = $1 AND application_id = $2
-              AND state = 'leased' AND lease_expires_at <= now()
-              AND attempt_count >= max_attempts
-            ORDER BY lease_expires_at, upload_session_id
-            FOR UPDATE SKIP LOCKED
-            LIMIT $3
-         )
-         UPDATE eper_customer_asset_scan_jobs j
-            SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
-                last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = now()
-           FROM candidates c
-          WHERE j.tenant_id = c.tenant_id
-            AND j.application_id = c.application_id
-            AND j.upload_session_id = c.upload_session_id
-          RETURNING j.upload_session_id, j.asset_id, j.correlation_id`,
+        `SELECT upload_session_id, asset_id, correlation_id
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2
+            AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+            AND attempt_count >= max_attempts
+          ORDER BY lease_expires_at, upload_session_id
+          LIMIT $3`,
         [input.tenantId, input.applicationId, limit],
       );
-      for (const job of exhausted.rows) {
+      let recovered = 0;
+      for (const candidate of candidates.rows) {
+        const session = await client.query<{ asset_id: string; upload_status: string }>(
+          `SELECT asset_id, upload_status
+             FROM eper_customer_asset_upload_sessions
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (!session.rows[0] || session.rows[0].upload_status !== "completed"
+          || session.rows[0].asset_id !== candidate.asset_id) continue;
+
+        const asset = await client.query<{ upload_status: string }>(
+          `SELECT upload_status FROM eper_customer_assets
+            WHERE tenant_id = $1 AND asset_id = $2
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, candidate.asset_id],
+        );
+        if (!asset.rows[0] || asset.rows[0].upload_status !== "scanning") continue;
+
+        const job = await client.query<{ correlation_id: string }>(
+          `SELECT correlation_id
+             FROM eper_customer_asset_scan_jobs
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+              AND attempt_count >= max_attempts
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (!job.rows[0]) continue;
+
+        const deadLetter = await client.query(
+          `UPDATE eper_customer_asset_scan_jobs
+              SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
+                  last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = clock_timestamp()
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+              AND attempt_count >= max_attempts`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (deadLetter.rowCount !== 1) continue;
         const quarantined = await client.query(
           `UPDATE eper_customer_assets
               SET upload_status = 'failed', scan_status = 'error',
                   lifecycle_status = 'quarantined', updated_by = $3,
-                  updated_at = now(), version = version + 1
-            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
-            RETURNING asset_id`,
-          [input.tenantId, job.asset_id, input.scannerServiceId],
+                  updated_at = clock_timestamp(), version = version + 1
+            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'`,
+          [input.tenantId, candidate.asset_id, input.scannerServiceId],
         );
         if (quarantined.rowCount !== 1) {
           throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
@@ -707,14 +739,15 @@ export class PostgresCustomerAssetRepository {
           actorType: "service", actorId: input.scannerServiceId,
           action: "customer.asset.scan.exhausted", outcome: "failure",
           reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
-          resourceId: job.asset_id, correlationId: job.correlation_id, source: "job",
+          resourceId: candidate.asset_id, correlationId: job.rows[0].correlation_id, source: "job",
           operationName: "independent customer asset scan recovery",
-          payload: { assetId: job.asset_id, uploadSessionId: job.upload_session_id,
+          payload: { assetId: candidate.asset_id, uploadSessionId: candidate.upload_session_id,
             scanStatus: "error", resultingAssetStatus: "failed" },
         });
+        recovered += 1;
       }
       await client.query("COMMIT");
-      return exhausted.rows.length;
+      return recovered;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
@@ -734,49 +767,16 @@ export class PostgresCustomerAssetRepository {
     const leaseMs = input.leaseMs ?? 60_000;
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("EPER_CUSTOMER_ASSET_SCAN_CLAIM_LIMIT_INVALID");
     if (!Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_INVALID");
+    // Finalize exhausted leases through the same canonical session/asset/job
+    // lock order used by the independent recovery worker.
+    await this.recoverExhaustedScanJobs({
+      tenantId: input.tenantId, applicationId: input.applicationId,
+      scannerServiceId: input.scannerServiceId, environment: input.environment, limit,
+    });
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const exhausted = await client.query<{
-        upload_session_id: string; asset_id: string; correlation_id: string;
-      }>(
-        `UPDATE eper_customer_asset_scan_jobs
-            SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
-                last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = now()
-          WHERE tenant_id = $1 AND application_id = $2
-            AND state = 'leased' AND lease_expires_at <= now()
-            AND attempt_count >= max_attempts
-          RETURNING upload_session_id, asset_id, correlation_id`,
-        [input.tenantId, input.applicationId],
-      );
-      // An exhausted lease may have expired after the worker crashed before
-      // finalization. Close the asset lifecycle and append its audit event in
-      // this same transaction; never leave a scanning asset behind a dead letter.
-      for (const job of exhausted.rows) {
-        const failed = await client.query(
-          `UPDATE eper_customer_assets
-              SET upload_status = 'failed', scan_status = 'error',
-                  lifecycle_status = 'quarantined', updated_by = $3,
-                  updated_at = now(), version = version + 1
-            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
-            RETURNING asset_id`,
-          [input.tenantId, job.asset_id, input.scannerServiceId],
-        );
-        if (failed.rowCount !== 1) {
-          throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
-        }
-        await appendAuditEventInTransaction(client as AuditSqlClient, {
-          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
-          actorType: "service", actorId: input.scannerServiceId,
-          action: "customer.asset.scan.exhausted", outcome: "failure",
-          reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
-          resourceId: job.asset_id, correlationId: job.correlation_id, source: "job",
-          operationName: "customer asset scan lease recovery",
-          payload: { assetId: job.asset_id, uploadSessionId: job.upload_session_id,
-            scanStatus: "error", resultingAssetStatus: "failed" },
-        });
-      }
       const claimed = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
         attempt_count: number; lease_expires_at: string | Date;
@@ -927,23 +927,47 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const locked = await client.query<{
-        asset_id: string; upload_status: string; scan_status: string;
-        lifecycle_status: string; session_status: string;
-        job_state: string; lease_owner: string | null; lease_active: boolean;
-      }>(
-        `SELECT a.asset_id, a.upload_status, a.scan_status, a.lifecycle_status,
-          s.upload_status AS session_status, j.state AS job_state, j.lease_owner,
-          (j.lease_expires_at > now()) AS lease_active
-         FROM eper_customer_asset_upload_sessions s
-         JOIN eper_customer_assets a
-           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         JOIN eper_customer_asset_scan_jobs j
-           ON j.tenant_id = s.tenant_id AND j.upload_session_id = s.upload_session_id
-         WHERE s.tenant_id = $1 AND s.application_id = $2 AND s.upload_session_id = $3
-         FOR UPDATE OF s, a, j`,
+      // All lifecycle writers acquire row locks in this order:
+      // upload session -> asset -> scan job. Do not replace with a multi-table
+      // FOR UPDATE query; PostgreSQL may acquire joined-row locks in a plan-
+      // dependent order and deadlock with recovery.
+      const session = await client.query<{ asset_id: string; upload_status: string }>(
+        `SELECT asset_id, upload_status
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+          FOR UPDATE`,
         [input.tenantId, input.applicationId, input.uploadSessionId],
       );
+      const sessionRow = session.rows[0];
+      if (!sessionRow) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const asset = await client.query<{
+        asset_id: string; upload_status: string; scan_status: string; lifecycle_status: string;
+      }>(
+        `SELECT asset_id, upload_status, scan_status, lifecycle_status
+           FROM eper_customer_assets
+          WHERE tenant_id = $1 AND asset_id = $2
+          FOR UPDATE`,
+        [input.tenantId, sessionRow.asset_id],
+      );
+      const assetRow = asset.rows[0];
+      if (!assetRow) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
+      const job = await client.query<{
+        state: string; lease_owner: string | null; lease_active: boolean;
+      }>(
+        `SELECT state, lease_owner, (lease_expires_at > clock_timestamp()) AS lease_active
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+          FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
+      );
+      const jobRow = job.rows[0];
+      if (!jobRow) throw new Error("EPER_CUSTOMER_ASSET_SCAN_JOB_NOT_FOUND");
+      const current = {
+        asset_id: assetRow.asset_id, upload_status: assetRow.upload_status,
+        scan_status: assetRow.scan_status, lifecycle_status: assetRow.lifecycle_status,
+        session_status: sessionRow.upload_status, job_state: jobRow.state,
+        lease_owner: jobRow.lease_owner, lease_active: jobRow.lease_active,
+      };
       const current = locked.rows[0];
       if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
       if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
