@@ -488,6 +488,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(crossTenantExpiry.rows.length, 0,
           "the tenant-bound expiry routine cannot return another tenant's sessions");
+        await restrictedRoleClient.query("SAVEPOINT deny_expiry_tenant_switch");
         await assert.rejects(
           restrictedRoleClient.query(
             "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
@@ -496,6 +497,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           /TENANT_CONTEXT_MISMATCH/i,
           "the function cannot switch away from the caller's bound tenant",
         );
+        await restrictedRoleClient.query("ROLLBACK TO SAVEPOINT deny_expiry_tenant_switch");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
           [tenantId, otherApplication],
