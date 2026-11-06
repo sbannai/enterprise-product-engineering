@@ -45,7 +45,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /value.identityFingerprint!==identityFingerprint/, "retry state from another tenant/customer identity must be discarded");
     assert.match(html, /identityFingerprint:pendingCustomerAssetIdentityFingerprint/, "retry state must persist its non-secret verified identity fingerprint");
     assert.match(html, /const currentSession=await api\("\/customer\/session"\)/, "upload retry must revalidate the current server session before replay");
-    assert.match(html, /try\\{\\s*const currentSession=await api/, "session preflight failures must be handled by the upload error boundary");
+    assert.match(html, /try\{\s*const currentSession=await api/, "session preflight failures must be handled by the upload error boundary");
     assert.match(html, /currentIdentityFingerprint!==verifiedCustomerIdentityFingerprint/, "a changed customer session must clear the pending retry");
     assert.match(html, /const identity=\{tenantId:session.tenantId,actorId:session.actorId,roleKey:session.roleKey\}/, "identity fingerprint must use server-derived tenant, actor and role values");
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
