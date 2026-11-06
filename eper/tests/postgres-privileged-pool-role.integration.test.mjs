@@ -24,8 +24,8 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
       FROM pg_roles
       WHERE rolname = ANY($1::text[])
-    `, [["eper_platform_admin_access", "eper_provider_catalogue_access"]]);
-    assert.equal(roles.rows.length, 2);
+    `, [["eper_platform_admin_access", "eper_provider_catalogue_access", "eper_customer_asset_upload_expiry_worker_access"]]);
+    assert.equal(roles.rows.length, 3);
     for (const role of roles.rows) {
       assert.equal(role.rolcanlogin, false, role.rolname + " must be a NOLOGIN group role");
       assert.equal(role.rolsuper, false, role.rolname + " must not be superuser");
@@ -58,7 +58,21 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
         has_table_privilege('eper_platform_admin_access', 'public.eper_audit_events', 'UPDATE') AS platform_audit_update,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_audit_events', 'INSERT') AS provider_audit_insert,
         has_column_privilege('eper_provider_catalogue_access', 'public.eper_audit_chain_head', 'last_event_hash', 'UPDATE') AS provider_chain_head_update,
-        has_column_privilege('eper_provider_catalogue_access', 'public.eper_audit_chain_head', 'singleton', 'UPDATE') AS provider_chain_singleton_update
+        has_column_privilege('eper_provider_catalogue_access', 'public.eper_audit_chain_head', 'singleton', 'UPDATE') AS provider_chain_singleton_update,
+        has_function_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_expire_customer_asset_upload_sessions(character varying, integer)', 'EXECUTE') AS expiry_function_execute,
+        has_function_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_asset_upload_expiry_queue_age_ms(character varying)', 'EXECUTE') AS expiry_queue_age_execute,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_asset_upload_sessions', 'SELECT') AS expiry_session_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_asset_upload_sessions', 'UPDATE') AS expiry_session_update,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_assets', 'SELECT') AS expiry_asset_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_customer_asset_scan_jobs', 'SELECT') AS expiry_scan_job_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_payment_orders', 'SELECT') AS expiry_payment_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_provider_payloads', 'SELECT') AS expiry_provider_payload_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'INSERT') AS expiry_audit_insert,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'SELECT') AS expiry_audit_select,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'UPDATE') AS expiry_audit_update,
+        has_table_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_events', 'DELETE') AS expiry_audit_delete,
+        has_column_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_chain_head', 'last_event_hash', 'UPDATE') AS expiry_chain_hash_update,
+        has_column_privilege('eper_customer_asset_upload_expiry_worker_access', 'public.eper_audit_chain_head', 'singleton', 'UPDATE') AS expiry_chain_singleton_update
     `);
     const g = grants.rows[0];
     for (const key of [
@@ -72,7 +86,13 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       "platform_permissions_update", "platform_credential_delete", "platform_provider_read",
       "provider_key_update", "provider_definition_delete", "provider_credential_read",
       "platform_audit_update", "provider_chain_singleton_update",
+      "expiry_session_select", "expiry_session_update", "expiry_asset_select",
+      "expiry_scan_job_select", "expiry_payment_select", "expiry_provider_payload_select",
+      "expiry_audit_select", "expiry_audit_update", "expiry_audit_delete", "expiry_chain_singleton_update",
     ]) assert.equal(g[key], false, key);
+    for (const key of [
+      "expiry_function_execute", "expiry_queue_age_execute", "expiry_audit_insert", "expiry_chain_hash_update",
+    ]) assert.equal(g[key], true, key);
 
     const rls = await pool.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
