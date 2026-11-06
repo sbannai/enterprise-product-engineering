@@ -382,9 +382,11 @@ export class PostgresCustomerAssetRepository {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey]);
       const prior = await client.query<{
         upload_session_id: string; asset_id: string; application_id: string; actor_id: string;
-        request_fingerprint: string | null; upload_status: string;
+        request_fingerprint: string | null; request_file_name: string | null;
+        request_mime_type: string | null; expected_size_bytes: number | string; upload_status: string;
       }>(
-        `SELECT upload_session_id, asset_id, application_id, actor_id, request_fingerprint, upload_status
+        `SELECT upload_session_id, asset_id, application_id, actor_id, request_fingerprint,
+                request_file_name, request_mime_type, expected_size_bytes, upload_status
            FROM eper_customer_asset_upload_sessions
           WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
         [input.tenantId, input.idempotencyKey],
@@ -393,7 +395,8 @@ export class PostgresCustomerAssetRepository {
         const row = prior.rows[0];
         if (!row.request_fingerprint || row.request_fingerprint !== input.requestFingerprint ||
             row.asset_id !== input.assetId || row.application_id !== input.applicationId ||
-            row.actor_id !== input.actorId) {
+            row.actor_id !== input.actorId || Number(row.expected_size_bytes) !== input.expectedSizeBytes ||
+            row.request_file_name !== input.requestFileName || row.request_mime_type !== input.requestMimeType) {
           throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
         }
         await client.query("COMMIT");
