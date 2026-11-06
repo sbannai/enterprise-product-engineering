@@ -99,52 +99,26 @@ export async function startCustomerAssetUpload(
     sizeBytes: input.expectedSizeBytes,
   };
 
-  let grant: Awaited<ReturnType<CustomerAssetUploadStartDependencies["issueGrant"]>>;
-  try {
-    grant = await dependencies.issueGrant(request, uploadSessionId);
-  } catch (error) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "provider_error",
-    });
-    throw error;
-  }
-  if (!grant) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "provider_unavailable",
-    });
-    return null;
-  }
+  // A thrown provider call, null response, invalid grant, or failed DB
+  // finalization can all occur after the provider created an object. Until a
+  // typed definitive rejection is available, preserve the durable reservation
+  // as outcome-unknown. Never turn an uncertain side effect into terminal
+  // failure or make a fresh provider object eligible on replay.
+  const grant = await dependencies.issueGrant(request, uploadSessionId);
+  if (!grant) return null;
 
   const expiry = Date.parse(grant.expiresAt);
   const now = (dependencies.now ?? Date.now)();
   if (!Number.isFinite(expiry) || expiry <= now || expiry - now > 15 * 60_000 ||
       !grant.providerUploadReference?.trim() || grant.providerUploadReference.length > 2048) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "invalid_provider_grant",
-    });
     return null;
   }
 
-  try {
-    await dependencies.repository.finalizeUploadGrant({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      providerUploadReference: grant.providerUploadReference, expiresAt: grant.expiresAt,
-    });
-  } catch (error) {
-    await dependencies.repository.failUploadReservation({
-      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
-      environment: input.environment, correlationId: input.correlationId, uploadSessionId,
-      reason: "grant_persistence_failed",
-    });
-    throw error;
-  }
+  await dependencies.repository.finalizeUploadGrant({
+    tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+    environment: input.environment, correlationId: input.correlationId, uploadSessionId,
+    providerUploadReference: grant.providerUploadReference, expiresAt: grant.expiresAt,
+  });
 
   return {
     uploadSessionId,
