@@ -261,7 +261,64 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         tenantId, applicationId: otherApplication, actorId, environment: "uat", correlationId,
         assetId: otherAppAsset.assetId, expectedSizeBytes: 512, idempotencyKey,
       });
+
       assert.ok(otherAppSessionId, "the same idempotency key is independent in another application");
+
+      // A shared asset can be uploaded by Application A and explicitly linked
+      // to Application B. An expired A session must not remain a tenant-wide
+      // active-index blocker merely because B cannot read A's session under RLS.
+      const crossAppAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "customer_shared", displayName: "Cross-app expiry", originalFileName: "shared-expiry.txt",
+        mediaCategory: "document", mimeType: "text/plain", fileExtension: "txt",
+        sizeBytes: 768, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:cross-app-expiry",
+      });
+      assetIds.push(crossAppAsset.assetId);
+      await repository.link({
+        tenantId, applicationId: otherApplication, actorId, environment: "uat", correlationId,
+        idempotencyKey: "asset-cross-app-link-" + randomUUID(),
+        assetId: crossAppAsset.assetId, reason: "cross-app-expiry-test",
+      });
+      const crossAppStaleSession = await repository.reserveUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        assetId: crossAppAsset.assetId, expectedSizeBytes: 768,
+        idempotencyKey: "asset-cross-app-stale-" + randomUUID(),
+      });
+      const crossAppExpireClient = await pool.connect();
+      try {
+        await crossAppExpireClient.query("BEGIN");
+        await crossAppExpireClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        await crossAppExpireClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET expires_at = clock_timestamp() - interval '1 second' WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
+          [tenantId, applicationId, crossAppStaleSession],
+        );
+        await crossAppExpireClient.query("COMMIT");
+      } finally {
+        try { await crossAppExpireClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        crossAppExpireClient.release();
+      }
+      const crossAppExpiryCounts = await Promise.all([
+        repository.expireStaleUploadSessions({
+          tenantId, applicationId: otherApplication, environment: "uat", correlationId, limit: 10,
+        }),
+        repository.expireStaleUploadSessions({
+          tenantId, applicationId: otherApplication, environment: "uat", correlationId, limit: 10,
+        }),
+      ]);
+      assert.equal(crossAppExpiryCounts.reduce((sum, count) => sum + count, 0), 1,
+        "tenant-bound expiry recovers an expired session created by another application exactly once");
+      const crossAppRetry = await repository.reserveUpload({
+        tenantId, applicationId: otherApplication, actorId, environment: "uat", correlationId,
+        assetId: crossAppAsset.assetId, expectedSizeBytes: 768,
+        idempotencyKey: "asset-cross-app-retry-" + randomUUID(),
+      });
+      assert.ok(crossAppRetry,
+        "the linked application can reserve the shared asset after the prior application's session expires");
+
 
       await Promise.all(Array.from({ length: 5 }, () => repository.link({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
@@ -360,7 +417,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND application_id = $3 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.upload.expire', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId, applicationId],
         );
-        assert.equal(audit.rows.length, 22, "five creates, eight reservations, one grant finalization, one failed reservation, two expiries, one application link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 26, "six creates, nine reservations, one grant finalization, one failed reservation, three expiries, two application links, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -389,13 +446,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, expiryAsset.assetId]),
+          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, expiryAsset.assetId, crossAppAsset.assetId]),
           "RLS role sees only assets linked to or owned by its current application");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 8,
+        assert.equal(sameApplicationSessions.rows.length, 9,
           "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
@@ -403,13 +460,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         const crossApplicationAssets = await restrictedRoleClient.query(
           "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1", [tenantId],
         );
-        assert.deepEqual(crossApplicationAssets.rows.map((row) => row.asset_id), [otherAppAsset.assetId],
+        assert.deepEqual(new Set(crossApplicationAssets.rows.map((row) => row.asset_id)), new Set([otherAppAsset.assetId, crossAppAsset.assetId]),
           "database RLS exposes only the explicitly linked shared asset to the other application");
         const crossApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.deepEqual(crossApplicationSessions.rows.map((row) => row.upload_session_id), [otherAppSessionId],
+        assert.deepEqual(new Set(crossApplicationSessions.rows.map((row) => row.upload_session_id)), new Set([otherAppSessionId, crossAppRetry]),
           "database RLS exposes only the other application's own upload session");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.tenant_id', $1, true)", [otherTenant],
@@ -419,6 +476,60 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(crossTenantAssets.rows.length, 0,
           "database RLS denies cross-tenant reads");
+        const crossTenantSessions = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
+          [tenantId],
+        );
+        assert.equal(crossTenantSessions.rows.length, 0,
+          "database RLS denies cross-tenant upload-session reads");
+        const crossTenantExpiry = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
+          [otherTenant],
+        );
+        assert.equal(crossTenantExpiry.rows.length, 0,
+          "the tenant-bound expiry routine cannot return another tenant's sessions");
+        await restrictedRoleClient.query("SAVEPOINT deny_expiry_tenant_switch");
+        await assert.rejects(
+          restrictedRoleClient.query(
+            "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
+            [tenantId],
+          ),
+          /TENANT_CONTEXT_MISMATCH/i,
+          "the function cannot switch away from the caller's bound tenant",
+        );
+        await restrictedRoleClient.query("ROLLBACK TO SAVEPOINT deny_expiry_tenant_switch");
+        await restrictedRoleClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, otherApplication],
+        );
+        const hiddenCrossApplicationSession = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, crossAppStaleSession],
+        );
+        assert.equal(hiddenCrossApplicationSession.rows.length, 0,
+          "Application B cannot directly read Application A's expired session");
+        const deniedCrossApplicationUpdate = await restrictedRoleClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET updated_at = clock_timestamp() WHERE tenant_id = $1 AND upload_session_id = $2 RETURNING upload_session_id",
+          [tenantId, crossAppStaleSession],
+        );
+        assert.equal(deniedCrossApplicationUpdate.rows.length, 0,
+          "Application B cannot directly update Application A's session");
+        const permittedTenantExpiry = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
+          [tenantId],
+        );
+        assert.equal(permittedTenantExpiry.rows.length, 0,
+          "the customer-asset runtime role may invoke the narrow expiry routine for its bound tenant");
+        await restrictedRoleClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [otherTenant, applicationId],
+        );
+        const deniedCrossTenantSessionUpdate = await restrictedRoleClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'expired' WHERE tenant_id = $1 AND upload_session_id = $2 RETURNING upload_session_id",
+          [tenantId, crossAppStaleSession],
+        );
+        assert.equal(deniedCrossTenantSessionUpdate.rows.length, 0,
+          "database RLS denies cross-tenant upload-session updates");
         await restrictedRoleClient.query("SAVEPOINT deny_cross_tenant_asset_insert");
         await assert.rejects(restrictedRoleClient.query(
           `INSERT INTO eper_customer_assets (

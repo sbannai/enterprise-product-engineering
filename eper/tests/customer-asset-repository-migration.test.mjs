@@ -76,3 +76,22 @@ test("upload retry migration preserves terminal history and scopes active sessio
   assert.ok(uploadRetryMigration.includes("WHERE upload_status IN ('reserved', 'initiated', 'in_progress')"));
   assert.ok(uploadRetryMigration.includes("ON eper_customer_asset_upload_sessions (tenant_id, application_id, expires_at)"));
 });
+
+const crossApplicationExpiryMigration = await readFile(new URL("../packages/audit/migrations/027_customer_asset_cross_application_expiry.sql", import.meta.url), "utf8");
+
+test("cross-application upload expiry uses a tenant-bound definer role without bypassing RLS", () => {
+  assert.ok(crossApplicationExpiryMigration.includes("CREATE ROLE eper_customer_asset_upload_expiry_access"));
+  assert.ok(crossApplicationExpiryMigration.includes("NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"));
+  assert.ok(crossApplicationExpiryMigration.includes("CREATE POLICY customer_asset_upload_expiry_tenant_scope"));
+  assert.ok(crossApplicationExpiryMigration.includes("tenant_id = current_setting('eper.tenant_id', true)"));
+  assert.ok(crossApplicationExpiryMigration.includes("SECURITY DEFINER"));
+  assert.ok(crossApplicationExpiryMigration.includes("set_config('eper.application_id', '', true)"));
+  assert.ok(crossApplicationExpiryMigration.includes("current_setting('eper.tenant_id', true) IS DISTINCT FROM p_tenant_id"));
+  assert.ok(crossApplicationExpiryMigration.includes("EPER_CUSTOMER_ASSET_EXPIRY_TENANT_CONTEXT_MISMATCH"));
+  assert.ok(crossApplicationExpiryMigration.includes("FOR UPDATE SKIP LOCKED"));
+  assert.ok(crossApplicationExpiryMigration.includes("clock_timestamp()"));
+  assert.ok(crossApplicationExpiryMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
+  assert.ok(crossApplicationExpiryMigration.includes("REVOKE ALL ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
+  assert.ok(crossApplicationExpiryMigration.includes("TO eper_customer_asset_access"));
+  assert.doesNotMatch(crossApplicationExpiryMigration, /\bBYPASSRLS\b|DISABLE ROW LEVEL SECURITY/i);
+});
