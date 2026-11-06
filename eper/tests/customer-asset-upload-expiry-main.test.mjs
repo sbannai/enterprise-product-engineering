@@ -43,6 +43,21 @@ test("upload expiry worker rejects non-PostgreSQL persistence before opening a p
   assert.match(result.stderr, /CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_REQUIRES_POSTGRES/);
 });
 
+test("upload expiry worker rejects a backoff cap below its poll interval before opening a pool", () => {
+  const result = runWith({
+    EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_ENABLED: "true",
+    EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
+    EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_SCOPES_JSON: JSON.stringify([
+      { tenantId: "tenant-test", applicationId: "app-test", environment: "sandbox" },
+    ]),
+    EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS: "5000",
+    EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS: "1000",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS_OUT_OF_RANGE/);
+});
+
 const databaseUrl = process.env.EPER_PAYMENT_DATABASE_URL || process.env.DATABASE_URL;
 test("upload expiry worker exposes liveness/readiness and shuts down cleanly on SIGTERM",
   { skip: !databaseUrl },
