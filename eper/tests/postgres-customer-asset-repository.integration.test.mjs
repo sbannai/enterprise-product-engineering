@@ -502,6 +502,18 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
           [tenantId, otherApplication],
         );
+        const hiddenCrossApplicationSession = await restrictedRoleClient.query(
+          "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, crossAppStaleSession],
+        );
+        assert.equal(hiddenCrossApplicationSession.rows.length, 0,
+          "Application B cannot directly read Application A's expired session");
+        const deniedCrossApplicationUpdate = await restrictedRoleClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET updated_at = clock_timestamp() WHERE tenant_id = $1 AND upload_session_id = $2 RETURNING upload_session_id",
+          [tenantId, crossAppStaleSession],
+        );
+        assert.equal(deniedCrossApplicationUpdate.rows.length, 0,
+          "Application B cannot directly update Application A's session");
         const permittedTenantExpiry = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM public.eper_expire_customer_asset_upload_sessions($1, 10)",
           [tenantId],
