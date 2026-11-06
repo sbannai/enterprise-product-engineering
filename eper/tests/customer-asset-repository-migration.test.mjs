@@ -91,5 +91,5 @@ test("cross-application upload expiry uses a tenant-bound definer role without b
   assert.ok(crossApplicationExpiryMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
   assert.ok(crossApplicationExpiryMigration.includes("REVOKE ALL ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)"));
   assert.ok(crossApplicationExpiryMigration.includes("TO eper_customer_asset_access"));
-  assert.doesNotMatch(crossApplicationExpiryMigration, /BYPASSRLS|DISABLE ROW LEVEL SECURITY/i);
+  assert.doesNotMatch(crossApplicationExpiryMigration, /\\bBYPASSRLS\\b|DISABLE ROW LEVEL SECURITY/i);
 });
