@@ -5,21 +5,32 @@ import { runCustomerAssetUploadExpiryWorker } from "../dist/packages/assets/cust
 test("upload expiry worker drains full bounded batches and sleeps only after a partial batch", async () => {
   const controller = new AbortController();
   const calls = [];
+  const batches = [];
   const repository = {
     async expireStaleUploadSessions(input) {
       calls.push(input);
+      input.onMetrics?.({
+        expiredCount: calls.length === 1 ? 2 : 0,
+        queueAgeMs: calls.length === 1 ? 1_250 : 0,
+      });
       return calls.length === 1 ? 2 : 0;
     },
   };
   await runCustomerAssetUploadExpiryWorker({
     repository, tenantId: "tenant-1", applicationId: "app-1", environment: "sandbox",
     correlationId: "expiry-correlation", signal: controller.signal, batchSize: 2,
-    onBatch(count) { if (calls.length === 2 && count === 0) controller.abort(); },
+    onBatch(count, durationMs, queueAgeMs) {
+      batches.push({ count, durationMs, queueAgeMs });
+      if (calls.length === 2 && count === 0) controller.abort();
+    },
   });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].limit, 2);
   assert.equal(calls[0].tenantId, "tenant-1");
   assert.equal(calls[0].applicationId, "app-1");
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].queueAgeMs, 1_250);
+  assert.ok(batches.every((batch) => batch.durationMs >= 0));
 });
 
 test("upload expiry worker reports failures without leaking error details and remains cancellable", async () => {
