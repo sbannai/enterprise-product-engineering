@@ -106,12 +106,13 @@ try {
           scope_index: scopeIndex,
         }));
       },
-      onBatch(expiredCount, durationMs) {
+      onBatch(expiredCount, durationMs, queueAgeMs) {
         console.log(JSON.stringify({
           event: "customer_asset_upload_expiry_batch",
           scope_index: scopeIndex,
           expired_count: expiredCount,
           batch_duration_ms: durationMs,
+          queue_age_ms: queueAgeMs,
           failures,
         }));
       },
