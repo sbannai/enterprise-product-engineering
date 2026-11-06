@@ -243,6 +243,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         assetId: restricted.assetId, expectedSizeBytes: 1024,
         idempotencyKey: "asset-upload-" + randomUUID(),
+        requestFingerprint: "f".repeat(64), requestFileName: "private.png", requestMimeType: "image/png",
         providerUploadReference: "opaque-upload:restricted-session",
         expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       });
