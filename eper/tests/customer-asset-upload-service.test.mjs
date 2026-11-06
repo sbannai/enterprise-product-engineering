@@ -209,3 +209,62 @@ test("grant persistence failure preserves reservation because provider object ma
   }), /database commit outcome uncertain/);
   assert.equal(failedCalls, 0, "database failure must not erase an already-created provider object");
 });
+
+
+test("typed definitive provider rejection is persisted and never returned as a grant", async () => {
+  const calls = [];
+  const result = await startCustomerAssetUpload(input, {
+    issueProviderOutcome: async (request, correlationId) => {
+      assert.equal(request.uploadSessionId, "upload-session-rejected-0001");
+      assert.equal(correlationId, input.correlationId);
+      return { status: "rejected", code: "policy_denied" };
+    },
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-rejected-0001", state: "reserved" }),
+      finalizeUploadGrant: async () => { calls.push("finalize"); },
+      rejectUploadReservation: async (rejection) => {
+        calls.push("reject");
+        assert.equal(rejection.uploadSessionId, "upload-session-rejected-0001");
+        assert.equal(rejection.rejectionCode, "policy_denied");
+      },
+    },
+  });
+  assert.equal(result, null);
+  assert.deepEqual(calls, ["reject"]);
+});
+
+test("typed uncertain provider outcome preserves reservation without terminal rejection", async () => {
+  let rejectionCalls = 0;
+  const result = await startCustomerAssetUpload(input, {
+    issueProviderOutcome: async () => ({ status: "unknown", code: "provider_outcome_unknown" }),
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: "upload-session-unknown-0001", state: "reserved" }),
+      finalizeUploadGrant: async () => {},
+      rejectUploadReservation: async () => { rejectionCalls += 1; },
+    },
+  });
+  assert.equal(result, null);
+  assert.equal(rejectionCalls, 0, "uncertain provider outcomes must remain recoverable");
+});
+
+test("typed successful provider outcome finalizes the exact provider reference", async () => {
+  let finalized;
+  const sessionId = "upload-session-typed-success-01";
+  const result = await startCustomerAssetUpload(input, {
+    now: () => 1_700_000_000_000,
+    issueProviderOutcome: async () => ({
+      status: "succeeded",
+      providerUploadReference: "opaque-typed-provider-object",
+      grant: {
+        url: "https://storage.example.test/typed", method: "PUT",
+        expiresAt: new Date(1_700_000_060_000).toISOString(), headers: {},
+      },
+    }),
+    repository: {
+      reserveUpload: async () => ({ disposition: "created", uploadSessionId: sessionId, state: "reserved" }),
+      finalizeUploadGrant: async (value) => { finalized = value; },
+    },
+  });
+  assert.equal(result.uploadSessionId, sessionId);
+  assert.equal(finalized.providerUploadReference, "opaque-typed-provider-object");
+});
