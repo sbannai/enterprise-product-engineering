@@ -1871,7 +1871,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
               !/^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(storageAdapterKey)) {
             sendJson(request, response, 503, { error: "customer_asset_upload_policy_unconfigured" }); return;
           }
-          if (typeof applicationId !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+          if (typeof body.clientOperationId !== "string" || !/^[a-f0-9]{32,64}$/i.test(body.clientOperationId) ||
+              typeof applicationId !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
               (scope !== "customer_shared" && scope !== "application_restricted") ||
               typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.length > 200 ||
               typeof body.originalFileName !== "string" || !body.originalFileName.trim() || body.originalFileName.length > 255 ||
@@ -1905,7 +1906,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           const asset = await options.customerAssetRepository.create({
             tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
             environment: options.adminConfigEnvironment ?? "sandbox",
-            correlationId: resolveApiRequestId(request), scope,
+            correlationId: resolveApiRequestId(request), clientOperationId: body.clientOperationId, scope,
             ...(scope === "application_restricted" ? { ownerApplicationId: applicationId } : {}),
             displayName: body.displayName, originalFileName: body.originalFileName,
             mediaCategory: body.mediaCategory as "image" | "video" | "document" | "other",
@@ -1920,7 +1921,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           } }); return;
         } catch (error) {
           const code = error instanceof Error ? error.message : "customer_asset_create_failed";
-          const status = code.includes("MISMATCH") || code.includes("INVALID") ? 400
+          const status = code.includes("METADATA_IDEMPOTENCY_CONFLICT") ? 409
+            : code.includes("MISMATCH") || code.includes("INVALID") ? 400
             : code.includes("NOT_FOUND") ? 404 : 503;
           sendJson(request, response, status, { error: status === 503 ? "customer_asset_create_failed" : code }); return;
         }
