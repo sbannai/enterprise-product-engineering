@@ -180,6 +180,32 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         failedClient.release();
       }
 
+      // A provider failure is terminal for that attempt, not for the asset.
+      // A fresh operation key must be able to reserve the same asset again.
+      const retrySessionId = await repository.reserveUpload({
+        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+        idempotencyKey: "asset-failed-retry-" + randomUUID(),
+      });
+      assert.notEqual(retrySessionId, failedReservationId,
+        "a terminal failed attempt must not permanently block a new upload attempt");
+
+      // Idempotency keys are application-scoped within a tenant. A second
+      // application may legitimately use the same key without seeing or
+      // colliding with the first application's session.
+      const otherAppAsset = await repository.create({
+        tenantId, applicationId: otherApplication, actorId, environment: "uat", correlationId,
+        scope: "customer_shared", displayName: "Other app upload", originalFileName: "other-app.txt",
+        mediaCategory: "document", mimeType: "text/plain", fileExtension: "txt",
+        sizeBytes: 512, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:other-app-upload",
+      });
+      assetIds.push(otherAppAsset.assetId);
+      const otherAppSessionId = await repository.reserveUpload({
+        tenantId, applicationId: otherApplication, actorId, environment: "uat", correlationId,
+        assetId: otherAppAsset.assetId, expectedSizeBytes: 512, idempotencyKey,
+      });
+      assert.ok(otherAppSessionId, "the same idempotency key is independent in another application");
+
       await Promise.all(Array.from({ length: 5 }, () => repository.link({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         idempotencyKey: linkKey, assetId: shared.assetId, reason: "integration-test",
@@ -277,7 +303,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 15, "four creates, four reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 17, "five creates, six reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -312,7 +338,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 4,
+        assert.equal(sameApplicationSessions.rows.length, 5,
           "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
