@@ -88,7 +88,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(path!=="\/customer\/session"&&!authenticated\)throw new Error\("customer_session_disconnected"\)/, "customer API calls must fail closed without an authenticated browser session");
     assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
-    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;pendingCustomerAssetOperationId="";pendingCustomerAssetMetadata=null;authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests, clear pending asset retries and clear customer data");
+    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;clearPendingCustomerAssetOperation\(\);authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests, clear pending asset retries and clear customer data");
     assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
     assert.match(html, /ticketViewSessionGeneration=sessionGeneration/, "ticket view application bootstrap must capture its session");
     assert.match(html, /if\(ticketViewSessionGeneration!==sessionGeneration\)return;const assigned=/, "late assigned-application responses must not mutate a stale ticket view");
