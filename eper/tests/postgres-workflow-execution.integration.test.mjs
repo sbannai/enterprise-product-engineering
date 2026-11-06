@@ -185,10 +185,52 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       const competingClaim = await outboxStore.claim(outboxContext, { workerId: "worker-b", limit: 10, leaseSeconds: 60 });
       assert.equal(competingClaim.length, 0, "a second worker must not claim unexpired leases");
 
-      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.started"].eventId, "worker-a");
-      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.completed"].eventId, "worker-a");
+      // Expire one claim, then reclaim it with the SAME worker ID. The new claim
+      // generation must fence both late success and late failure from attempt one.
+      const expiryClient = await pool.connect();
+      try {
+        await expiryClient.query("BEGIN");
+        await expiryClient.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await expiryClient.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+        await expiryClient.query(
+          `UPDATE eper_workflow_outbox_delivery
+              SET locked_at = clock_timestamp() - INTERVAL '120 seconds'
+            WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3`,
+          [tenantId, applicationId, byType["workflow.instance.started"].eventId],
+        );
+        await expiryClient.query("COMMIT");
+      } catch (error) {
+        try { await expiryClient.query("ROLLBACK"); } catch { /* preserve original error */ }
+        throw error;
+      } finally { expiryClient.release(); }
+
+      const reclaimedStarted = await outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 });
+      assert.equal(reclaimedStarted.length, 1);
+      assert.equal(reclaimedStarted[0].claimToken > byType["workflow.instance.started"].claimToken, true);
+      await assert.rejects(
+        outboxStore.markDelivered(outboxContext, byType["workflow.instance.started"].eventId, "worker-a",
+          byType["workflow.instance.started"].claimToken, 60),
+        /WORKFLOW_OUTBOX_LEASE_NOT_HELD/,
+      );
+      await assert.rejects(
+        outboxStore.markFailed(outboxContext, byType["workflow.instance.started"].eventId, {
+          workerId: "worker-a", claimToken: byType["workflow.instance.started"].claimToken,
+          leaseSeconds: 60, maxAttempts: 8, retryDelaySeconds: 0, error: "late failure from stale attempt",
+        }),
+        /WORKFLOW_OUTBOX_LEASE_NOT_HELD/,
+      );
+      assert.equal(await outboxStore.renewLease(
+        outboxContext, byType["workflow.instance.started"].eventId, "worker-a",
+        byType["workflow.instance.started"].claimToken, 60,
+      ), false);
+
+      await outboxStore.markDelivered(outboxContext, reclaimedStarted[0].eventId, "worker-a",
+        reclaimedStarted[0].claimToken, 60);
+      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.completed"].eventId, "worker-a",
+        byType["workflow.instance.completed"].claimToken, 60);
       const firstFailure = await outboxStore.markFailed(outboxContext, byType["workflow.instance.submitted"].eventId, {
-        workerId: "worker-a", maxAttempts: 2, retryDelaySeconds: 0, error: "simulated transient delivery failure",
+        workerId: "worker-a", claimToken: byType["workflow.instance.submitted"].claimToken,
+        leaseSeconds: 60, maxAttempts: 2, retryDelaySeconds: 0, error: "simulated transient delivery failure",
       });
       assert.deepEqual(firstFailure, { status: "pending", attempts: 1 });
       const retry = await outboxStore.claim(outboxContext, { workerId: "worker-b", limit: 10, leaseSeconds: 60 });
@@ -196,7 +238,8 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(retry[0].eventType, "workflow.instance.submitted");
       assert.equal(retry[0].attempts, 2);
       const deadLetter = await outboxStore.markFailed(outboxContext, retry[0].eventId, {
-        workerId: "worker-b", maxAttempts: 2, retryDelaySeconds: 0, error: "simulated terminal delivery failure",
+        workerId: "worker-b", claimToken: retry[0].claimToken, leaseSeconds: 60,
+        maxAttempts: 2, retryDelaySeconds: 0, error: "simulated terminal delivery failure",
       });
       assert.deepEqual(deadLetter, { status: "dead_letter", attempts: 2 });
 
