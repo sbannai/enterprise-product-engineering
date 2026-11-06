@@ -520,6 +520,16 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(permittedTenantExpiry.rows.length, 0,
           "the customer-asset runtime role may invoke the narrow expiry routine for its bound tenant");
+        await restrictedRoleClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [otherTenant, applicationId],
+        );
+        const deniedCrossTenantSessionUpdate = await restrictedRoleClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'expired' WHERE tenant_id = $1 AND upload_session_id = $2 RETURNING upload_session_id",
+          [tenantId, crossAppStaleSession],
+        );
+        assert.equal(deniedCrossTenantSessionUpdate.rows.length, 0,
+          "database RLS denies cross-tenant upload-session updates");
         await restrictedRoleClient.query("SAVEPOINT deny_cross_tenant_asset_insert");
         await assert.rejects(restrictedRoleClient.query(
           `INSERT INTO eper_customer_assets (
