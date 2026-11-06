@@ -418,13 +418,13 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([metadataCreated.assetId, shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
-          "RLS role sees only assets linked to or owned by its current application");
+          new Set([metadataCreated.assetId, shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId, rejectedAsset.assetId]),
+          "RLS role sees only assets linked to or owned by its current application, including a definitive-rejection test asset");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 5,
+        assert.equal(sameApplicationSessions.rows.length, 6,
           "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
