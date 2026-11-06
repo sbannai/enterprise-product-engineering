@@ -52,6 +52,7 @@ const pool = createCustomerAssetUploadExpiryPool();
 try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
+  await repository.assertUploadExpiryWorkerReady();
   await assertAuditStoreReady(pool);
   console.log(JSON.stringify({ event: "customer_asset_upload_expiry_worker_ready", poolMax }));
   await runCustomerAssetUploadExpiryWorker({
