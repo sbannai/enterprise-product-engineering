@@ -3368,3 +3368,70 @@ PR #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; compare to curr
 7. **Independent handover:** no second engineer has demonstrated the clean-clone/build/test/PR/release/rollback path. Runbooks and owner-approved repository controls remain required.
 
 No merge, production deployment, chargeable cloud provisioning, production credential use or real external/provider action occurred in this watch. This scorecard update does not authorize acceptance or production activity.
+
+
+## Live engineering watch — 2026-11-06 16:39 IST
+
+This dated record supersedes older live snapshots above. Main and every open PR head were resolved from GitHub metadata during this watch. The exact-head SHAs and run IDs below are this snapshot only; future watches must resolve them again.
+
+### Integrated mainline
+
+- Current main: `2c380d79c55c9183a42ed534ffd1a504f7d41316` (commit timestamp 2026-11-03T16:36:07Z).
+- Exact-main Actions all completed successfully for this SHA: EPER CI [41675875771], same-commit integrated validation [41675875913], 228/38 matrix [41675875818], G9 [41675875648], six-family HTTP [41675875652], container smoke [41675875533], controlled QA [41675875702], technical simulation [41675875724].
+- Integrated PostgreSQL job [41675875913] reports 1,410 tests / 1,404 passed / 0 failed / 6 skipped. It applies payment, audit/admin, identity, capability/agent-worker, workflow, campaign scheduler and ticketing migration groups; workflow and ticketing repeatability checks pass; the full suite with live PostgreSQL passes.
+- The matrix classifies the 228 pilot checks as automated technical evidence only. The approved 228 requirements and 38 chapters remain intact. Main has no dedicated fresh-clone workflow or Chromium customer-browser E2E on this SHA; do not infer those lanes from PR evidence.
+- Current repository metadata reports main `protected=false` and an empty rulesets list. The continuity charter remains proposed, not owner-approved.
+
+### Merged foundations — verified against current main
+
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; current main is 653 commits ahead / 0 behind.
+- PR #310 is closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; current main is 652 commits ahead / 0 behind.
+- #310 delivered the provider-neutral OIDC protocol, PKCE/state/nonce and durable identity/session foundation. Browser routes, secure cookies, CSRF, role/assignment enforcement and browser E2E are subsequent merged work. Production IdP onboarding and JWKS/secret custody remain unproven.
+
+### Current open PR snapshot and exact-head Actions
+
+GitHub returned the following open draft PRs. Every returned workflow run for each current head had a matching `head_sha` and completed successfully; no run from a superseded head was counted. Relevant fresh-clone, PostgreSQL, browser, provider, integrated or G9 job logs were inspected for every row. All remain open/draft and unmerged.
+
+| PR | Exact current head | Relevant exact-head run evidence |
+|---|---|---|
+| #377 scorecard | `9097421e4081b3e3214112ddb9aa4bf8cf34ac69` | CI [42205299576], integrated [42205299627], matrix [42205299747], G9 [42205299551] |
+| #399 customer assets | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | Fresh clone [42176208018], PostgreSQL [42176208105], Chromium [42176208027] |
+| #386 upload idempotency | `a1b7341d71a4086c983dd3362a4704c124a52b74` | Fresh clone [41837639258], PostgreSQL [41837639319], Chromium [41837639329] |
+| #395 storage catalogue | `baa6151a5ef4b9b4f460b72bd8a26aa9326ceeb8` | Fresh clone [42156557469], PostgreSQL [42156557498], provider lifecycle [42156557499] |
+| #400 workflow outbox worker | `c445691f27a06ee36b590f374d5f7ddc6a8ab119` | Fresh clone [41960896718], PostgreSQL/restricted worker login [41960896927], CI [41960896932] |
+| #394 asset download authorization | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | Fresh clone [41868477584], PostgreSQL [41868477557], Chromium [41868477503] |
+| #398 provider runtime registry | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | Fresh clone [42159145998], PostgreSQL [42159145775], provider lifecycle [42159145776] |
+| #396 asset scan recovery | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | Fresh clone [41871265755], PostgreSQL [41871265396], provider lifecycle [41871265677] |
+| #401 PostgreSQL capacity plan | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | Fresh clone [41993032684], PostgreSQL [41993032789] |
+| #392 encrypted provider lifecycle | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | Fresh clone [41833626500], PostgreSQL [41833626430], provider lifecycle [41833626478] |
+| #384 asset repository | `291129b77ab50623e41dd28c4a746ef70da28183` | Fresh clone [41786048886], PostgreSQL [41786048950], integrated [41786048948] |
+| #393 asset/provider integration | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | Fresh clone [41844357369], PostgreSQL [41844357332], integrated [41844357419] |
+| #378 encrypted payload boundary | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | Fresh clone [41738299068], provider lifecycle [41738299039] |
+| #379 PostgreSQL encrypted payload store | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | Fresh clone [41738351740], PostgreSQL [41738351604], provider lifecycle [41738351657] |
+| #385 asset requirement draft | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | CI [41764331361], G9 [41764308165], integrated [41764308133] |
+| #380 asset/application UX draft | `55006ab19bcbb685fc3e84c4230fd865087887f3` | CI [41763251702], G9 [41763251777], integrated [41763251674] |
+| #390 payload-operation integrity | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | Fresh clone [41805934645], PostgreSQL [41805934647], provider lifecycle [41805934711] |
+| #391 restricted-role/RLS reconciliation | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | Fresh clone [41820073308], provider lifecycle [41820073247], QA [41820073253] |
+| #389 database-engine evaluation | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | CI [41795128689], matrix [41795128670], integrated [41795128802] |
+| #387 actor-scoped customer work queue | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | Fresh clone [41784823307], PostgreSQL [41784823446], integrated [41784823525] |
+
+### Exact-head job-log findings
+
+- **Fresh clone/PostgreSQL:** #399 fresh-clone [42176208018] reports 1,521 tests / 1,517 passed / 0 failed / 4 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`; all seven migration groups including identity were applied/repeated and disposable PostgreSQL 16 restore reports 81 source / 81 restored base tables and seven ledgers. Its separate PostgreSQL integration [42176208105] applies payment, audit, identity, workflow and scheduler migrations and exercises live transaction, tenant/role and lifecycle contracts. #401's fresh-clone [41993032684] reports 1,528 / 1,524 / 0 / 4 and 80/80 restored tables; its capacity harness has not been executed.
+- **Workflow outbox:** #400 fresh-clone [41960896718] reports 1,437 / 1,432 / 0 / 5 and disposable restore 75/75 tables, seven ledgers. Its separate PostgreSQL integration [41960896927] passes the live dedicated workflow-outbox restricted-login gate 1/1. The worker is a separate process with lease renewal/fencing, idempotency, retry/backoff, dead-letter handling, graceful shutdown and an approved-dispatch contract. The deployment-owned dispatcher module is still absent; external process supervision, metrics/alerts and an independent recovery rehearsal remain.
+- **Provider payload integrity:** #392 exact-head PostgreSQL lifecycle [41833626478] applies migrations 018, 019 and 021–024. It passes queue lifecycle 1/1, worker 7/7, host 5/5, wake-source 3/3, post-commit NOTIFY 1/1, keyring unit tests 6/6 and standalone payload identity/orphan-FK tests 2/2. The operation-backed PostgreSQL lifecycle test also writes a v2 payload under key A, reads it after active-key rotation, writes under key B and fails closed when a still-referenced key is removed. This proves disposable PostgreSQL v2 persistence/rotation, not production secret-manager integration or key custody.
+- **Customer workspace/support:** #399 Chromium [42176208027] passes the synthetic-IdP customer OIDC workspace/support/logout journey 1/1. Ticket API/store/UI tests cover customer submission/history/replies, tenant/application scope, admin triage/status/assignment/severity, P1 rationale, internal-only versus customer-visible replies and filtered CSV export. The support-admin console still uses a server-issued bearer credential, not a tested OIDC browser journey. First-response/resolution deadlines, pause rules, breach detection and escalation are not implemented.
+- **Customer assets:** #399's API composition root constructs the PostgreSQL asset repository and upload authorizer but does not inject concrete `assetStoragePort`, `assetUploadPort`, `assetUploadVerificationPort` or `assetMalwareScanPort` into `createAppServer`. Its browser E2E is not a real file-byte upload test. The separate scan worker requires a deployment-supplied scanner module. The complete upload → object verification → malware scan → authorized download journey remains incomplete; provider catalogue/registry contracts are not concrete storage/scanner adapters.
+- **Work queue and requirements:** #387 tests actor/application-scoped queue reads, but the full work-queue UI/activity/detail journey and SLA timers remain. #380 and #385 reuse CW-060 with conflicting acceptance criteria; preserve both draft sources for owner disposition and keep CW-061 separate. The approved 228 requirement IDs and 38 chapters remain unchanged. The v34 crosswalk records 45 source rows: 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. CW-056–059 are separate owner-directed draft additions; no exact chapter requirement IDs are invented.
+
+### Seven-checkpoint status and next actions
+
+1. **Requirements reconciliation — AMBER:** preserve 228/38; resolve CW-060 once by owner disposition, keep CW-061 separate, and retain the v34 crosswalk's 45-row boundary.
+2. **Fresh-clone setup — GREEN on exact PR heads / AMBER on main:** PR #306 is merged; candidate fresh-clone proof is reproducible. Run dedicated `npm run dev:verify` on exact main before declaring mainline fresh-clone closure.
+3. **PostgreSQL — GREEN for local/CI migrations, integration and disposable restore / AMBER operationally:** seven groups including identity, repeatability, live PG and disposable restore pass on candidate heads. Off-host encrypted backup, key custody, retention, RPO/RTO and independent restore rehearsal remain.
+4. **Identity — AMBER:** provider-neutral OIDC protocol, browser login/callback, secure cookies, CSRF, durable sessions and tenant/application assignments have synthetic-IdP browser/PostgreSQL evidence. Production IdP onboarding/JWKS/secret lifecycle, customer-admin bootstrap/delegation and support-admin OIDC remain.
+5. **Customer workspace/support — AMBER:** customer ticket journey and admin API/UI controls are tested. Concrete customer file-byte storage/scanning/download, support-admin OIDC and SLA policy/timers/escalation remain.
+6. **Scheduler/workflow operations — AMBER:** continuous worker core, restricted DB role, leases/fencing, idempotency, retry/dead-letter and approved-dispatch gate have test evidence. Concrete dispatcher, independent supervisor, metrics/alerts, operational recovery and capacity evidence remain.
+7. **Release/continuity — RED:** main is unprotected and has no rulesets in current metadata; charter is proposed. No independent second-engineer release/rollback, off-host recovery rehearsal or owner-approved branch-control evidence is recorded.
+
+No approved requirement or chapter changed. No PR merged, no production deployment or credential use occurred, no real external/provider action was triggered, and no chargeable cloud resource was provisioned. This engineering record is technical evidence only and does not authorize acceptance or production activity.
