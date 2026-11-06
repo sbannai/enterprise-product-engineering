@@ -3,6 +3,7 @@ import {
   PostgresWorkflowOutboxStore,
   type WorkflowOutboxContext,
   type WorkflowOutboxEvent,
+  type WorkflowOutboxClaimedEvent,
 } from "./postgres-workflow-outbox-store.js";
 
 export interface WorkflowOutboxDispatcher {
@@ -92,7 +93,7 @@ export class WorkflowOutboxWorker {
 
   private async processClaim(
     context: WorkflowOutboxContext,
-    event: WorkflowOutboxEvent,
+    event: WorkflowOutboxClaimedEvent,
     result: WorkflowOutboxRunResult,
     shutdownSignal?: AbortSignal,
   ): Promise<void> {
