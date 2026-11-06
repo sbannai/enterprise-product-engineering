@@ -32,7 +32,7 @@ test("repository readiness requires all four upload recovery columns and the rec
   assert.deepEqual(fake.calls[0].values, [[
     "request_fingerprint", "request_file_name", "request_mime_type", "provider_outcome",
   ]]);
-  assert.match(fake.calls[0].sql, /information_schema\\.columns/);
+  assert.match(fake.calls[0].sql, /information_schema\.columns/);
   assert.match(fake.calls[0].sql, /eper_customer_asset_upload_recovery_idx/);
   assert.equal(fake.released, 1);
 });
