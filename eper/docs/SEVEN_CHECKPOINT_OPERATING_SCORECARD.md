@@ -3083,3 +3083,33 @@ Every current open PR head was fetched from GitHub. Exact-SHA workflow inventori
 6. Obtain current-main fresh-clone evidence, approve the continuity charter, harden repository controls, and demonstrate independent second-engineer release/rollback.
 
 This entry changes only the documentation branch. It does not change approved requirements, merge any PR, authorize UAT, provision chargeable resources or trigger external/provider actions. Because this append changes PR #377's head, its pre-append green runs are not valid for the new head; re-resolve and rerun exact-head Actions before treating the updated scorecard as validated.
+
+
+## Operating correction — 2026-11-06 07:08 IST
+
+This entry supersedes the two incorrect negative conclusions in the 06:09 IST correction below. The exact-head workflow inventories, job lists, and relevant full job logs were re-read for the current PR heads. A skip in the general fresh-clone suite is not substituted for, or confused with, a separately configured live PostgreSQL integration lane.
+
+### PR #400 — dedicated workflow-outbox login is proven in the PostgreSQL integration lane
+
+- Current exact head: `c445691f27a06ee36b590f374d5f7ddc6a8ab119`.
+- Fresh-clone run [41960896718](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896718) executes `npm run dev:verify`: 1,437 tests / 1,432 passed / 0 failed / 5 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; disposable PostgreSQL backup/restore PASS. The test `dedicated workflow outbox login satisfies the live restricted PostgreSQL role gate` is skipped in this general lane because its dedicated connection URL is not provisioned by `dev:verify`. This skip is not the dedicated-role integration result.
+- The exact-head PostgreSQL integration run [41960896927](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41960896927) applies workflow migrations 015 and 016, creates a disposable `eper_workflow_outbox_worker_runtime` LOGIN with a masked random password, grants the NOLOGIN worker group, injects the test connection/expected role, and runs `tests/workflow-outbox-worker-database.integration.test.mjs`.
+- Its full job log records `dedicated workflow outbox login satisfies the live restricted PostgreSQL role gate`: 1 test / 1 passed / 0 failed / 0 skipped. The role is checked against the exact expected `current_user`, non-superuser/no-BYPASSRLS, RLS and FORCE RLS, non-ownership, required column grants, and absence of table-wide UPDATE/INSERT/DELETE/TRUNCATE or elevated-role inheritance.
+- **Corrected conclusion:** the dedicated restricted worker login gate passes in the separate PostgreSQL integration lane. Retain the five skips in the fresh-clone suite as suite-level skips; do not report the live role gate as missing.
+- Remaining: the PR does not supply a deployment-owned approved dispatcher module, external process supervisor, readiness/liveness endpoint, metrics/alert sink, backlog/dead-letter dashboard, or independent restart/recovery rehearsal. No real external dispatch is enabled.
+
+### PR #392 — operation-backed PostgreSQL v2 key rotation is proven
+
+- Current exact head: `312a9358150c1967feba9307f1b71fbffd8cb8f5`.
+- Exact-head provider lifecycle run [41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) passes the queue lifecycle integration test (1/1), worker tests (7/7), host tests (5/5), wake-listener tests (3/3), post-commit PostgreSQL NOTIFY (1/1), keyring unit tests (6/6), and payload identity/orphan-FK tests (2/2).
+- The queue lifecycle integration test on this head includes the operation-backed keyring scenario. It creates a v2 envelope with key A using `enqueueWithPayload()`, verifies the persisted envelope version/key ID, reads the existing row after rotating the active writer to key B, writes a second operation under key B, verifies its v2/key-B metadata, and proves that removing still-referenced key A fails closed. The enclosing PostgreSQL queue-lifecycle test passes on the exact head; these assertions are within that test body rather than a separately counted top-level subtest.
+- **Corrected conclusion:** live PostgreSQL v1/v2 envelope compatibility and v2 active-key rotation/read-key retention are covered by operation-backed integration assertions on this exact head. The earlier statement that this integration case was absent is superseded.
+- Remaining: production secret-manager/key custody, operator-controlled rotation cadence, key retirement runbook and production worker deployment are not demonstrated. No production credentials or provider dispatch are used.
+
+### Updated seven-checkpoint interpretation
+
+- **PostgreSQL:** #401 exact-head fresh-clone and live PostgreSQL runs remain the strongest candidate evidence for all seven migration groups including identity, repeatability, live integration and disposable backup/restore. #400 separately proves the restricted workflow worker LOGIN. Current-main fresh-clone execution, off-host backup/retention/key custody, owner-approved RPO/RTO and independent restore rehearsal remain outstanding.
+- **Workflow operations:** the worker's dedicated PostgreSQL identity is proven in CI, and the provider payload keyring's operation-backed rotation path is proven in CI. These are implementation/integration proofs, not production supervision, dispatcher approval, alerting or recovery rehearsal.
+- **No status inflation:** PR #400 and #392 remain open draft PRs. Their exact-head workflow evidence does not imply merge, production operation, Business UAT, or release authorization.
+
+This is a documentation-only correction. It preserves the approved 228 requirements and 38 chapters and does not merge a PR, provision chargeable resources, use production credentials, or trigger external/provider actions.
