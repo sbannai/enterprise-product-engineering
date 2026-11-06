@@ -223,11 +223,26 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         );
         assert.equal(expiredRow.rows[0]?.upload_status, "expired",
           "retry reconciliation durably marks the stale session expired");
+        await expiryClient.query(
+          "UPDATE eper_customer_asset_upload_sessions SET expires_at = clock_timestamp() - interval '1 second' WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, afterExpirySessionId],
+        );
         await expiryClient.query("COMMIT");
       } finally {
         try { await expiryClient.query("ROLLBACK"); } catch { /* no active transaction */ }
         expiryClient.release();
       }
+      const workerExpiredCount = await repository.expireStaleUploadSessions({
+        tenantId, applicationId, environment: "uat", correlationId, limit: 10,
+      });
+      assert.equal(workerExpiredCount, 1,
+        "the dedicated bounded expiry operation expires stale sessions for its application");
+      const afterWorkerRetryId = await repository.reserveUpload({
+        ...reservationInput, assetId: expiryAsset.assetId, expectedSizeBytes: 256,
+        idempotencyKey: "asset-after-worker-expiry-" + randomUUID(),
+      });
+      assert.notEqual(afterWorkerRetryId, afterExpirySessionId,
+        "a session expired by the worker no longer blocks a fresh attempt");
 
       // Idempotency keys are application-scoped within a tenant. A second
       // application may legitimately use the same key without seeing or
@@ -343,7 +358,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND application_id = $3 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.upload.expire', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId, applicationId],
         );
-        assert.equal(audit.rows.length, 20, "five creates, seven reservations, one grant finalization, one failed reservation, one expiry, one application link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 22, "five creates, eight reservations, one grant finalization, one failed reservation, two expiries, one application link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -378,7 +393,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
           [tenantId],
         );
-        assert.equal(sameApplicationSessions.rows.length, 7,
+        assert.equal(sameApplicationSessions.rows.length, 8,
           "all initiated, reserved and failed upload sessions remain bound to their creating application");
         await restrictedRoleClient.query(
           "SELECT set_config('eper.application_id', $1, true)", [otherApplication],
