@@ -322,10 +322,10 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         crossAppExpireClient.release();
       }
       const crossAppExpiryCounts = await Promise.all([
-        repository.expireStaleUploadSessions({
+        workerRepository.expireStaleUploadSessions({
           tenantId, applicationId: otherApplication, environment: "uat", correlationId, limit: 10,
         }),
-        repository.expireStaleUploadSessions({
+        workerRepository.expireStaleUploadSessions({
           tenantId, applicationId: otherApplication, environment: "uat", correlationId, limit: 10,
         }),
       ]);
