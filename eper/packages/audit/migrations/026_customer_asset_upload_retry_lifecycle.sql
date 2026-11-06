@@ -12,7 +12,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_application_idempot
   ON eper_customer_asset_upload_sessions (tenant_id, application_id, idempotency_key);
 
 CREATE UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_active_asset_uq
-  ON eper_customer_asset_upload_sessions (tenant_id, application_id, asset_id)
+  ON eper_customer_asset_upload_sessions (tenant_id, asset_id)
   WHERE upload_status IN ('reserved', 'initiated', 'in_progress');
 
 DROP INDEX IF EXISTS eper_customer_asset_upload_expiry_idx;
