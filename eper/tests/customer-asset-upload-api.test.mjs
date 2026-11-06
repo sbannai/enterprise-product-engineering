@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
+import { createCustomerCsrfToken } from "../dist/packages/identity/customer-browser-security.js";
 
 test("customer upload reservation requires identity, assignment, provider and durable audit", async () => {
   const keys = [
     "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
-    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
+    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON",
     "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -13,6 +14,7 @@ test("customer upload reservation requires identity, assignment, provider and du
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ASSET_FILE_POLICY_JSON = JSON.stringify({ files: [
     { extension: ".docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", maxSizeBytes: 16384 },
   ] });
@@ -82,13 +84,14 @@ test("customer upload reservation requires identity, assignment, provider and du
 });
 
 test("customer upload reservation fails closed when provider or repository configuration is absent", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-unconfigured-token-00000000001";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({ [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] } });
   process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
   process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
@@ -110,7 +113,7 @@ test("customer upload reservation fails closed when provider or repository confi
 
 
 test("customer asset metadata creation is tenant-derived, role-gated and audited through the repository", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
     "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON",
     "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES", "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY"];
@@ -119,6 +122,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-derived", actorId: "actor-admin", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
@@ -152,6 +156,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
         applicationId: "app-a", scope: "customer_shared", displayName: "Project brief",
         originalFileName: "brief.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         fileExtension: "docx", mediaCategory: "document", sizeBytes: 4096,
+        clientOperationId: "a".repeat(32),
         tenantId: "attacker-controlled-tenant",
       }),
     });
@@ -166,6 +171,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
     assert.equal(created.ownerApplicationId, undefined);
     assert.match(created.storageObjectReference, /^pending-upload:/);
     assert.equal(created.correlationId, "asset-create-correlation-001");
+    assert.equal(created.clientOperationId, "a".repeat(32));
     assert.equal("tenantId" in body.asset, false);
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -175,7 +181,7 @@ test("customer asset metadata creation is tenant-derived, role-gated and audited
 
 
 test("upload completion uses provider-observed metadata and leaves asset in scanning state", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-complete-test-token-000000001";
@@ -183,6 +189,7 @@ test("upload completion uses provider-observed metadata and leaves asset in scan
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
@@ -236,13 +243,14 @@ test("upload completion uses provider-observed metadata and leaves asset in scan
 });
 
 test("upload completion fails closed when the trusted verification adapter is unavailable", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const token = "customer-upload-no-verifier-token-0000000001";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
   process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a"] },
   });
@@ -261,5 +269,265 @@ test("upload completion fails closed when the trusted verification adapter is un
   } finally {
     await new Promise((resolve) => server.close(resolve));
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
+
+test("durable customer asset upload mutations require CSRF and current application-role permission", async () => {
+  const keys = [
+    "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+    "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
+    "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON", "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES",
+    "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY",
+  ];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const sessionToken = "s".repeat(48);
+  const csrfSecret = "customer-asset-upload-csrf-secret-000000000000";
+  const csrfToken = createCustomerCsrfToken(sessionToken, csrfSecret);
+  const mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  Object.assign(process.env, {
+    EPER_CUSTOMER_ASSETS_API_ENABLED: "true",
+    EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
+    EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_IDENTITY_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_WORKSPACE_MODULES_JSON: JSON.stringify({ "tenant-a": ["client-assets"] }),
+    EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON: JSON.stringify([mimeType]),
+    EPER_CUSTOMER_ASSET_MAX_FILE_BYTES: "10485760",
+    EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY: "customer-storage",
+  });
+  let allowUpload = true;
+  let authorizationCalls = 0;
+  let created;
+  const server = createAppServer({
+    customerIdentitySessionStore: {
+      async resolveSession(token) {
+        assert.equal(token, sessionToken);
+        return { tenantId: "tenant-a", actorId: "actor-a", issuer: "https://idp.example.test", subject: "subject-a" };
+      },
+    },
+    tenantApplicationAssignmentStore: {
+      async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a"]; },
+    },
+    actorApplicationAssignmentStore: {
+      async listActive(tenantId, actorId) {
+        assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]);
+        return ["app-a"];
+      },
+      async isAssigned(tenantId, actorId, applicationId) {
+        assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+        return true;
+      },
+    },
+    assetUploadAuthorizer: {
+      async authorize(input) {
+        authorizationCalls++;
+        assert.deepEqual(input, { tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a" });
+        return allowUpload;
+      },
+    },
+    customerAssetRepository: {
+      async create(input) {
+        created = input;
+        return {
+          assetId: "asset-oidc-001", scope: input.scope, displayName: input.displayName,
+          originalFileName: input.originalFileName, mimeType: input.mimeType,
+          sizeBytes: input.sizeBytes, uploadStatus: "pending",
+        };
+      },
+    },
+    customerOidcPublicOrigin: "http://localhost",
+    customerCsrfSecret: csrfSecret,
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const endpoint = "http://127.0.0.1:" + address.port + "/customer/assets";
+    const body = {
+      applicationId: "app-a", scope: "application_restricted", displayName: "Client proposal",
+      originalFileName: "proposal.docx", mimeType, fileExtension: "docx",
+      mediaCategory: "document", sizeBytes: 4096, clientOperationId: "a".repeat(32), tenantId: "attacker-controlled",
+    };
+    const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
+    const missingCsrf = await fetch(endpoint, {
+      method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    assert.equal(missingCsrf.status, 403);
+    assert.equal(authorizationCalls, 0);
+    assert.equal(created, undefined);
+
+    const headers = {
+      cookie, origin: "http://localhost", "x-csrf-token": csrfToken,
+      "content-type": "application/json", "x-correlation-id": "oidc-asset-create-001",
+    };
+    const allowed = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal(allowed.status, 201);
+    assert.equal((await allowed.json()).asset.assetId, "asset-oidc-001");
+    assert.equal(authorizationCalls, 1);
+    assert.equal(created.tenantId, "tenant-a");
+    assert.equal(created.actorId, "actor-a");
+    assert.equal(created.applicationId, "app-a");
+
+    allowUpload = false;
+    const denied = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.equal(denied.status, 403);
+    assert.equal(authorizationCalls, 2);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+
+test("durable OIDC asset upload completes metadata, grant and verification only with CSRF and application permission", async () => {
+  const keys = [
+    "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE",
+    "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
+    "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON",
+    "EPER_CUSTOMER_ASSET_MAX_FILE_BYTES", "EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY",
+    "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const sessionToken = "d".repeat(48);
+  const csrfSecret = "customer-asset-full-flow-csrf-secret-000000000000";
+  const csrfToken = createCustomerCsrfToken(sessionToken, csrfSecret);
+  const mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  let uploadSessionId = "";
+  Object.assign(process.env, {
+    EPER_CUSTOMER_ASSETS_API_ENABLED: "true",
+    EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
+    EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_IDENTITY_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
+    EPER_CUSTOMER_WORKSPACE_MODULES_JSON: JSON.stringify({ "tenant-a": ["client-assets"] }),
+    EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON: JSON.stringify([mimeType]),
+    EPER_CUSTOMER_ASSET_FILE_POLICY_JSON: JSON.stringify({ files: [{ extension: ".docx", mimeType, maxSizeBytes: 10485760 }] }),
+    EPER_CUSTOMER_ASSET_MAX_FILE_BYTES: "10485760",
+    EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY: "customer-storage",
+    EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON: JSON.stringify(["storage.example.test"]),
+  });
+  let allowUpload = true;
+  const authorizations = [];
+  const events = [];
+  const server = createAppServer({
+    customerIdentitySessionStore: {
+      async resolveSession(token) {
+        assert.equal(token, sessionToken);
+        return { tenantId: "tenant-a", actorId: "actor-a", issuer: "https://idp.example.test", subject: "subject-a" };
+      },
+    },
+    tenantApplicationAssignmentStore: {
+      async listActive(tenantId) { assert.equal(tenantId, "tenant-a"); return ["app-a"]; },
+    },
+    actorApplicationAssignmentStore: {
+      async listActive(tenantId, actorId) { assert.deepEqual([tenantId, actorId], ["tenant-a", "actor-a"]); return ["app-a"]; },
+      async isAssigned(tenantId, actorId, applicationId) {
+        assert.deepEqual([tenantId, actorId, applicationId], ["tenant-a", "actor-a", "app-a"]);
+        return true;
+      },
+    },
+    assetUploadAuthorizer: {
+      async authorize(input) {
+        authorizations.push(input);
+        return allowUpload;
+      },
+    },
+    customerAssetRepository: {
+      async create(input) {
+        events.push("metadata");
+        return { assetId: "asset-oidc-002", scope: input.scope, displayName: input.displayName,
+          originalFileName: input.originalFileName, mimeType: input.mimeType, sizeBytes: input.sizeBytes, uploadStatus: "pending" };
+      },
+      async getPendingUploadAsset(tenantId, applicationId, assetId) {
+        assert.deepEqual([tenantId, applicationId, assetId], ["tenant-a", "app-a", "asset-oidc-002"]);
+        return { originalFileName: "proposal.docx", mimeType, sizeBytes: 4096 };
+      },
+      async reserveUpload(input) { events.push("reservation"); uploadSessionId = input.uploadSessionId; return uploadSessionId; },
+      async finalizeUploadGrant(input) { events.push("grant-finalized"); assert.equal(input.providerUploadReference, "private-provider-reference"); },
+      async failUploadReservation() { events.push("reservation-failed"); },
+      async getUploadSessionForVerification(tenantId, applicationId, sessionId) {
+        assert.deepEqual([tenantId, applicationId, sessionId], ["tenant-a", "app-a", uploadSessionId]);
+        return { assetId: "asset-oidc-002", actorId: "actor-a", providerUploadReference: "private-provider-reference",
+          expectedSizeBytes: 4096, expectedMimeType: mimeType, expiresAt: new Date(Date.now() + 60_000).toISOString() };
+      },
+      async completeUpload(input) {
+        events.push("completed");
+        assert.equal(input.receivedSizeBytes, 4096);
+        return { assetId: "asset-oidc-002", uploadStatus: "scanning", scanStatus: "pending",
+          lifecycleStatus: "active", checksumSha256: input.checksumSha256 };
+      },
+    },
+    assetUploadResolver: async () => ({
+      providerUploadReference: "private-provider-reference",
+      url: "https://storage.example.test/upload?signature=synthetic",
+      method: "PUT",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      headers: { "content-type": mimeType },
+    }),
+    assetUploadVerificationResolver: async () => ({
+      sizeBytes: 4096, detectedMimeType: mimeType, checksumSha256: "a".repeat(64),
+    }),
+    customerOidcPublicOrigin: "http://localhost",
+    customerCsrfSecret: csrfSecret,
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const cookie = "__Host-eper_session=" + sessionToken + "; __Host-eper_csrf=" + csrfToken;
+    const headers = { cookie, origin: "http://localhost", "x-csrf-token": csrfToken, "content-type": "application/json" };
+    const created = await fetch(base + "/customer/assets", {
+      method: "POST", headers,
+      body: JSON.stringify({ applicationId: "app-a", scope: "application_restricted", displayName: "Client proposal",
+        originalFileName: "proposal.docx", mimeType, fileExtension: "docx", mediaCategory: "document", sizeBytes: 4096, clientOperationId: "b".repeat(32) }),
+    });
+    assert.equal(created.status, 201);
+    assert.equal((await created.json()).asset.assetId, "asset-oidc-002");
+
+    const uploadPath = base + "/customer/applications/app-a/assets/asset-oidc-002/uploads";
+    const missingCsrf = await fetch(uploadPath, {
+      method: "POST", headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ fileName: "proposal.docx", mimeType, sizeBytes: 4096, idempotencyKey: "oidc-asset-upload-idempotency-001" }),
+    });
+    assert.equal(missingCsrf.status, 403);
+    assert.equal(authorizations.length, 1);
+
+    const started = await fetch(uploadPath, {
+      method: "POST", headers,
+      body: JSON.stringify({ fileName: "proposal.docx", mimeType, sizeBytes: 4096, idempotencyKey: "oidc-asset-upload-idempotency-001" }),
+    });
+    const startedPayload = await started.json();
+    assert.equal(started.status, 201, JSON.stringify(startedPayload));
+    const grant = startedPayload.upload;
+    assert.equal(grant.method, "PUT");
+    assert.equal(grant.url, "https://storage.example.test/upload?signature=synthetic");
+    assert.equal(grant.uploadSessionId, uploadSessionId);
+    assert.equal("providerUploadReference" in grant, false);
+
+    const completed = await fetch(uploadPath + "/" + uploadSessionId + "/complete", {
+      method: "POST", headers, body: "{}",
+    });
+    assert.equal(completed.status, 200);
+    assert.equal((await completed.json()).asset.scanStatus, "pending");
+    assert.deepEqual(events, ["metadata", "reservation", "grant-finalized", "completed"]);
+    assert.equal(authorizations.length, 3);
+    assert.ok(authorizations.every(input => input.tenantId === "tenant-a" && input.applicationId === "app-a" && input.actorId === "actor-a"));
+
+    allowUpload = false;
+    const denied = await fetch(uploadPath + "/" + uploadSessionId + "/complete", {
+      method: "POST", headers, body: "{}",
+    });
+    assert.equal(denied.status, 403);
+    assert.equal(authorizations.length, 4);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
   }
 });

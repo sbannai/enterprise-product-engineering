@@ -110,3 +110,41 @@ test("customer asset scan worker waits for an in-flight lease renewal before job
   });
   assert.equal(renewalFinished, true, "worker must not return while its lease renewal query is still running");
 });
+
+
+test("customer asset scan worker quarantines an infected result without retrying or marking it clean", async () => {
+  const f = fixture("infected");
+  await runCustomerAssetScanWorker({
+    ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    onJob() { f.controller.abort(); },
+  });
+  assert.ok(f.calls.some((call) => call[0] === "record" && call[1] === "infected"));
+  assert.equal(f.calls.filter((call) => call[0] === "retry").length, 0);
+  assert.equal(f.calls.filter((call) => call[0] === "record" && call[1] === "clean").length, 0);
+});
+
+
+test("customer asset scan worker retries mismatched scanner identity and malformed outcomes without marking assets clean", async () => {
+  const invalidOutcomes = [
+    { scanStatus: "clean", scannerServiceId: "untrusted-scanner" },
+    { scanStatus: "unknown", scannerServiceId: "asset-scanner" },
+    null,
+    "malformed-scanner-response",
+  ];
+  for (const invalidOutcome of invalidOutcomes) {
+    const f = fixture("clean");
+    f.scanner.scan = async () => invalidOutcome;
+    await runCustomerAssetScanWorker({
+      ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+      scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+      onJob() { f.controller.abort(); },
+    });
+    assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR"),
+      "invalid scanner identity or outcome must enter the bounded retry path");
+    assert.equal(f.calls.filter((call) => call[0] === "record").length, 0,
+      "invalid scanner output must never be persisted as a scan result");
+    assert.equal(f.calls.filter((call) => call[0] === "record" && call[1] === "clean").length, 0,
+      "invalid scanner output must never mark an asset clean");
+  }
+});

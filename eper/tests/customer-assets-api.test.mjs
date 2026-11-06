@@ -195,6 +195,61 @@ test("asset download rechecks tenant/application access and requires an audited 
   }
 });
 
+test("durable asset download resolves only available tenant/application-scoped PostgreSQL metadata", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_IDENTITY_PERSISTENCE"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const credential = "durable-assets-download-token-12345678901234567890";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_AUDIT_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "disabled";
+  process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [credential]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer-admin", applicationIds: ["app-a", "app-b"] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a", "app-b"] });
+  // Durable mode must not need or fall back to the legacy JSON asset manifest.
+  delete process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON;
+  const calls = [];
+  const audit = [];
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const repository = {
+    async getDownloadableAsset(tenantId, applicationId, assetId) {
+      calls.push([tenantId, applicationId, assetId]);
+      if (tenantId !== "tenant-a" || applicationId !== "app-a" || assetId !== "asset-a") return null;
+      return { assetId, originalFileName: "Brief.pdf", mimeType: "application/pdf", storageObjectReference: "opaque:tenant-a:asset-a" };
+    },
+  };
+  const server = createAppServer({
+    customerAssetRepository: repository,
+    assetStoragePort: { invoke: async (input) => {
+      assert.equal(input.accessReference, "opaque:tenant-a:asset-a");
+      assert.equal(input.fileName, "Brief.pdf");
+      return { success: true, value: { url: "https://storage.example.test/durable-signed", expiresAt } };
+    } },
+    assetAuditWriter: async (record) => { audit.push(record); },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const response = await fetch(base + "/customer/applications/app-a/assets/asset-a/download", { headers: { authorization: "Bearer " + credential } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { downloadUrl: "https://storage.example.test/durable-signed", expiresAt, fileName: "Brief.pdf" });
+    assert.deepEqual(calls[0], ["tenant-a", "app-a", "asset-a"]);
+    assert.equal(audit[0].outcome, "success");
+    const denied = await fetch(base + "/customer/applications/app-b/assets/asset-a/download", { headers: { authorization: "Bearer " + credential } });
+    assert.equal(denied.status, 404);
+    assert.equal(audit[1].outcome, "denied");
+    assert.equal(calls.length, 2);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+  }
+});
+
 test("asset download records failure when no storage provider is configured", async () => {
   const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON", "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));

@@ -27,10 +27,14 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("Submission needs retry"), "uncertain ticket submissions surface a warning notification");
     assert.ok(html.includes("Ticket history unavailable"), "ticket history failures trigger a toast");
     assert.ok(html.includes("Assets unavailable"), "asset loading failures trigger a toast");
+    assert.match(html, /let pendingCustomerAssetOperationId=""/, "metadata operation ID must survive an uncertain upload result");
+    assert.match(html, /clientOperationId:pendingCustomerAssetOperationId/, "metadata create must receive its stable operation ID");
+    assert.match(html, /JSON\.stringify\(metadata\)!==JSON\.stringify\(pendingCustomerAssetMetadata\)/, "an uncertain metadata operation cannot be reused with edited file metadata");
+    assert.ok(html.includes('pendingCustomerAssetOperationId="";\npendingCustomerAssetMetadata=null;'), "successful upload completion clears the pending metadata operation");
     assert.ok(html.includes("Settings partially unavailable"), "partial settings failures trigger a warning toast");
     assert.match(html, /Submission outcome may be unknown\. Retry the original request unchanged/, "ticket retry messaging must preserve idempotency without exposing internal errors");
     assert.match(html, /Download unavailable\. Check your access or try again shortly\./, "download errors must not expose internal provider or storage details");
-    for (const label of ["Help Center", "Growth Hub", "My Applications", "Plan &amp; Billing", "Switch tariff plan", "Accept and switch plan", "customerTariffAccepted", "/customer/commercial-tariff", "Single-Application", "Multi-Application", "Select which active applications to revoke", "customerTariffRevoke", "CUSTOMER_ACCEPTED_TARIFF_DOWNGRADE_SELECTION", "These changes and the tariff switch are committed together, or none are applied.", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups", "Sign in with your organization", "Sign out", "/customer/auth/oidc/start"]) {
+    for (const label of ["assetUploadForm", "assetUploadProgress", "Upload a client asset", "Upload file", "Supported formats", "/customer/applications", "/uploads", "complete", "Help Center", "Growth Hub", "My Applications", "Plan &amp; Billing", "Switch tariff plan", "Accept and switch plan", "customerTariffAccepted", "/customer/commercial-tariff", "Single-Application", "Multi-Application", "Select which active applications to revoke", "customerTariffRevoke", "CUSTOMER_ACCEPTED_TARIFF_DOWNGRADE_SELECTION", "These changes and the tariff switch are committed together, or none are applied.", "Client Assets", "/customer/assets", "loadAllClientAssets", "all=true", "/customer/session", "/customer/portal/context", "/customer/workspace/modules", "/customer/help-center/content", "/customer/growth-hub/content", "data-download-application", "data-download-asset", "Requesting secure download", "downloadUrl", "Allow pop-ups", "Sign in with your organization", "Sign out", "/customer/auth/oidc/start"]) {
       assert.ok(html.includes(label), "missing customer portal content: " + label);
     }
     assert.ok(html.includes("Sign in with your organization"), "customer workspace must use provider-neutral OIDC sign-in");
@@ -78,7 +82,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(path!=="\/customer\/session"&&!authenticated\)throw new Error\("customer_session_disconnected"\)/, "customer API calls must fail closed without an authenticated browser session");
     assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
-    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests and clear customer data");
+    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;pendingCustomerAssetOperationId="";pendingCustomerAssetMetadata=null;authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests, clear pending asset retries and clear customer data");
     assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
     assert.match(html, /ticketViewSessionGeneration=sessionGeneration/, "ticket view application bootstrap must capture its session");
     assert.match(html, /if\(ticketViewSessionGeneration!==sessionGeneration\)return;const assigned=/, "late assigned-application responses must not mutate a stale ticket view");
@@ -87,9 +91,13 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(submissionSessionGeneration!==sessionGeneration\)return;result\.textContent="Ticket submitted\./, "late ticket success must not update the UI after a session change");
     assert.match(html, /if\(submissionSessionGeneration===sessionGeneration\)\{form\.dataset\.submitting="false";submitButton\.disabled=application\.disabled\|\|!application\.value;\}/, "late ticket completion must not mutate stale form controls");
     assert.match(html, /if\(renderSequence!==viewLoadSequence\)return;/, "late view responses must not overwrite the currently selected section");
-    assert.match(html, /loadAllClientAssets\(\)\.then\(initialItems=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
+    assert.match(html, /Promise\.all\(\[loadAllClientAssets\(\),api\("\/customer\/applications"\)\.catch\(\(\)=>\(\{applications:\[\]\}\)\)\]\)\.then\(\(\[initialItems,applicationPayload\]\)=>\{if\(renderSequence!==viewLoadSequence\)return;/, "asset view must load assigned applications without allowing stale responses to replace another view");
     assert.match(html, /api\("\/customer\/assets\?all=true"\)/, "all client assets are fetched with one API request");
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
+    assert.match(html, /async function uploadCustomerFile\(upload,file\)/, "customer asset uploads use a dedicated transfer path");
+    assert.match(html, /credentials:"omit",redirect:"error"/, "signed storage uploads must omit cookies and reject redirects");
+    assert.match(html, /customerAssetUploadTypes/, "client upload types must include image, video and office document mappings");
+    assert.match(html, /uploadStatus|scanStatus/, "asset upload completion must retain verification and scan state");
     assert.ok(html.includes("Current accepted plan"), "customer can review the accepted tariff snapshot");
     assert.ok(html.includes("acceptanceReference"), "tariff switching requires a contract or acceptance reference");
     assert.ok(html.includes("revokeApplications"), "downgrade selection is submitted with the tariff acceptance");
@@ -359,5 +367,30 @@ test("durable customer identity mode refuses missing identity and assignment sto
       if (prior[name] === undefined) delete process.env[name];
       else process.env[name] = prior[name];
     }
+  }
+});
+
+
+test("customer asset upload CSP allows only configured storage origins", async () => {
+  const key = "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON";
+  const previous = process.env[key];
+  process.env[key] = JSON.stringify(["storage.example.test"]);
+  const server = createAppServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch("http://127.0.0.1:" + address.port + "/customer-portal-preview");
+    assert.equal(response.status, 200);
+    const csp = response.headers.get("content-security-policy") ?? "";
+    assert.match(csp, /connect-src 'self' https:\/\/storage\.example\.test/);
+    assert.doesNotMatch(csp, /https:\/\/unconfigured\.example/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
   }
 });

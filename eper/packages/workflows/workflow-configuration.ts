@@ -4,7 +4,8 @@ export type WorkflowPermission =
   | "workflow:approve"
   | "workflow:admin"
   | "role:assign"
-  | "access:manage";
+  | "access:manage"
+  | "customer.asset.upload";
 
 export type WorkflowFieldType = "text" | "textarea" | "number" | "date" | "select" | "checkbox";
 export function workflowPermissionGranted(granted: readonly WorkflowPermission[], permission: WorkflowPermission): boolean {
@@ -207,7 +208,7 @@ export class WorkflowConfigurationService {
   static readonly MAX_SELECT_OPTIONS = 100;
 
   static readonly PERMISSIONS: readonly WorkflowPermission[] = [
-    "workflow:view", "workflow:act", "workflow:approve", "workflow:admin", "role:assign", "access:manage",
+    "workflow:view", "workflow:act", "workflow:approve", "workflow:admin", "role:assign", "access:manage", "customer.asset.upload",
   ];
   private workflows: WorkflowDefinition[] = [];
   private roles: WorkflowRole[] = [];

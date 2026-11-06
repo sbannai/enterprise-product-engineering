@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   appendAuditEventInTransaction,
   type AuditEnvironment,
@@ -35,6 +35,7 @@ export interface CreateCustomerAssetInput {
   environment: AuditEnvironment;
   correlationId: string;
   assetId?: string;
+  clientOperationId?: string;
   scope: CustomerAssetScope;
   ownerApplicationId?: string;
   displayName: string;
@@ -90,11 +91,11 @@ export class PostgresCustomerAssetRepository {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null }>(
-        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\"",
+      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null; metadataOperations: string | null }>(
+        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\", to_regclass('public.eper_customer_asset_metadata_operations')::text AS \"metadataOperations\"",
       );
       const row = result.rows[0];
-      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
+      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs || !row.metadataOperations) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
     } catch (error) {
       if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED") throw error;
       throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_READINESS_FAILED", { cause: error });
@@ -128,6 +129,50 @@ export class PostgresCustomerAssetRepository {
       );
       await client.query("COMMIT");
       return result.rows.map(mapAsset);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /**
+   * Resolves an asset for a download only when it is available, clean and visible
+   * to the requested application. The opaque object reference never leaves the
+   * server; callers pass it only to the configured storage adapter.
+   */
+  async getDownloadableAsset(
+    tenantId: string, applicationId: string, assetId: string,
+  ): Promise<(CustomerAsset & { storageObjectReference: string }) | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(assetId, "assetId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<AssetRow & { storage_object_reference: string }>(
+        `SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
+          a.display_name, a.original_file_name, a.media_category, a.mime_type, a.file_extension,
+          a.size_bytes, a.checksum_sha256, a.storage_adapter_key, a.upload_status,
+          a.scan_status, a.lifecycle_status, a.version, a.created_by, a.created_at,
+          a.storage_object_reference
+         FROM eper_customer_assets a
+         WHERE a.tenant_id = $1 AND a.asset_id = $3
+           AND a.lifecycle_status = 'active' AND a.upload_status = 'available'
+           AND a.scan_status IN ('clean', 'not_required')
+           AND (
+             (a.repository_scope = 'application_restricted' AND a.owner_application_id = $2)
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id AND l.application_id = $2 AND l.asset_id = a.asset_id
+             ))
+           )
+         LIMIT 1`,
+        [tenantId, applicationId, assetId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      return row ? { ...mapAsset(row), storageObjectReference: row.storage_object_reference } : null;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
@@ -173,13 +218,48 @@ export class PostgresCustomerAssetRepository {
     if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) throw new Error("EPER_CUSTOMER_ASSET_SIZE_INVALID");
     if (input.checksumSha256 && !/^[a-f0-9]{64}$/.test(input.checksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    if (input.clientOperationId !== undefined && !/^[a-f0-9]{32,64}$/i.test(input.clientOperationId)) {
+      throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_KEY_INVALID");
+    }
     const assetId = input.assetId ?? randomUUID();
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({
+      applicationId: input.applicationId, actorId: input.actorId, scope: input.scope,
+      ownerApplicationId: input.ownerApplicationId ?? null, displayName: input.displayName,
+      originalFileName: input.originalFileName, mediaCategory: input.mediaCategory,
+      mimeType: input.mimeType, fileExtension: input.fileExtension.toLowerCase().replace(/^\\./, ""),
+      sizeBytes: input.sizeBytes, storageAdapterKey: input.storageAdapterKey,
+    })).digest("hex");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      await client.query(
-        `INSERT INTO eper_customer_assets (
+      if (input.clientOperationId) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          "eper-asset-metadata:" + input.tenantId + ":" + input.applicationId + ":" + input.actorId + ":" + input.clientOperationId,
+        ]);
+        const prior = await client.query<AssetRow & { request_fingerprint: string }>(
+          `SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
+            a.display_name, a.original_file_name, a.media_category, a.mime_type, a.file_extension,
+            a.size_bytes, a.checksum_sha256, a.storage_adapter_key, a.upload_status,
+            a.scan_status, a.lifecycle_status, a.version, a.created_by, a.created_at,
+            o.request_fingerprint
+           FROM eper_customer_asset_metadata_operations o
+           JOIN eper_customer_assets a ON a.tenant_id = o.tenant_id AND a.asset_id = o.asset_id
+           WHERE o.tenant_id = $1 AND o.application_id = $2 AND o.actor_id = $3
+             AND o.client_operation_id = $4
+           FOR UPDATE OF o, a`,
+          [input.tenantId, input.applicationId, input.actorId, input.clientOperationId],
+        );
+        if (prior.rows[0]) {
+          if (prior.rows[0].request_fingerprint !== requestFingerprint) {
+            throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT");
+          }
+          await client.query("COMMIT");
+          return mapAsset(prior.rows[0]);
+        }
+      }
+      await client.query(`
+        INSERT INTO eper_customer_assets (
           tenant_id, asset_id, repository_scope, owner_application_id, display_name,
           original_file_name, media_category, mime_type, file_extension, size_bytes,
           checksum_sha256, storage_adapter_key, storage_object_reference, upload_status,
@@ -225,6 +305,14 @@ export class PostgresCustomerAssetRepository {
         correlationId: input.correlationId, source: "api", operationName: "POST /customer/assets",
         payload: { assetId, scope: input.scope, mediaCategory: input.mediaCategory, sizeBytes: input.sizeBytes },
       });
+      if (input.clientOperationId) {
+        await client.query(
+          `INSERT INTO eper_customer_asset_metadata_operations
+            (tenant_id, application_id, actor_id, client_operation_id, request_fingerprint, asset_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [input.tenantId, input.applicationId, input.actorId, input.clientOperationId, requestFingerprint, assetId],
+        );
+      }
       await client.query("COMMIT");
       return mapAsset(row);
     } catch (error) {

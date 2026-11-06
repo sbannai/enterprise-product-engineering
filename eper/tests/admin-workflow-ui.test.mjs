@@ -40,6 +40,7 @@ test("Customer Admin workflow studio, application roles, draft publishing and sh
     assert.match(html, /Routing rule IDs/);
     assert.match(html, /data-k="routingRuleIds"/);
     assert.match(html, /Application roles/);
+    assert.match(html, /customer\.asset\.upload/, "role editor must expose the durable customer asset upload permission");
     assert.match(html, /Application ID/);
     assert.match(html, /workflow-definitions/);
     assert.match(html, /publishWorkflow/);
@@ -65,7 +66,7 @@ test("Customer Admin workflow studio, application roles, draft publishing and sh
       method: "PUT", headers: auth,
       body: JSON.stringify({ roles: [{
         id: "fee-approver", name: "Fee Approver", description: "Approves fee adjustments",
-        members: ["principal-1001"], permissions: ["workflow:view", "workflow:approve"],
+        members: ["principal-1001"], permissions: ["workflow:view", "workflow:approve", "customer.asset.upload"],
       }] }),
     });
     assert.equal(roleSave.status, 200);

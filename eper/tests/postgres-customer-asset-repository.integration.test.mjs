@@ -21,6 +21,50 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
     try {
       await repository.assertReady();
 
+      const metadataOperationId = randomUUID().replace(/-/g, "");
+      const metadataInput = {
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        clientOperationId: metadataOperationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Idempotent metadata file", originalFileName: "idempotent.docx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 3072, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:metadata-idempotency-first",
+      };
+      const metadataCreated = await repository.create(metadataInput);
+      assetIds.push(metadataCreated.assetId);
+      const metadataRetries = await Promise.all(Array.from({ length: 5 }, (_, index) =>
+        repository.create({ ...metadataInput, storageObjectReference: "opaque:metadata-idempotency-retry-" + index }),
+      ));
+      assert.deepEqual(new Set(metadataRetries.map(asset => asset.assetId)), new Set([metadataCreated.assetId]),
+        "concurrent metadata retries must return the same asset");
+      await assert.rejects(() => repository.create({
+        ...metadataInput, displayName: "Changed request payload",
+      }), /METADATA_IDEMPOTENCY_CONFLICT/);
+      const metadataAuditClient = await pool.connect();
+      try {
+        await metadataAuditClient.query("BEGIN");
+        await metadataAuditClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const operationCount = await metadataAuditClient.query(
+          "SELECT count(*)::int AS count FROM eper_customer_asset_metadata_operations WHERE tenant_id = $1 AND application_id = $2 AND actor_id = $3 AND client_operation_id = $4",
+          [tenantId, applicationId, actorId, metadataOperationId],
+        );
+        const auditCount = await metadataAuditClient.query(
+          "SELECT count(*)::int AS count FROM eper_audit_events WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3 AND action = 'customer.asset.metadata.create'",
+          [tenantId, applicationId, metadataCreated.assetId],
+        );
+        assert.equal(operationCount.rows[0]?.count, 1);
+        assert.equal(auditCount.rows[0]?.count, 1, "one logical metadata operation must append one metadata-create audit event");
+        await metadataAuditClient.query("COMMIT");
+      } finally {
+        try { await metadataAuditClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        metadataAuditClient.release();
+      }
+
       const shared = await repository.create({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         scope: "customer_shared", displayName: "Shared brief", originalFileName: "brief.docx",
@@ -258,6 +302,20 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
       assert.equal(quarantined.lifecycleStatus, "quarantined");
       assert.deepEqual(await repository.listForApplication(tenantId, applicationId), [clean],
         "infected assets must never appear in the available asset listing");
+      const sharedDownloadable = await repository.getDownloadableAsset(tenantId, applicationId, shared.assetId);
+      assert.ok(sharedDownloadable?.storageObjectReference,
+        "customer-shared assets must resolve for an explicitly linked application");
+      assert.equal(await repository.getDownloadableAsset(tenantId, otherApplication, shared.assetId), null,
+        "customer-shared assets must not resolve for an application without an explicit link");
+      const downloadable = await repository.getDownloadableAsset(tenantId, applicationId, clean.assetId);
+      assert.ok(downloadable?.storageObjectReference, "available clean assets resolve an opaque storage reference for server-side signing");
+      assert.equal(downloadable.assetId, clean.assetId);
+      assert.equal(await repository.getDownloadableAsset(tenantId, applicationId, quarantined.assetId), null,
+        "quarantined assets must never be downloadable");
+      assert.equal(await repository.getDownloadableAsset(tenantId, otherApplication, clean.assetId), null,
+        "application-restricted assets must not be downloadable from another application");
+      assert.equal(await repository.getDownloadableAsset(otherTenant, applicationId, clean.assetId), null,
+        "assets must not be downloadable across tenant boundaries");
 
       const client = await pool.connect();
       try {
@@ -277,7 +335,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           "SELECT action FROM eper_audit_events WHERE tenant_id = $1 AND correlation_id = $2 AND action IN ('customer.asset.metadata.create', 'customer.asset.upload.reserve', 'customer.asset.upload.grant.finalize', 'customer.asset.upload.reserve.fail', 'customer.asset.application.link', 'customer.asset.upload.complete', 'customer.asset.scan.complete')",
           [tenantId, correlationId],
         );
-        assert.equal(audit.rows.length, 15, "four creates, four reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
+        assert.equal(audit.rows.length, 16, "five creates, four reservations, one grant finalization, one failed reservation, one application link, two upload completions and two scan results are audited once each");
         await client.query("COMMIT");
       } finally {
         try { await client.query("ROLLBACK"); } catch { /* no active transaction */ }
@@ -306,7 +364,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
           [tenantId],
         );
         assert.deepEqual(new Set(sameApplicationAssets.rows.map((row) => row.asset_id)),
-          new Set([shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
+          new Set([metadataCreated.assetId, shared.assetId, restricted.assetId, reservedAsset.assetId, failedAsset.assetId]),
           "RLS role sees only assets linked to or owned by its current application");
         const sameApplicationSessions = await restrictedRoleClient.query(
           "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1",
@@ -360,6 +418,7 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         await client.query("DELETE FROM eper_customer_asset_scan_jobs WHERE tenant_id = $1", [tenantId]);
         await client.query("DELETE FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1", [tenantId]);
         await client.query("DELETE FROM eper_customer_asset_application_links WHERE tenant_id = $1", [tenantId]);
+        await client.query("DELETE FROM eper_customer_asset_metadata_operations WHERE tenant_id = $1", [tenantId]);
         await client.query("DELETE FROM eper_customer_assets WHERE tenant_id = $1", [tenantId]);
         await client.query("COMMIT");
       } finally {

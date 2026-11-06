@@ -23,6 +23,7 @@ import { PostgresActorApplicationAssignmentStore } from "../../packages/identity
 import { PostgresTenantApplicationAssignmentStore } from "../../packages/identity/postgres-tenant-application-assignment-store.js";
 import { PostgresCustomerIdentitySessionStore } from "../../packages/identity/postgres-customer-identity-session-store.js";
 import { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
+import { PostgresCustomerAssetUploadAuthorizer } from "../../packages/assets/customer-asset-upload-authorization.js";
 import { PostgresPlatformAdminCredentialStore } from "../../packages/identity/postgres-platform-admin-credential-store.js";
 import { ProviderNeutralOidcClient } from "../../packages/identity/provider-neutral-oidc-client.js";
 import { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
@@ -61,6 +62,7 @@ const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSI
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
+const customerAssetUploadAuthorizationEnabled = customerAssetPersistenceMode === "postgres" && customerIdentityPersistenceMode === "postgres" && process.env.EPER_CUSTOMER_ASSETS_API_ENABLED === "true";
 const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceMode === "postgres";
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 
@@ -380,12 +382,15 @@ const providerValidationService = providerValidationEnabled && paymentPool
     )
   : undefined;
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetUploadAuthorizationEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
 const workflowActorRoleAssignmentStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowActorRoleAssignmentStore(paymentPool)
+  : undefined;
+const customerAssetUploadAuthorizer = customerAssetUploadAuthorizationEnabled && workflowActorRoleAssignmentStore
+  ? new PostgresCustomerAssetUploadAuthorizer(workflowActorRoleAssignmentStore)
   : undefined;
 const workflowDefinitionPublisher = workflowExecutionEnabled && paymentPool
   ? new WorkflowDefinitionPublisher(paymentPool)
@@ -483,9 +488,9 @@ const platformAdminCredentialStore = platformAdminCredentialsEnabled && platform
 if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
 
 const server = createAppServer({
-  capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
+  capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled || customerAssetUploadAuthorizationEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
-  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, customerAssetRepository,
+  agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore, customerAssetRepository, assetUploadAuthorizer: customerAssetUploadAuthorizer,
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,

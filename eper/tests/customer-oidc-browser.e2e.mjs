@@ -161,6 +161,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(tariffAttempt.status,403,"least-privilege customer-user must not switch tenant-wide tariff");
     assert.equal(tariffAttempt.body.error.code,"CUSTOMER_TARIFF_SWITCH_FORBIDDEN");
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
+    await page.waitForFunction(()=>{const select=document.querySelector("#ticketApplication");return select instanceof HTMLSelectElement&&!select.disabled&&Boolean(select.value);},{timeout:10000});
     await page.getByLabel("Title").fill("Browser-authenticated support request");
     await page.getByLabel("Description").fill("Customer can submit a support request after OIDC sign-in.");
     await page.getByLabel("Business impact").fill("The customer workspace support journey must be authenticated and scoped.");

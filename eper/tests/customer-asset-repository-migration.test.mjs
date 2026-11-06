@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 const uploadReservationMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_reservation.sql", import.meta.url), "utf8");
+const metadataIdempotencyMigration = await readFile(new URL("../packages/audit/migrations/025_customer_asset_metadata_idempotency.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -63,4 +64,15 @@ test("upload reservation migration supports provider-free reservations and a gua
   assert.ok(uploadReservationMigration.includes("'initiated'"));
   assert.ok(uploadReservationMigration.includes("provider_upload_reference is already nullable"));
   assert.ok(uploadReservationMigration.includes("WHERE upload_status = 'reserved'"));
+});
+
+
+test("customer asset metadata idempotency is scoped to tenant, application and actor with an immutable fingerprint", () => {
+  assert.ok(metadataIdempotencyMigration.includes("CREATE TABLE IF NOT EXISTS eper_customer_asset_metadata_operations"));
+  assert.ok(metadataIdempotencyMigration.includes("PRIMARY KEY (tenant_id, application_id, actor_id, client_operation_id)"));
+  assert.ok(metadataIdempotencyMigration.includes("request_fingerprint char(64)"));
+  assert.ok(metadataIdempotencyMigration.includes("FOREIGN KEY (tenant_id, asset_id)"));
+  assert.ok(metadataIdempotencyMigration.includes("FORCE ROW LEVEL SECURITY"));
+  assert.ok(metadataIdempotencyMigration.includes("application_id = current_setting('eper.application_id', true)"));
+  assert.ok(metadataIdempotencyMigration.includes("GRANT SELECT, INSERT ON eper_customer_asset_metadata_operations"));
 });
