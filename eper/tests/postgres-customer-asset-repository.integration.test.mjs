@@ -236,8 +236,18 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         failedClient.release();
       }
 
+      const rejectedAsset = await repository.create({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Definitive provider rejection test file", originalFileName: "provider-rejected.docx",
+        mediaCategory: "document",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileExtension: "docx", sizeBytes: 1536, storageAdapterKey: "test-adapter",
+        storageObjectReference: "opaque:test-provider-rejected",
+      });
+      assetIds.push(rejectedAsset.assetId);
       const rejectedReservation = await repository.reserveUpload({
-        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+        ...reservationInput, assetId: rejectedAsset.assetId, expectedSizeBytes: 1536,
         idempotencyKey: "asset-rejected-" + randomUUID(),
         requestFingerprint: "e".repeat(64), requestFileName: "provider-rejected.docx",
         requestMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
