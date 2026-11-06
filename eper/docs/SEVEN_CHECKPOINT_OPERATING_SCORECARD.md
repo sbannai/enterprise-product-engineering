@@ -3113,3 +3113,93 @@ This entry supersedes the two incorrect negative conclusions in the 06:09 IST co
 - **No status inflation:** PR #400 and #392 remain open draft PRs. Their exact-head workflow evidence does not imply merge, production operation, Business UAT, or release authorization.
 
 This is a documentation-only correction. It preserves the approved 228 requirements and 38 chapters and does not merge a PR, provision chargeable resources, use production credentials, or trigger external/provider actions.
+
+
+## Dated operating update — 2026-11-06 12:05 IST
+
+**Dynamically resolved main SHA:** `2c380d79c55c9183a42ed534ffd1a504f7d41316` (main remained unchanged during this watch).  
+**Approved baseline:** preserve 228 requirements across 38 chapters; no baseline IDs or chapters changed.
+
+### Current-main evidence
+
+The exact-main push workflow set contains eight successful runs for the SHA above:
+- EPER CI [41675875771].
+- Integrated validation [41675875913].
+- 228/38 pilot matrix [41675875818].
+- G9 reconciliation [41675875648].
+- Six-family HTTP smoke [41675875652].
+- Container runtime [41675875533].
+- Controlled QA re-execution [41675875702].
+- Additional technical re-execution [41675875724].
+
+The integrated job set passed; its technical QA suite reports 1,402 tests, 1,366 passed, 0 failed and 36 skipped. The separate requirement matrix reports 228 requirements, 38 chapters, 259 passed tests, 0 failed tests, 28 passed HTTP checks and no failed chapters. These are technical checks, not feature-completion claims.
+
+**Current-main evidence gap:** no fresh-clone `npm run dev:verify` run and no Chromium customer OIDC browser E2E run were returned for this exact main SHA. Do not substitute candidate-branch results for current-main verification.
+
+### Merged foundation verification
+
+- PR #306 is closed/merged as `6e8dd438e5091b1802d65e4f29951389fe077859`; current main is a descendant (653 commits ahead, 0 behind). It is not open.
+- PR #310 is closed/merged as `88b9708d748c19dc80a1a2d7ad4960914451db7e`; current main is a descendant (652 commits ahead, 0 behind). Its merged scope is the durable identity/OIDC foundation, not by itself the complete production identity lifecycle.
+- PR #324 merge `a554990cb7f4969bb218aad7a2e9944aec62fa05`, #329 merge `82a82d92222c613c02e55f01211ecbb32ce63bba`, and #337 merge `18315e1654b52f1546936a8fd28daed907cab31e` are also ancestors of current main.
+
+### Current open PR inventory — exact heads and selected exact-head evidence
+
+All listed PRs remain open drafts. The selected workflow runs below were resolved against the exact head SHA shown; no result from an earlier head is treated as current.
+
+| PR | Exact head | Base | Exact-head evidence / disposition |
+|---|---|---|---|
+| #399 | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | `integration/asset-provider-stack-validation` | Matrix, payment contract, PostgreSQL payment-store and provider lifecycle checks passed; fresh-clone, controlled QA and Chromium checks were still running at update time. This is the current asset-workspace stack leaf. Earlier exact heads exposed test-fixture and RLS expectation defects; focused test-only corrections were committed on this owning branch. Do not claim its latest full suite passed until the in-progress checks finish. |
+| #395 | `baa6151a5ef4b9b4f460b72bd8a26aa9326ceeb8` | same integration stack | Fresh clone [42156557469] passed: 1,522 tests, 1,518 passed, 0 failed, 4 skipped; all seven migration groups repeat and disposable restore passes. Catalogue contract is not a concrete object-storage driver. |
+| #398 | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | same integration stack | Fresh clone [42159145998], PostgreSQL [42159145775] and provider lifecycle [42159145776] passed. Fresh clone: 1,551 / 1,547 passed / 0 failed / 4 skipped. Worker/host/wake/keyring/payload integration tests pass. Concrete provider drivers and production credential custody remain. |
+| #377 | `9c57e9e45f6e989caddc77b3f6239aed7642a08b` | main | Integrated [42145611151] and separate matrix [42145611148] passed. Scorecard/crosswalk documentation only; additive v1.6.0 remains pending owner disposition. |
+| #392 | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | provider RLS stack | Fresh clone [41833626500], PostgreSQL [41833626430] and provider lifecycle [41833626478] passed. Queue lifecycle 1/1, worker 7/7, host 5/5, wake 3/3, NOTIFY 1/1, keyring 6/6 and payload integrity 2/2. Operation-backed v2 key rotation assertions pass; production key custody and operator rotation remain. |
+| #401 | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | asset/provider integration stack | Fresh clone [41993032684], PostgreSQL [41993032789] and provider lifecycle [41993032652] passed. Fresh clone: 1,528 / 1,524 passed / 0 failed / 4 skipped. Seven migration groups including identity applied and repeated; disposable restore passed with 80 source/restored base tables and 7 migration ledgers. This is candidate evidence, not current-main proof or a production capacity result. |
+| #394 | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | asset/provider integration stack | Chromium [41868477503] passed the synthetic-IdP customer workspace/support journey; PostgreSQL [41868477557] passed. Actual object-byte download through a concrete storage adapter remains. |
+| #386 | `a1b7341d71a4086c983dd3362a4704c124a52b74` | #384 asset repository foundation | Fresh clone [41837639258] passed: 1,474 / 1,470 passed / 0 failed / 4 skipped; seven migration groups repeat and disposable restore passes. Upload reservation/idempotency foundation. |
+| #396 | `f9d32a10cb6337b4f49c9d3b80abea16e99e6d81` | #394 download authorization | Fresh clone [41871265755] passed: 1,510 / 1,506 passed / 0 failed / 4 skipped; seven migrations repeat and disposable restore passes. Scan recovery remains adapter/supervision dependent. |
+| #384 | `291129b77ab50623e41dd28c4a746ef70da28183` | main | Fresh clone [41786048886], PostgreSQL [41786048950], browser [41786049023] and integrated [41786048948] passed. Repository/RLS foundation; no real-byte storage/scanner adapter. |
+| #393 | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | #386 upload-idempotency stack | Fresh clone [41844357369], provider lifecycle [41844357288] and integrated [41844357419] passed. Stack integration base; preserve its ancestry when consolidating. |
+| #400 | `c445691f27a06ee36b590f374d5f7ddc6a8ab119` | main | Fresh clone [41960896718], PostgreSQL [41960896927], provider lifecycle [41960896826] and integrated [41960896797] passed. Fresh clone: 1,437 / 1,432 passed / 0 failed / 5 skipped. Dedicated restricted workflow worker LOGIN passes 1/1 in its separate live PostgreSQL lane. Dispatcher module, external supervisor, metrics/alerts and independent recovery rehearsal remain. |
+| #385 | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | main | Integrated [41764308133] and G9 [41764308165] passed. Draft CW-060 redefinition conflicts with #380; owner disposition required. |
+| #380 | `55006ab19bcbb685fc3e84c4230fd865087887f3` | main | Integrated [41763251674] and G9 [41763251777] passed. Draft customer asset repository/CW-061 definition; do not silently merge its CW-060 scope with #385. |
+| #391 | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | #390 payload integrity stack | Fresh clone [41820073308] passed: 1,439 / 1,435 passed / 0 failed / 4 skipped; seven migration groups repeat and disposable restore passes. Restricted-role/RLS reconciliation. |
+| #390 | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | #379 encrypted payload store | Integrated [41805934725] and G9 [41805934672] passed. Reciprocal operation/payload references and orphan prevention. |
+| #389 | `aff3f4194fa37cd33dba3f4e2f5f97e97a87ddc2` | main | Integrated [41795128802] and G9 [41795128672] passed. Database comparison is a plan only; no comparative workload benchmark yet. |
+| #379 | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | #378 encrypted payload boundary | Fresh clone [41738351740] passed: 1,438 / 1,434 passed / 0 failed / 4 skipped; seven migrations repeat and disposable restore passes. Durable encrypted PostgreSQL payload store. |
+| #387 | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | main | Browser [41784823265], PostgreSQL [41784823446] and integrated [41784823525] passed. Actor/application-scoped customer work queue; SLA and full lifecycle remain. |
+| #378 | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | main | Fresh clone [41738299068], provider lifecycle [41738299039] and integrated [41738299062] passed. Encrypted payload boundary; production key custody remains. |
+
+### PR #399 exact-head correction record
+
+- Head `ab81c208e3a6bb622630280b07e519af2e0b75ce` failed two upload API tests because their fixtures omitted the required `clientOperationId`; the PostgreSQL integration cleanup also attempted to delete assets before their metadata-operation rows.
+- Focused corrections were made only on the owning PR branch: add valid idempotency keys to both upload fixtures and delete metadata-operation rows before asset rows.
+- The next head `4d46db109c5900eb532ed933855a7dff16cab2ca` then exposed a stale audit-count expectation (15 expected, 16 actual) and an RLS assertion that omitted the newly created metadata asset.
+- Head `9e857f10f248a3286e167729136dc8cd7abd1117` corrected the audit count but the RLS expected set still omitted that application-owned metadata asset.
+- Current head `ef9f85c775b41fc7ec8316eb51578e036cec8a64` includes the focused RLS expectation correction. Its fresh-clone, PostgreSQL and Chromium runs are the only valid results for this head; at update time they were in progress. Earlier green runs are not valid for this head.
+
+### Seven-checkpoint assessment
+
+| Checkpoint | Status | Evidence and remaining blocker |
+|---|---|---|
+| 1. Requirements reconciliation | AMBER | The v34 crosswalk preserves 45 source rows: 0 exact full-coverage matches, 45 partial shared-control links and 45 additive draft candidates. Approved 228 IDs and 38 chapters are unchanged. CW-060 conflict between #380/#385 and CW-061 separation require owner disposition. |
+| 2. Fresh-clone and PostgreSQL foundation | AMBER | #401/#398 candidate exact-head runs prove `npm run dev:verify`, seven migration groups including identity, repeatability, live PostgreSQL and disposable restore. Current-main fresh-clone is still missing; off-host backup, encryption/key custody, retention, RPO/RTO and independent restore rehearsal remain. |
+| 3. Customer identity and access | AMBER | Merged #310/#324/#329/#337 ancestry provides OIDC browser flow, PKCE, durable PostgreSQL sessions, secure cookies, CSRF, tenant/application assignment and role checks; synthetic-IdP browser E2E exists on candidate branches. Production IdP onboarding, discovery/JWKS lifecycle, credential/key custody and operational onboarding remain. |
+| 4. Customer workspace and support | AMBER | Customer ticket submission/history/replies, tenant/application scope, admin triage/assignment/severity, internal-note visibility and CSV export have API/store/UI/browser evidence. First-response/resolution SLA timers, breach escalation and reporting remain. Asset upload is not a complete binary lifecycle: concrete storage, verification, scanning and byte download adapters are not demonstrated. |
+| 5. Scheduler/workflow execution | AMBER | PostgreSQL queue claims, lease renewal/fencing, idempotency, retry/dead-letter and recovery tests pass. #400 separately proves restricted worker login and continuous outbox process foundations. Deployment-owned dispatcher, independent process supervisor, readiness/metrics/alerts and recovery rehearsal remain. |
+| 6. Integration and product capabilities | AMBER | Six-family HTTP and technical matrix pass on main; remaining customer asset, provider drivers, workflow designer/settings and application work queue capabilities are in draft stacks and must not be inferred complete from documentation or synthetic adapters. |
+| 7. Release and continuity | RED | Main branch metadata reports `protected=false`, protection disabled, required status checks enforcement `off`; repository rulesets endpoint returned an empty list. Continuity charter remains proposed and its owner approval checklist is unchecked. Off-host backup, tested runbooks and second-engineer release/rollback are not demonstrated. |
+
+### Release-control evidence
+
+The live `/branches/main` response reports `protected=false`, `protection.enabled=false`, and required status-check enforcement `off` with no required contexts. The repository rulesets endpoint returned an empty list. This is an actual current branch-metadata finding, not an inference from CI. The continuity charter remains **Proposed operating charter — requires owner review**; owner approval, accountable engineering/QA/operations owners and repository protection settings remain required.
+
+### Next concrete actions
+
+1. Protect main with owner-approved required checks and merge controls; retain no direct unvalidated path to main.
+2. Run `npm run dev:verify` on the exact current main SHA and add a current-main Chromium customer OIDC/support journey run.
+3. Let the current #399 exact-head checks finish; fix only a demonstrated new failure on its owning branch, then consolidate the asset stack without skipping #384/#386/#393 ancestry.
+4. Resolve CW-060/CW-061 owner disposition while preserving the approved 228/38 baseline.
+5. Complete real-byte storage/verification/scanning/download, support-admin browser identity and SLA lifecycle.
+6. Finish worker supervision, dispatcher approval, metrics/alerts, off-host backup/restore and second-engineer release/rollback demonstration.
+
+No PR was merged, no branch was deleted, no chargeable cloud resource was provisioned, and no real external/provider action was triggered in this update.
