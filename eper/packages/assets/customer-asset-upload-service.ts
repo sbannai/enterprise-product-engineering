@@ -132,7 +132,7 @@ export async function startCustomerAssetUpload(
       // unknown, not_found and unavailable are not terminal; retain reservation.
       return null;
     }
-    grant = { ...outcome.grant, providerUploadReference: outcome.providerUploadReference };
+    grant = { ...outcome.grant, headers: outcome.grant.headers ?? {}, providerUploadReference: outcome.providerUploadReference };
   } else {
     // Legacy adapters retain conservative behavior: null/throw never marks a
     // reservation failed because the provider may have created an object.
