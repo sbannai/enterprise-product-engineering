@@ -259,7 +259,7 @@ export class PostgresCustomerAssetRepository {
         }
       }
       await client.query(`
-        `INSERT INTO eper_customer_assets (
+        INSERT INTO eper_customer_assets (
           tenant_id, asset_id, repository_scope, owner_application_id, display_name,
           original_file_name, media_category, mime_type, file_extension, size_bytes,
           checksum_sha256, storage_adapter_key, storage_object_reference, upload_status,
