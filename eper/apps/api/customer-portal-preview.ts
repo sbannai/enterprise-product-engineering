@@ -189,6 +189,7 @@ if(!policy){fail("Choose an image, video, PDF, DOCX, PPTX or XLSX file.");return
 if(!Number.isSafeInteger(file.size)||file.size<=0){fail("The selected file is empty or has an invalid size.");return;}
 const metadata={applicationId,scope,displayName,originalFileName:file.name,mimeType:policy.mimeType,fileExtension:extension,
 mediaCategory:policy.category,sizeBytes:file.size};
+try{
 const currentSession=await api("/customer/session");
 const currentIdentityFingerprint=await customerIdentityFingerprint(currentSession);
 if(generation!==sessionGeneration)return;
@@ -217,7 +218,6 @@ persistPendingCustomerAssetOperation();
 }
 if(submit)submit.disabled=true;
 if(progress){progress.hidden=false;progress.value=0;}
-try{
 fail("Creating or recovering the customer asset record…");
 const created=await api("/customer/assets",{method:"POST",body:JSON.stringify({
 ...metadata,clientOperationId:pendingCustomerAssetOperationId
