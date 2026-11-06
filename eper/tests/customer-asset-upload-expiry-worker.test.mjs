@@ -55,3 +55,31 @@ test("upload expiry worker rejects unbounded polling and batch configuration", a
     correlationId: "expiry-correlation", signal: controller.signal, batchSize: 501,
   }), /WORKER_OPTIONS_INVALID/);
 });
+
+
+test("upload expiry worker applies bounded exponential backoff and resets after a successful batch", async () => {
+  const controller = new AbortController();
+  const attempts = [];
+  const failures = [];
+  let calls = 0;
+  const repository = {
+    async expireStaleUploadSessions(input) {
+      attempts.push(Date.now());
+      calls += 1;
+      if (calls <= 2) throw new Error("synthetic database failure");
+      input.onMetrics?.({ expiredCount: 0, queueAgeMs: 0 });
+      return 0;
+    },
+  };
+  await runCustomerAssetUploadExpiryWorker({
+    repository, tenantId: "tenant-1", applicationId: "app-1", environment: "sandbox",
+    correlationId: "expiry-correlation", signal: controller.signal,
+    pollIntervalMs: 100, maxBackoffMs: 200,
+    onError(_error, count) { failures.push(count); },
+    onBatch() { controller.abort(); },
+  });
+  assert.deepEqual(failures, [1, 2]);
+  assert.equal(attempts.length, 3);
+  assert.ok(attempts[1] - attempts[0] >= 80, "first retry waits for the poll interval");
+  assert.ok(attempts[2] - attempts[1] >= 160, "second retry doubles the delay");
+});
