@@ -968,8 +968,6 @@ export class PostgresCustomerAssetRepository {
         session_status: sessionRow.upload_status, job_state: jobRow.state,
         lease_owner: jobRow.lease_owner, lease_active: jobRow.lease_active,
       };
-      const current = locked.rows[0];
-      if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
       if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
       if (current.scan_status !== "pending") {
         if (current.scan_status === input.scanStatus) {
