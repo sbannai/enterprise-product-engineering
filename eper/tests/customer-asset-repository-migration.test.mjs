@@ -6,6 +6,7 @@ const migration = await readFile(new URL("../packages/audit/migrations/021_custo
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 const uploadReservationMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_reservation.sql", import.meta.url), "utf8");
 const metadataIdempotencyMigration = await readFile(new URL("../packages/audit/migrations/025_customer_asset_metadata_idempotency.sql", import.meta.url), "utf8");
+const uploadRecoveryMigration = await readFile(new URL("../packages/audit/migrations/026_customer_asset_upload_recovery.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -75,4 +76,19 @@ test("customer asset metadata idempotency is scoped to tenant, application and a
   assert.ok(metadataIdempotencyMigration.includes("FORCE ROW LEVEL SECURITY"));
   assert.ok(metadataIdempotencyMigration.includes("application_id = current_setting('eper.application_id', true)"));
   assert.ok(metadataIdempotencyMigration.includes("GRANT SELECT, INSERT ON eper_customer_asset_metadata_operations"));
+});
+
+
+test("upload recovery migration is additive and binds retries to durable request identity", () => {
+  assert.ok(migration.includes("updated_at timestamptz NOT NULL DEFAULT now()"));
+  assert.ok(migration.includes("application_id varchar(128) NOT NULL"));
+  assert.ok(uploadReservationMigration.includes("ADD CONSTRAINT eper_customer_asset_upload_sessions_upload_status_check"));
+  assert.ok(uploadRecoveryMigration.includes("ADD COLUMN IF NOT EXISTS request_fingerprint varchar(64)"));
+  assert.ok(uploadRecoveryMigration.includes("request_file_name varchar(255)"));
+  assert.ok(uploadRecoveryMigration.includes("request_mime_type varchar(128)"));
+  assert.ok(uploadRecoveryMigration.includes("provider_outcome varchar(16) NOT NULL DEFAULT 'unknown'"));
+  assert.ok(uploadRecoveryMigration.includes("provider_outcome IN ('unknown', 'succeeded', 'rejected')"));
+  assert.ok(uploadRecoveryMigration.includes("request_fingerprint IS NULL"));
+  assert.ok(uploadRecoveryMigration.includes("WHERE upload_status = 'reserved' AND provider_outcome = 'unknown'"));
+  assert.doesNotMatch(uploadRecoveryMigration, /DROP POLICY|CREATE POLICY|ALTER TABLE .* (ENABLE|FORCE) ROW LEVEL SECURITY/i);
 });
