@@ -5,6 +5,9 @@ on:
     paths:
       - "eper/apps/api/**"
       - "eper/packages/identity/**"
+      - "eper/packages/assets/**"
+      - "eper/tests/customer-asset-upload-*.mjs"
+      - "eper/tests/*asset*browser*.e2e.mjs"
       - "eper/tests/customer-oidc-*.mjs"
       - "eper/tests/customer-browser-*.mjs"
       - "eper/tests/platform-application-remediation.browser.e2e.mjs"
@@ -15,6 +18,9 @@ on:
     paths:
       - "eper/apps/api/**"
       - "eper/packages/identity/**"
+      - "eper/packages/assets/**"
+      - "eper/tests/customer-asset-upload-*.mjs"
+      - "eper/tests/*asset*browser*.e2e.mjs"
       - "eper/tests/customer-oidc-*.mjs"
       - "eper/tests/customer-browser-*.mjs"
       - "eper/tests/platform-application-remediation.browser.e2e.mjs"
