@@ -22,8 +22,17 @@ export const STORAGE_AUTH_MODES = [
 
 export type StorageAuthMode = typeof STORAGE_AUTH_MODES[number];
 
+export const STORAGE_PROVIDER_KEYS = [
+  "aws-s3",
+  "azure-blob",
+  "google-cloud-storage",
+  "dropbox",
+] as const;
+
+export type StorageProviderKey = typeof STORAGE_PROVIDER_KEYS[number];
+
 export interface StorageProviderRegistration {
-  providerKey: "aws-s3" | "azure-blob" | "google-cloud-storage" | "dropbox";
+  providerKey: StorageProviderKey;
   displayName: string;
   adapterKey: string;
   adapterVersion: string;
@@ -142,7 +151,10 @@ export function validateStorageProviderRegistration(
     throw new Error("STORAGE_PROVIDER_REGISTRATION_INVALID");
   }
   if (typeof registration.providerKey !== "string" ||
-      !/^[a-z][a-z0-9-]{1,63}$/.test(registration.providerKey) ||
+      !(STORAGE_PROVIDER_KEYS as readonly string[]).includes(registration.providerKey)) {
+    throw new Error("STORAGE_PROVIDER_PROVIDER_NOT_REGISTERED");
+  }
+  if (!/^[a-z][a-z0-9-]{1,63}$/.test(registration.providerKey) ||
       typeof registration.displayName !== "string" ||
       !registration.displayName.trim() || registration.displayName.length > 160 ||
       typeof registration.adapterKey !== "string" ||
