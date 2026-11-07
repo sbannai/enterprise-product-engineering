@@ -952,3 +952,38 @@ Next safe slice: implement the independently launchable worker process on curren
 7. Release/continuity: **RED/AMBER** — no independent production worker, production provider connection or Business UAT evidence/authorization.
 
 Next safe slice: port the independent worker process entrypoint and package launch script from the stale candidate only after validating its imports and host lifecycle against current main. Keep explicit opt-in, realpath/symlink containment, dedicated restricted login, approval recheck and claim token propagation mandatory. Prove startup/shutdown with a fake dispatcher before any real provider integration. Preserve all 228 approved requirements and 38 chapters. No chargeable AWS resource, production worker, external action or Business UAT authorization.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:47 IST
+
+### Standalone workflow outbox worker host — PR #442 merged
+- PR #442 merged to main by squash at `07b3b728c4518a52ea99be162e6ee7f34dd376fc`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `9586af1fb9a80a3faab0f93f5d782eb631089748`.
+- 18 check runs succeeded; one duplicate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted. The separate `chapter-pilot-matrix` workflow and same-commit integrated gate completed successfully.
+- Added independently launchable `workflow-outbox-main.ts` and package script `npm run start:workflow-outbox-worker`; worker remains disabled unless explicit environment opt-in and all required settings are present.
+- Startup checks the dedicated PostgreSQL login/role before importing a dispatcher. Dispatcher path is validated using filesystem realpath; symlink escapes, missing files and non-JavaScript targets are rejected.
+- No default/no-op dispatcher exists. A configured module must explicitly export `createWorkflowOutboxDispatcher({ pool, env })` and provide both approval and dispatch operations.
+- SIGINT/SIGTERM are mapped to AbortSignal; listeners are removed and PostgreSQL pool is closed on exit. Structured pass/error events are emitted.
+- Build/typecheck passed. Dispatcher realpath tests: 3 passed, 0 failed, 0 skipped. Process-level fail-closed startup tests: 2 passed, 0 failed, 0 skipped. Worker/claim/store/config/approval contracts passed. Same-commit integrated gate, chapter-pilot matrix workflow, fresh-clone PostgreSQL, release and other applicable technical checks passed.
+- Operations runbook added with restricted-login setup, required configuration, bounded runtime controls and deployment limitations.
+- No production worker was launched; no dispatcher module, provider credentials, external action, cloud resource or Business UAT authorization was added.
+
+### #436 lifecycle status
+- Completed on main: restricted NOLOGIN worker role and live login proof (#439); startup privilege/RLS/ownership gate and approval-denial parking (#440); monotonic claim-generation fencing with live PostgreSQL takeover proof (#441); standalone fail-closed worker host, launch command, realpath containment and shutdown adapter (#442).
+- Remaining: real dispatcher implementation backed by approved secret resolution; two independent restricted logins proving concurrent claim exclusion and takeover under simultaneous claims; lease expiry/renewal/shutdown race tests; durable approval revocation at the last possible point before external action; provider-side idempotency; full retry/dead-letter/replay operations; deployment supervisor/restart policy and production metrics.
+- Worker remains disabled and unlaunched. No provider module is present. The runbook is operational guidance, not activation authorization.
+- Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER improved** — an independent process boundary now exists, but no approved dispatcher or live provider delivery.
+2. CI/persistence: **AMBER improved** — restricted role, startup checks and claim-generation fencing have exact PostgreSQL 16 evidence.
+3. Architecture/identity: **AMBER improved** — dedicated credentials and realpath-contained dispatcher loading are enforced at startup.
+4. Workflow/runtime: **AMBER improved** — process loop, launch script and graceful signal/pool cleanup are implemented; production supervision and provider lifecycle remain.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, chapter-pilot matrix workflow and fresh-clone PostgreSQL checks passed; path-filter-skipped duplicate matrix check is not counted.
+6. PR governance: **AMBER improved** — #442 was individually reviewed, validated and merged; stale branches were not bulk-merged.
+7. Release/continuity: **RED/AMBER** — no production dispatcher, provider credential path, supervised deployment or Business UAT evidence/authorization.
+
+Next safe slice: prove two independently connected restricted worker logins competing for the same tenant/application queue, lease takeover after expiry, and signal-driven shutdown under a fake dispatcher. Then exercise durable approval revocation and idempotent dispatch using a synthetic/local adapter only. No real provider calls, chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
