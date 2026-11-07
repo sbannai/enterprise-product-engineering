@@ -79,6 +79,7 @@ function options(calls, withProvider = false) {
       },
     },
     ...(withProvider ? {
+      assetUploadProviderCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
       assetUploadPort: {
         async invoke(request, requestId, operationId) {
           calls.push("provider");

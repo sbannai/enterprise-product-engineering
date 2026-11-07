@@ -38,6 +38,7 @@ test("reserves a stable session before provider grant and persists grant metadat
       recordUploadGrant: async (value) => { events.push("persist-grant"); recorded = value; },
       recordUploadProviderRejection: async () => assert.fail("unexpected provider rejection"),
     },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
     issueGrant: async (request, correlationId) => {
       events.push("provider");
       assert.equal(request.uploadSessionId, "00000000-0000-4000-8000-000000000001");
@@ -80,6 +81,7 @@ test("matching retry reuses the same session and requires the same provider obje
       recordUploadGrant: async (value) => { saved = value; },
       recordUploadProviderRejection: async () => assert.fail("unexpected provider rejection"),
     },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
     issueGrant: async (request) => { requestSeen = request; return { kind: "succeeded", ...grant("provider-object-existing") }; },
   });
   assert.equal(requestSeen.uploadSessionId, prior.uploadSessionId);
@@ -93,6 +95,7 @@ test("provider renewal cannot switch the persisted provider object", async () =>
   await assert.rejects(() => startCustomerAssetUpload(input, {
     now: () => now,
     repository: { reserveUpload: async () => prior, recordUploadGrant: async () => assert.fail("must not persist"), recordUploadProviderRejection: async () => assert.fail("must not reject") },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
     issueGrant: async () => ({ kind: "succeeded", ...grant("different-provider-object") }),
   }), /PROVIDER_REFERENCE_CONFLICT/);
 });
@@ -106,6 +109,7 @@ test("same idempotency key with changed immutable metadata is rejected by reposi
       reserveUpload: async (value) => { fingerprint = value.requestFingerprint; return reservation(); },
       recordUploadGrant: async () => {}, recordUploadProviderRejection: async () => {},
     },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
     issueGrant: async () => ({ kind: "succeeded", ...grant() }),
   });
   await assert.rejects(() => startCustomerAssetUpload(changed, {
@@ -149,6 +153,7 @@ test("ambiguous first provider outcome is not blindly created again on reservati
       recordUploadGrant: async () => {},
       recordUploadProviderRejection: async () => {},
     },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
     issueGrant: async () => { providerCalls++; return { kind: "unknown", reason: "transport" }; },
   };
   assert.equal(await startCustomerAssetUpload(input, deps), null);
@@ -166,6 +171,7 @@ test("only a definitive typed provider rejection is persisted as terminal reject
       recordUploadGrant: async () => assert.fail("must not persist a grant"),
       recordUploadProviderRejection: async value => { rejected = value; },
     },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
     issueGrant: async () => ({ kind: "rejected", rejectionCode: "policy_denied" }),
   });
   assert.equal(result, null);
