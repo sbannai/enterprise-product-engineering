@@ -18,12 +18,12 @@ export type ProviderStorageRuntimeRegistration<TCredentials> =
 
 export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   enabled: boolean;
-  environment: ProviderStorageRuntimeEnvironment;
+  environment?: ProviderStorageRuntimeEnvironment;
   registrations?: readonly ProviderStorageRuntimeRegistration<TCredentials>[];
-  dispatch: Pick<ProviderDispatchConfigurationService, "resolve">;
-  catalogue: Pick<PostgresProviderCatalogueRepository, "get">;
-  connections: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference">;
-  secretResolver: ProviderSecretResolverPort<TCredentials>;
+  dispatch?: Pick<ProviderDispatchConfigurationService, "resolve">;
+  catalogue?: Pick<PostgresProviderCatalogueRepository, "get">;
+  connections?: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference">;
+  secretResolver?: ProviderSecretResolverPort<TCredentials>;
   scannerIdentity?: string;
   allowedHosts?: readonly string[];
 };
@@ -66,6 +66,10 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
 ): ProviderStorageRuntimeComposition<TCredentials> {
   if (!input || input.enabled !== true) return { enabled: false, allowedHosts: [] };
 
+  if (input.environment !== "development" && input.environment !== "test" &&
+      input.environment !== "uat" && input.environment !== "production") {
+    throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
+  }
   if (!input.dispatch || !input.catalogue || !input.connections || !input.secretResolver) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
   }
