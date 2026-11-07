@@ -962,25 +962,46 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const locked = await client.query<{
-        asset_id: string; upload_status: string; scan_status: string;
-        lifecycle_status: string; session_status: string;
-        job_state: string; lease_owner: string | null; lease_active: boolean;
-      }>(
-        `SELECT a.asset_id, a.upload_status, a.scan_status, a.lifecycle_status,
-          s.upload_status AS session_status, j.state AS job_state, j.lease_owner,
-          (j.lease_expires_at > now()) AS lease_active
-         FROM eper_customer_asset_upload_sessions s
-         JOIN eper_customer_assets a
-           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         JOIN eper_customer_asset_scan_jobs j
-           ON j.tenant_id = s.tenant_id AND j.upload_session_id = s.upload_session_id
-         WHERE s.tenant_id = $1 AND s.application_id = $2 AND s.upload_session_id = $3
-         FOR UPDATE OF s, a, j`,
+      // Canonical lifecycle lock order: upload session -> asset -> scan job.
+      // Never use a joined FOR UPDATE here; planner-dependent lock acquisition can
+      // deadlock with exhausted-lease recovery.
+      const session = await client.query<{ asset_id: string; upload_status: string }>(
+        `SELECT asset_id, upload_status
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+          FOR UPDATE`,
         [input.tenantId, input.applicationId, input.uploadSessionId],
       );
-      const current = locked.rows[0];
-      if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const sessionRow = session.rows[0];
+      if (!sessionRow) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const asset = await client.query<{
+        asset_id: string; upload_status: string; scan_status: string; lifecycle_status: string;
+      }>(
+        `SELECT asset_id, upload_status, scan_status, lifecycle_status
+           FROM eper_customer_assets
+          WHERE tenant_id = $1 AND asset_id = $2
+          FOR UPDATE`,
+        [input.tenantId, sessionRow.asset_id],
+      );
+      const assetRow = asset.rows[0];
+      if (!assetRow) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
+      const job = await client.query<{
+        state: string; lease_owner: string | null; lease_active: boolean;
+      }>(
+        `SELECT state, lease_owner, (lease_expires_at > clock_timestamp()) AS lease_active
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+          FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
+      );
+      const jobRow = job.rows[0];
+      if (!jobRow) throw new Error("EPER_CUSTOMER_ASSET_SCAN_JOB_NOT_FOUND");
+      const current = {
+        asset_id: assetRow.asset_id, upload_status: assetRow.upload_status,
+        scan_status: assetRow.scan_status, lifecycle_status: assetRow.lifecycle_status,
+        session_status: sessionRow.upload_status, job_state: jobRow.state,
+        lease_owner: jobRow.lease_owner, lease_active: jobRow.lease_active,
+      };
       if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
       if (current.scan_status !== "pending") {
         if (current.scan_status === input.scanStatus) {
