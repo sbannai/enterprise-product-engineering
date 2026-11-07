@@ -1775,7 +1775,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
 
     // Direct upload grants are issued only after CSRF, durable session, application
     // assignment and explicit role permission checks; the storage provider remains injected.
-    const assetUploadMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{2,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/upload-grant$/.exec(requestUrl.pathname);
+    const assetUploadMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{2,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/upload-grant$/.exec(requestUrl.pathname);
     if (assetUploadMatch) {
       if (process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
