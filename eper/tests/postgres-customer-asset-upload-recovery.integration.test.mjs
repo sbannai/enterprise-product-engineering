@@ -72,7 +72,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         repository.reserveUpload({
           ...reservationInput, applicationId: otherApplicationId,
         }),
-        /EPER_CUSTOMER_ASSET_NOT_FOUND|duplicate key|unique constraint/i,
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
         "another application must not recover the reservation or learn its session",
       );
 
