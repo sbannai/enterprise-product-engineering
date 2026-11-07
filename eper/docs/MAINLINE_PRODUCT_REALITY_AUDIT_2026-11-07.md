@@ -165,3 +165,32 @@ A narrow main-based test-only correction is proposed in [PR #433](https://github
 - Business UAT: no responsible ETA until all 13 entry gates and 48 case-level approval/preparation gaps have owners and evidence; current audit still records 228/228 not run and 0/228 accepted.
 
 No mainline product change, migration change, bulk PR closure, branch deletion, chargeable cloud resource or Business UAT authorization has been made.
+
+
+## 8. Requirement and B01 source-register reconciliation — 2026-11-07
+
+### 228-row business capture is explicit and complete as a register, but unexecuted
+
+The mainline file `eper/uat/EPER_228_BUSINESS_UAT_EXECUTION_CAPTURE.csv` contains 228 data rows (one for every approved requirement ID across Chapters 463–500). Every row currently has `outcome=NOT_RUN` and `business_decision=PENDING`. This supports the CI readiness count of 228 not run / zero accepted. It is not a missing register; it is a populated capture register with no business execution evidence yet.
+
+The requirement registry `eper/packages/requirements/registry.ts` defines six repeating technical patterns for every chapter: authoritative records, authorization, business validation, audit evidence, exception handling and governed reporting. That gives 228 requirement bindings to shared capability contracts, but it does not make each chapter's business acceptance criterion specific or approved.
+
+The existing technical crosswalk `eper/docs/requirements/EPER_V34_TO_228_REQUIREMENTS_CROSSWALK.md` explicitly states that it cannot make exact approved feature-to-REQ mappings: 45 wireframe candidate rows are only partially supported by shared controls; zero are fully covered by one exact 228 requirement; the 45 candidates remain additive v1.6.0 draft proposals. Do not import those 45 proposals into the approved 228 baseline or report them as owner-approved requirements.
+
+### B01 baseline approval: reconcile a source-record conflict, do not assume
+
+There is a recorded decision note `eper/uat/B01_BASELINE_APPROVAL_DECISION_001.md` stating B01-BASELINE-APPROVAL-001 was APPROVED for controlled BRD/SRS versions, Chapters 463–470, 48 requirements, on 2026-10-11. It explicitly excludes requirement-specific acceptance criteria, test oracles, case approval and UAT execution.
+
+However, `eper/uat/B01_READINESS_BLOCKER_CLOSURE_PLAN.md` records a later source-package conflict: the GitHub checklist says approved while copies of the controlled source package describe the SRS/source baseline as working draft / approval pending; a standalone approval artifact with independently verifiable scope, approver, versions and effective date was not located in the searched materials. The latest CI readiness audit therefore correctly counts 48 cases as lacking a controlled baseline approval evidence locator.
+
+The accurate status is **approval decision recorded, controlled source artifact/locator reconciliation unresolved**. This is more precise than saying no approval decision exists. Do not fill the 48 locators or flip status fields until the authoritative artifact is verified.
+
+### B01 case-preparation gaps
+
+The 48-row B01 case checklist and related acceptance matrix/gap register are structurally aligned. But all 48 case rows still lack actor/role/tenant confirmation, approved preconditions/test data, reviewed positive steps, reviewed negative paths, approved measurable expected results, evidence capture plan and complete review/approval fields. All 48 execution authorization fields remain NO. The 13 E1–E13 controls remain pending or without current evidence in the latest readiness run.
+
+This confirms the near-term critical path is controlled source resolution and requirement-specific acceptance/case approval—not another round of generic technical CI.
+
+## 9. Test-fixture correction status — 2026-11-07 03:08 UTC
+
+PR #433 changes only the static reservation expiry in `eper/tests/customer-asset-upload-api.test.mjs` to a five-minute relative expiry. On exact PR head `3b8e02cc620a473fbcc84c9d4295ed4d116037a9`, 8 of 10 workflows have completed successfully, including EPER CI and controlled QA re-execution. Integrated validation and fresh-clone setup are still running at this update. The corrected test has not yet been declared fully accepted; wait for all ten exact-head workflows to finish.
