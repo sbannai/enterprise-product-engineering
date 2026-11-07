@@ -20,3 +20,40 @@ test("dedicated workflow outbox login satisfies the live restricted PostgreSQL r
     await pool.end();
   }
 });
+
+
+test("worker startup gate rejects unauthorized column-level write grants", {
+  skip: !databaseUrl || !process.env.DATABASE_URL,
+}, async () => {
+  const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+  const worker = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  try {
+    await admin.query(
+      "GRANT UPDATE (tenant_id) ON public.eper_workflow_outbox_delivery TO " + expectedRole,
+    );
+    await assert.rejects(
+      () => assertRestrictedWorkerDatabaseRole(worker, expectedRole),
+      /WORKFLOW_OUTBOX_DATABASE_GRANTS_INVALID/,
+    );
+    await admin.query(
+      "REVOKE UPDATE (tenant_id) ON public.eper_workflow_outbox_delivery FROM " + expectedRole,
+    );
+
+    await admin.query(
+      "GRANT UPDATE (tenant_id) ON public.eper_tenant_application_assignment TO " + expectedRole,
+    );
+    await assert.rejects(
+      () => assertRestrictedWorkerDatabaseRole(worker, expectedRole),
+      /WORKFLOW_OUTBOX_DATABASE_GRANTS_INVALID/,
+    );
+  } finally {
+    await admin.query(
+      "REVOKE UPDATE (tenant_id) ON public.eper_workflow_outbox_delivery FROM " + expectedRole,
+    ).catch(() => undefined);
+    await admin.query(
+      "REVOKE UPDATE (tenant_id) ON public.eper_tenant_application_assignment FROM " + expectedRole,
+    ).catch(() => undefined);
+    await worker.end();
+    await admin.end();
+  }
+});
