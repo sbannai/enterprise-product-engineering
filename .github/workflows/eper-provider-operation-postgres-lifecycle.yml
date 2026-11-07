@@ -11,6 +11,7 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -25,6 +26,7 @@ on:
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -74,3 +76,5 @@ jobs:
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
       - name: Exercise customer-asset upload recovery and scan lifecycle on PostgreSQL 16
         run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
+      - name: Verify customer-asset migration catalog, RLS role boundary and checksum drift on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-migration-assurance.integration.test.mjs
