@@ -72,7 +72,10 @@ export async function startCustomerAssetUpload(
     ...(reservation.providerUploadReference
       ? { providerUploadReference: reservation.providerUploadReference } : {}),
   };
-  const grant = await dependencies.issueGrant(request, input.idempotencyKey);
+  // Keep request tracing separate from the client key. The durable provider
+  // operation identity is request.uploadSessionId; adapters receive the API
+  // correlation ID in IntegrationPort's correlation slot.
+  const grant = await dependencies.issueGrant(request, input.correlationId);
   if (!grant) return null;
   const now = (dependencies.now ?? Date.now)();
   const expiry = Date.parse(grant.expiresAt);

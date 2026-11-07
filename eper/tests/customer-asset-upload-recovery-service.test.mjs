@@ -36,11 +36,11 @@ test("reserves a stable session before provider grant and persists grant metadat
       reserveUpload: async (value) => { events.push("reserve"); reservedInput = value; return reservation(); },
       recordUploadGrant: async (value) => { events.push("persist-grant"); recorded = value; },
     },
-    issueGrant: async (request, idempotencyKey) => {
+    issueGrant: async (request, correlationId) => {
       events.push("provider");
       assert.equal(request.uploadSessionId, "00000000-0000-4000-8000-000000000001");
       assert.equal(request.assetId, input.assetId);
-      assert.equal(idempotencyKey, input.idempotencyKey);
+      assert.equal(correlationId, input.correlationId);
       return grant();
     },
   });

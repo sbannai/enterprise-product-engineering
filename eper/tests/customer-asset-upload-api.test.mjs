@@ -83,7 +83,7 @@ function options(calls, withProvider = false) {
           calls.push("provider");
           assert.equal(request.uploadSessionId, "session-upload-001");
           assert.equal(request.applicationId, "app-alpha");
-          assert.equal(requestId, "upload-request-key-0001");
+          assert.equal(requestId, "upload-api-correlation-001");
           return {
             success: true,
             externalReference: "opaque-provider-object-reference",
@@ -153,7 +153,7 @@ test("upload grant endpoint reserves, invokes allowlisted provider, persists ref
   await withServer(t, async (base, calls) => {
     const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/upload-grant", {
       method: "POST",
-      headers: { origin, cookie, "x-csrf-token": csrf,
+      headers: { origin, cookie, "x-csrf-token": csrf, "x-request-id": "upload-api-correlation-001",
         "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
       body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
     });
