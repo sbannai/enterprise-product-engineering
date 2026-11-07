@@ -252,7 +252,7 @@ All 29 pre-existing open PRs were individually compared with current main. Every
 
 ### Mainline and audit CI confirmation
 
-Current main `2f42e87b0b88a74ef856a9b7095ed4d116037a9` has all 9 observed workflows successful, including EPER CI, integrated validation and fresh-clone setup. Audit PR #432 was retargeted to current main; its exact head `9fe162ad07953750b93dd386ea70ac051731447c` has all 9 observed workflows successful and is now 4 commits ahead / 0 behind. It remains draft and unmerged pending review of this report.
+Current main `2f42e87b0b88a74ef856a9b709d68d1d39eba1de` has all 9 observed workflows successful, including EPER CI, integrated validation and fresh-clone setup. Audit PR #432 was retargeted to current main; its exact head `9fe162ad07953750b93dd386ea70ac051731447c` has all 9 observed workflows successful and is now 4 commits ahead / 0 behind. It remains draft and unmerged pending review of this report.
 
 ### Next safe execution order
 
