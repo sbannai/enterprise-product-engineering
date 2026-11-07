@@ -1115,3 +1115,31 @@ Next safe slice: exercise a real worker host under a fake process supervisor wit
 7. Release/continuity: **RED/AMBER** — no approved provider integration, secret resolver, production supervisor or Business UAT evidence/authorization.
 
 Next safe slice: implement an explicit production activation gate and deployment preflight that requires a signed-off dispatcher, secret-resolver contract, provider idempotency key, approval-revocation proof, process supervisor and telemetry before the worker can be enabled outside CI. Keep the worker disabled and use no provider credentials, chargeable cloud resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 21:25 IST
+
+### PR backlog reconciliation — superseded workflow branches closed
+- Closed PR #411 (`fix(workflows): fence outbox delivery against stale claims`) as superseded by merged PR #441 and the subsequent current-main validation series #443–#446. The claim-generation fencing and associated proof remain on main; no functionality was discarded.
+- Closed PR #400 (`feat(workflows): add independent workflow outbox worker`) as superseded by the individually extracted, validated mainline work #439–#446, including standalone worker host, restricted role, startup/approval gates, claim fencing, two-login concurrency, retry/replay and bounded shutdown. The stale bundled branch was not merged or deleted.
+- Both closures were individually documented in their PR conversations. No code changes were made to main in this cleanup step.
+
+### Live repository inventory after reconciliation
+- Open PRs: **28** (down from 30).
+- Merged PRs: **266**.
+- Closed without merge: **99** (includes these two documented superseded closures).
+- Total PRs: **393**.
+- Open issues: **34**.
+- Closed issues: **19**.
+- Open PR count verified from GitHub's live pulls endpoint; issue counts and historical merged/closed totals from GitHub search index. Search index may lag very recent state changes.
+- Remaining open PRs are not assumed redundant; continue individual purpose/base/diff/mainline/evidence reconciliation before closing, extracting or merging.
+
+### Seven-checkpoint impact
+- PR governance: **AMBER improved** — active workflow backlog reduced from 30 to 28 by evidence-based closure of two branches whose functionality is already on main.
+- Product/functionality: unchanged — no customer functionality removed; all referenced worker capabilities remain in main.
+- No changes to approved 228 requirements / 38 chapters, production worker activation, provider credentials, cloud resources or Business UAT authorization.
+
+Next reconciliation targets: inspect remaining open PRs by dependency graph and current-main overlap. Prioritize customer asset upload/recovery stack (#384, #386, #402, #422, #423, #426) as one dependency chain; do not merge isolated child PRs ahead of required migration and PostgreSQL 16 integration proof.
