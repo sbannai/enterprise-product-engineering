@@ -725,3 +725,26 @@ No merge, PR closure, branch deletion, real provider dispatch, cloud provisionin
 5. Complete #406 release controls with owner-approved rulesets, off-host recovery design/evidence, RPO/RTO, runbooks and independent second-engineer rehearsal.
 
 No PR was merged or closed, no branch was deleted, no chargeable cloud resource was provisioned, no real external/provider action was triggered, and no approved requirement/chapter was changed by this checkpoint.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 19:15 IST
+
+### Exact mainline identity and CI
+- Dynamically resolved main SHA: `10009d8741687b8249bfe50d3999b6c7cc52ee3b` (`test(assets): include scope in provider lookup failure fixture`).
+- Exact-SHA push workflows completed successfully: EPER CI run `42377814893`; integrated validation `42377814818`; fresh-clone PostgreSQL verification `42377814804`; 228-requirement pilot matrix `42377814777`; six-family HTTP smoke `42377814758`; controlled QA re-execution `42377814756`; container smoke `42377814735`; controlled UAT technical simulation `42377814840`; G9 reconciliation `42377814877`. All nine runs report completed/success. The integrated-validation run has six successful jobs, including PostgreSQL/payment contracts, G9/release artifact, UAT readiness audit, container/six-family smoke, 228/38 matrix and same-commit integrated gate. Fresh-clone PostgreSQL job passed. No separate commit status contexts were returned; workflow-run evidence is the verification source.
+
+### #397 provider runtime — implementation boundary
+- Main contains the six-operation provider runtime contracts and components: exact-version adapter registry, provider runtime resolution, credential resolution, PostgreSQL dispatch configuration service, driver dispatch service, runtime composition validator and opt-in configuration parser.
+- Main `eper/apps/api/main.ts` still does not compose the policy/dispatch service, concrete provider runtime, or secret resolver into the API. If `EPER_PROVIDER_STORAGE_RUNTIME_ENABLED=true`, startup intentionally throws `PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED`. This is fail-closed and must remain so until the missing dependencies are explicitly supplied and tested.
+- Missing integration work: instantiate the PostgreSQL tenant/application dispatch policy service on the dedicated provider-catalogue pool; supply an approved server-side secret-resolver implementation; supply provider driver registrations (network-free synthetic drivers for tests only; approved real drivers separately); adapt all six operations into the existing asset upload/lookup/renew/verify/download/scan ports; connect the runtime host allowlist to the asset grant validator; and test disabled-by-default plus incomplete/production startup rejection.
+- No production secret resolver, real provider SDK, provider dispatch, customer binary, cloud resource, deployment or Business UAT is authorized or claimed. No approved requirement or chapter changed.
+
+### Next slice
+1. Implement and test a network-free synthetic storage/verification/download/scanner driver set with explicit `synthetic: true` metadata and production prohibition.
+2. Wire the provider-catalogue PostgreSQL dispatch configuration and runtime composition into API startup only for a complete explicit opt-in; preserve disabled-by-default behavior.
+3. Adapt the six runtime operations to the existing asset ports and prove host/HTTPS/TTL, tenant/application, credential redaction, upload recovery, verification, clean-scan and download authorization boundaries.
+4. Run exact-head CI and PostgreSQL integration, then #405 real-byte browser journey on the same reconciled SHA.
+
+No PR merge/closure, branch deletion, chargeable cloud provisioning, production provider call, release or Business UAT authorization is made by this checkpoint.
