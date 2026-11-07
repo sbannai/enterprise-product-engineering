@@ -64,6 +64,44 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
         run: npm run migrate:audit
+      - name: Verify customer asset migrations replay on PostgreSQL 16 with RLS intact
+        run: |
+          set -euo pipefail
+          for migration in packages/audit/migrations/021_customer_asset_repository.sql packages/audit/migrations/022_customer_asset_scan_dispatch.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $
+          DECLARE table_name text;
+          BEGIN
+            FOREACH table_name IN ARRAY ARRAY[
+              'eper_customer_assets',
+              'eper_customer_asset_application_links',
+              'eper_customer_asset_upload_sessions',
+              'eper_customer_asset_scan_jobs'
+            ] LOOP
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public' AND c.relname = table_name
+                   AND c.relrowsecurity AND c.relforcerowsecurity
+              ) THEN
+                RAISE EXCEPTION 'customer asset table missing ENABLE/FORCE RLS: %', table_name;
+              END IF;
+            END LOOP;
+            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_assets' AND policyname = 'customer_asset_application_read')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_assets' AND policyname = 'customer_asset_application_insert')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_assets' AND policyname = 'customer_asset_application_update')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_asset_scan_jobs' AND policyname = 'customer_asset_scan_job_application_isolation') THEN
+              RAISE EXCEPTION 'customer asset RLS policies missing after replay';
+            END IF;
+            IF NOT has_table_privilege('eper_customer_asset_access', 'public.eper_customer_assets', 'SELECT')
+              OR NOT has_table_privilege('eper_customer_asset_access', 'public.eper_customer_asset_upload_sessions', 'INSERT')
+              OR NOT has_table_privilege('eper_customer_asset_access', 'public.eper_customer_asset_scan_jobs', 'UPDATE') THEN
+              RAISE EXCEPTION 'customer asset least-privilege grants missing after replay';
+            END IF;
+          END $;
+          SQL
       - name: Apply workflow execution, publication and role migrations to ephemeral CI database
         run: npm run migrate:workflows
       - name: Verify workflow migrations are safely repeatable
