@@ -112,3 +112,30 @@ test("rejects malformed operation inputs before runtime or secret resolution", a
     error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
   assert.equal(f.calls.some(call => call[0] === "resolve"), false);
 });
+
+test("classifies renew tenant mismatch as scope failure, not missing capability", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
+    operation: { kind: "renew_upload", request: {
+      tenantId: "tenant-b", applicationId: "app-a", actorId: "actor", assetId: "asset",
+      uploadSessionId: "session", fileName: "file.txt", mimeType: "text/plain",
+      sizeBytes: 1, providerUploadReference: "provider-ref",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+  assert.equal(f.calls.some(call => call[0] === "renew"), false);
+});
+
+test("classifies download application mismatch as scope failure, not missing capability", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
+    operation: { kind: "create_download", request: {
+      tenantId: "tenant-a", applicationId: "app-other", actorId: "actor",
+      assetId: "asset", accessReference: "access-ref", fileName: "file.txt",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+  assert.equal(f.calls.some(call => call[0] === "download"), false);
+});
