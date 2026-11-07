@@ -53,6 +53,10 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
         has_column_privilege('eper_provider_catalogue_access', 'public.eper_provider_connections', 'connection_status', 'UPDATE') AS provider_connection_status_update,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_validation_events', 'INSERT') AS provider_validation_insert,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_validation_events', 'SELECT') AS provider_validation_select,
+        has_table_privilege('eper_provider_catalogue_access', 'public.eper_tenant_provider_defaults', 'SELECT') AS tenant_defaults_select,
+        has_column_privilege('eper_provider_catalogue_access', 'public.eper_tenant_provider_defaults', 'version', 'UPDATE') AS tenant_defaults_version_update,
+        has_table_privilege('eper_provider_catalogue_access', 'public.eper_application_provider_policies', 'SELECT') AS application_policy_select,
+        has_table_privilege('eper_provider_catalogue_access', 'public.eper_provider_operations', 'INSERT') AS provider_operations_insert,
         has_table_privilege('eper_provider_catalogue_access', 'public.eper_platform_admin_credentials', 'SELECT') AS provider_credential_read,
         has_table_privilege('eper_platform_admin_access', 'public.eper_audit_events', 'INSERT') AS platform_audit_insert,
         has_table_privilege('eper_platform_admin_access', 'public.eper_audit_events', 'UPDATE') AS platform_audit_update,
@@ -65,7 +69,9 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       "platform_credential_select", "platform_credential_insert", "platform_last_used_update",
       "platform_revoked_update", "provider_definition_select", "provider_definition_insert",
       "provider_status_update", "provider_connection_insert", "provider_connection_status_update",
-      "provider_validation_insert", "provider_validation_select", "platform_audit_insert",
+      "provider_validation_insert", "provider_validation_select", "tenant_defaults_select",
+      "tenant_defaults_version_update", "application_policy_select", "provider_operations_insert",
+      "platform_audit_insert",
       "provider_audit_insert", "provider_chain_head_update",
     ]) assert.equal(g[key], true, key);
     for (const key of [
@@ -82,8 +88,10 @@ test("privileged PostgreSQL roles enforce isolated least-privilege grants and te
       "eper_provider_connections",
       "eper_provider_connection_applications",
       "eper_provider_validation_events",
+      "eper_tenant_provider_defaults",
+      "eper_application_provider_policies",
     ]]);
-    assert.equal(rls.rows.length, 3);
+    assert.equal(rls.rows.length, 5);
     for (const table of rls.rows) {
       assert.equal(table.relrowsecurity, true, table.relname + " RLS enabled");
       assert.equal(table.relforcerowsecurity, true, table.relname + " RLS forced");

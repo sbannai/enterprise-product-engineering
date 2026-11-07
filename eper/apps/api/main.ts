@@ -140,7 +140,8 @@ if (providerCataloguePool) {
     [
       "eper_provider_definitions", "eper_provider_connections",
       "eper_provider_connection_applications", "eper_provider_validation_events",
-      "eper_audit_events", "eper_audit_chain_head",
+      "eper_tenant_provider_defaults", "eper_application_provider_policies",
+      "eper_provider_operations", "eper_audit_events", "eper_audit_chain_head",
     ],
     "EPER_PROVIDER_CATALOGUE_DATABASE_ROLE_INVALID",
   );
