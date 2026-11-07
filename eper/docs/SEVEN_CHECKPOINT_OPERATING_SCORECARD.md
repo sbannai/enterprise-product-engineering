@@ -885,3 +885,37 @@ No PR was merged or closed; no branch was deleted; no approved requirement or ch
 7. Release/continuity: **RED/AMBER** — no production worker deployment or continuity proof; Business UAT remains unauthorized.
 
 Next safe action: port the independent worker entrypoint/configuration from the stale candidate only after re-reading it against this new main SHA. Keep explicit opt-in, fail-closed dispatcher loading, dedicated restricted database credentials, human approval recheck, claim fencing and graceful shutdown as required tests. Preserve all 228 approved requirements and 38 chapters. No cloud resource, production worker, provider action, customer external action or Business UAT authorization is made by this checkpoint.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:33 IST
+
+### Workflow outbox startup and approval boundary — PR #440 merged
+- PR #440 merged to main by squash at `c255d6ee735379930496e0cebae49990f9957e74`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `6c90ed5524f08bf97086c723dbef6029af13b554`.
+- 16 check runs succeeded; one separate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted as a pass. The `chapter-pilot-matrix` workflow completed successfully, as did the same-commit integrated gate.
+- PostgreSQL 16 dedicated-login baseline: 1 passed, 0 failed, 0 skipped.
+- Startup privilege gate adversarial regression: 2 passed, 0 failed, 0 skipped. The test deliberately granted unauthorized column-level UPDATE privileges on delivery and assignment tables and verified startup rejected both.
+- Worker config and approved-dispatcher contract suite: 18 passed, 0 failed, 0 skipped. Build/typecheck, migration replay, fresh-clone PostgreSQL verification, UAT technical simulation, release artifact, G9 reconciliation, six-family HTTP smoke and container smoke passed.
+- Startup checks now reject excess column-level privileges, not merely table-level grants; assignment discovery remains limited to three approved columns; event rows remain read-only; delivery-state updates remain column-scoped.
+- Human approval is checked for the exact event immediately before dispatch. Denied approval is parked in dead-letter without transient retry.
+- No worker executable, launch script, production dispatcher, secret resolver, provider action, cloud resource or Business UAT authorization was added.
+
+### #436 lifecycle status
+- Completed on main: restricted NOLOGIN database role/migration and live dedicated PostgreSQL login proof (#439); bounded worker config; startup privilege gate with adversarial column-grant proof; approval-gated dispatcher interface and denial parking (#440).
+- Still required: independently launchable worker process and package script; deployment-bundled module realpath/symlink containment at load time; current-main claim-generation fencing and two-worker concurrency proof; lease renewal/takeover; approval revocation race handling; idempotent delivery; retry/backoff/recovery; SIGTERM supervision and pool closure.
+- The dispatcher remains an interface only. No external action or production activation is possible from this slice alone. Worker remains disabled and unlaunched.
+- Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER** — workflow delivery still lacks an independently supervised worker process.
+2. CI/persistence: **AMBER improved** — PostgreSQL 16 least-privilege startup proof, including adversarial column grants, is green on exact head.
+3. Architecture/identity: **AMBER improved** — restricted role, RLS checks, and approval boundary are on main; actual production dispatcher is not.
+4. Workflow/runtime: **AMBER improved** — configuration and approval gates exist; independent process lifecycle and fencing remain.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, chapter-pilot matrix workflow and fresh-clone verification succeeded; path-filter-skipped duplicate matrix check is not represented as passed.
+6. PR governance: **AMBER improved** — #440 reconciled and merged individually; no orphan functionality was bulk-merged.
+7. Release/continuity: **RED/AMBER** — no supervised production worker, production provider connection or Business UAT evidence/authorization.
+
+Next safe slice: implement the independently launchable worker process on current main, with explicit opt-in and startup realpath containment, then prove claim-generation fencing and full lifecycle behavior on PostgreSQL 16 with two concurrent restricted worker logins. Preserve all 228 approved requirements and 38 chapters. No chargeable AWS resources, external provider actions or Business UAT authorization.
