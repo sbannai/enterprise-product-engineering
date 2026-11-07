@@ -1143,3 +1143,33 @@ Next safe slice: implement an explicit production activation gate and deployment
 - No changes to approved 228 requirements / 38 chapters, production worker activation, provider credentials, cloud resources or Business UAT authorization.
 
 Next reconciliation targets: inspect remaining open PRs by dependency graph and current-main overlap. Prioritize customer asset upload/recovery stack (#384, #386, #402, #422, #423, #426) as one dependency chain; do not merge isolated child PRs ahead of required migration and PostgreSQL 16 integration proof.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 21:55 IST
+
+### Customer-asset PR reconciliation — two superseded branches closed
+- Closed PR #422: provider upload outcome/idempotency/lookup contract is superseded by current-main typed outcome, capability, lookup adapter, service and API-composition work tracked in issue #437. The remaining configured vendor implementation remains explicitly unclaimed.
+- Closed PR #423: its migration 026 is based on a divergent 021–025 migration chain and reuses the recovery-index name already created by current-main migration 023 with a different definition. Current main has durable recovery metadata in migration 023 and provider outcome/backfill in migration 024. The old migration cannot be merged safely.
+- Both PR conversations contain the reason and current-main replacement references. Neither branch was merged or deleted.
+
+### Current-main capability audit
+- Present on main: tenant-isolated customer asset repository, upload reservation/idempotency, request fingerprint, provider grant expiry/recovery timestamp, explicit provider outcome classification, typed provider capabilities and lookup semantics, API composition seam, upload recovery service and PostgreSQL integration test.
+- Still absent as a complete current-main vertical slice: independent customer-asset scan worker/adapters/runtime (tracked by #435 and source material in #384); isolated upload-expiry worker and least-privilege runtime (tracked by #404, source material in #414/#402).
+- PostgreSQL 16 migration acceptance remains open in #425. The earlier PR #426 CI was branch-only; it does not prove the current-main migration 023/024 upgrade, legacy backfill, exact index definitions, RLS/grants and checksum behavior.
+- PR #384/#402/#426 remain source/reference branches only; their stale stacked histories must not be merged wholesale.
+
+### Live inventory after closures
+- Open PRs: 26 (down from 28).
+- Merged PRs: 266.
+- Closed without merge: 101.
+- Total PRs: 393.
+- Open issues: 34.
+- Closed issues: 19.
+- No code was merged in this reconciliation checkpoint. The two closures remove superseded branches only.
+
+### Delivery decision
+- Continue with three current-main work packages: (1) PostgreSQL 16 migration/legacy upgrade proof for 023–024 (#425), (2) scan worker vertical slice (#435), and (3) upload-expiry worker vertical slice (#404).
+- Provider vendor activation remains disabled until owner-approved credentials, adapter capabilities, secret resolution and real-provider evidence exist.
+- Approved 228 requirements / 38 chapters unchanged. No cloud resources provisioned; Business UAT remains unauthorized.
