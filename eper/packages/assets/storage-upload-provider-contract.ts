@@ -24,6 +24,8 @@ export type StorageUploadLookupOutcome =
 
 /** Minimal lookup request: provider identity is always the server-owned session ID. */
 export interface StorageUploadLookupRequest {
+  tenantId: string;
+  applicationId: string;
   uploadSessionId: string;
 }
 
