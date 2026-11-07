@@ -13,7 +13,7 @@ const cookie = `${CUSTOMER_SESSION_COOKIE}=${sessionToken}; ${CUSTOMER_CSRF_COOK
 const envKeys = [
   "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
   "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
-  "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_OIDC_ENABLED",
+  "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_OIDC_ENABLED", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
 ];
 function configure() {
   for (const [key, value] of Object.entries({
@@ -25,7 +25,7 @@ function configure() {
     EPER_CUSTOMER_OIDC_ENABLED: "true",
   })) process.env[key] = value;
 }
-function options(calls) {
+function options(calls, withProvider = false) {
   return {
     adminConfigEnvironment: "uat",
     customerOidcPublicOrigin: origin,
@@ -60,12 +60,46 @@ function options(calls) {
     },
     customerAssetRepository: {
       async assertReady() {},
-      async reserveUpload() { throw new Error("must not reserve without a provider"); },
-      async recordUploadGrant() { throw new Error("must not persist without a provider"); },
+      async reserveUpload(input) {
+        calls.push("reserve");
+        if (!withProvider) throw new Error("must not reserve without a provider");
+        assert.equal(input.applicationId, "app-alpha");
+        return {
+          uploadSessionId: "session-upload-001", providerUploadReference: null,
+          uploadStatus: "initiated", expiresAt: "2026-11-07T03:00:00.000Z",
+          providerGrantExpiresAt: null,
+        };
+      },
+      async recordUploadGrant(input) {
+        calls.push("record-grant");
+        if (!withProvider) throw new Error("must not persist without a provider");
+        assert.equal(input.uploadSessionId, "session-upload-001");
+        assert.equal(input.providerUploadReference, "opaque-provider-object-reference");
+      },
     },
+    ...(withProvider ? {
+      assetUploadPort: {
+        async invoke(request, requestId) {
+          calls.push("provider");
+          assert.equal(request.uploadSessionId, "session-upload-001");
+          assert.equal(request.applicationId, "app-alpha");
+          assert.equal(requestId, "upload-request-key-0001");
+          return {
+            success: true,
+            externalReference: "opaque-provider-object-reference",
+            value: {
+              url: "https://uploads.example.test/put/object?signature=redacted",
+              method: "PUT",
+              expiresAt: "2026-11-07T02:35:00.000Z",
+              headers: { "content-type": "application/pdf" },
+            },
+          };
+        },
+      },
+    } : {}),
   };
 }
-async function withServer(t, handler) {
+async function withServer(t, handler, withProvider = false) {
   const previous = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
   configure();
   const calls = [];
@@ -112,4 +146,22 @@ test("upload grant endpoint authorizes durable role but fails closed when no tru
     assert.deepEqual(await response.json(), { error: "customer_asset_upload_provider_unavailable" });
     assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
   });
+});
+
+test("upload grant endpoint reserves, invokes allowlisted provider, persists reference, and never discloses provider reference", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/upload-grant", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf,
+        "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
+      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.uploadSessionId, "session-upload-001");
+    assert.equal(payload.upload.method, "PUT");
+    assert.equal(new URL(payload.upload.url).hostname, "uploads.example.test");
+    assert.equal(JSON.stringify(payload).includes("opaque-provider-object-reference"), false);
+    assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission", "reserve", "provider", "record-grant"]);
+  }, true);
 });
