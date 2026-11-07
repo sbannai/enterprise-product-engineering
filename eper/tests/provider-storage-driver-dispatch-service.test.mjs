@@ -43,7 +43,7 @@ test("resolves tenant-scoped runtime and invokes only the requested operation", 
   const f = fixture();
   const result = await f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
-    operation: { kind: "lookup_upload", request: { uploadSessionId: "upload-session-1" } },
+    operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "upload-session-1" } },
   });
   assert.deepEqual(result, { kind: "not_found" });
   assert.equal(f.calls[0][1].capability, "storage.upload.lookup");
