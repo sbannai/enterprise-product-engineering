@@ -1,3 +1,4 @@
+# Uses a deterministic local OIDC test issuer and disposable PostgreSQL. This verifies the browser protocol/session lifecycle, not production identity-provider interoperability.
 name: EPER Customer OIDC Browser E2E
 
 on:

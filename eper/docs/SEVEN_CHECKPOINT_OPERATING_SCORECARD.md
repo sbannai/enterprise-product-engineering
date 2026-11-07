@@ -515,3 +515,73 @@ PR #348 contains current main as an ancestor and the corrected shared tariff pol
 5. Finish restricted worker identity, independent supervision, alerts, backup/recovery runbooks and second-engineer release demonstration.
 
 No approved requirement or chapter was edited. No branch was deleted, no merge was performed, no chargeable cloud resource was provisioned, and no real external/provider action was triggered.
+
+
+---
+
+## Mainline evidence refresh — 2026-11-07 08:00 IST
+
+Evidence baseline: live `main` SHA `eb1704501480847a47e8fa138176ff400fbc4250`, resolved immediately before this reporting update. This section supersedes the older seven-checkpoint snapshot. Exact-head evidence is not inherited across a later commit; each subsequent run must resolve `main` again and match the Actions `head_sha`.
+
+### 1. Requirements reconciliation — AMBER
+
+- The approved baseline remains 228 requirements across Chapters 463–500 (38 chapters); the crosswalk records zero baseline changes.
+- The v34 source export retains 45 original candidate rows. The current technical crosswalk records zero exact mappings and 45 partial links to shared controls. It proposes 45 additive v1.6.0 draft requirements; these are not owner-approved or implemented by virtue of the crosswalk.
+- The separate owner-directed commercial additions CW-046–055 remain distinct from the original 45 v34 rows.
+- The 228/38 automated pilot matrix last passed on predecessor main SHA `a6b24aea9ca85c4ffa5aecb73d8ab48cd73f1379` (run 42329379609): 259 passed checks, zero failed, 38 chapters, no failed chapters. That result is historical for that SHA and must be refreshed after a head change.
+- Next: preserve all 228/38 identifiers, complete feature-level v34 traceability without fabricated exact REQ matches, and obtain explicit owner approval before promoting additive scope.
+
+### 2. Fresh-clone setup and PostgreSQL — GREEN for local reproducibility; production recovery remains unproven
+
+- PR #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`.
+- Exact-main fresh-clone run 42330179708 on `eb1704501480847a47e8fa138176ff400fbc4250` passed `npm ci`, `npm run dev:verify`, local PostgreSQL 16 integration and the disposable backup/restore smoke.
+- Test result: 1,459 tests, 1,454 passed, zero failed, five skipped. The final marker was `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- Backup/restore smoke passed with 79 source/restored base tables and seven migration-ledger tables.
+- The seven migration groups include identity. The developer guide now distinguishes migration-runner ledger repeatability from direct SQL DDL replay.
+- On predecessor main SHA `a6b24aea9ca85c4ffa5aecb73d8ab48cd73f1379`, EPER CI run 42329379580 directly executed asset migrations 021, 022 and 023 twice on PostgreSQL 16, preserved a sentinel asset, checked ENABLE/FORCE RLS, policies and least-privilege grants, and passed the live upload-reservation integration test (1 passed, zero failed). Issue #427 was closed with this exact evidence. This predecessor run is not presented as a current-head check.
+- No production-scale capacity, off-host backup, key-custody, retention, RPO/RTO or independent disaster-recovery proof is asserted.
+
+### 3. Customer identity and authorization — AMBER
+
+- Merged foundations: PR #310 (`88b9708d748c19dc80a1a2d7ad4960914451db7e`), PR #324 (`a554990cb7f4969bb218aad7a2e9944aec62fa05`) and PR #329 (`82a82d92222c613c02e55f01211ecbb32ce63bba`).
+- Current main contains provider-neutral OIDC browser routes, PKCE/state/nonce protections, durable sessions, secure session/CSRF cookies, logout/revocation and server-derived tenant/actor/application assignment checks.
+- The exact-main fresh-clone suite includes live PostgreSQL tenant/actor assignment tests. The latest Chromium OIDC browser run before this snapshot was 42329222398 on predecessor SHA `5f797bd60701d8d3f00b8383c0fe5c2fc2751400`; it is not carried forward as an exact-`main` browser result.
+- The browser workflow uses a deterministic test issuer. It does not prove production identity-provider interoperability or operator credential lifecycle.
+
+### 4. Customer workspace and support — AMBER
+
+- The customer workspace has OIDC sign-in, assigned-application views, help/growth sections, tenant-scoped asset listing, ticket submission/history and customer-visible replies.
+- The support-admin console has queue filtering, triage/status, assignment, severity/P1 rationale, reply threads with internal/customer-visible separation and filtered export.
+- The admin support UI still uses a configured bearer credential rather than an integrated browser-admin OIDC journey. No verified SLA timer, response/resolution target or escalation-policy evidence was found in the current support flow.
+- The asset view has list/filter/export and a download action, but no customer file-upload control. `main.ts` constructs the durable asset repository but does not inject `assetUploadPort` or `assetStoragePort`; the server therefore has no concrete upload/download provider in its main composition. The provider-neutral adapter also collapses thrown/unsuccessful provider outcomes to `null`, rather than distinguishing definitive rejection from an unknown outcome.
+- The complete binary journey (upload, durable recovery, transfer, verification/scanning and authorized download) is not delivered on main. Issue #421 remains open; related provider/workspace work remains draft-branch-only.
+
+### 5. Scheduler and workflow operations — AMBER
+
+- Current main worker entrypoints are `agent-worker-main.ts` and `campaign-scheduler-main.ts`. An independent workflow outbox worker is not yet on main.
+- Draft PR #400 contains the independent worker; draft PR #411 adds stale-claim fencing. Exact-head branch evidence includes lease renewal, fencing, idempotency, retry/dead-letter behavior, shutdown recovery and approved-dispatch parking. PR #411 fresh-clone run 42222084089 passed 1,437 of 1,442 tests, zero failed, five skipped; its live restricted-worker-login test was skipped.
+- These are branch-only results, not mainline delivery. Independent process supervision, restricted worker identity proof, operational alerting/metrics and a second-operator recovery rehearsal remain.
+
+### 6. Consolidation and repository governance — RED/AMBER
+
+- The live inventory contains 29 open PRs and every one is still draft. Exact-head Actions were checked for every current open PR; selected capability job logs were inspected. The exact-head runs are successful. Where an integrated gate path-skipped the 228/38 matrix, a separate standalone matrix run on that same head passed.
+- The main-branch-only functional delivery policy is effective: main is the product source of truth; stacked PRs are review/integration artifacts and must not hold approved functionality hostage.
+- Repository rulesets returned an empty collection. The branch-protection endpoint returned HTTP 403 through the connected GitHub integration, so protection is not verified and must not be assumed enabled.
+- Do not bulk-merge or mass-close drafts. Reconcile each branch against the live main SHA; close only after its full scope is demonstrably present on main.
+
+### 7. Release and independent continuity — AMBER
+
+- The clean-clone guide, local PostgreSQL verification, migration repeatability and disposable local restore smoke are documented and reproducible.
+- The continuity charter remains a proposed control baseline. The acceptance checklist still requires active repository protection, tested backup/restore runbooks, incident/recovery procedures, supervised worker operations and a demonstrated second-engineer build/test/release path.
+- No chargeable cloud resources or real external/provider actions are part of this evidence.
+
+### Immediate owner priorities
+
+1. Complete provider outcome classification and a deterministic isolated storage-provider integration; then prove the browser upload/transfer/scan/download journey.
+2. Complete migration 026 legacy upgrade, backfill, checksum-drift and restricted-role acceptance under issue #425; do not alter applied migrations 021/023.
+3. Bring the independent workflow outbox worker and its supervision/metrics/recovery controls onto main as a coherent slice.
+4. Complete support service-level targets/escalation and the authenticated support-admin journey.
+5. Reconcile stacked drafts against current main and enable owner-approved branch/ruleset controls.
+6. Demonstrate an independent second-engineer release and recovery path.
+
+No approved requirement or chapter was changed by this reporting update.

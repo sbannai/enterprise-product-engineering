@@ -119,6 +119,8 @@ It does not prove production scale, production backup/restore, cloud deployment,
 
 The canonical CI sequence is in `.github/workflows/ci.yml` and `.github/workflows/eper-integrated-validation.yml`. When changing migrations, keep the local script and CI migration order aligned. A new engineer should be able to clone the repository, start PostgreSQL, run `npm ci`, run `npm run dev:verify`, and reproduce the same tests without relying on a prior chat or private workstation state.
 
+The fresh-clone workflow also runs on main pushes that change this guide, local Compose/dev:verify files, API/packages/tests or the workflow itself. For an independent handover, record the exact cloned main SHA and the matching Actions run URL; a green run on a different SHA is historical evidence only.
+
 For architecture and product scope, read:
 - `docs/ENGINEERING_CONTINUITY_AND_INDEPENDENCE_CHARTER.md`
 - `docs/SEVEN_CHECKPOINT_OPERATING_SCORECARD.md`
