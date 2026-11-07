@@ -56,3 +56,26 @@ test("invalid explicit deployment environment fails closed", () => {
   assert.throws(() => readProviderStorageRuntimeConfiguration({ ...valid, EPER_ENVIRONMENT: "staging" }),
     e => e.code === "PROVIDER_STORAGE_RUNTIME_ENVIRONMENT_INVALID");
 });
+
+test("runtime opt-in rejects adapter sets missing any required storage operation", () => {
+  const capabilities = ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew",
+    "storage.object.verify", "storage.download.grant"];
+  const config = { ...valid, EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: JSON.stringify({
+    scannerIdentity: "scanner-v1", allowedHosts: ["storage.example.com"],
+    adapters: [{ adapterKey: "storage-test", adapterVersion: "1.0.0", capabilities, synthetic: false }],
+  }) };
+  assert.throws(() => readProviderStorageRuntimeConfiguration(config),
+    e => e.code === "PROVIDER_STORAGE_RUNTIME_CONFIG_INVALID");
+});
+test("runtime opt-in accepts complete six-operation coverage split across adapter registrations", () => {
+  const capabilities = [
+    ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew"],
+    ["storage.object.verify", "storage.download.grant", "storage.object.scan"],
+  ];
+  const config = { ...valid, EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: JSON.stringify({
+    scannerIdentity: "scanner-v1", allowedHosts: ["storage.example.com"],
+    adapters: capabilities.map((items, index) => ({ adapterKey: "adapter-" + index,
+      adapterVersion: "1.0.0", capabilities: items, synthetic: false })),
+  }) };
+  assert.equal(readProviderStorageRuntimeConfiguration(config).adapters.length, 2);
+});

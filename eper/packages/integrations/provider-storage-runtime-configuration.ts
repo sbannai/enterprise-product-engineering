@@ -67,6 +67,15 @@ export function readProviderStorageRuntimeConfiguration(env: Record<string, stri
   if (!Array.isArray(value.adapters) || value.adapters.length < 1 || value.adapters.length > 64) {
     throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_ADAPTERS_REQUIRED");
   }
+  const requiredCapabilities = [
+    "storage.upload.grant",
+    "storage.upload.lookup",
+    "storage.upload.renew",
+    "storage.object.verify",
+    "storage.download.grant",
+    "storage.object.scan",
+  ] as const;
+  const seenCapabilities = new Set<string>();
   const seen = new Set<string>();
   const adapters = value.adapters.map(item => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_CONFIG_INVALID");
@@ -81,12 +90,16 @@ export function readProviderStorageRuntimeConfiguration(env: Record<string, stri
     const key = adapter.adapterKey + "\u0000" + adapter.adapterVersion;
     if (seen.has(key)) throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_CONFIG_INVALID");
     seen.add(key);
+    for (const capability of adapter.capabilities as string[]) seenCapabilities.add(capability);
     if (environment === "production" && adapter.synthetic) {
       throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_SYNTHETIC_PRODUCTION_FORBIDDEN");
     }
     return { adapterKey: adapter.adapterKey, adapterVersion: adapter.adapterVersion,
       capabilities: adapter.capabilities as string[], synthetic: adapter.synthetic };
   });
+  if (requiredCapabilities.some(capability => !seenCapabilities.has(capability))) {
+    throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_CONFIG_INVALID");
+  }
   return { enabled: true, environment, scannerIdentity: value.scannerIdentity,
     allowedHosts: value.allowedHosts as string[], adapters };
 }
