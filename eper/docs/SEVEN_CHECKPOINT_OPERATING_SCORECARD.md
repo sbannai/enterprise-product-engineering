@@ -649,3 +649,38 @@ The first follow-up on `b610603755c65f91517191ecce12e2e2b9d273b2` (EPER CI run 4
 - This scorecard does not authorize Business UAT or production use.
 
 **Next concrete actions:** (1) deliver the customer-asset provider composition and safe reservation-recovery slice directly from current main; (2) complete migration-026 legacy-upgrade/RLS/least-privilege acceptance; (3) implement and test the workflow outbox worker's two-connection concurrency and approval-revocation boundary on a current-main-based slice; (4) reconcile the 29 stale draft branches without wholesale merges; (5) obtain owner-approved branch/ruleset controls and independent release/recovery evidence.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 08:50 IST
+
+### Mainline identity and evidence boundary
+- Latest commit returned by the repository's commit search: `2f42e87b0b88a74ef856a9b709d68d1d39eba1de` (`test(assets): keep upload reservation fixture unexpired`). This is the source baseline for this checkpoint; do not substitute the earlier audit SHA `22f976db832c4b14cf31ea92b70b0610673491ea`.
+- Commit-scoped workflow-run lookup and combined-status lookup returned no records for `2f42e87b0b88a74ef856a9b709d68d1d39eba1de`. Current-head CI is **NOT ASSESSED** from these lookups; previously green workflow evidence remains attached only to its exact historical SHA.
+- Current open-PR search returned 30 results. PR-only code and green PR-head workflows are not mainline delivery evidence.
+
+### Customer asset vertical slice — corrected status
+- **Delivered on main:** PostgreSQL asset repository/reservation foundation and migration 021–023 integration coverage. Issue #427 records PostgreSQL 16 double-execution, RLS/FORCE RLS, grants and sentinel-data retention evidence on its cited historical exact SHA. Do not reopen migration 021 as an unimplemented defect without new contrary evidence.
+- **Not delivered as an integrated mainline journey:** the API composition root constructs/passes `customerAssetRepository`, but does not supply `assetUploadPort`, `assetStoragePort`, or `assetDownloadResolver`. The server builds its upload grant issuer only when an upload port and configured allowlisted storage hosts are supplied; otherwise the upload route returns `503 customer_asset_upload_provider_unavailable`.
+- **Next implementation authority:** issue #397 — versioned allowlisted provider runtime, tenant/application binding and policy revalidation, server-side secret resolution, narrow storage/verification/download/scanner contracts, fail-closed configuration and network-free test drivers. Keep the provider worker independently supervised; do not place a timer or long-lived dispatch loop in the API request process.
+- **Acceptance authority:** issue #405 — browser real-byte journey through reservation, transfer, verification, scan-pending/clean gating, authorized download, retry/reload recovery, audit visibility and tenant/application denial.
+- Migration 026 / branch PR #423/#426 remains a separate reconciliation and acceptance item under #425. It must be reconciled with main's migration 023 index names and executed through the actual PostgreSQL 16 migration runner before its evidence is accepted.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER** — durable asset reservation exists; complete customer binary journey is not proven on main.
+2. CI/persistence: **GREEN only for the historically named PostgreSQL lanes; AMBER for latest main** — latest exact-SHA checks not assessed by current lookup.
+3. Architecture/execution: **AMBER** — injectable asset ports exist, but composition-root provider runtime wiring is absent.
+4. Workflow/runtime: **AMBER** — workflow outbox worker evidence is separate from the provider-operation worker and does not close asset storage/scanner execution.
+5. Integrated validation: **AMBER** — no exact-current-main end-to-end asset browser journey evidence.
+6. PR governance: **RED/AMBER** — 30 open PR search results; retain main as functional source of truth; no wholesale merge/close/delete.
+7. Operations/continuity: **AMBER** — no production provider dispatch, chargeable cloud resources, off-host recovery or Business UAT evidence is asserted.
+
+### Immediate sequence and guardrails
+1. Implement the provider runtime composition as a small main-based slice under #397, with explicit disabled-by-default configuration and production fail-closed checks.
+2. Add local fake storage, object-verification and scanner drivers; prove no network access and production prohibition.
+3. Wire tenant/application provider binding, capability/version and credential-reference resolution before dispatch; redact secrets and raw provider references.
+4. Run exact-SHA PostgreSQL/provider lifecycle/API tests, then #405 browser real-byte E2E on the same reconciled commit.
+5. Reconcile migration 026 independently; do not import divergent migration stacks wholesale.
+
+No merge, PR closure, branch deletion, real provider dispatch, cloud provisioning, requirement-baseline change, production release or Business UAT authorization is made by this checkpoint.
