@@ -61,6 +61,27 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
       assert.match(recoveryIndex.indexdef, /\(tenant_id, application_id, actor_id, idempotency_key, updated_at DESC\)/);
       assert.match(outcomeIndex.indexdef, /\(tenant_id, application_id, provider_outcome, updated_at DESC\)/);
 
+      const constraints = await pool.query(`
+        SELECT conname, pg_get_constraintdef(oid) AS definition
+          FROM pg_constraint
+         WHERE conrelid = 'eper_customer_asset_upload_sessions'::regclass
+           AND conname IN (
+             'eper_customer_asset_upload_request_fingerprint_format',
+             'eper_customer_asset_upload_grant_expiry_requires_reference',
+             'eper_customer_asset_upload_provider_outcome_values',
+             'eper_customer_asset_upload_provider_success_reference',
+             'eper_customer_asset_upload_provider_rejection_reference'
+           )
+         ORDER BY conname
+      `);
+      assert.equal(constraints.rowCount, 5, "all recovery and provider-outcome constraints must exist");
+      const constraintDefinitions = constraints.rows.map(row => row.definition).join(" ");
+      assert.match(constraintDefinitions, /request_fingerprint IS NULL OR request_fingerprint ~/);
+      assert.match(constraintDefinitions, /provider_grant_expires_at IS NULL OR provider_upload_reference IS NOT NULL/);
+      assert.match(constraintDefinitions, /provider_outcome = ANY/);
+      assert.match(constraintDefinitions, /provider_outcome <> 'succeeded' OR provider_upload_reference IS NOT NULL/);
+      assert.match(constraintDefinitions, /provider_outcome <> 'rejected' OR provider_upload_reference IS NULL/);
+
       const role = await pool.query(`
         SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolinherit
           FROM pg_roles WHERE rolname = 'eper_customer_asset_access'
