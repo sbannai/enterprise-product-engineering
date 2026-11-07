@@ -22,7 +22,7 @@ function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
     ...driver,
   };
   const resolvedSelection = {
-    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "storage.upload.grant",
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: selection.capabilityKey ?? "storage.upload.grant",
     connectionId: "connection-a", providerKey: "provider-a", ...selection,
   };
   const credentials = { token: "must-not-escape" };
@@ -31,7 +31,7 @@ function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
       calls.push(["resolve", input]);
       if (resolveError) throw resolveError;
       return {
-        runtime: { selection: resolvedSelection, capability: input.capability, adapter },
+        runtime: { selection: { ...resolvedSelection, capabilityKey: selection.capabilityKey ?? input.capability }, capability: input.capability, adapter },
         credentials,
       };
     },
