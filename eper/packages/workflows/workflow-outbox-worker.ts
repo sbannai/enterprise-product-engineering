@@ -42,6 +42,24 @@ class WorkflowOutboxLeaseLostError extends Error {
 }
 
 /** One bounded worker pass; scheduling/lifecycle is owned by the host worker process. */
+function awaitDispatchOrAbort(dispatch: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    // The dispatcher may be non-cooperative; observe any eventual rejection without
+    // keeping the worker pass blocked after the host has requested shutdown.
+    void dispatch.catch(() => undefined);
+    return Promise.reject(signal.reason ?? new Error("WORKFLOW_OUTBOX_DISPATCH_ABORTED"));
+  }
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error("WORKFLOW_OUTBOX_DISPATCH_ABORTED"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  return Promise.race([dispatch, aborted]).finally(() => {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  });
+}
+
 export class WorkflowOutboxWorker {
   private readonly maxAttempts: number;
   private readonly baseRetryDelaySeconds: number;
@@ -135,7 +153,8 @@ export class WorkflowOutboxWorker {
         result.interrupted += 1;
         return;
       }
-      await this.dispatcher.dispatch(event, controller.signal);
+      const dispatch = this.dispatcher.dispatch(event, controller.signal);
+      await awaitDispatchOrAbort(dispatch, controller.signal);
       if (shutdownRequested) {
         result.interrupted += 1;
         return;
