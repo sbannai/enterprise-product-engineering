@@ -919,3 +919,36 @@ Next safe action: port the independent worker entrypoint/configuration from the 
 7. Release/continuity: **RED/AMBER** — no supervised production worker, production provider connection or Business UAT evidence/authorization.
 
 Next safe slice: implement the independently launchable worker process on current main, with explicit opt-in and startup realpath containment, then prove claim-generation fencing and full lifecycle behavior on PostgreSQL 16 with two concurrent restricted worker logins. Preserve all 228 approved requirements and 38 chapters. No chargeable AWS resources, external provider actions or Business UAT authorization.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:43 IST
+
+### Workflow outbox claim-generation fencing — PR #441 merged
+- PR #441 merged to main by squash at `ac6e00dde35339983eae9867d4646b93171da049`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `e94e98876d9f051cecbc2e22675e099c037b57c5`.
+- 16 check runs succeeded; one duplicate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted. The separate `chapter-pilot-matrix` workflow and same-commit integrated gate completed successfully.
+- Migration 016 applied and replayed successfully on PostgreSQL 16. It adds a monotonic `claim_generation` token and grants the restricted worker role UPDATE on that column only.
+- Live PostgreSQL 16 fencing test: **1 passed, 0 failed, 0 skipped**. First claim generation 1 was expired and reclaimed as generation 2 using the same worker ID; generation 1 could not renew, acknowledge or mark failure; generation 2 successfully marked the event delivered.
+- Restricted-login privilege contract, startup gate, worker configuration/dispatcher contracts, migration/store unit tests, existing workflow execution integration, fresh-clone PostgreSQL verification, same-commit integrated gate and other applicable technical checks passed.
+- Existing direct store callers in the workflow execution integration now pass the exact claim token returned by claim; no un-fenced acknowledgement path remains in that integration.
+- No worker process was launched. No production dispatcher/provider action, cloud resource or Business UAT authorization.
+
+### #436 lifecycle status
+- Completed on main: restricted NOLOGIN worker role and atomic least-privilege migration (#439); explicit worker opt-in/configuration, startup privilege/RLS/ownership gate, approval-gated dispatcher interface and denial parking (#440); monotonic claim-generation fencing across claim, lease renewal, delivery acknowledgement and failure handling (#441).
+- Still required: independently launchable worker process/package script; dispatcher realpath/symlink containment at module load; two independent restricted logins proving concurrent claim exclusion and takeover; lease renewal/expiry race coverage; approval revocation immediately before provider action; idempotent dispatch; retry/backoff/dead-letter recovery; SIGTERM supervision and pool closure.
+- Worker remains disabled and unlaunched. The approved dispatcher is still an interface; no external action is activated.
+- Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER** — delivery is not yet exposed through an independently supervised worker process.
+2. CI/persistence: **AMBER improved** — PostgreSQL 16 proves the stale-claim fence with the restricted login.
+3. Architecture/identity: **AMBER improved** — restricted role, RLS startup checks and claim ownership token are on main.
+4. Workflow/runtime: **AMBER improved** — lease takeover is now fenced; process supervision and real dispatcher remain.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, chapter-pilot matrix workflow and fresh-clone PostgreSQL checks passed; the path-filter-skipped duplicate matrix check is not counted.
+6. PR governance: **AMBER improved** — #441 reconciled and merged individually; no stale branch was bulk-merged.
+7. Release/continuity: **RED/AMBER** — no independent production worker, production provider connection or Business UAT evidence/authorization.
+
+Next safe slice: port the independent worker process entrypoint and package launch script from the stale candidate only after validating its imports and host lifecycle against current main. Keep explicit opt-in, realpath/symlink containment, dedicated restricted login, approval recheck and claim token propagation mandatory. Prove startup/shutdown with a fake dispatcher before any real provider integration. Preserve all 228 approved requirements and 38 chapters. No chargeable AWS resource, production worker, external action or Business UAT authorization.
