@@ -203,3 +203,61 @@ PR #433 completed all 10/10 exact-head workflows successfully and was squash-mer
 This confirms the earlier three workflow failures were all propagated by one time-expired test fixture. The correction was tested on its exact PR head before merge. The merged main SHA is now `2f42e87b0b88a74ef856a9b709d68d1d39eba1de`; post-merge main CI should still be observed rather than assumed.
 
 The requirement source audit is also complete for the relevant register state: all 228 capture rows remain NOT_RUN/PENDING; the 48 B01 case rows are structurally aligned with the capture/gap/acceptance matrices but not prepared/reviewed/authorized. The controlled baseline decision note records approval, but the controlled source-package artifact/locator discrepancy remains unresolved. The v34-to-228 crosswalk explicitly classifies 45 candidate requirements as draft additions and makes zero exact feature-to-228 mappings; these are not to be promoted into the approved baseline without owner change control.
+
+
+## 11. Full open-PR compare matrix — current main 2f42e87b0b88a74ef856a9b709d68d1d39eba1de
+
+All 29 pre-existing open PRs were individually compared with current main. Every one is diverged and 75 commits behind. The ahead count below is the PR head's commits ahead of main; changed-file comparisons show the scope overlap described by the cluster labels. All 29 remain draft. This is a comparison/disposition register, not authorization to merge or close.
+
+| PR | Ahead | Cluster / purpose | Initial disposition |
+|---|---:|---|---|
+| #422 | 270 | Asset upload + provider recovery | Do not merge wholesale; extract provider recovery contract only after migration-chain reconciliation |
+| #426 | 251 | Asset migration PG16 validation | Rebuild as narrow main-based migration/replay test slice |
+| #423 | 232 | Asset upload recovery metadata | Migration collision; rework against current migration 023, do not merge |
+| #420 | 238 | Upload retry identity / verified customer binding | Extract identity-bound retry behavior after UI/API contract review |
+| #416 | 229 | Upload retry identity persistence | Reconcile with #420; avoid duplicate implementation |
+| #414 | 240 | Upload expiry worker isolation | Preserve worker lifecycle candidate; reconcile migrations 026–029 against main before extraction |
+| #413 | 210 | Cross-application shared upload recovery | Defer until tenant/customer isolation invariants are proven |
+| #412 | 191 | Asset scan lifecycle lock ordering | Candidate targeted concurrency fix; validate on main-based PostgreSQL tests |
+| #411 | 43 | Workflow outbox claim fencing | Retain as candidate; requires main-based lease/fencing/approval-race tests |
+| #402 | 194 | Upload reservation expiry and retry | Merge into one asset retry/expiry candidate with #413/#414; no separate wholesale merge |
+| #401 | 185 | PostgreSQL capacity validation plan | Salvage benchmark scripts and test methodology; exclude unrelated asset/provider stack |
+| #400 | 31 | Independent workflow outbox worker | Extract only after PostgreSQL claim/renew/ack/fail lifecycle and RLS proof |
+| #399 | 223 | Customer asset workspace upload UI | Candidate browser journey; extract separately from backend/migration stack |
+| #398 | 236 | Fail-closed provider runtime adapter registry | Preserve provider-neutral adapter boundary; isolate from asset/provider stack |
+| #396 | 187 | Independent asset scan recovery | Reconcile with #412; avoid duplicate recovery workers |
+| #395 | 183 | Provider-neutral storage catalogue | Extract provider registration contract after interface review |
+| #394 | 178 | PostgreSQL-backed asset download authorization | Candidate high-priority customer journey slice; prove tenant isolation and browser download |
+| #393 | 166 | Asset/provider integrated validation | Treat as evidence/test harness; do not use stacked branch as integration baseline |
+| #392 | 39 | Provider worker runtime + payload integrity | Consolidate with #390/#391; one migration/test stream |
+| #391 | 21 | Provider RLS + payload integrity | Consolidate with #390/#392; reconcile migration ordering and restricted-role proof |
+| #390 | 20 | Provider payload-operation referential integrity | Candidate narrow provider persistence slice after migration reconciliation |
+| #387 | 22 | Actor-scoped customer work queue | Candidate isolated workflow read-model slice; verify main API integration and actor/tenant isolation |
+| #386 | 164 | Upload idempotency reservation before provider grant | Backend foundation candidate; compare with current main asset reservation behavior before extraction |
+| #385 | 4 | Customer asset repository requirements docs | Salvage approved-neutral design material only; preserve draft/change-control status |
+| #384 | 140 | Tenant-isolated customer asset repository foundation | Do not merge wholesale; main already has meaningful PG asset repository/recovery integration tests |
+| #380 | 5 | Client asset / workflow-driven app UX requirements | Candidate product UX notes; preserve draft status and baseline separation |
+| #379 | 8 | Durable encrypted PostgreSQL provider payload store | Consolidate with #390–#392; reconcile migration chain before any extraction |
+| #378 | 7 | Encrypted provider payload storage boundary | Consolidate with #379; avoid duplicate provider boundary |
+| #377 | 80 | Nov 3 scorecard and PR governance docs | Salvage any still-current evidence only; newer scorecard/audit supersedes stale baseline |
+
+### Consolidated disposition
+
+- **Asset upload/repository/scan/download/expiry/UI:** #422, #426, #423, #420, #416, #414, #413, #412, #402, #399, #396, #394, #393, #386, #384. These overlap heavily in API composition, repository, migration and test files. Build a main-based extraction sequence, not 15 separate merges.
+- **Provider payload and storage integration:** #398, #395, #392, #391, #390, #379, #378. Consolidate into one provider integration plan and one forward-only migration sequence.
+- **Workflow outbox and customer work queue:** #411, #400, #387. Keep separate from asset/provider migration work; require durable PostgreSQL lifecycle and tenant/actor evidence.
+- **Capacity validation:** #401. Salvage benchmark methodology/scripts as an isolated, no-cloud validation task.
+- **Requirements and UX documentation:** #385, #380. Review for useful product content, but do not change the approved 228-requirement baseline.
+- **Scorecard documentation:** #377. Use only as historical source; current audit/scorecard supersedes it.
+
+### Mainline and audit CI confirmation
+
+Current main `2f42e87b0b88a74ef856a9b7095ed4d116037a9` has all 9 observed workflows successful, including EPER CI, integrated validation and fresh-clone setup. Audit PR #432 was retargeted to current main; its exact head `9fe162ad07953750b93dd386ea70ac051731447c` has all 9 observed workflows successful and is now 4 commits ahead / 0 behind. It remains draft and unmerged pending review of this report.
+
+### Next safe execution order
+
+1. Preserve the current main baseline and keep PRs as source archives until each candidate has a feature-level disposition.
+2. Prioritize a customer-facing asset journey extraction: PostgreSQL-backed upload reservation → provider grant/recovery → scan/outbox → download authorization → browser workflow, with migration and RLS proofs on main.
+3. In parallel, prove workflow outbox lease fencing using two-connection PostgreSQL tests; keep provider payload lifecycle independent until its migration sequence is resolved.
+4. Salvage the capacity benchmark script from #401 and run only against local/test PostgreSQL, no chargeable cloud infrastructure.
+5. Once each source PR's unique value is either extracted or proven already present on main, close it as superseded with a traceable disposition comment. No PR is closed by this audit.
