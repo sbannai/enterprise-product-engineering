@@ -19,6 +19,7 @@ function grant(providerUploadReference = "provider-object-001") {
 }
 function reservation(overrides = {}) {
   return {
+    disposition: "created",
     uploadSessionId: "00000000-0000-4000-8000-000000000001",
     providerUploadReference: null, uploadStatus: "initiated",
     expiresAt: new Date(now + 10 * 60_000).toISOString(),
@@ -51,10 +52,25 @@ test("reserves a stable session before provider grant and persists grant metadat
   assert.equal("providerUploadReference" in result, false);
 });
 
+test("replayed reservation without provider reference fails closed without invoking provider", async () => {
+  const prior = reservation({ disposition: "replayed" });
+  let providerCalls = 0;
+  const result = await startCustomerAssetUpload(input, {
+    now: () => now,
+    repository: {
+      reserveUpload: async () => prior,
+      recordUploadGrant: async () => assert.fail("must not persist"),
+    },
+    issueGrant: async () => { providerCalls++; return grant(); },
+  });
+  assert.equal(result, null);
+  assert.equal(providerCalls, 0);
+});
+
 test("matching retry reuses the same session and requires the same provider object", async () => {
   let requestSeen;
   let saved;
-  const prior = reservation({ providerUploadReference: "provider-object-existing" });
+  const prior = reservation({ disposition: "replayed", providerUploadReference: "provider-object-existing" });
   const result = await startCustomerAssetUpload(input, {
     now: () => now,
     repository: {
@@ -115,17 +131,22 @@ test("completed, expired and aborted reservations fail closed without provider c
   }
 });
 
-test("provider outage leaves the durable reservation available for same-key retry", async () => {
-  let calls = 0;
+test("ambiguous first provider outcome is not blindly created again on reservation replay", async () => {
+  let reservations = 0;
+  let providerCalls = 0;
   const deps = {
     now: () => now,
     repository: {
-      reserveUpload: async () => { calls++; return reservation(); },
+      reserveUpload: async () => {
+        reservations++;
+        return reservation(reservations > 1 ? { disposition: "replayed" } : {});
+      },
       recordUploadGrant: async () => {},
     },
-    issueGrant: async () => null,
+    issueGrant: async () => { providerCalls++; return null; },
   };
   assert.equal(await startCustomerAssetUpload(input, deps), null);
   assert.equal(await startCustomerAssetUpload(input, deps), null);
-  assert.equal(calls, 2);
+  assert.equal(reservations, 2);
+  assert.equal(providerCalls, 1, "a replay without a saved provider reference must not create again");
 });

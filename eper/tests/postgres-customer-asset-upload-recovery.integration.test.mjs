@@ -43,6 +43,8 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       ]);
       assert.equal(first.uploadSessionId, concurrentReplay.uploadSessionId,
         "concurrent requests with one idempotency key must resolve to one durable session");
+      assert.deepEqual(new Set([first.disposition, concurrentReplay.disposition]), new Set(["created", "replayed"]),
+        "exactly one concurrent reservation wins creation and the other is classified as replay");
       assert.equal(first.uploadStatus, "initiated");
       assert.equal(first.providerUploadReference, null);
       assert.ok(Date.parse(first.expiresAt) > Date.now());
@@ -63,6 +65,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         providerUploadReference: "opaque-provider-object-" + suffix, grantExpiresAt: grantExpiry,
       });
       const recovered = await repository.reserveUpload(reservationInput);
+      assert.equal(recovered.disposition, "replayed");
       assert.equal(recovered.uploadSessionId, first.uploadSessionId);
       assert.equal(recovered.providerUploadReference, "opaque-provider-object-" + suffix);
       assert.equal(recovered.uploadStatus, "initiated");

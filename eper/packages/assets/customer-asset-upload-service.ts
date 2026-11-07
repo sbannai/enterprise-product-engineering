@@ -16,6 +16,7 @@ export interface CustomerAssetUploadStartInput {
   fileName: string; mimeType: string;
 }
 type UploadReservation = {
+  disposition: "created" | "replayed";
   uploadSessionId: string; providerUploadReference: string | null;
   uploadStatus: "initiated" | "in_progress" | "completed" | "aborted" | "expired" | "failed";
   expiresAt: string; providerGrantExpiresAt: string | null;
@@ -61,6 +62,10 @@ export async function startCustomerAssetUpload(
   if (!["initiated", "in_progress"].includes(reservation.uploadStatus)) {
     throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_" + reservation.uploadStatus.toUpperCase());
   }
+  // A replay without a persisted provider reference is ambiguous: the first
+  // provider create may have succeeded even if its response was lost. Never
+  // issue another create until authoritative lookup/reconciliation is available.
+  if (reservation.disposition === "replayed" && !reservation.providerUploadReference) return null;
   if (Date.parse(reservation.expiresAt) <= (dependencies.now ?? Date.now)()) {
     throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
   }

@@ -240,6 +240,7 @@ export class PostgresCustomerAssetRepository {
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
     requestFingerprint: string; uploadSessionId?: string;
   }): Promise<{
+    disposition: "created" | "replayed";
     uploadSessionId: string; providerUploadReference: string | null;
     uploadStatus: "initiated" | "in_progress" | "completed" | "aborted" | "expired" | "failed";
     expiresAt: string; providerGrantExpiresAt: string | null;
@@ -308,6 +309,7 @@ export class PostgresCustomerAssetRepository {
         await client.query("COMMIT");
         transactionOpen = false;
         return {
+          disposition: "replayed",
           uploadSessionId: row.upload_session_id,
           providerUploadReference: row.provider_upload_reference,
           uploadStatus: row.upload_status,
@@ -347,6 +349,7 @@ export class PostgresCustomerAssetRepository {
       await client.query("COMMIT");
       transactionOpen = false;
       return {
+        disposition: "created",
         uploadSessionId: sessionId, providerUploadReference: null,
         uploadStatus: "initiated", expiresAt, providerGrantExpiresAt: null,
       };

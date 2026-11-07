@@ -65,7 +65,7 @@ function options(calls, withProvider = false) {
         if (!withProvider) throw new Error("must not reserve without a provider");
         assert.equal(input.applicationId, "app-alpha");
         return {
-          uploadSessionId: "session-upload-001", providerUploadReference: null,
+          disposition: "created", uploadSessionId: "session-upload-001", providerUploadReference: null,
           uploadStatus: "initiated", expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
           providerGrantExpiresAt: null,
         };
