@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createStorageUploadAdapter } from "../dist/packages/assets/storage-upload-adapter.js";
+import { createStorageUploadAdapter, createStorageUploadLookupAdapter } from "../dist/packages/assets/storage-upload-adapter.js";
 
 const request = {
   tenantId: "tenant-a", actorId: "actor-a", applicationId: "app-a",
@@ -93,4 +93,35 @@ test("storage upload adapter distinguishes definitive provider rejection from re
   }, { allowedHosts: ["storage.example.test"] });
   assert.deepEqual(await rejected(request, "upload-reject-001"), { kind: "rejected", rejectionCode: "policy_denied" });
   assert.deepEqual(await unknown(request, "upload-unknown-001"), { kind: "unknown", reason: "transport" });
+});
+
+
+test("storage lookup adapter separates request correlation from durable operation ID", async () => {
+  let received;
+  const lookup = createStorageUploadLookupAdapter({
+    invoke: async (input, correlationId, operationId) => {
+      received = { input, correlationId, operationId };
+      return { success: true, value: { kind: "found", providerUploadReference: "opaque-existing-object" } };
+    },
+  });
+  assert.deepEqual(await lookup("upload-session-stable-001", "api-request-correlation-001"), {
+    kind: "found", providerUploadReference: "opaque-existing-object",
+  });
+  assert.deepEqual(received, {
+    input: { uploadSessionId: "upload-session-stable-001" },
+    correlationId: "api-request-correlation-001", operationId: "upload-session-stable-001",
+  });
+});
+
+test("storage lookup adapter never infers absence from transport or malformed results", async () => {
+  const thrown = createStorageUploadLookupAdapter({ invoke: async () => { throw new Error("secret"); } });
+  const failed = createStorageUploadLookupAdapter({ invoke: async () => ({ success: false, retryable: false }) });
+  const unavailable = createStorageUploadLookupAdapter({ invoke: async () => ({ success: false, retryable: true }) });
+  const malformed = createStorageUploadLookupAdapter({ invoke: async () => ({ success: true, value: { kind: "found", providerUploadReference: " " } }) });
+  const absent = createStorageUploadLookupAdapter({ invoke: async () => ({ success: true, value: { kind: "not_found" } }) });
+  assert.deepEqual(await thrown("session-001", "request-001"), { kind: "unavailable" });
+  assert.deepEqual(await failed("session-001", "request-001"), { kind: "unknown" });
+  assert.deepEqual(await unavailable("session-001", "request-001"), { kind: "unavailable" });
+  assert.deepEqual(await malformed("session-001", "request-001"), { kind: "unknown" });
+  assert.deepEqual(await absent("session-001", "request-001"), { kind: "not_found" });
 });

@@ -1,5 +1,5 @@
 import type { IntegrationPort } from "../integration/index.js";
-import type { StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
+import type { StorageUploadLookupOutcome, StorageUploadLookupRequest, StorageUploadLookupResponse, StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
 
 export interface StorageUploadRequest {
   tenantId: string;
@@ -113,5 +113,40 @@ export function createStorageUploadAdapter(
       url: url.toString(), method: grant.method,
       expiresAt: new Date(expiry).toISOString(), headers,
     };
+  };
+}
+
+
+/**
+ * Creates a provider-neutral authoritative lookup adapter. The provider operation
+ * ID is always the durable uploadSessionId; request correlation remains separate.
+ * A failed or malformed lookup is never converted into not_found.
+ */
+export function createStorageUploadLookupAdapter(
+  port: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>,
+): (uploadSessionId: string, requestId: string) => Promise<StorageUploadLookupOutcome> {
+  return async (uploadSessionId, requestId) => {
+    if (typeof uploadSessionId !== "string" || !uploadSessionId.trim() || uploadSessionId.length > 128 ||
+        typeof requestId !== "string" || !requestId.trim() || requestId.length > 128) {
+      return { kind: "unknown" };
+    }
+    let outcome;
+    try {
+      outcome = await port.invoke({ uploadSessionId }, requestId, uploadSessionId);
+    } catch {
+      return { kind: "unavailable" };
+    }
+    if (!outcome.success) return outcome.retryable === true
+      ? { kind: "unavailable" } : { kind: "unknown" };
+    const value = outcome.value;
+    if (!value || typeof value !== "object" || !("kind" in value)) return { kind: "unknown" };
+    if (value.kind === "not_found" || value.kind === "unknown" || value.kind === "unavailable") {
+      return { kind: value.kind };
+    }
+    if (value.kind === "found" && typeof value.providerUploadReference === "string" &&
+        value.providerUploadReference.trim() && value.providerUploadReference.length <= 2048) {
+      return { kind: "found", providerUploadReference: value.providerUploadReference };
+    }
+    return { kind: "unknown" };
   };
 }

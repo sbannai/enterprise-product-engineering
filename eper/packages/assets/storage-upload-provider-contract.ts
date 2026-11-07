@@ -21,3 +21,15 @@ export type StorageUploadLookupOutcome =
   | { kind: "not_found" }
   | { kind: "unknown" }
   | { kind: "unavailable" };
+
+/** Minimal lookup request: provider identity is always the server-owned session ID. */
+export interface StorageUploadLookupRequest {
+  uploadSessionId: string;
+}
+
+/** Provider lookup must explicitly distinguish authoritative absence from uncertainty. */
+export type StorageUploadLookupResponse =
+  | { kind: "found"; providerUploadReference: string }
+  | { kind: "not_found" }
+  | { kind: "unknown" }
+  | { kind: "unavailable" };
