@@ -149,10 +149,11 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         if (!driver.capabilities.lookupByUploadSessionId) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         return driver.lookupUpload(context, input.operation.request.uploadSessionId, input.requestId);
       case "renew_upload":
-        if (!driver.capabilities.renewByProviderReference ||
-            input.operation.request.tenantId !== input.tenantId ||
-            input.operation.request.applicationId !== input.applicationId ||
-            !input.operation.request.providerUploadReference.trim()) {
+        if (input.operation.request.tenantId !== input.tenantId ||
+            input.operation.request.applicationId !== input.applicationId) {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+        }
+        if (!driver.capabilities.renewByProviderReference) {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         }
         return driver.renewUploadGrant(context, input.operation.request, input.requestId);
@@ -160,9 +161,11 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         if (!driver.capabilities.verifyObject) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         return driver.verifyObject(context, input.operation.request, input.requestId);
       case "create_download":
-        if (!driver.capabilities.downloadGrant ||
-            input.operation.request.tenantId !== input.tenantId ||
+        if (input.operation.request.tenantId !== input.tenantId ||
             input.operation.request.applicationId !== input.applicationId) {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+        }
+        if (!driver.capabilities.downloadGrant) {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         }
         return driver.createDownloadGrant(context, input.operation.request, input.requestId);
