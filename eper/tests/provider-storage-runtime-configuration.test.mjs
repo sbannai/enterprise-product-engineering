@@ -45,3 +45,14 @@ test("production refuses synthetic adapter registrations", () => {
   assert.throws(() => readProviderStorageRuntimeConfiguration(config),
     e => e.code === "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_PRODUCTION_FORBIDDEN");
 });
+test("production deployment declaration dominates NODE_ENV and forbids synthetic adapters", () => {
+  const config = { ...valid, NODE_ENV: "test", EPER_ENVIRONMENT: "production",
+    EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: JSON.stringify({ scannerIdentity: "scanner", allowedHosts: ["storage.example.com"],
+      adapters: [{ adapterKey: "synthetic", adapterVersion: "1.0.0", capabilities: ["storage.upload.grant"], synthetic: true }] }) };
+  assert.throws(() => readProviderStorageRuntimeConfiguration(config),
+    e => e.code === "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_PRODUCTION_FORBIDDEN");
+});
+test("invalid explicit deployment environment fails closed", () => {
+  assert.throws(() => readProviderStorageRuntimeConfiguration({ ...valid, EPER_ENVIRONMENT: "staging" }),
+    e => e.code === "PROVIDER_STORAGE_RUNTIME_ENVIRONMENT_INVALID");
+});

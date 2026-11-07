@@ -38,10 +38,19 @@ function environmentValid(value: unknown): value is ProviderStorageRuntimeEnviro
 export function readProviderStorageRuntimeConfiguration(env: Record<string, string | undefined>): ProviderStorageRuntimeConfiguration {
   const flag = env.EPER_PROVIDER_STORAGE_RUNTIME_ENABLED ?? "false";
   if (flag !== "true" && flag !== "false") throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_FLAG_INVALID");
-  const environment = env.NODE_ENV === "production" ? "production"
-    : env.NODE_ENV === "test" ? "test"
-    : env.EPER_ENVIRONMENT === "uat" ? "uat" : "development";
-  if (!environmentValid(environment)) throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_ENVIRONMENT_INVALID");
+  const nodeEnvironment = env.NODE_ENV;
+  const deploymentEnvironment = env.EPER_ENVIRONMENT;
+  if ((nodeEnvironment !== undefined && nodeEnvironment !== "production" && nodeEnvironment !== "test" && nodeEnvironment !== "development") ||
+      (deploymentEnvironment !== undefined && !environmentValid(deploymentEnvironment))) {
+    throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_ENVIRONMENT_INVALID");
+  }
+  // A production deployment declaration always wins over NODE_ENV. This prevents
+  // a mis-set NODE_ENV=test/development from enabling synthetic drivers in prod.
+  const environment: ProviderStorageRuntimeEnvironment =
+    nodeEnvironment === "production" || deploymentEnvironment === "production" ? "production"
+      : deploymentEnvironment === "uat" ? "uat"
+      : nodeEnvironment === "test" || deploymentEnvironment === "test" ? "test"
+      : "development";
   if (flag === "false") return { enabled: false, environment, allowedHosts: [], adapters: [] };
   let raw: unknown;
   try { raw = JSON.parse(env.EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON ?? ""); }
