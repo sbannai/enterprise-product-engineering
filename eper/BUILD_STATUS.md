@@ -1,41 +1,62 @@
 # Build Status
 
-Source of truth: GitHub `main`
-EPER scope: EM-OPS Chapters 463–500 / 228 requirements
-Last verified: 2026-10-12
-Verified main commit: `050384fea19bbe850ace03fcfd90f4f19ecd7426`
+**Source of truth:** GitHub `main`  
+**EPER scope:** Chapters 463–500 / 228 requirements  
+**Current main SHA:** `6bf4ae6206b1d6dae1e292fc32ede4828d78326c`  
+**Current main commit:** `docs(governance): align contribution guide with main-only delivery`  
+**Last mainline functional CI evidence:** `2c380d79c55c9183a42ed534ffd1a504f7d41316` — 2026-11-03 16:36 UTC  
+**Status updated:** 2026-11-07
 
-## Implementation and technical verification
+## Mainline verification
 
-- Source baseline: PRESENT
-- Requirement source files: 228/228
-- Shared capability families: 6/6
-- TypeScript toolchain: PRESENT
-- CI workflow: CONFIGURED FOR MAIN
-- Capability implementation and integration tests: INCLUDED
-- Main-branch EPER CI: PASS
-- Main-branch container runtime smoke: PASS
-- Main-branch six-family capability HTTP smoke: PASS
-- Main-branch 228-requirement pilot matrix: PASS
-- Main-branch G9 reconciliation CI: PASS
-- Main-branch controlled QA re-execution: PASS
-- Main-branch controlled UAT technical simulation: PASS
-- Latest main-commit chapter pilot matrix, controlled QA re-execution, controlled UAT simulation, six-family HTTP smoke, G9 reconciliation, container runtime smoke, build-and-test, and B01 evidence bridge: PASS (commit `050384fea19bbe850ace03fcfd90f4f19ecd7426`, verified 2026-10-12 15:14 UTC)
+The current main contains two governance/documentation-only commits after the last mainline functional CI checkpoint:
+
+- `5a644f62ecfe8f6e1be5a6ae7a36c7d09e522d8e` — establishes the main-only functional delivery policy.
+- `6bf4ae6206b1d6dae1e292fc32ede4828d78326c` — aligns `CONTRIBUTING.md` with that policy.
+
+The latest main-branch Actions query returned eight successful push-triggered workflows for the prior functional baseline `2c380d79c55c9183a42ed534ffd1a504f7d41316`:
+
+- EPER CI
+- Integrated Validation (same-commit end-to-end)
+- 228 Requirement Pilot Test Matrix
+- G9 Reconciliation CI
+- Six-Family Capability HTTP Smoke
+- Container Runtime Smoke Test
+- Controlled QA Re-Execution
+- Controlled UAT Technical Simulation
+
+**Important:** those successful runs are for `2c380d79...`, not the current main SHA `6bf4ae6...`. The current main SHA has not yet been verified by a fresh mainline CI run. The two intervening commits are documentation-only, but the current exact SHA must still receive a fresh baseline validation before being labelled green.
+
+## Implementation inventory — baseline claims
+
+- Requirement source files: previously reported 228/228; verify against current main before reusing as a current result.
+- Shared capability families: previously reported 6/6; verify against current main.
+- TypeScript toolchain: present in the repository.
+- CI workflow: configured for main.
+- Capability implementation and integration tests: present in the repository.
+- PostgreSQL remains the approved target persistence engine. Local development and integration tests only; no cloud database provisioning is authorized.
+
+Do not interpret repository presence or historical CI as proof that every customer-facing capability is complete on current main. Report API, UI, persistence, authorization, audit and operational maturity separately.
 
 ## Governance and release state
 
-- Immutable release-candidate artifact: NOT VERIFIED BY THIS STATUS UPDATE
-- Business UAT: NOT EXECUTED
-- Business acceptance: PENDING (0/228 recorded as accepted)
-- G9 traceability freeze: PENDING
-- Release authorization: PENDING
-- Production/operations readiness: PENDING
-- Certification: PENDING
+- Business UAT: **NOT AUTHORIZED / NOT EXECUTED**.
+- Business acceptance: pending; no acceptance may be inferred from automated pilot tests.
+- G9 traceability freeze: pending explicit evidence/owner disposition.
+- Release authorization: pending.
+- Production/operations readiness: pending.
+- Certification: pending.
+- Main branch protection: **NOT VERIFIED** through the connected GitHub integration; administrator confirmation required.
 
-## Interpretation and guardrails
+## Required next action
 
-The checks above establish a passing automated technical checkpoint on the listed main commit. Automated pilot tests, QA re-execution, and controlled UAT simulation are not live-target business UAT and do not establish business acceptance.
+Run the repository's documented mainline validation procedure against exact current SHA `6bf4ae6206b1d6dae1e292fc32ede4828d78326c`. Record each workflow's run ID, conclusion, head SHA, test totals, skips and artifact links. If CI is not automatically triggered by the direct documentation commits, use the repository's approved manual runbook; do not report the prior 2c380d79 results as current-main validation.
 
-B01 remains HOLD / NOT EXECUTED until the approved requirement-specific acceptance sources, D3 case disposition, E1–E13 entry evidence, hosted UAT target, and explicit D4 authorization are recorded. SRC-003 remains OPEN / P0 until the approved Chapter 463 HLD/LLD bindings and DATA/API/EVENT contracts or separately approved N/A decisions are evidenced.
+## Guardrails
 
-Do not change the 228-requirement / 38-chapter baseline, enable the UAT API, provision AWS resources, or infer business/release approval from green CI.
+- `main` is the only functional source of truth. Open, draft, stacked or blocked PRs must not hold approved functionality hostage.
+- A capability is delivered only when its code is present on main and validated against the exact main SHA.
+- Do not change the approved 228-requirement / 38-chapter baseline without explicit owner approval.
+- Do not enable UAT APIs, provision AWS resources, authorize Business UAT or infer business/release approval from green CI.
+- Automated pilot tests, QA re-execution and controlled UAT simulation are not live-target business UAT.
+- Preserve tenant isolation, RLS, server-derived identity, durable PostgreSQL persistence, audit trails and fail-closed security.
