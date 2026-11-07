@@ -2,18 +2,20 @@
 
 **Source of truth:** GitHub `main`  
 **EPER scope:** Chapters 463–500 / 228 requirements  
-**Main SHA immediately before this status refresh:** `1720234672d4e7e6ede08692aee196661b1bc41c`  
-**Status refresh commit:** `docs(status): correct build status to latest main SHA`  
+**Main SHA immediately before this CI-triggering status refresh:** `f02f0f5d5a4cdfd37c85c6c4f0aec7190acdd589`  
+**Status refresh:** this commit updates the evidence boundary and intentionally triggers the `eper/**` main-push CI lane.  
 **Last mainline functional CI evidence:** `2c380d79c55c9183a42ed534ffd1a504f7d41316` — 2026-11-03 16:36 UTC  
 **Status updated:** 2026-11-07
 
 ## Mainline verification
 
-The current main contains three governance/documentation-only commits after the last mainline functional CI checkpoint:
+The mainline contains five governance/status documentation commits after the last mainline functional CI checkpoint:
 
 - `5a644f62ecfe8f6e1be5a6ae7a36c7d09e522d8e` — establishes the main-only functional delivery policy.
 - `6bf4ae6206b1d6dae1e292fc32ede4828d78326c` — aligns `CONTRIBUTING.md` with that policy.
-- `1720234672d4e7e6ede08692aee196661b1bc41c` — reconciles this build-status report with the current main SHA.
+- `1720234672d4e7e6ede08692aee196661b1bc41c` — initial build-status reconciliation.
+- `c886df095050f094eba73f791554735547f3fd88` — clarifies the status report's validation boundary.
+- `f02f0f5d5a4cdfd37c85c6c4f0aec7190acdd589` — corrects the validation-boundary wording.
 
 The latest main-branch Actions query returned eight successful push-triggered workflows for the prior functional baseline `2c380d79c55c9183a42ed534ffd1a504f7d41316`:
 
