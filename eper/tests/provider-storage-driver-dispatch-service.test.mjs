@@ -91,7 +91,7 @@ test("does not invoke a driver when runtime or secret resolution fails", async (
   const f = fixture({ resolveError: new Error("binding or secret unavailable") });
   await assert.rejects(() => f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
-    operation: { kind: "lookup_upload", request: { uploadSessionId: "session" } },
+    operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session" } },
   }), /binding or secret unavailable/);
   assert.equal(f.calls.some(call => call[0] === "lookup"), false);
 });
