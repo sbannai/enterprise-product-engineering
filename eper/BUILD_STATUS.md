@@ -28,7 +28,7 @@ The latest main-branch Actions query returned eight successful push-triggered wo
 - Controlled QA Re-Execution
 - Controlled UAT Technical Simulation
 
-**Important:** those successful runs are for `2c380d79...`, not the mainline status-refresh commit `c886df095050f094eba73f791554735547f3fd88` or its successor. No fresh mainline CI run is recorded for the status-refresh commit; do not label it green. The three intervening commits are documentation-only, but the current exact SHA must still receive a fresh baseline validation before being labelled green.
+**Important:** those eight successful runs belong to `2c380d79...`, not the later governance/status commits or this CI-triggering status refresh. The latest status-refresh commit is `638e9a5c6c916e1054f825680e9a57ae9ccd5a3c`; its combined status endpoint currently returns no checks. A push to `eper/BUILD_STATUS.md` is included by `.github/workflows/ci.yml` (`eper/**` path filter), but a workflow run must be independently observed and its head SHA verified before this commit can be called green.
 
 ## Implementation inventory — baseline claims
 
