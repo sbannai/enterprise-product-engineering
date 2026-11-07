@@ -1207,3 +1207,21 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 - Legacy-upgrade test creates an isolated PostgreSQL database, applies audit migrations 001–022, seeds legacy upload sessions, then applies 023–024. Rows with persisted provider references backfill to `succeeded`; rows without references remain `unknown`. Legacy request fingerprints remain NULL; no retry identity is fabricated. Exact 023–024 rerun is idempotent.
 - No applied migration SQL was edited. All database work ran on ephemeral GitHub Actions PostgreSQL 16; no AWS/cloud or production DB resources.
 - Issue #425 is closed on evidence. Business UAT remains unauthorized; scan worker (#435), expiry worker (#404), and real provider activation (#437) remain separate delivery gaps.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 22:30 IST
+
+### Customer-asset scan worker and recovery — completed on current main
+- Tested main SHA: `722598ddac19260cdbac48e7942a6d1320977026`.
+- PostgreSQL 16 lifecycle/process/concurrency: [42391193676](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193676) — success.
+- Fresh-clone developer verification: [42391193668](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193668) — success; 1,571 tests / 1,560 passed / 0 failed / 11 skipped; `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`; PostgreSQL 16 backup/restore smoke passed with 79 source/restored base tables.
+- EPER CI [42391193661](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193661), same-commit integrated gate [42391193651](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193651), container runtime [42391193665](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193665), controlled QA [42391193657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193657), 228/38 matrix [42391193656](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193656), G9 [42391193647](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193647), six-family smoke [42391193629](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193629), and controlled technical simulation [42391193612](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42391193612) all passed.
+- Extracted scan worker, malware-scan and upload-verification adapters, opt-in worker process, independent exhausted-lease recovery method/process and package scripts. Both processes require explicit enablement and `EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL`.
+- Process integration used ephemeral PostgreSQL login roles inheriting `eper_customer_asset_access`; verified no superuser/BYPASSRLS and no asset DELETE privilege. A generated CI-only scanner fixture proved enqueue -> claim -> scanner invocation -> persisted clean result -> SIGTERM. Recovery process proved expired exhausted lease -> quarantine/dead-letter/audit -> SIGTERM.
+- Canonical lock order enforced for upload completion, scan-result finalization and recovery: upload session -> asset -> scan job. Recovery candidate discovery is unlocked, then each row is locked/revalidated with SKIP LOCKED. Concurrent two-sweep/stale-callback PostgreSQL test passed exactly-once finalization and rejected the stale callback.
+- Worker/adapter suite: 12 passed / 0 failed / 0 skipped. Process/concurrency suite: 3 passed / 0 failed / 0 skipped.
+- Issue #435 closed as completed. PR #396 and PR #412 closed unmerged as superseded; branches retained for historical evidence. PR #384 remains open as a broader asset-foundation reference pending separate reconciliation.
+- Live counts after closures: **24 open PRs; 32 open issues**.
+- No migrations added/replayed, no real scanner/provider configured or invoked, no chargeable cloud resources or production worker activated. Business UAT remains unauthorized; real scanner integration and production worker supervision/metrics/alerts/runbooks remain separate work.
