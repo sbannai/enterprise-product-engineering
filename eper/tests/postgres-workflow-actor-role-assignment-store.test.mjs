@@ -123,6 +123,16 @@ test("permission check accepts provider connection permission vocabulary", async
   assert.ok(query.sql.includes("rd.permissions ? $5"));
 });
 
+test("permission check accepts customer asset upload permission", async () => {
+  const { calls, pool } = fixture();
+  const allowed = await new PostgresWorkflowActorRoleAssignmentStore(pool)
+    .hasPermission(input.tenantId, input.applicationId, input.actorId, input.roleId, "customer.asset.upload");
+  assert.equal(allowed, true);
+  const query = calls.find(call => call.sql.includes("SELECT EXISTS"));
+  assert.equal(query.values[4], "customer.asset.upload");
+  assert.ok(query.sql.includes("rd.permissions ? $5"));
+});
+
 test("permission check denies absent permission and rejects unknown permission keys", async () => {
   const denied = fixture({ permissionAllowed: false });
   assert.equal(
