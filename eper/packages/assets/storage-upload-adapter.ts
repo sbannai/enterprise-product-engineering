@@ -63,7 +63,8 @@ export function createStorageUploadAdapter(
   return async (request, requestId) => {
     let outcome;
     try {
-      outcome = await port.invoke(request, requestId);
+      // Correlation remains the request trace; operationId is the durable provider idempotency key.
+      outcome = await port.invoke(request, requestId, request.uploadSessionId);
     } catch {
       return { kind: "unknown", reason: "transport" };
     }

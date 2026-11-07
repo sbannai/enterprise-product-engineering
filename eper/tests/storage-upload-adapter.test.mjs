@@ -12,8 +12,8 @@ const request = {
 test("storage upload adapter returns a scoped short-lived HTTPS capability", async () => {
   let received;
   const adapter = createStorageUploadAdapter({
-    invoke: async (input, correlationId) => {
-      received = { input, correlationId };
+    invoke: async (input, correlationId, operationId) => {
+      received = { input, correlationId, operationId };
       return { success: true, externalReference: "opaque-provider-object-001", value: {
         url: "https://storage.example.test/upload?signature=opaque",
         method: "PUT", expiresAt: new Date(1_700_000_060_000).toISOString(),
@@ -24,6 +24,7 @@ test("storage upload adapter returns a scoped short-lived HTTPS capability", asy
   const result = await adapter(request, "upload-request-001");
   assert.equal(received.input, request);
   assert.equal(received.correlationId, "upload-request-001");
+  assert.equal(received.operationId, request.uploadSessionId);
   assert.equal(result.kind, "succeeded");
   assert.equal(result.method, "PUT");
   assert.equal(result.expiresAt, new Date(1_700_000_060_000).toISOString());

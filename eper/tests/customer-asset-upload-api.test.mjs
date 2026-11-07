@@ -80,11 +80,12 @@ function options(calls, withProvider = false) {
     },
     ...(withProvider ? {
       assetUploadPort: {
-        async invoke(request, requestId) {
+        async invoke(request, requestId, operationId) {
           calls.push("provider");
           assert.equal(request.uploadSessionId, "session-upload-001");
           assert.equal(request.applicationId, "app-alpha");
           assert.equal(requestId, "upload-api-correlation-001");
+          assert.equal(operationId, "session-upload-001");
           return {
             success: true,
             externalReference: "opaque-provider-object-reference",
