@@ -80,12 +80,13 @@ function options(calls, withProvider = false, replay = false) {
     },
     ...(withProvider ? {
       assetUploadProviderCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
-      ...(replay ? { assetUploadLookup: async (sessionId, requestId) => {
+      ...(replay ? { assetUploadLookupPort: { invoke: async (request, correlationId, operationId) => {
         calls.push("lookup");
-        assert.equal(sessionId, "session-upload-001");
-        assert.equal(requestId, "upload-api-correlation-001");
-        return { kind: "found", providerUploadReference: "opaque-provider-object-reference" };
-      } } : {}),
+        assert.equal(request.uploadSessionId, "session-upload-001");
+        assert.equal(correlationId, "upload-api-correlation-001");
+        assert.equal(operationId, "session-upload-001");
+        return { success: true, value: { kind: "found", providerUploadReference: "opaque-provider-object-reference" } };
+      } } } : {}),
       assetUploadPort: {
         async invoke(request, requestId, operationId) {
           calls.push("provider");
