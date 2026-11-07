@@ -43,8 +43,10 @@ export class ProviderRuntimeAdapterRegistry<TAdapter> {
   private register(registration: ProviderRuntimeAdapterRegistration<TAdapter>): void {
     const validKey = (value: unknown): value is string =>
       typeof value === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(value);
+    const validVersion = (value: unknown): value is string =>
+      typeof value === "string" && /^[0-9][A-Za-z0-9.+-]{0,127}$/.test(value);
     if (!registration || !validKey(registration.adapterKey) ||
-        !validKey(registration.adapterVersion) || !registration.adapter ||
+        !validVersion(registration.adapterVersion) || !registration.adapter ||
         !Array.isArray(registration.capabilities) || registration.capabilities.length === 0 ||
         registration.capabilities.length > 64 ||
         registration.capabilities.some(capability => !validKey(capability)) ||
@@ -64,10 +66,12 @@ export class ProviderRuntimeAdapterRegistry<TAdapter> {
   }
 
   resolve(request: ProviderRuntimeAdapterRequest): TAdapter {
-    const valid = (value: unknown): value is string =>
+    const validKey = (value: unknown): value is string =>
       typeof value === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(value);
-    if (!request || !valid(request.adapterKey) || !valid(request.adapterVersion) ||
-        !valid(request.capability)) {
+    const validVersion = (value: unknown): value is string =>
+      typeof value === "string" && /^[0-9][A-Za-z0-9.+-]{0,127}$/.test(value);
+    if (!request || !validKey(request.adapterKey) || !validVersion(request.adapterVersion) ||
+        !validKey(request.capability)) {
       throw new ProviderRuntimeAdapterRegistryError("PROVIDER_RUNTIME_REGISTRATION_INVALID");
     }
     const exact = this.registrations.get(this.key(request.adapterKey, request.adapterVersion));
