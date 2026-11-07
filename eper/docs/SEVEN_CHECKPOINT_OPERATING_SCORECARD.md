@@ -773,3 +773,31 @@ No PR merge/closure, branch deletion, chargeable cloud provisioning, production 
 - Recheck all workflows against exact main SHA `3e52ede4a16ba5cf5b2cf5bf2d4d9e807334ec9a`; resolve any failures before treating the mainline as green.
 - Continue #397 from this mainline: explicitly compose the dedicated provider-catalogue dispatch resolver, approved server-side secret resolver and driver registrations, and adapt the six operations through existing asset ports. Keep runtime disabled by default and reject incomplete/production synthetic configuration. Do not fabricate a real secret-manager or provider implementation; if no approved implementation exists, retain the startup guard and document the dependency.
 - Preserve 228 approved requirements / 38 chapters; no chargeable cloud resources, real provider calls, customer binaries, production deployment or Business UAT authorization.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 19:35 IST
+
+### Exact mainline and post-merge validation
+- Dynamically resolved `main`: `25004337d609123b6db0b8554862f9368a812609` (`docs(eper): record provider dispatch test merge checkpoint`).
+- The current main check-run set now contains 13 entries: 12 completed successfully and the `Same-commit integrated gate` remains in progress. This includes successful exact-main checks for build/test, controlled QA re-execution, controlled UAT technical simulation, container health, all six capability-family HTTP smoke, G9 reconciliation, release artifact, UAT readiness audit, payment API/PostgreSQL/receipt contracts, and the 228 requirements / 38 chapter pilot matrix. Do not call the full integrated gate complete until its final check concludes.
+- PR #438 remains merged at application commit `3e52ede4a16ba5cf5b2cf5bf2d4d9e807334ec9a`; its six-operation provider-dispatch test coverage is present on main. The current main tip is one documentation checkpoint commit after that application merge.
+
+### #397 provider runtime — current composition boundary
+- Re-inspected `eper/apps/api/main.ts`, `eper/apps/api/server.ts`, the runtime composition/configuration modules, and the existing runtime/dispatch/API tests on current main.
+- The entrypoint parses the runtime flag before constructing PostgreSQL pools and deliberately throws `PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED` on opt-in. The dedicated provider-catalogue pool and repository currently activate only for catalogue administration or provider connections; the runtime flag is not yet wired into that database boundary.
+- `createAppServer` already exposes injection points for upload grant, upload lookup, storage download, and customer-asset persistence, but current `main.ts` supplies no provider upload/storage/download ports. The customer upload route therefore continues to return `503 customer_asset_upload_provider_unavailable` when no approved provider is configured.
+- Existing unit tests cover disabled-by-default config, complete six-operation declarations, production rejection of synthetic adapters, composition dependency requirements, six dispatch operation routes, tenant/application scope checks, and credential non-disclosure. The API test suite also proves the upload endpoint fails closed without a provider.
+- No approved production secret resolver or real provider driver implementation is present in the inspected mainline. A synthetic resolver/driver must not be promoted as a production dependency. Therefore no runtime wiring change is safe in this slice; the startup guard remains correct.
+
+### Seven-checkpoint impact and next action
+1. Product/customer journey: **AMBER** — provider-backed asset upload/download is still unavailable without an approved provider.
+2. CI/persistence: **AMBER pending integrated gate** — 12 checks passed; the same-commit integrated gate remains in progress.
+3. Architecture/identity: **AMBER** — provider dispatch contracts and six-operation tests exist; production secret resolution and real driver registration are not supplied.
+4. Workflow/runtime: **AMBER** — no worker/runtime behavior changed.
+5. Integrated validation: **AMBER pending final gate** — do not infer completion from the successful component jobs alone.
+6. PR governance: **AMBER** — PR #438 merged; remaining open branches are not to be bulk-merged, and stacked asset/provider branches require individual mainline reconciliation.
+7. Release/continuity: **RED/AMBER** — no new off-host recovery, production provider, or release evidence; Business UAT remains unauthorized.
+
+Next safe engineering action: keep #397 open and obtain an approved server-side secret-manager integration and provider driver ownership/implementation before changing the API composition root. Then implement a small current-main-based adapter slice and run exact-head API, PostgreSQL, security and integrated checks. Preserve the 228 approved requirements / 38 chapters. No cloud resource, real provider call, customer binary, deployment, merge, or Business UAT authorization is made by this checkpoint.
