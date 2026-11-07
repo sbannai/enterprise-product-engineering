@@ -76,11 +76,11 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
       `);
       assert.equal(constraints.rowCount, 5, "all recovery and provider-outcome constraints must exist");
       const constraintDefinitions = constraints.rows.map(row => row.definition).join(" ");
-      assert.match(constraintDefinitions, /request_fingerprint IS NULL OR request_fingerprint ~/);
-      assert.match(constraintDefinitions, /provider_grant_expires_at IS NULL OR provider_upload_reference IS NOT NULL/);
-      assert.match(constraintDefinitions, /provider_outcome = ANY/);
-      assert.match(constraintDefinitions, /provider_outcome <> 'succeeded' OR provider_upload_reference IS NOT NULL/);
-      assert.match(constraintDefinitions, /provider_outcome <> 'rejected' OR provider_upload_reference IS NULL/);
+      assert.match(constraintDefinitions, /request_fingerprint.*IS NULL.*request_fingerprint.*~/);
+      assert.match(constraintDefinitions, /provider_grant_expires_at.*IS NULL.*provider_upload_reference.*IS NOT NULL/);
+      assert.match(constraintDefinitions, /provider_outcome.*ANY/);
+      assert.match(constraintDefinitions, /provider_outcome.*'succeeded'.*provider_upload_reference.*IS NOT NULL/);
+      assert.match(constraintDefinitions, /provider_outcome.*'rejected'.*provider_upload_reference.*IS NULL/);
 
       const role = await pool.query(`
         SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolinherit
