@@ -14,11 +14,11 @@ on:
     paths:
       - "eper/**"
       - ".github/workflows/ci.yml"
-      - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main", "reconcile/payment-153-168-integration"]
     paths:
       - "eper/**"
+      - ".github/workflows/ci.yml"
 
 jobs:
   build-and-test:
@@ -141,8 +141,13 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_workflow_outbox_worker_test"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker_test"
           echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL=postgres://eper_workflow_outbox_worker_test:${worker_password}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          echo "EPER_WORKFLOW_OUTBOX_EXPECTED_DATABASE_ROLE=eper_workflow_outbox_worker_test" >> "$GITHUB_ENV"
       - name: Verify dedicated workflow outbox login privileges on PostgreSQL 16
         run: node --test tests/workflow-outbox-worker-access.integration.test.mjs
+      - name: Verify worker startup privilege gate with dedicated PostgreSQL 16 login
+        run: node --test tests/workflow-outbox-worker-database.integration.test.mjs
+      - name: Verify worker configuration and approval dispatcher contracts
+        run: node --test tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs
       - name: Live PostgreSQL workflow execution integration
         run: node --test tests/postgres-workflow-execution.integration.test.mjs
       - name: Live PostgreSQL tenant and actor application assignment integration
