@@ -139,3 +139,75 @@ test("classifies download application mismatch as scope failure, not missing cap
     error.code === "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
   assert.equal(f.calls.some(call => call[0] === "download"), false);
 });
+
+// Network-free synthetic driver contract: every operation returns a conservative
+// fixture outcome; no SDK, credentials, HTTP client or provider endpoint is used.
+test("routes all six storage operations through their exact capability and synthetic driver method", async () => {
+  const cases = [
+    {
+      kind: "create_upload",
+      capability: "storage.upload.grant",
+      request: { tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a", assetId: "asset-a",
+        uploadSessionId: "session-a", fileName: "evidence.txt", mimeType: "text/plain", sizeBytes: 12 },
+      expectedCall: "create",
+      expectedResult: { kind: "unknown", reason: "transport" },
+    },
+    {
+      kind: "lookup_upload",
+      capability: "storage.upload.lookup",
+      request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session-a" },
+      expectedCall: "lookup",
+      expectedResult: { kind: "not_found" },
+    },
+    {
+      kind: "renew_upload",
+      capability: "storage.upload.renew",
+      request: { tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a", assetId: "asset-a",
+        uploadSessionId: "session-a", fileName: "evidence.txt", mimeType: "text/plain",
+        sizeBytes: 12, providerUploadReference: "synthetic-object-ref" },
+      expectedCall: "renew",
+      expectedResult: { kind: "unknown", reason: "transport" },
+    },
+    {
+      kind: "verify_object",
+      capability: "storage.object.verify",
+      request: { uploadSessionId: "session-a", providerUploadReference: "synthetic-object-ref",
+        expectedSizeBytes: 12, expectedMimeType: "text/plain", expectedSha256: "a".repeat(64) },
+      expectedCall: "verify",
+      expectedResult: { kind: "unknown" },
+    },
+    {
+      kind: "create_download",
+      capability: "storage.download.grant",
+      request: { tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
+        assetId: "asset-a", accessReference: "synthetic-access-ref", fileName: "evidence.txt" },
+      expectedCall: "download",
+      expectedResult: null,
+    },
+    {
+      kind: "scan_object",
+      capability: "storage.object.scan",
+      request: { assetId: "asset-a", providerObjectReference: "synthetic-object-ref",
+        expectedSha256: "a".repeat(64) },
+      expectedCall: "scan",
+      expectedResult: { kind: "timeout" },
+    },
+  ];
+
+  for (const item of cases) {
+    const f = fixture();
+    const result = await f.service.dispatch({
+      tenantId: "tenant-a",
+      applicationId: "app-a",
+      requestId: `req-${item.kind}`,
+      operation: { kind: item.kind, request: item.request },
+    });
+    assert.deepEqual(result, item.expectedResult, item.kind);
+    assert.equal(f.calls[0][0], "resolve", item.kind);
+    assert.equal(f.calls[0][1].capability, item.capability, item.kind);
+    assert.equal(f.calls.filter(call => call[0] !== "resolve").length, 1, item.kind);
+    assert.equal(f.calls[1][0], item.expectedCall, item.kind);
+    assert.equal(f.calls[1][1].credentials, f.credentials, item.kind);
+    assert.equal(JSON.stringify(result).includes("must-not-escape"), false, item.kind);
+  }
+});
