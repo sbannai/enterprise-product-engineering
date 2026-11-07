@@ -123,6 +123,10 @@ jobs:
           END
           $verify$;
           SQL
+      - name: Live PostgreSQL customer asset upload recovery integration
+        env:
+          EPER_CUSTOMER_ASSET_LIVE_TESTS: "1"
+        run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
       - name: Apply workflow execution, publication and role migrations to ephemeral CI database
         run: npm run migrate:workflows
       - name: Verify workflow migrations are safely repeatable
