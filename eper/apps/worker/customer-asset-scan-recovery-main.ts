@@ -60,7 +60,11 @@ function shutdown(): void {
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdown);
 
-const pool = createPostgresPaymentPool();
+const workerDatabaseUrl = required("EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL");
+const pool = createPostgresPaymentPool({
+  ...process.env,
+  EPER_PAYMENT_DATABASE_URL: workerDatabaseUrl,
+});
 try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await repository.assertReady();
