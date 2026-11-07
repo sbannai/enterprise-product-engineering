@@ -748,3 +748,28 @@ No PR was merged or closed, no branch was deleted, no chargeable cloud resource 
 4. Run exact-head CI and PostgreSQL integration, then #405 real-byte browser journey on the same reconciled SHA.
 
 No PR merge/closure, branch deletion, chargeable cloud provisioning, production provider call, release or Business UAT authorization is made by this checkpoint.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 19:21 IST
+
+### Exact mainline identity and merged delivery
+- Main SHA at checkpoint: `3e52ede4a16ba5cf5b2cf5bf2d4d9e807334ec9a` (`test(assets): cover all six synthetic provider dispatch operations`). This is the squash merge commit for PR [#438](https://github.com/sbannai/enterprise-product-engineering/pull/438).
+- PR #438 adds 72 lines to `eper/tests/provider-storage-driver-dispatch-service.test.mjs`, covering all six dispatch operation kinds: upload grant, upload lookup, upload renewal, object verification, download grant and malware scan. It asserts exact capability routing, one matching driver invocation, conservative synthetic outcomes and credential redaction.
+- PR-head CI completed successfully for all applicable checks. The 228 requirements / 38 chapter pilot matrix was skipped by the path filter; it is not counted as a pass from this PR. The PR was marked ready only after checks completed and then squash-merged. No runtime composition or production capability was delivered by this test-only change.
+- Post-merge check runs on exact main SHA `3e52ede4a16ba5cf5b2cf5bf2d4d9e807334ec9a` were queued at the time of inspection. They must be rechecked on this SHA before reporting mainline CI as green.
+
+### Seven-checkpoint impact
+1. **Product/customer journey — AMBER:** no new customer-visible behavior; the six provider dispatch paths now have explicit synthetic unit coverage.
+2. **CI/persistence — AMBER pending post-merge checks:** applicable PR-head checks passed; exact-main post-merge workflows were queued, not yet passed.
+3. **Architecture/execution — AMBER:** dispatch contract routing is tested; API composition, provider secret resolution and real adapter registrations remain absent. The production runtime startup guard remains intentionally fail-closed.
+4. **Workflow/runtime — AMBER:** no change to worker execution or supervision.
+5. **Integrated validation — AMBER pending exact-main evidence:** post-merge integrated and PostgreSQL checks are not yet complete.
+6. **PR governance — AMBER:** PR #438 is merged and no longer an open branch dependency; continue reconciling other PRs individually against main, not by bulk merge.
+7. **Release/continuity — RED/AMBER:** no new release, off-host recovery or operational-readiness evidence. Business UAT remains unauthorized.
+
+### Next concrete action and guardrails
+- Recheck all workflows against exact main SHA `3e52ede4a16ba5cf5b2cf5bf2d4d9e807334ec9a`; resolve any failures before treating the mainline as green.
+- Continue #397 from this mainline: explicitly compose the dedicated provider-catalogue dispatch resolver, approved server-side secret resolver and driver registrations, and adapt the six operations through existing asset ports. Keep runtime disabled by default and reject incomplete/production synthetic configuration. Do not fabricate a real secret-manager or provider implementation; if no approved implementation exists, retain the startup guard and document the dependency.
+- Preserve 228 approved requirements / 38 chapters; no chargeable cloud resources, real provider calls, customer binaries, production deployment or Business UAT authorization.
