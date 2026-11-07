@@ -854,3 +854,34 @@ No PR was merged or closed; no branch was deleted; no requirements changed; no c
 5. Do not activate the worker, dispatcher, production integrations, external actions, cloud resources or Business UAT as part of this slice.
 
 No PR was merged or closed; no branch was deleted; no approved requirement or chapter changed; no cloud resource or external action was triggered.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:17 IST
+
+### Workflow outbox restricted-role slice — PR #439 merged
+- PR #439 merged to main by squash at `5f8c74e57ea8488e8c3533aa9ea94eb5e7aa643c`. Main now resolves to this exact SHA.
+- Exact PR head was `4765c67dfbac58682325bf4169e26e618ed760cd`; PR was made ready only after validation completed.
+- 16 applicable check runs succeeded. The `228 requirements / 38 chapter pilot matrix` was skipped by path filtering and is explicitly not counted as a pass.
+- The PostgreSQL 16 CI job provisioned a temporary restricted LOGIN, granted membership in `eper_workflow_outbox_worker_access`, and executed `workflow-outbox-worker-access.integration.test.mjs`: 1 test passed, 0 failed, 0 skipped. The test output explicitly reports that the dedicated login has only the approved database privileges.
+- The same job passed workflow migration replay, live workflow execution integration, tenant/application assignment integration, commercial tariff access guard, and capability persistence checks. Workflow YAML validation and the same-commit integrated gate passed.
+- Migration 015 is atomic and creates a NOLOGIN, non-superuser, non-bypass group role. Assignment discovery is restricted to `tenant_id`, `application_id`, `assignment_status`; event rows are read-only; delivery updates are column-scoped. No assignment/event writes, delivery insert/delete/truncate, or stored credentials were introduced.
+- CI login/password are ephemeral to the PostgreSQL service. No chargeable cloud resources were provisioned.
+
+### #436 — what this closes and what remains
+- Closed by this merge: current-main restricted database group role, atomic least-privilege migration, migration contract coverage, and a real PostgreSQL 16 dedicated-login privilege proof.
+- Still open: independently launchable worker process entrypoint, package launch script, bounded opt-in configuration, approved dispatcher boundary, current-main PostgreSQL claim-generation fencing/concurrency proof, and lifecycle proof for approval revocation, idempotency, retries/dead-letter, supervision, SIGTERM shutdown and pool closure.
+- Worker remains disabled/not launched. No production dispatcher, external action or Business UAT is authorized.
+- PR #400 and #387 remain stale/divergent candidates; do not merge them wholesale. PR #411 fencing evidence still requires current-main PostgreSQL revalidation.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER** — workflow outbox delivery is not yet operationally exposed as a supervised worker.
+2. CI/persistence: **AMBER improved** — atomic migration and real dedicated-login PostgreSQL 16 proof are green; production operational proof remains outstanding.
+3. Architecture/identity: **AMBER improved** — least-privilege database boundary is now present on main; approved dispatcher boundary remains.
+4. Workflow/runtime: **AMBER** — outbox worker process lifecycle is not yet independently launchable or activated.
+5. Integrated validation: **AMBER improved** — exact PR-head integrated gate passed; chapter matrix was path-filter skipped on this PR and is not inferred from this run.
+6. PR governance: **AMBER improved** — #439 reconciled and merged; stale stacked branches still require individual extraction/reconciliation.
+7. Release/continuity: **RED/AMBER** — no production worker deployment or continuity proof; Business UAT remains unauthorized.
+
+Next safe action: port the independent worker entrypoint/configuration from the stale candidate only after re-reading it against this new main SHA. Keep explicit opt-in, fail-closed dispatcher loading, dedicated restricted database credentials, human approval recheck, claim fencing and graceful shutdown as required tests. Preserve all 228 approved requirements and 38 chapters. No cloud resource, production worker, provider action, customer external action or Business UAT authorization is made by this checkpoint.
