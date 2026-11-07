@@ -10,6 +10,7 @@ const WORKFLOW_ROLE_PERMISSION_KEYS = [
   "workflow:admin", "role:assign", "access:manage",
   "provider.connection.create", "provider.connection.read", "provider.connection.bind",
   "provider.connection.validate", "provider.connection.rotate", "provider.connection.revoke",
+  "customer.asset.upload",
 ] as const;
 
 export interface WorkflowActorRoleAssignment {
