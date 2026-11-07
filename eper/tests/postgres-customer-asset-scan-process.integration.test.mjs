@@ -218,3 +218,67 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
       await pool.end();
     }
   });
+
+
+test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in session-asset-job lock order",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 6 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-lock-order");
+    const workerId = "ci-asset-scanner:expired-worker";
+    try {
+      const [job] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        workerId, scannerServiceId: "ci-asset-scanner", environment: "sandbox",
+        limit: 1, leaseMs: 5_000,
+      });
+      assert.ok(job);
+      await pool.query(
+        `UPDATE eper_customer_asset_scan_jobs
+            SET attempt_count = max_attempts,
+                lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+      const outcomes = await Promise.allSettled([
+        repository.recoverExhaustedScanJobs({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId: "ci-asset-scan-recovery", environment: "sandbox", limit: 5,
+        }),
+        repository.recoverExhaustedScanJobs({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId: "ci-asset-scan-recovery", environment: "sandbox", limit: 5,
+        }),
+        repository.recordScanResult({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+          correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+          scanStatus: "clean",
+        }),
+      ]);
+      const recovered = outcomes.slice(0, 2)
+        .filter(result => result.status === "fulfilled")
+        .reduce((sum, result) => sum + result.value, 0);
+      assert.equal(recovered, 1, "exactly one recovery sweep must finalize the exhausted lease");
+      assert.equal(outcomes[2].status, "rejected", "expired scanner callback must not publish a clean result");
+      if (outcomes[2].status === "rejected") {
+        assert.match(String(outcomes[2].reason?.message),
+          /SCAN_LEASE_LOST|SCAN_RESULT_CONFLICT|NOT_AWAITING_SCAN/);
+      }
+      const finalState = await pool.query(
+        `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+           FROM eper_customer_assets a
+           JOIN eper_customer_asset_upload_sessions s
+             ON s.tenant_id = a.tenant_id AND s.asset_id = a.asset_id
+           JOIN eper_customer_asset_scan_jobs j
+             ON j.tenant_id = s.tenant_id AND j.upload_session_id = s.upload_session_id
+          WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+        [fixture.tenantId, fixture.assetId],
+      );
+      assert.deepEqual(finalState.rows[0], {
+        upload_status: "failed", scan_status: "error", lifecycle_status: "quarantined", state: "dead_letter",
+      });
+    } finally {
+      await pool.end();
+    }
+  });
