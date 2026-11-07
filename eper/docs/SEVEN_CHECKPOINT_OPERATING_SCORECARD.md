@@ -1193,3 +1193,17 @@ Next reconciliation targets: inspect remaining open PRs by dependency graph and 
 
 ### Next safe engineering slice
 Build the missing migration assurance tests for current-main 023–024 (legacy upgrade/backfill, checksum drift, catalog definitions and DB-role security) without editing applied migrations. Keep scan/expiry worker gaps #435/#404 separately scoped.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 22:15 IST
+
+### PostgreSQL 16 migration assurance — completed on current main
+- Final main SHA: `3b2fd38b71c4cbcb7a048f080734983825deadce`.
+- Exact-main workflow: [42390215757](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42390215757) — **success**.
+- All four PostgreSQL lifecycle tests passed with **1 passed / 0 failed / 0 skipped each**: provider-operation lifecycle; customer-asset upload recovery and scan lifecycle; customer-asset migration catalog/RLS/checksum assurance; customer-asset legacy upgrade/backfill.
+- Migration assurance verifies 023/024 recovery and provider-outcome constraints; exact recovery and outcome index definitions; ENABLE + FORCE RLS on all four asset tables; asset runtime role NOLOGIN/NOSUPERUSER/NOBYPASSRLS and SELECT/INSERT/UPDATE without DELETE; real `SET ROLE` queries prove owning-application visibility and deny cross-application/cross-tenant reads; actual migration runner rerun; checksum-drift rejection.
+- Legacy-upgrade test creates an isolated PostgreSQL database, applies audit migrations 001–022, seeds legacy upload sessions, then applies 023–024. Rows with persisted provider references backfill to `succeeded`; rows without references remain `unknown`. Legacy request fingerprints remain NULL; no retry identity is fabricated. Exact 023–024 rerun is idempotent.
+- No applied migration SQL was edited. All database work ran on ephemeral GitHub Actions PostgreSQL 16; no AWS/cloud or production DB resources.
+- Issue #425 is closed on evidence. Business UAT remains unauthorized; scan worker (#435), expiry worker (#404), and real provider activation (#437) remain separate delivery gaps.
