@@ -1049,3 +1049,36 @@ Next safe slice: use a synthetic/local dispatcher only to test approval revocati
 7. Release/continuity: **RED/AMBER** — no real provider, production secret resolver, supervisor or Business UAT evidence/authorization.
 
 Next safe slice: test the complete retry/dead-letter/replay lifecycle with two restricted logins against PostgreSQL 16 and a synthetic dispatcher, then test process supervision/restart and shutdown. Do not connect real provider credentials or trigger external side effects. No chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 21:00 IST
+
+### Two-worker retry/dead-letter/audited replay lifecycle — PR #445 merged
+- PR #445 merged to main by squash at `9a96e7d658deff925b4bc67d9aa3bae5df9b4c10`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `2a6133d85af8043c5a89c501a58b6904ddfe0b06`.
+- 15 check runs succeeded; one duplicate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted. The separate 228-requirement matrix workflow, chapter-pilot-matrix and same-commit integrated gate succeeded.
+- Live PostgreSQL 16 integration: **1 passed, 0 failed, 0 skipped**. Two distinct restricted worker logins participated in one synthetic event's lifecycle.
+- Worker A transient attempt 1 was rescheduled. Worker B transient attempt 2 reached dead-letter under the bounded two-attempt policy.
+- The real `replayWorkflowOutboxDeadLetter` service authorized the synthetic workflow-admin actor, inserted one immutable replay audit row and appended one audit event. A repeated idempotency key returned the original replay receipt; no duplicate replay was created.
+- A synthetic local dispatcher redelivered the same immutable event ID exactly once after replay. Final delivery state: `delivered`, attempts 3, claim generation 3.
+- Both login identities and startup privilege checks, concurrent claim exclusion, stale-owner fencing, workflow execution integration, worker/store/config/approval suites, typecheck/build, fresh-clone PostgreSQL and integrated gate passed.
+- No provider/network calls, worker activation, cloud resources or Business UAT authorization.
+
+### #436 lifecycle status
+- Completed on main: restricted worker login (#439); startup privilege and approval-denial gate (#440); claim-generation fencing (#441); standalone worker host (#442); two-login concurrent claim/takeover (#443); final approval recheck and synthetic idempotency contract (#444); two-login retry/dead-letter/audited replay/redelivery lifecycle (#445).
+- Remaining: actual owner-approved provider dispatcher and secret resolver; production provider-side durable approval revalidation and idempotency; two-process shutdown/lease race under a real supervisor; deployment restart/backoff, monitoring and alerting; formal production acceptance evidence.
+- Worker remains disabled and unlaunched. No real dispatcher/provider integration exists. Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER improved** — retry, dead-letter, audited replay and synthetic redelivery now have a live PostgreSQL proof; no real provider delivery.
+2. CI/persistence: **AMBER improved** — PostgreSQL 16 proves two-login claim exclusion, takeover, retry and replay.
+3. Architecture/identity: **AMBER improved** — replay is authorized through active tenant/application/actor workflow-admin assignments and audit evidence.
+4. Workflow/runtime: **AMBER improved** — full synthetic delivery lifecycle is proven; production provider and supervisor remain.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, pilot matrix workflow and fresh-clone PostgreSQL passed; duplicate path-filter-skipped check is not counted.
+6. PR governance: **AMBER improved** — #445 individually validated and merged.
+7. Release/continuity: **RED/AMBER** — no production dispatcher, secret resolver, supervised deployment or Business UAT evidence/authorization.
+
+Next safe slice: exercise a real worker host under a fake process supervisor with SIGTERM during a long-running synthetic dispatch, proving heartbeats stop, the in-flight event is left for lease recovery, the DB pool closes and restart can reclaim safely. Keep all provider calls disabled. No chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
