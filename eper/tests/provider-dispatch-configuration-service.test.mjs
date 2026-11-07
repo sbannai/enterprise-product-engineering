@@ -178,3 +178,25 @@ test("dispatch rejects missing or undefined tenant-default version metadata", as
   }), error => error instanceof ProviderDispatchConfigurationError
     && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
 });
+
+test("dispatch requires a persisted tenant-default version when policy source is TENANT_DEFAULT", async () => {
+  const { instance } = service([connection()], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: null,
+  });
+  await assert.rejects(() => instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+  }), error => error instanceof ProviderDispatchConfigurationError
+    && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+});
+test("dispatch permits application override when no tenant default exists", async () => {
+  const { instance } = service([connection()], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    policy: { approvalRequired: true }, source: "APPLICATION_OVERRIDE", tenantDefaultVersion: null,
+  });
+  const result = await instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+  });
+  assert.equal(result.policySource, "APPLICATION_OVERRIDE");
+  assert.equal(result.tenantDefaultVersion, null);
+});

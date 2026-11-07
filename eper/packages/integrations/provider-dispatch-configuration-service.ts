@@ -97,7 +97,8 @@ export class ProviderDispatchConfigurationService {
         !effective.policy || typeof effective.policy !== "object" || Array.isArray(effective.policy) ||
         containsSensitivePolicyKey(effective.policy) ||
         !(effective.tenantDefaultVersion === null ||
-          (Number.isSafeInteger(effective.tenantDefaultVersion) && effective.tenantDefaultVersion >= 1))) {
+          (Number.isSafeInteger(effective.tenantDefaultVersion) && effective.tenantDefaultVersion >= 1)) ||
+        (effective.source === "TENANT_DEFAULT" && effective.tenantDefaultVersion === null)) {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_INVALID");
     }
 
