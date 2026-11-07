@@ -7,7 +7,8 @@ import type {
 } from "./provider-storage-driver-contract.js";
 import { assertProviderStorageDriver, ProviderStorageDriverContractError } from "./provider-storage-driver-contract.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
-import type { StorageDownloadRequest, StorageDownloadResult, StorageUploadRequest } from "../assets/storage-download-adapter.js";
+import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
+import type { StorageUploadRequest } from "../assets/storage-upload-adapter.js";
 import type { StorageUploadLookupOutcome, StorageUploadProviderOutcome } from "../assets/storage-upload-provider-contract.js";
 
 export type ProviderStorageOperation =
