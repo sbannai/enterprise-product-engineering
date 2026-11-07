@@ -1,5 +1,3 @@
-import type { PostgresWorkflowActorRoleAssignmentStore } from "../workflows/postgres-workflow-actor-role-assignment-store.js";
-
 export interface CustomerAssetUploadPermissionStore {
   listActiveRoleIds(tenantId: string, applicationId: string, actorId: string): Promise<string[]>;
   hasPermission(tenantId: string, applicationId: string, actorId: string, roleId: string, permission: string): Promise<boolean>;
@@ -17,7 +15,7 @@ export async function hasCustomerAssetUploadPermission(
   store: CustomerAssetUploadPermissionStore,
 ): Promise<boolean> {
   if (!identity.tenantId || !identity.actorId ||
-      !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId)) return false;
+      !/^[a-zA-Z0-9._:-]{2,128}$/.test(applicationId)) return false;
   const roles = await store.listActiveRoleIds(identity.tenantId, applicationId, identity.actorId);
   for (const roleId of roles) {
     if (await store.hasPermission(
