@@ -987,3 +987,34 @@ Next safe slice: port the independent worker process entrypoint and package laun
 7. Release/continuity: **RED/AMBER** — no production dispatcher, provider credential path, supervised deployment or Business UAT evidence/authorization.
 
 Next safe slice: prove two independently connected restricted worker logins competing for the same tenant/application queue, lease takeover after expiry, and signal-driven shutdown under a fake dispatcher. Then exercise durable approval revocation and idempotent dispatch using a synthetic/local adapter only. No real provider calls, chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:57 IST
+
+### Two-login workflow outbox concurrency and takeover — PR #443 merged
+- PR #443 merged to main by squash at `cdc8ee4cdae4537d9c7ca046e50320cc237da3e3`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `0a9e1600e2022bb4f822e1963a54db840c71a299`.
+- 14 check runs succeeded; one duplicate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted. The separate 228-requirement pilot matrix workflow, chapter-pilot-matrix check and same-commit integrated gate completed successfully.
+- CI now provisions two independent, random-credential PostgreSQL LOGIN roles, both members only of the restricted workflow outbox access group.
+- Live PostgreSQL 16 concurrency test: **1 passed, 0 failed, 0 skipped**. Both roles passed the startup privilege gate. Concurrent claims against one event produced exactly one owner. After lease expiry, the other login took over at claim generation 2. The stale owner could not renew, acknowledge or fail the event; the new owner successfully delivered it.
+- Existing sequential claim-generation proof, workflow execution integration, worker/store/config/approval contract suites, build/typecheck, G9, fresh-clone PostgreSQL, release, UAT technical simulation, payment and capability checks passed.
+- No provider calls, worker activation, cloud resource or Business UAT authorization.
+
+### #436 lifecycle status
+- Completed on main: restricted worker role and live login proof (#439); startup privilege/RLS/ownership gate and approval-denial parking (#440); claim-generation fencing (#441); standalone fail-closed worker host and dispatcher realpath containment (#442); two-login concurrent claim exclusion and takeover proof (#443).
+- Remaining: actual owner-approved dispatcher/secret resolver; approval revocation race immediately before provider action; provider-side idempotency and duplicate-delivery tests; full retry/backoff/dead-letter/replay operational lifecycle; external process supervisor/restart policy and production metrics; shutdown behavior under an actual supervised process.
+- Worker remains disabled and unlaunched. No real dispatcher/provider integration is present. Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER improved** — independent worker foundation and DB concurrency safety are proven; no live delivery connector.
+2. CI/persistence: **AMBER improved** — two restricted PostgreSQL 16 logins prove single-owner claims and stale-owner fencing.
+3. Architecture/identity: **AMBER improved** — two distinct login roles inherit only the narrow worker group; startup checks both.
+4. Workflow/runtime: **AMBER improved** — claim, lease takeover and acknowledgement are fenced across independent logins; provider delivery and operational supervision remain.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, 228-requirement pilot workflow and fresh-clone PostgreSQL checks passed; duplicate path-filter-skipped check is not counted.
+6. PR governance: **AMBER improved** — #443 was individually validated and merged; no stale branch bulk merge.
+7. Release/continuity: **RED/AMBER** — no production dispatcher, credentials, supervisor or Business UAT evidence/authorization.
+
+Next safe slice: use a synthetic/local dispatcher only to test approval revocation immediately before dispatch, event-ID idempotency, transient retry/backoff, dead-letter/replay and real process SIGTERM shutdown. Keep provider integrations and external side effects disabled. No chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
