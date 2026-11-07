@@ -120,3 +120,34 @@ test("dispatch validates required tenant, application and capability identifiers
     tenantId: " ", applicationId: "app-a", capabilityKey: "email.send",
   }), /PROVIDER_DISPATCH_TENANT_INVALID/);
 });
+
+test("dispatch rejects policy returned for a different tenant, application or connection", async () => {
+  for (const effective of [
+    { tenantId: "tenant-b", applicationId: "app-a", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 1 },
+    { tenantId: "tenant-a", applicationId: "app-b", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 1 },
+    { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-b",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 1 },
+  ]) {
+    const { instance } = service([connection()], effective);
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH");
+  }
+});
+test("dispatch rejects malformed policy provenance and invalid tenant-default versions", async () => {
+  for (const effective of [
+    { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "UNTRUSTED", tenantDefaultVersion: 1 },
+    { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 0 },
+  ]) {
+    const { instance } = service([connection()], effective);
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+  }
+});

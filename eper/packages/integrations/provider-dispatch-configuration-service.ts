@@ -23,7 +23,8 @@ export class ProviderDispatchConfigurationError extends Error {
   constructor(readonly code:
     | "PROVIDER_DISPATCH_NO_ACTIVE_BINDING"
     | "PROVIDER_DISPATCH_AMBIGUOUS_BINDING"
-    | "PROVIDER_DISPATCH_POLICY_INVALID") {
+    | "PROVIDER_DISPATCH_POLICY_INVALID"
+    | "PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH") {
     super(code);
     this.name = "ProviderDispatchConfigurationError";
   }
@@ -77,7 +78,15 @@ export class ProviderDispatchConfigurationService {
       applicationId: input.applicationId,
       connectionId: selected.connectionId,
     });
-    if (effective.source === "NONE" || !effective.policy || typeof effective.policy !== "object" || Array.isArray(effective.policy)) {
+    if (effective.tenantId !== input.tenantId ||
+        effective.applicationId !== input.applicationId ||
+        effective.connectionId !== selected.connectionId) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH");
+    }
+    if ((effective.source !== "APPLICATION_OVERRIDE" && effective.source !== "TENANT_DEFAULT") ||
+        !effective.policy || typeof effective.policy !== "object" || Array.isArray(effective.policy) ||
+        (effective.tenantDefaultVersion !== null &&
+          (!Number.isSafeInteger(effective.tenantDefaultVersion) || effective.tenantDefaultVersion < 1))) {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_INVALID");
     }
 
