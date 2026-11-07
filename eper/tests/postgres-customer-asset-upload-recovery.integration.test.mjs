@@ -185,14 +185,31 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.ok(visible.some(asset => asset.assetId === scanAssetId),
         "only the clean, completed asset becomes visible in application listing");
       const scanAudit = await pool.query(
-        `SELECT action, outcome FROM eper_audit_events
-          WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3
-            AND action IN ('customer.asset.upload.complete', 'customer.asset.scan.complete')
+        `SELECT action, outcome, resource_type, resource_id, payload
+           FROM eper_audit_events
+          WHERE tenant_id = $1 AND application_id = $2
+            AND (
+              (action = 'customer.asset.upload.complete'
+                AND resource_type = 'customer-asset-upload' AND resource_id = $3)
+              OR
+              (action = 'customer.asset.scan.complete'
+                AND resource_type = 'customer-asset' AND resource_id = $4)
+            )
           ORDER BY occurred_at`,
-        [tenantId, applicationId, scanAssetId],
+        [tenantId, applicationId, scanReservation.uploadSessionId, scanAssetId],
       );
-      assert.ok(scanAudit.rows.some(row => row.action === "customer.asset.upload.complete" && row.outcome === "success"));
-      assert.ok(scanAudit.rows.some(row => row.action === "customer.asset.scan.complete" && row.outcome === "success"));
+      const uploadCompleteAudit = scanAudit.rows.find((row) =>
+        row.action === "customer.asset.upload.complete" &&
+        row.outcome === "success" &&
+        row.resourceId === scanReservation.uploadSessionId);
+      assert.ok(uploadCompleteAudit, "upload completion audit must be keyed by its durable upload session");
+      assert.equal(uploadCompleteAudit.payload?.assetId, scanAssetId,
+        "upload completion audit must retain the linked asset ID in its payload");
+      const scanCompleteAudit = scanAudit.rows.find((row) =>
+        row.action === "customer.asset.scan.complete" &&
+        row.outcome === "success" &&
+        row.resourceId === scanAssetId);
+      assert.ok(scanCompleteAudit, "trusted scan completion audit must be keyed by the asset ID");
     } finally {
       await pool.end();
     }

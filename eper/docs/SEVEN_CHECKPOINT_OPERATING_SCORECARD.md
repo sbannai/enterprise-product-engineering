@@ -585,3 +585,8 @@ Evidence baseline: live `main` SHA `eb1704501480847a47e8fa138176ff400fbc4250`, r
 6. Demonstrate an independent second-engineer release and recovery path.
 
 No approved requirement or chapter was changed by this reporting update.
+
+
+### Exact-head CI correction — 2026-11-07 08:17 IST
+
+On reporting commit `4c14305b97dadfb0977e80826b0ff9d1c8c50f38`, exact-head EPER CI run 42330877424 failed only in `postgres-customer-asset-upload-recovery.integration.test.mjs`. The assertion filtered both upload-completion and scan-completion audit events by the asset ID. The repository intentionally keys `customer.asset.upload.complete` by the durable upload-session ID (and carries the asset ID in its payload), while `customer.asset.scan.complete` is keyed by the asset ID. The test is corrected to assert those two distinct resource identities and their linkage. No production code, migration or data behavior was changed. The correction must pass on its new exact main SHA before EPER CI is considered green.
