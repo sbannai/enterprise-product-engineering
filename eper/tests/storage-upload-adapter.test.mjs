@@ -119,9 +119,10 @@ test("storage lookup adapter never infers absence from transport or malformed re
   const unavailable = createStorageUploadLookupAdapter({ invoke: async () => ({ success: false, retryable: true }) });
   const malformed = createStorageUploadLookupAdapter({ invoke: async () => ({ success: true, value: { kind: "found", providerUploadReference: " " } }) });
   const absent = createStorageUploadLookupAdapter({ invoke: async () => ({ success: true, value: { kind: "not_found" } }) });
-  assert.deepEqual(await thrown("session-001", "request-001"), { kind: "unavailable" });
-  assert.deepEqual(await failed("session-001", "request-001"), { kind: "unknown" });
-  assert.deepEqual(await unavailable("session-001", "request-001"), { kind: "unavailable" });
-  assert.deepEqual(await malformed("session-001", "request-001"), { kind: "unknown" });
-  assert.deepEqual(await absent("session-001", "request-001"), { kind: "not_found" });
+  const scope = { tenantId: "tenant-a", applicationId: "app-a" };
+  assert.deepEqual(await thrown("session-001", "request-001", scope), { kind: "unavailable" });
+  assert.deepEqual(await failed("session-001", "request-001", scope), { kind: "unknown" });
+  assert.deepEqual(await unavailable("session-001", "request-001", scope), { kind: "unavailable" });
+  assert.deepEqual(await malformed("session-001", "request-001", scope), { kind: "unknown" });
+  assert.deepEqual(await absent("session-001", "request-001", scope), { kind: "not_found" });
 });
