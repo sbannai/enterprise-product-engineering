@@ -153,7 +153,7 @@ test("upload grant endpoint reserves, invokes allowlisted provider, persists ref
   await withServer(t, async (base, calls) => {
     const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/upload-grant", {
       method: "POST",
-      headers: { origin, cookie, "x-csrf-token": csrf, "x-request-id": "upload-api-correlation-001",
+      headers: { origin, cookie, "x-csrf-token": csrf, "x-correlation-id": "upload-api-correlation-001",
         "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
       body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
     });
