@@ -5,7 +5,7 @@ import type {
   ProviderObjectVerificationRequest,
   ProviderStorageDriver,
 } from "./provider-storage-driver-contract.js";
-import { assertProviderStorageDriver, ProviderStorageDriverContractError } from "./provider-storage-driver-contract.js";
+import { assertProviderStorageDriver } from "./provider-storage-driver-contract.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
 import type { StorageUploadRequest } from "../assets/storage-upload-adapter.js";
@@ -34,6 +34,49 @@ const CAPABILITY_BY_OPERATION: Record<ProviderStorageOperation["kind"], string> 
   create_download: "storage.download.grant",
   scan_object: "storage.object.scan",
 };
+
+function validText(value: unknown, max = 2048): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= max;
+}
+
+function validSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function validOperationRequest(operation: ProviderStorageOperation): boolean {
+  if (!operation || typeof operation !== "object" || !operation.request ||
+      typeof operation.request !== "object" || Array.isArray(operation.request)) return false;
+  const request = operation.request as Record<string, unknown>;
+  switch (operation.kind) {
+    case "create_upload":
+      return validText(request.tenantId, 128) && validText(request.applicationId, 128) &&
+        validText(request.actorId, 128) && validText(request.assetId, 128) &&
+        validText(request.uploadSessionId, 128) && validText(request.fileName, 512) &&
+        validText(request.mimeType, 256) && Number.isSafeInteger(request.sizeBytes) &&
+        (request.sizeBytes as number) > 0;
+    case "lookup_upload":
+      return validText(request.uploadSessionId, 128);
+    case "renew_upload":
+      return validText(request.tenantId, 128) && validText(request.applicationId, 128) &&
+        validText(request.actorId, 128) && validText(request.assetId, 128) &&
+        validText(request.uploadSessionId, 128) && validText(request.fileName, 512) &&
+        validText(request.mimeType, 256) && Number.isSafeInteger(request.sizeBytes) &&
+        (request.sizeBytes as number) > 0 && validText(request.providerUploadReference, 2048);
+    case "verify_object":
+      return validText(request.uploadSessionId, 128) &&
+        validText(request.providerUploadReference, 2048) &&
+        Number.isSafeInteger(request.expectedSizeBytes) && (request.expectedSizeBytes as number) > 0 &&
+        validText(request.expectedMimeType, 256) && validSha256(request.expectedSha256);
+    case "create_download":
+      return validText(request.tenantId, 128) && validText(request.applicationId, 128) &&
+        validText(request.actorId, 128) && validText(request.assetId, 128) &&
+        validText(request.accessReference, 2048) && validText(request.fileName, 512) &&
+        (request.mimeType === undefined || validText(request.mimeType, 256));
+    case "scan_object":
+      return validText(request.assetId, 128) &&
+        validText(request.providerObjectReference, 2048) && validSha256(request.expectedSha256);
+  }
+}
 
 export class ProviderStorageDispatchError extends Error {
   constructor(readonly code:
@@ -70,7 +113,10 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
     const capability = CAPABILITY_BY_OPERATION[input.operation.kind];
-    if (!capability) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+    if (!capability || !validText(input.tenantId, 128) || !validText(input.applicationId, 128) ||
+        !validOperationRequest(input.operation)) {
+      throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+    }
 
     const resolved = await this.runtime.resolve({
       tenantId: input.tenantId,
