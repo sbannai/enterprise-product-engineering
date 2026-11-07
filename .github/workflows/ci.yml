@@ -64,43 +64,55 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
         run: npm run migrate:audit
-      - name: Verify customer asset migrations replay on PostgreSQL 16 with RLS intact
+      - name: Verify customer asset migrations replay on PostgreSQL 16 with RLS and data intact
         run: |
           set -euo pipefail
-          for migration in packages/audit/migrations/021_customer_asset_repository.sql packages/audit/migrations/022_customer_asset_scan_dispatch.sql; do
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-          done
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/audit/migrations/021_customer_asset_repository.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-          DO $
+          SELECT set_config('eper.tenant_id', 'ci-asset-replay', false);
+          SELECT set_config('eper.application_id', 'ci-asset-replay-app', false);
+          INSERT INTO eper_customer_assets (
+            tenant_id, asset_id, repository_scope, owner_application_id,
+            display_name, original_file_name, media_category, mime_type,
+            file_extension, size_bytes, storage_adapter_key, storage_object_reference,
+            created_by, updated_by
+          ) VALUES (
+            'ci-asset-replay', '00000000-0000-4000-8000-000000000021',
+            'application_restricted', 'ci-asset-replay-app',
+            'Replay sentinel', 'sentinel.txt', 'document', 'text/plain',
+            'txt', 12, 'ci-test', 'opaque:ci-replay-sentinel', 'ci', 'ci'
+          );
+          SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/audit/migrations/021_customer_asset_repository.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/audit/migrations/022_customer_asset_scan_dispatch.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/audit/migrations/022_customer_asset_scan_dispatch.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT set_config('eper.tenant_id', 'ci-asset-replay', false);
+          SELECT set_config('eper.application_id', 'ci-asset-replay-app', false);
+          DO $verify$
           DECLARE table_name text;
           BEGIN
-            FOREACH table_name IN ARRAY ARRAY[
-              'eper_customer_assets',
-              'eper_customer_asset_application_links',
-              'eper_customer_asset_upload_sessions',
-              'eper_customer_asset_scan_jobs'
-            ] LOOP
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                 WHERE n.nspname = 'public' AND c.relname = table_name
-                   AND c.relrowsecurity AND c.relforcerowsecurity
-              ) THEN
+            FOREACH table_name IN ARRAY ARRAY['eper_customer_assets','eper_customer_asset_application_links','eper_customer_asset_upload_sessions','eper_customer_asset_scan_jobs'] LOOP
+              IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=table_name AND c.relrowsecurity AND c.relforcerowsecurity) THEN
                 RAISE EXCEPTION 'customer asset table missing ENABLE/FORCE RLS: %', table_name;
               END IF;
             END LOOP;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_assets' AND policyname = 'customer_asset_application_read')
-              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_assets' AND policyname = 'customer_asset_application_insert')
-              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_assets' AND policyname = 'customer_asset_application_update')
-              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'eper_customer_asset_scan_jobs' AND policyname = 'customer_asset_scan_job_application_isolation') THEN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_assets' AND policyname='customer_asset_application_read')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_assets' AND policyname='customer_asset_application_insert')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_assets' AND policyname='customer_asset_application_update')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_asset_scan_jobs' AND policyname='customer_asset_scan_job_application_isolation') THEN
               RAISE EXCEPTION 'customer asset RLS policies missing after replay';
             END IF;
-            IF NOT has_table_privilege('eper_customer_asset_access', 'public.eper_customer_assets', 'SELECT')
-              OR NOT has_table_privilege('eper_customer_asset_access', 'public.eper_customer_asset_upload_sessions', 'INSERT')
-              OR NOT has_table_privilege('eper_customer_asset_access', 'public.eper_customer_asset_scan_jobs', 'UPDATE') THEN
+            IF NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_assets','SELECT')
+              OR NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_asset_upload_sessions','INSERT')
+              OR NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_asset_scan_jobs','UPDATE') THEN
               RAISE EXCEPTION 'customer asset least-privilege grants missing after replay';
             END IF;
-          END $;
+            IF NOT EXISTS (SELECT 1 FROM eper_customer_assets WHERE tenant_id='ci-asset-replay' AND asset_id='00000000-0000-4000-8000-000000000021' AND display_name='Replay sentinel') THEN
+              RAISE EXCEPTION 'customer asset data was not preserved across migration replay';
+            END IF;
+          END
+          $verify$;
           SQL
       - name: Apply workflow execution, publication and role migrations to ephemeral CI database
         run: npm run migrate:workflows
