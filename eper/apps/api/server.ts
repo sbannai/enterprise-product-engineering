@@ -59,6 +59,12 @@ import type { PostgresActorApplicationAssignmentStore } from "../../packages/ide
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
+import { createStorageUploadAdapter, type StorageUploadGrant } from "../../packages/assets/storage-upload-adapter.js";
+import { createStorageUploadVerificationAdapter, type StorageUploadVerificationRequest, type StorageUploadVerificationResult } from "../../packages/assets/storage-upload-verification-adapter.js";
+import { createStorageMalwareScanAdapter, type StorageMalwareScanRequest, type StorageMalwareScanResult } from "../../packages/assets/storage-malware-scan-adapter.js";
+import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
+import type { StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
+import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
 import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
 import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
@@ -519,10 +525,13 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadVerificationPort?: IntegrationPort<StorageUploadVerificationRequest, StorageUploadVerificationResult>; assetMalwareScanPort?: IntegrationPort<StorageMalwareScanRequest, StorageMalwareScanResult>; assetMalwareScanResolver?: (input: StorageMalwareScanRequest, requestId: string) => Promise<{ scanStatus: "clean" | "infected" | "error"; scannerServiceId: string; engine?: string; signatureVersion?: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadResolver?: (input: StorageUploadRequest, requestId: string) => Promise<{ providerUploadReference: string; url: string; method: "PUT" | "POST"; expiresAt: string; headers: Record<string, string> } | null>; assetUploadVerificationResolver?: (input: StorageUploadVerificationRequest, requestId: string) => Promise<{ sizeBytes: number; detectedMimeType: string; checksumSha256: string } | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
+  if (process.env.EPER_CUSTOMER_ASSET_PERSISTENCE === "postgres" && !options.customerAssetRepository) {
+    throw new Error("CUSTOMER_ASSET_REPOSITORY_REQUIRED_IN_POSTGRES_MODE");
+  }
   if (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres" && !options.customerIdentitySessionStore) {
     throw new Error("CUSTOMER_IDENTITY_SESSION_STORE_REQUIRED_IN_POSTGRES_MODE");
   }
@@ -583,6 +592,23 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   const assetDownloadResolver: CustomerAssetDownloadResolver | undefined = options.assetDownloadResolver ?? (
     options.assetStoragePort && configuredAssetStorageHosts.length > 0
       ? createStorageDownloadAdapter(options.assetStoragePort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
+  const assetUploadResolver = options.assetUploadResolver ?? (
+    options.assetUploadPort && configuredAssetStorageHosts.length > 0
+      ? createStorageUploadAdapter(options.assetUploadPort, { allowedHosts: configuredAssetStorageHosts })
+      : undefined
+  );
+  const assetMalwareScanResolver = options.assetMalwareScanResolver ?? (
+    options.assetMalwareScanPort && process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID
+      ? createStorageMalwareScanAdapter(options.assetMalwareScanPort, {
+          scannerServiceId: process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID,
+        })
+      : undefined
+  );
+  const assetUploadVerificationResolver = options.assetUploadVerificationResolver ?? (
+    options.assetUploadVerificationPort
+      ? createStorageUploadVerificationAdapter(options.assetUploadVerificationPort)
       : undefined
   );
   const assetAuditWriter: CustomerAssetAuditWriter | undefined = options.assetAuditWriter ?? (
@@ -1762,16 +1788,96 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      if (request.method === "POST") {
+        if (process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres") { sendMethodNotAllowed(request, response, "GET"); return; }
+        const identity = await resolveCustomerWorkspaceIdentity(request, options);
+        if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+        if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
+          sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+        }
+        let modulesConfig: unknown;
+        try { modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? ""); }
+        catch { sendJson(request, response, 503, { error: "customer_asset_upload_policy_unconfigured" }); return; }
+        const tenantModules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+          ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+        if (!Array.isArray(tenantModules) || !tenantModules.includes("client-assets")) {
+          sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
+        }
+        if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+            process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+          sendJson(request, response, 503, { error: "customer_asset_repository_unavailable" }); return;
+        }
+        try {
+          const body = await readJson(request);
+          const applicationId = body.applicationId;
+          const scope = body.scope;
+          const allowedMimes = JSON.parse(process.env.EPER_CUSTOMER_ASSET_ALLOWED_MIME_TYPES_JSON ?? "null");
+          const maxBytes = Number(process.env.EPER_CUSTOMER_ASSET_MAX_FILE_BYTES);
+          const storageAdapterKey = process.env.EPER_CUSTOMER_ASSET_STORAGE_ADAPTER_KEY ?? "";
+          if (!Array.isArray(allowedMimes) || allowedMimes.length === 0 ||
+              !allowedMimes.every((value) => typeof value === "string" && value.length <= 128) ||
+              !Number.isSafeInteger(maxBytes) || maxBytes <= 0 ||
+              !/^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(storageAdapterKey)) {
+            sendJson(request, response, 503, { error: "customer_asset_upload_policy_unconfigured" }); return;
+          }
+          if (typeof applicationId !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+              (scope !== "customer_shared" && scope !== "application_restricted") ||
+              typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.length > 200 ||
+              typeof body.originalFileName !== "string" || !body.originalFileName.trim() || body.originalFileName.length > 255 ||
+              typeof body.mimeType !== "string" || !allowedMimes.includes(body.mimeType) ||
+              typeof body.fileExtension !== "string" || !/^[A-Za-z0-9]{1,12}$/.test(body.fileExtension) ||
+              !body.originalFileName.toLowerCase().endsWith("." + body.fileExtension.toLowerCase()) ||
+              !Number.isSafeInteger(body.sizeBytes) || Number(body.sizeBytes) <= 0 || Number(body.sizeBytes) > maxBytes ||
+              !["image", "video", "document", "other"].includes(String(body.mediaCategory))) {
+            sendJson(request, response, 400, { error: "invalid_customer_asset_metadata" }); return;
+          }
+          const tenantAssignments = options.tenantApplicationAssignmentStore
+            ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+            : (() => {
+                const raw = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+                return raw && typeof raw === "object" && !Array.isArray(raw)
+                  ? (raw as Record<string, unknown>)[identity.tenantId] : null;
+              })();
+          const actorAssigned = options.actorApplicationAssignmentStore
+            ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+            : identity.applicationIds?.includes(applicationId) === true;
+          if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId) || !actorAssigned) {
+            sendJson(request, response, 404, { error: "application_not_found" }); return;
+          }
+          const asset = await options.customerAssetRepository.create({
+            tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+            environment: options.adminConfigEnvironment ?? "sandbox",
+            correlationId: resolveApiRequestId(request), scope,
+            ...(scope === "application_restricted" ? { ownerApplicationId: applicationId } : {}),
+            displayName: body.displayName, originalFileName: body.originalFileName,
+            mediaCategory: body.mediaCategory as "image" | "video" | "document" | "other",
+            mimeType: body.mimeType, fileExtension: body.fileExtension,
+            sizeBytes: Number(body.sizeBytes), storageAdapterKey,
+            storageObjectReference: "pending-upload:" + randomUUID(),
+          });
+          sendJson(request, response, 201, { asset: {
+            assetId: asset.assetId, scope: asset.scope, displayName: asset.displayName,
+            originalFileName: asset.originalFileName, mimeType: asset.mimeType,
+            sizeBytes: asset.sizeBytes, uploadStatus: asset.uploadStatus,
+          } }); return;
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "customer_asset_create_failed";
+          const status = code.includes("MISMATCH") || code.includes("INVALID") ? 400
+            : code.includes("NOT_FOUND") ? 404 : 503;
+          sendJson(request, response, status, { error: status === 503 ? "customer_asset_create_failed" : code }); return;
+        }
+      }
+      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET, POST"); return; }
       const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
       let modulesConfig: unknown;
       let assignmentsConfig: unknown;
       let assetsConfig: unknown;
+      const durableAssetMode = process.env.EPER_CUSTOMER_ASSET_PERSISTENCE === "postgres";
       try {
         modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
         if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
-        assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+        if (!durableAssetMode) assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
       } catch {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
       }
@@ -1794,12 +1900,28 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const actorApplicationSet = new Set(actorAssignments);
       const tenantAssets = assetsConfig && typeof assetsConfig === "object" && !Array.isArray(assetsConfig)
         ? (assetsConfig as Record<string, unknown>)[identity.tenantId] : null;
-      if (!tenantAssets || typeof tenantAssets !== "object" || Array.isArray(tenantAssets)) {
+      if (!durableAssetMode && (!tenantAssets || typeof tenantAssets !== "object" || Array.isArray(tenantAssets))) {
         sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
       }
       const allAssets: Record<string, unknown>[] = [];
       const applicationsWithAssets = new Set<string>();
       for (const assignedId of [...new Set(tenantAssignments as string[])].filter((id) => actorApplicationSet.has(id))) {
+        if (durableAssetMode) {
+          try {
+            const durableAssets = await options.customerAssetRepository!.listForApplication(identity.tenantId, assignedId);
+            for (const asset of durableAssets) {
+              applicationsWithAssets.add(assignedId);
+              allAssets.push({
+                id: asset.assetId, applicationId: assignedId, name: asset.displayName,
+                type: asset.mediaCategory === "document" ? "document" : asset.mediaCategory,
+                mimeType: asset.mimeType, sizeBytes: asset.sizeBytes, updatedAt: asset.createdAt,
+              });
+            }
+          } catch {
+            sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return;
+          }
+          continue;
+        }
         const applicationAssets = (tenantAssets as Record<string, unknown>)[assignedId];
         if (applicationAssets === undefined) continue;
         if (!Array.isArray(applicationAssets) || applicationAssets.length > 10000) {
@@ -1845,6 +1967,284 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         nextCursor: !includeAll && nextOffset < allAssets.length ? String(nextOffset) : null,
       });
       return;
+    }
+
+    // Direct uploads require durable identity assignments, PostgreSQL reservation/audit,
+    // and an injected provider adapter. The signed capability is withheld until reservation commits.
+    // Workers claim durable scan jobs through a separate authenticated endpoint.
+    // Tenant/application scope is explicit; worker identity is server-configured.
+    if (requestUrl.pathname === "/internal/customer-assets/scan/claim") {
+      if (process.env.EPER_CUSTOMER_ASSET_SCAN_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const scannerToken = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN ?? "";
+      if (scannerToken.length < 32 || !bearerMatches(request, scannerToken)) {
+        sendJson(request, response, 401, { error: "unauthorized" }); return;
+      }
+      const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
+      if (!options.customerAssetRepository ||
+          process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+          !/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId)) {
+        sendJson(request, response, 503, { error: "asset_scanner_unavailable" }); return;
+      }
+      try {
+        const body = await readJson(request);
+        const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
+        const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+        const workerId = typeof body.workerId === "string" ? body.workerId : "";
+        const limit: unknown = body.limit === undefined ? 10 : body.limit;
+        const leaseMs: unknown = body.leaseMs === undefined ? 60_000 : body.leaseMs;
+        if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(tenantId) ||
+            !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+            !/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
+            !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128 ||
+            typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
+            typeof leaseMs !== "number" || !Number.isSafeInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000) {
+          sendJson(request, response, 400, { error: "invalid_scan_claim_request" }); return;
+        }
+        const jobs = await options.customerAssetRepository.claimScanJobs({
+          tenantId, applicationId, workerId, scannerServiceId,
+          environment: options.adminConfigEnvironment ?? "sandbox", limit, leaseMs,
+        });
+        sendJson(request, response, 200, { jobs }); return;
+      } catch {
+        sendJson(request, response, 503, { error: "asset_scan_claim_failed" }); return;
+      }
+    }
+
+    // Internal scanner worker boundary. This route is separate from customer
+    // identity and accepts no client-supplied scan outcome or scanner identity.
+    if (requestUrl.pathname === "/internal/customer-assets/scan" ) {
+      if (process.env.EPER_CUSTOMER_ASSET_SCAN_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const scannerToken = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_TOKEN ?? "";
+      if (scannerToken.length < 32 || !bearerMatches(request, scannerToken)) {
+        sendJson(request, response, 401, { error: "unauthorized" }); return;
+      }
+      if (!options.customerAssetRepository ||
+          process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" || !assetMalwareScanResolver) {
+        sendJson(request, response, 503, { error: "asset_scanner_unavailable" }); return;
+      }
+      try {
+        const body = await readJson(request);
+        const tenantId = typeof body.tenantId === "string" ? body.tenantId : "";
+        const applicationId = typeof body.applicationId === "string" ? body.applicationId : "";
+        const uploadSessionId = typeof body.uploadSessionId === "string" ? body.uploadSessionId : "";
+        if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(tenantId) ||
+            !/^[a-zA-Z0-9._:-]{1,128}$/.test(applicationId) ||
+            !/^[a-zA-Z0-9-]{16,64}$/.test(uploadSessionId)) {
+          sendJson(request, response, 400, { error: "invalid_scan_job_reference" }); return;
+        }
+        const scannerServiceId = process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ?? "";
+        const workerId = typeof body.workerId === "string" ? body.workerId : "";
+        if (!/^[a-zA-Z0-9._:-]{2,128}$/.test(scannerServiceId) ||
+            !workerId.startsWith(scannerServiceId + ":") || workerId.length > 128) {
+          sendJson(request, response, 400, { error: "invalid_scan_worker_identity" }); return;
+        }
+        const session = await options.customerAssetRepository.getUploadSessionForScanning(
+          tenantId, applicationId, uploadSessionId, workerId,
+        );
+        if (!session) { sendJson(request, response, 404, { error: "scan_job_not_found_or_not_pending" }); return; }
+        const requestId = resolveApiRequestId(request);
+        const outcome = await assetMalwareScanResolver({
+          tenantId, applicationId, assetId: session.assetId, uploadSessionId,
+          providerUploadReference: session.providerUploadReference,
+          checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes,
+          mimeType: session.mimeType,
+        }, requestId);
+        if (!process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID ||
+            outcome.scannerServiceId !== process.env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID) {
+          sendJson(request, response, 503, { error: "asset_scanner_identity_mismatch" }); return;
+        }
+        if (outcome.scanStatus === "error") {
+          // Retry policy is based on the persisted claim count, never a worker-supplied value.
+          const attempt = Math.max(1, Math.min(session.attempt, 5));
+          const retryAfterMs = Math.min(3_600_000, 15_000 * (2 ** (attempt - 1)));
+          const retryState = await options.customerAssetRepository.retryScanJob({
+            tenantId, applicationId, uploadSessionId, workerId,
+            errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
+          });
+          if (retryState === "lease_lost") {
+            sendJson(request, response, 409, { error: "scan_job_lease_lost" }); return;
+          }
+          if (retryState === "pending") {
+            sendJson(request, response, 202, { scanJob: { state: "pending", retryAfterMs } }); return;
+          }
+          const failedAsset = await options.customerAssetRepository.recordScanResult({
+            tenantId, applicationId, scannerServiceId,
+            environment: options.adminConfigEnvironment ?? "sandbox",
+            correlationId: requestId, uploadSessionId, workerId, scanStatus: "error",
+          });
+          sendJson(request, response, 200, { scanJob: { state: "dead_letter" }, asset: {
+            assetId: failedAsset.assetId, uploadStatus: failedAsset.uploadStatus,
+            scanStatus: failedAsset.scanStatus, lifecycleStatus: failedAsset.lifecycleStatus,
+          } }); return;
+        }
+        const asset = await options.customerAssetRepository.recordScanResult({
+          tenantId, applicationId, scannerServiceId,
+          environment: options.adminConfigEnvironment ?? "sandbox",
+          correlationId: requestId, uploadSessionId, workerId, scanStatus: outcome.scanStatus,
+        });
+        sendJson(request, response, 200, { scanJob: { state: "completed" }, asset: {
+          assetId: asset.assetId, uploadStatus: asset.uploadStatus,
+          scanStatus: asset.scanStatus, lifecycleStatus: asset.lifecycleStatus,
+        } }); return;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "asset_scan_failed";
+        const status = code.includes("NOT_FOUND") ? 404 : 503;
+        sendJson(request, response, status, { error: status === 503 ? "asset_scan_failed" : code }); return;
+      }
+    }
+
+    const assetUploadCompleteMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/uploads\/([a-zA-Z0-9-]{16,64})\/complete$/.exec(requestUrl.pathname);
+    if (assetUploadCompleteMatch) {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+      }
+      if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" || !assetUploadVerificationResolver) {
+        sendJson(request, response, 503, { error: "asset_upload_verification_unavailable" }); return;
+      }
+      const [applicationId, assetId, uploadSessionId] = [assetUploadCompleteMatch[1], assetUploadCompleteMatch[2], assetUploadCompleteMatch[3]];
+      try {
+        const modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+        const modules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+          ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+        if (!Array.isArray(modules) || !modules.includes("client-assets")) {
+          sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
+        }
+        const tenantAssignments = options.tenantApplicationAssignmentStore
+          ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+          : (() => {
+              const raw = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+              return raw && typeof raw === "object" && !Array.isArray(raw)
+                ? (raw as Record<string, unknown>)[identity.tenantId] : null;
+            })();
+        const actorAssigned = options.actorApplicationAssignmentStore
+          ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+          : identity.applicationIds?.includes(applicationId) === true;
+        if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId) || !actorAssigned) {
+          sendJson(request, response, 404, { error: "application_not_found" }); return;
+        }
+        const session = await options.customerAssetRepository.getUploadSessionForVerification(identity.tenantId, applicationId, uploadSessionId);
+        if (!session || session.assetId !== assetId) { sendJson(request, response, 404, { error: "upload_session_not_found" }); return; }
+        if (session.actorId !== identity.actorId) { sendJson(request, response, 403, { error: "upload_session_actor_mismatch" }); return; }
+        const verified = await assetUploadVerificationResolver({
+          tenantId: identity.tenantId, applicationId, assetId, uploadSessionId,
+          providerUploadReference: session.providerUploadReference,
+          expectedSizeBytes: session.expectedSizeBytes, expectedMimeType: session.expectedMimeType,
+        }, resolveApiRequestId(request));
+        if (!verified) { sendJson(request, response, 503, { error: "asset_upload_provider_verification_failed" }); return; }
+        const asset = await options.customerAssetRepository.completeUpload({
+          tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+          environment: options.adminConfigEnvironment ?? "sandbox",
+          correlationId: resolveApiRequestId(request), uploadSessionId,
+          receivedSizeBytes: verified.sizeBytes, observedMimeType: verified.detectedMimeType,
+          checksumSha256: verified.checksumSha256, scanStatus: "pending",
+        });
+        sendJson(request, response, 200, { asset: {
+          assetId: asset.assetId, uploadStatus: asset.uploadStatus,
+          scanStatus: asset.scanStatus, lifecycleStatus: asset.lifecycleStatus,
+          checksumSha256: asset.checksumSha256,
+        } }); return;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "asset_upload_completion_failed";
+        const status = code.includes("NOT_FOUND") ? 404
+          : code.includes("MISMATCH") || code.includes("EXPIRED") || code.includes("NOT_COMPLETABLE") ? 409
+          : 503;
+        sendJson(request, response, status, { error: status === 503 ? "asset_upload_completion_failed" : code }); return;
+      }
+    }
+    const assetUploadMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{1,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/uploads$/.exec(requestUrl.pathname);
+    if (assetUploadMatch) {
+      if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") { sendJson(request, response, 404, { error: "not_found" }); return; }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const identity = await resolveCustomerWorkspaceIdentity(request, options);
+      if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
+      if (!["customer-admin", "customer-asset-manager"].includes(identity.roleKey ?? "")) {
+        sendJson(request, response, 403, { error: "customer_asset_upload_forbidden" }); return;
+      }
+      if (!options.customerAssetRepository || process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+          !assetUploadResolver || process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+        sendJson(request, response, 503, { error: "asset_upload_provider_or_durable_store_unavailable" }); return;
+      }
+      const [applicationId, assetId] = [assetUploadMatch[1], assetUploadMatch[2]];
+      try {
+        const modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
+        const modules = modulesConfig && typeof modulesConfig === "object" && !Array.isArray(modulesConfig)
+          ? (modulesConfig as Record<string, unknown>)[identity.tenantId] : null;
+        if (!Array.isArray(modules) || !modules.includes("client-assets")) {
+          sendJson(request, response, 403, { error: "customer_assets_not_enabled" }); return;
+        }
+        const tenantAssignments = options.tenantApplicationAssignmentStore
+          ? await options.tenantApplicationAssignmentStore.listActive(identity.tenantId)
+          : (() => {
+              const raw = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
+              return raw && typeof raw === "object" && !Array.isArray(raw)
+                ? (raw as Record<string, unknown>)[identity.tenantId] : null;
+            })();
+        const actorAssigned = options.actorApplicationAssignmentStore
+          ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
+          : identity.applicationIds?.includes(applicationId) === true;
+        if (!Array.isArray(tenantAssignments) || !tenantAssignments.includes(applicationId) || !actorAssigned) {
+          sendJson(request, response, 404, { error: "application_not_found" }); return;
+        }
+        const body = await readJson(request);
+        if (typeof body.fileName !== "string" || !body.fileName.trim() || body.fileName.length > 255 ||
+            typeof body.mimeType !== "string" || !body.mimeType.trim() || body.mimeType.length > 128 ||
+            !Number.isSafeInteger(body.sizeBytes) || Number(body.sizeBytes) <= 0 ||
+            typeof body.idempotencyKey !== "string") {
+          sendJson(request, response, 400, { error: "invalid_asset_upload_request" }); return;
+        }
+        const pendingAsset = await options.customerAssetRepository.getPendingUploadAsset(identity.tenantId, applicationId, assetId);
+        if (!pendingAsset) { sendJson(request, response, 404, { error: "asset_not_found" }); return; }
+        if (pendingAsset.originalFileName !== body.fileName ||
+            pendingAsset.mimeType.toLowerCase() !== body.mimeType.toLowerCase() ||
+            pendingAsset.sizeBytes !== Number(body.sizeBytes)) {
+          sendJson(request, response, 409, { error: "asset_upload_metadata_mismatch" }); return;
+        }
+        const grant = await startCustomerAssetUpload({
+          tenantId: identity.tenantId, applicationId, actorId: identity.actorId,
+          environment: options.adminConfigEnvironment ?? "sandbox",
+          correlationId: resolveApiRequestId(request), assetId,
+          expectedSizeBytes: pendingAsset.sizeBytes, idempotencyKey: body.idempotencyKey,
+          fileName: pendingAsset.originalFileName, mimeType: pendingAsset.mimeType,
+        }, {
+          repository: options.customerAssetRepository,
+          issueGrant: assetUploadResolver,
+        });
+        if (!grant) { sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return; }
+        let uploadUrl: URL;
+        try { uploadUrl = new URL(grant.url); } catch { uploadUrl = new URL("about:blank"); }
+        const expiry = Date.parse(grant.expiresAt);
+        const remaining = expiry - Date.now();
+        const headersSafe = grant.headers && Object.entries(grant.headers).every(([name, value]) =>
+          /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) &&
+          typeof value === "string" && value.length <= 4096 && !/[\r\n]/.test(value));
+        if (uploadUrl.protocol !== "https:" || uploadUrl.username || uploadUrl.password ||
+            !configuredAssetStorageHosts.some((host) => host.toLowerCase() === uploadUrl.hostname.toLowerCase()) ||
+            (grant.method !== "PUT" && grant.method !== "POST") ||
+            !Number.isFinite(expiry) || remaining <= 0 || remaining > 15 * 60_000 || !headersSafe) {
+          sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
+        }
+        sendJson(request, response, 201, { upload: grant }); return;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "asset_upload_start_failed";
+        const status = code.includes("NOT_FOUND") ? 404
+          : code.includes("CONFLICT") ? 409
+          : code.includes("INVALID") || code.includes("MISMATCH") ? 400
+          : 503;
+        sendJson(request, response, status, { error: status === 503 ? "asset_upload_start_failed" : code }); return;
+      }
     }
 
     // A download is authorized independently of the manifest request. Storage access is
