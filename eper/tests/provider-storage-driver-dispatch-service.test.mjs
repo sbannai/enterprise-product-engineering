@@ -95,3 +95,20 @@ test("does not invoke a driver when runtime or secret resolution fails", async (
   }), /binding or secret unavailable/);
   assert.equal(f.calls.some(call => call[0] === "lookup"), false);
 });
+
+test("rejects malformed operation inputs before runtime or secret resolution", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
+    operation: { kind: "lookup_upload", request: { uploadSessionId: " " } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset", providerObjectReference: "object-ref", expectedSha256: "not-a-hash",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+  assert.equal(f.calls.some(call => call[0] === "resolve"), false);
+});
