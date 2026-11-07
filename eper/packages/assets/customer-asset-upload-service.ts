@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { StorageUploadRequest } from "./storage-upload-adapter.js";
+import type { StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
 
 export interface CustomerAssetUploadGrant {
   uploadSessionId: string;
@@ -22,11 +23,8 @@ type UploadReservation = {
   expiresAt: string; providerGrantExpiresAt: string | null;
 };
 export interface CustomerAssetUploadStartDependencies {
-  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "recordUploadGrant">;
-  issueGrant: (request: StorageUploadRequest, requestId: string) => Promise<{
-    providerUploadReference: string; url: string; method: "PUT" | "POST";
-    expiresAt: string; headers: Record<string, string>;
-  } | null>;
+  repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "recordUploadGrant" | "recordUploadProviderRejection">;
+  issueGrant: (request: StorageUploadRequest, requestId: string) => Promise<StorageUploadProviderOutcome>;
   now?: () => number;
 }
 function fingerprint(input: CustomerAssetUploadStartInput): string {
@@ -80,8 +78,17 @@ export async function startCustomerAssetUpload(
   // Keep request tracing separate from the client key. The durable provider
   // operation identity is request.uploadSessionId; adapters receive the API
   // correlation ID in IntegrationPort's correlation slot.
-  const grant = await dependencies.issueGrant(request, input.correlationId);
-  if (!grant) return null;
+  const outcome = await dependencies.issueGrant(request, input.correlationId);
+  if (outcome.kind === "rejected") {
+    await dependencies.repository.recordUploadProviderRejection({
+      tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
+      environment: input.environment, correlationId: input.correlationId, assetId: input.assetId,
+      uploadSessionId: reservation.uploadSessionId, rejectionCode: outcome.rejectionCode,
+    });
+    return null;
+  }
+  if (outcome.kind !== "succeeded") return null;
+  const grant = outcome;
   const now = (dependencies.now ?? Date.now)();
   const expiry = Date.parse(grant.expiresAt);
   if (!Number.isFinite(expiry) || expiry <= now || expiry - now > 15 * 60_000) return null;

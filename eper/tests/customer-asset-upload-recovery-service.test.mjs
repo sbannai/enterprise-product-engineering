@@ -36,13 +36,15 @@ test("reserves a stable session before provider grant and persists grant metadat
     repository: {
       reserveUpload: async (value) => { events.push("reserve"); reservedInput = value; return reservation(); },
       recordUploadGrant: async (value) => { events.push("persist-grant"); recorded = value; },
+      recordUploadProviderRejection: async () => assert.fail("unexpected provider rejection"),
     },
     issueGrant: async (request, correlationId) => {
       events.push("provider");
       assert.equal(request.uploadSessionId, "00000000-0000-4000-8000-000000000001");
       assert.equal(request.assetId, input.assetId);
       assert.equal(correlationId, input.correlationId);
-      return grant();
+      assert.notEqual(correlationId, input.idempotencyKey, "request correlation must not reuse the client idempotency key");
+      return { kind: "succeeded", ...grant() };
     },
   });
   assert.deepEqual(events, ["reserve", "provider", "persist-grant"]);
@@ -59,9 +61,9 @@ test("replayed reservation without provider reference fails closed without invok
     now: () => now,
     repository: {
       reserveUpload: async () => prior,
-      recordUploadGrant: async () => assert.fail("must not persist"),
+      recordUploadGrant: async () => assert.fail("must not persist"), recordUploadProviderRejection: async () => assert.fail("must not reject"),
     },
-    issueGrant: async () => { providerCalls++; return grant(); },
+    issueGrant: async () => { providerCalls++; return { kind: "succeeded", ...grant() }; },
   });
   assert.equal(result, null);
   assert.equal(providerCalls, 0);
@@ -76,8 +78,9 @@ test("matching retry reuses the same session and requires the same provider obje
     repository: {
       reserveUpload: async () => prior,
       recordUploadGrant: async (value) => { saved = value; },
+      recordUploadProviderRejection: async () => assert.fail("unexpected provider rejection"),
     },
-    issueGrant: async (request) => { requestSeen = request; return grant("provider-object-existing"); },
+    issueGrant: async (request) => { requestSeen = request; return { kind: "succeeded", ...grant("provider-object-existing") }; },
   });
   assert.equal(requestSeen.uploadSessionId, prior.uploadSessionId);
   assert.equal(requestSeen.providerUploadReference, "provider-object-existing");
@@ -89,8 +92,8 @@ test("provider renewal cannot switch the persisted provider object", async () =>
   const prior = reservation({ providerUploadReference: "provider-object-existing" });
   await assert.rejects(() => startCustomerAssetUpload(input, {
     now: () => now,
-    repository: { reserveUpload: async () => prior, recordUploadGrant: async () => assert.fail("must not persist") },
-    issueGrant: async () => grant("different-provider-object"),
+    repository: { reserveUpload: async () => prior, recordUploadGrant: async () => assert.fail("must not persist"), recordUploadProviderRejection: async () => assert.fail("must not reject") },
+    issueGrant: async () => ({ kind: "succeeded", ...grant("different-provider-object") }),
   }), /PROVIDER_REFERENCE_CONFLICT/);
 });
 
@@ -101,9 +104,9 @@ test("same idempotency key with changed immutable metadata is rejected by reposi
     now: () => now,
     repository: {
       reserveUpload: async (value) => { fingerprint = value.requestFingerprint; return reservation(); },
-      recordUploadGrant: async () => {},
+      recordUploadGrant: async () => {}, recordUploadProviderRejection: async () => {},
     },
-    issueGrant: async () => grant(),
+    issueGrant: async () => ({ kind: "succeeded", ...grant() }),
   });
   await assert.rejects(() => startCustomerAssetUpload(changed, {
     now: () => now,
@@ -113,6 +116,7 @@ test("same idempotency key with changed immutable metadata is rejected by reposi
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
       },
       recordUploadGrant: async () => assert.fail("must not persist"),
+      recordUploadProviderRejection: async () => assert.fail("must not reject"),
     },
     issueGrant: async () => assert.fail("provider must not be called before reservation validation"),
   }), /IDEMPOTENCY_CONFLICT/);
@@ -125,6 +129,7 @@ test("completed, expired and aborted reservations fail closed without provider c
       repository: {
         reserveUpload: async () => reservation({ uploadStatus: state }),
         recordUploadGrant: async () => assert.fail("must not persist"),
+        recordUploadProviderRejection: async () => assert.fail("must not reject"),
       },
       issueGrant: async () => assert.fail("must not issue a grant"),
     }), new RegExp(state.toUpperCase()));
@@ -142,11 +147,28 @@ test("ambiguous first provider outcome is not blindly created again on reservati
         return reservation(reservations > 1 ? { disposition: "replayed" } : {});
       },
       recordUploadGrant: async () => {},
+      recordUploadProviderRejection: async () => {},
     },
-    issueGrant: async () => { providerCalls++; return null; },
+    issueGrant: async () => { providerCalls++; return { kind: "unknown", reason: "transport" }; },
   };
   assert.equal(await startCustomerAssetUpload(input, deps), null);
   assert.equal(await startCustomerAssetUpload(input, deps), null);
   assert.equal(reservations, 2);
   assert.equal(providerCalls, 1, "a replay without a saved provider reference must not create again");
+});
+
+test("only a definitive typed provider rejection is persisted as terminal rejection", async () => {
+  let rejected;
+  const result = await startCustomerAssetUpload(input, {
+    now: () => now,
+    repository: {
+      reserveUpload: async () => reservation(),
+      recordUploadGrant: async () => assert.fail("must not persist a grant"),
+      recordUploadProviderRejection: async value => { rejected = value; },
+    },
+    issueGrant: async () => ({ kind: "rejected", rejectionCode: "policy_denied" }),
+  });
+  assert.equal(result, null);
+  assert.equal(rejected.uploadSessionId, reservation().uploadSessionId);
+  assert.equal(rejected.rejectionCode, "policy_denied");
 });

@@ -1,4 +1,5 @@
 import type { IntegrationPort } from "../integration/index.js";
+import type { StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
 
 export interface StorageUploadRequest {
   tenantId: string;
@@ -49,7 +50,7 @@ export interface StorageUploadAdapterOptions {
 export function createStorageUploadAdapter(
   port: IntegrationPort<StorageUploadRequest, StorageUploadGrant>,
   options: StorageUploadAdapterOptions,
-): (request: StorageUploadRequest, requestId: string) => Promise<StorageUploadResult | null> {
+): (request: StorageUploadRequest, requestId: string) => Promise<StorageUploadProviderOutcome> {
   const allowedHosts = new Set(options.allowedHosts.map((host) => host.trim().toLowerCase()).filter(Boolean));
   const maxTtlMs = options.maxTtlMs ?? 15 * 60_000;
   const now = options.now ?? Date.now;
@@ -64,44 +65,52 @@ export function createStorageUploadAdapter(
     try {
       outcome = await port.invoke(request, requestId);
     } catch {
-      return null;
+      return { kind: "unknown", reason: "transport" };
     }
-    if (!outcome.success || !outcome.value || typeof outcome.externalReference !== "string" || !outcome.externalReference.trim() || outcome.externalReference.length > 2048) return null;
-    if (request.providerUploadReference && outcome.externalReference !== request.providerUploadReference) return null;
+    if (!outcome.success) {
+      return outcome.definitiveRejection === true
+        ? { kind: "rejected", rejectionCode: typeof outcome.rejectionCode === "string" && /^[a-zA-Z0-9._:-]{1,128}$/.test(outcome.rejectionCode) ? outcome.rejectionCode : "provider_rejected" }
+        : { kind: "unknown", reason: "transport" };
+    }
+    if (!outcome.value || typeof outcome.externalReference !== "string" || !outcome.externalReference.trim() || outcome.externalReference.length > 2048) {
+      return { kind: "unknown", reason: "malformed_response" };
+    }
+    if (request.providerUploadReference && outcome.externalReference !== request.providerUploadReference) {
+      return { kind: "unknown", reason: "malformed_response" };
+    }
 
     const grant = outcome.value;
     if (typeof grant.url !== "string" || typeof grant.expiresAt !== "string" ||
-        (grant.method !== "PUT" && grant.method !== "POST")) return null;
+        (grant.method !== "PUT" && grant.method !== "POST")) return { kind: "unknown", reason: "malformed_response" };
 
     let url: URL;
     try {
       url = new URL(grant.url);
     } catch {
-      return null;
+      return { kind: "unknown", reason: "malformed_response" };
     }
     if (url.protocol !== "https:" || url.username || url.password ||
-        !allowedHosts.has(url.hostname.toLowerCase())) return null;
+        !allowedHosts.has(url.hostname.toLowerCase())) return { kind: "unknown", reason: "malformed_response" };
 
     const expiry = Date.parse(grant.expiresAt);
     const remaining = expiry - now();
-    if (!Number.isFinite(expiry) || remaining <= 0 || remaining > maxTtlMs) return null;
+    if (!Number.isFinite(expiry) || remaining <= 0 || remaining > maxTtlMs) return { kind: "unknown", reason: "malformed_response" };
 
     const headers: Record<string, string> = {};
     if (grant.headers !== undefined) {
-      if (!grant.headers || typeof grant.headers !== "object" || Array.isArray(grant.headers)) return null;
+      if (!grant.headers || typeof grant.headers !== "object" || Array.isArray(grant.headers)) return { kind: "unknown", reason: "malformed_response" };
       for (const [name, value] of Object.entries(grant.headers)) {
         if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) ||
-            typeof value !== "string" || value.length > 4096 || /[\r\n]/.test(value)) return null;
+            typeof value !== "string" || value.length > 4096 || /[\r\n]/.test(value)) return { kind: "unknown", reason: "malformed_response" };
         headers[name] = value;
       }
     }
 
     return {
+      kind: "succeeded",
       providerUploadReference: outcome.externalReference,
-      url: url.toString(),
-      method: grant.method,
-      expiresAt: new Date(expiry).toISOString(),
-      headers,
+      url: url.toString(), method: grant.method,
+      expiresAt: new Date(expiry).toISOString(), headers,
     };
   };
 }

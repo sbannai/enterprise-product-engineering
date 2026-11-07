@@ -70,6 +70,7 @@ function options(calls, withProvider = false) {
           providerGrantExpiresAt: null,
         };
       },
+      async recordUploadProviderRejection() { throw new Error("unexpected rejection"); },
       async recordUploadGrant(input) {
         calls.push("record-grant");
         if (!withProvider) throw new Error("must not persist without a provider");
