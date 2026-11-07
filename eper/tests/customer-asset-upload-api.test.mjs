@@ -66,7 +66,7 @@ function options(calls, withProvider = false) {
         assert.equal(input.applicationId, "app-alpha");
         return {
           uploadSessionId: "session-upload-001", providerUploadReference: null,
-          uploadStatus: "initiated", expiresAt: "2026-11-07T03:00:00.000Z",
+          uploadStatus: "initiated", expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
           providerGrantExpiresAt: null,
         };
       },
