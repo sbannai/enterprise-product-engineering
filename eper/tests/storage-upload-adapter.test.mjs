@@ -104,7 +104,7 @@ test("storage lookup adapter separates request correlation from durable operatio
       return { success: true, value: { kind: "found", providerUploadReference: "opaque-existing-object" } };
     },
   });
-  assert.deepEqual(await lookup("upload-session-stable-001", "api-request-correlation-001"), {
+  assert.deepEqual(await lookup("upload-session-stable-001", "api-request-correlation-001", { tenantId: "tenant-a", applicationId: "app-a" }), {
     kind: "found", providerUploadReference: "opaque-existing-object",
   });
   assert.deepEqual(received, {
