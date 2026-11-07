@@ -1200,7 +1200,7 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 ## Append-only checkpoint — 2026-11-07 22:15 IST
 
 ### PostgreSQL 16 migration assurance — completed on current main
-- Final main SHA: `3b2fd38b71c4cbcb7a048f080734983825deadce`.
+- Tested code SHA: `3b2fd38b71c4cbcb7a048f080734983825deadce`; subsequent scorecard-only commit: `440e4a8fe7cfe1ba511523860fb7653e14ea4624`.
 - Exact-main workflow: [42390215757](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42390215757) — **success**.
 - All four PostgreSQL lifecycle tests passed with **1 passed / 0 failed / 0 skipped each**: provider-operation lifecycle; customer-asset upload recovery and scan lifecycle; customer-asset migration catalog/RLS/checksum assurance; customer-asset legacy upgrade/backfill.
 - Migration assurance verifies 023/024 recovery and provider-outcome constraints; exact recovery and outcome index definitions; ENABLE + FORCE RLS on all four asset tables; asset runtime role NOLOGIN/NOSUPERUSER/NOBYPASSRLS and SELECT/INSERT/UPDATE without DELETE; real `SET ROLE` queries prove owning-application visibility and deny cross-application/cross-tenant reads; actual migration runner rerun; checksum-drift rejection.
