@@ -595,3 +595,57 @@ On reporting commit `4c14305b97dadfb0977e80826b0ff9d1c8c50f38`, exact-head EPER 
 ### Exact-head CI follow-up — 2026-11-07 08:20 IST
 
 The first follow-up on `b610603755c65f91517191ecce12e2e2b9d273b2` (EPER CI run 42331126001) still failed in the corrected audit assertion: PostgreSQL result columns are exposed as `resource_id` and `resource_type`, not camelCase property names. The test now uses the returned snake_case fields. This remains a test-only correction; no production code or migration was changed. The new exact-main run must pass before EPER CI is considered green.
+
+
+### Dated operating update — 2026-11-07 08:27 IST
+
+**Evidence baseline:** current main immediately before this documentation update was `22f976db832c4b14cf31ea92b70b0610673491ea` (`test(assets): assert PostgreSQL audit resource columns correctly`). This appendix is an append-only assessment of that exact source SHA; it does not change the approved product baseline.
+
+#### Exact-main technical evidence
+
+- EPER CI: PASS — run [42331249265](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42331249265).
+- Same-commit integrated validation: PASS — run [42331249067](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42331249067); all component jobs and the final same-commit gate passed.
+- Fresh-clone PostgreSQL verification: PASS — run [42331248955](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42331248955). `npm run dev:verify`: 1,459 tests, 1,454 passed, 0 failed, 5 skipped. Disposable PostgreSQL 16 backup/restore passed with 79 source/restored base tables and seven migration ledgers.
+- Controlled QA technical re-execution: PASS — run [42331248952](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42331248952).
+- Chromium customer OIDC lifecycle: PASS — run [42331249128](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42331249128); customer login/protected access/logout/revocation and Product Admin remediation browser flow each passed 1/1. The browser uses a deterministic test issuer; production identity-provider interoperability is not asserted.
+- The integrated 228/38 matrix reports 228 requirements, 38/38 chapter suites, 259/259 chapter tests and 28/28 HTTP smoke checks across nine chapters with HTTP pilot apps. Artifact: [EPER-INTEGRATED-228-MATRIX-42331249067](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42331249067).
+- The current mainline exact-SHA workflow set is recorded as 11/11 green in the 2026-11-07 governance update on [issue #417](https://github.com/sbannai/enterprise-product-engineering/issues/417). This is technical validation only; it does not authorize Business UAT or production operation.
+
+#### Seven-checkpoint assessment
+
+| Checkpoint | Status | Evidence-led position |
+|---|---|---|
+| 1. Product USP and positioning | AMBER | v34 crosswalk preserves all 45 source candidates and their acceptance text. It claims zero exact matches to the 228 baseline, 45 partial links to shared controls and 45 additive v1.6.0 draft candidates; four overlap the existing approval control. The approved 228 requirements and 38 chapters are unchanged. Owner approval of additive requirements remains pending; CW-060 still needs one canonical disposition while preserving CW-061. |
+| 2. CI and persistence foundations | AMBER | Fresh-clone verification, seven migration groups, PostgreSQL integration and disposable local backup/restore pass on the evidence SHA above. Capacity/load targets remain unmeasured. Migration 026 is not yet accepted on main: issue #425 still requires legacy pre-026 upgrade/backfill, migration-specific replay/checksum, RLS and restricted-role acceptance. Branch-only migration-026 evidence must not be reported as mainline delivery. |
+| 3. Architecture and execution boundaries | AMBER | Mainline OIDC routes, PKCE/state/nonce, durable sessions, secure cookies, CSRF, logout/revocation and tenant/application assignment checks have browser and live-PostgreSQL evidence. The test issuer does not prove production IdP interoperability or credential operations. The support-admin browser OIDC journey remains incomplete. |
+| 4. Workflow execution design and schema | AMBER | Mainline campaign scheduler has a continuous worker loop, durable claims/lease renewal, dispatch fencing, idempotency, retry/dead-letter and current-policy authorization boundaries. The independent workflow outbox worker remains draft-branch work; two-connection PostgreSQL concurrency and approval-revocation serialization evidence are still required. |
+| 5. Integrated validation | GREEN | Exact-main EPER CI, same-commit integrated validation, fresh-clone PostgreSQL, controlled QA, Chromium OIDC, 228/38 pilot matrix, six-family HTTP smoke, container smoke, workflow validation and G9 reconciliation are recorded green on the evidence SHA. The 228/38 matrix is an automated technical pilot, not business acceptance. |
+| 6. PR consolidation and governance | RED | The live inventory contains 29 open PRs; all 29 are drafts. Every current head was checked for exact-head Actions; returned runs are successful, with standalone matrix evidence used where an integrated path was skipped. However, all 29 branches diverge from current main and are 73 commits behind it, sharing merge base `2c380d79c55c9183a42ed534ffd1a504f7d41316`. Exact-head green runs do not make these stale-base branches merge-ready. Reconcile one dependency-complete slice at a time against current main, then rerun all required checks. Repository rulesets are empty; branch protection is not verified. |
+| 7. Workflow publisher/runtime implementation | AMBER | Campaign scheduler process entrypoint and runtime loop exist, but operational supervision, metrics/alerts, load/recovery and independent operator rehearsal remain incomplete. The independent workflow outbox worker and its restricted identity are not on main. |
+
+#### Seven user-approved delivery pointers
+
+1. **v34-to-228 reconciliation:** technical crosswalk delivered; approved baseline remains 228 requirements / 38 chapters. Additive v1.6.0 candidates remain unapproved.
+2. **Fresh-clone developer setup:** delivered and verified on the evidence SHA using `npm run dev:verify`; PR #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859` and is an ancestor of main.
+3. **PostgreSQL:** mainline migration groups, live integration and disposable backup/restore pass. Migration 026's branch-only upgrade/backfill/RLS/least-privilege acceptance remains open under issue #425. Production-scale capacity and off-host recovery are not measured.
+4. **Identity:** PR #310 merge `88b9708d748c19dc80a1a2d7ad4960914451db7e`, PR #324 merge `a554990cb7f4969bb218aad7a2e9944aec62fa05`, and PR #329 merge `82a82d92222c613c02e55f01211ecbb32ce63bba` are ancestors of main. Browser OIDC and assignment tests pass with a synthetic issuer; production IdP interoperability is not claimed.
+5. **Customer workspace/support:** ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note separation and filtered export are implemented. SLA timers/escalation and support-admin browser OIDC remain open. The API composition root creates the asset repository but does not inject `assetUploadPort` or `assetStoragePort`; the full customer binary upload/recovery/verification/scan/download journey is not delivered on main. Issue #421 remains open.
+6. **Scheduler/workflow:** campaign worker foundations are on main; independent workflow outbox worker remains branch-only under #400/#411 and requires PostgreSQL concurrency, fencing, approval-revocation and supervision/metrics/recovery proof.
+7. **Release/continuity:** local fresh-clone and disposable restore evidence exists. Branch/ruleset enforcement, off-host backup, RPO/RTO, operational runbooks and a demonstrated second-engineer release/recovery path remain incomplete. The continuity charter remains a proposed standard, not evidence that these controls are active.
+
+#### Live PR inventory and integration rule
+
+- Open PRs: 29; drafts: 29; ready-for-review: 0.
+- All 29 current heads are 73 commits behind main and diverged from the same merge base. Exact head SHAs and workflow/run evidence are recorded in the dated owner brief and PR ledger; no head was treated as current-main evidence.
+- PR #384 is especially unsuitable for wholesale merge: 140 commits ahead / 73 behind, 23 changed files, and GitHub reports it non-mergeable/dirty. Preserve its unique scope only through smaller main-based slices.
+- Do not bulk-merge, mass-close or delete branches. Main remains the only functional source of truth. Reconcile each retained PR against current main and its linked issue; close only when its complete scope is present on main or explicitly withdrawn with no lost acceptance criteria.
+
+#### Continuity and release guardrails
+
+- No chargeable cloud resources were provisioned.
+- No real external/provider dispatch or credentialed provider action was triggered.
+- No production-scale capacity, off-host backup, key-custody, retention, RPO/RTO or second-engineer disaster-recovery proof is asserted.
+- No approved requirement or chapter was changed by this update.
+- This scorecard does not authorize Business UAT or production use.
+
+**Next concrete actions:** (1) deliver the customer-asset provider composition and safe reservation-recovery slice directly from current main; (2) complete migration-026 legacy-upgrade/RLS/least-privilege acceptance; (3) implement and test the workflow outbox worker's two-connection concurrency and approval-revocation boundary on a current-main-based slice; (4) reconcile the 29 stale draft branches without wholesale merges; (5) obtain owner-approved branch/ruleset controls and independent release/recovery evidence.
