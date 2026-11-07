@@ -233,7 +233,7 @@ export class PostgresWorkflowOutboxStore {
       }>(
         `SELECT e.event_id, e.tenant_id, e.application_id, e.instance_id,
                 e.transition_id, e.event_type, e.event_version, e.payload,
-                e.occurred_at, d.attempts, d.last_error, d.updated_at
+                e.occurred_at, d.attempts, d.claim_generation, d.last_error, d.updated_at
            FROM eper_workflow_outbox_delivery d
            JOIN eper_workflow_outbox_events e
              ON e.tenant_id = d.tenant_id
