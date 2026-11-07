@@ -20,6 +20,8 @@ export interface WorkflowOutboxEvent {
   payload: Record<string, unknown>;
   occurredAt: string;
   attempts: number;
+  /** Monotonic fencing token incremented on every successful claim/takeover. */
+  claimGeneration: number;
 }
 
 export interface WorkflowOutboxClaimedEvents extends Array<WorkflowOutboxEvent> {
@@ -37,6 +39,7 @@ export interface WorkflowOutboxClaimOptions {
 
 export interface WorkflowOutboxFailureOptions {
   workerId: string;
+  claimGeneration: number;
   maxAttempts: number;
   retryDelaySeconds: number;
   error: string;
@@ -77,6 +80,7 @@ function mapEvent(row: EventRow): WorkflowOutboxEvent {
     instanceId: row.instance_id, transitionId: row.transition_id, eventType: row.event_type,
     eventVersion: Number(row.event_version), payload: parsePayload(row.payload),
     occurredAt: new Date(row.occurred_at).toISOString(), attempts: Number(row.attempts),
+    claimGeneration: Number(row.claim_generation),
   };
 }
 async function setRls(client: AuditSqlClient, context: WorkflowOutboxContext): Promise<void> {
@@ -144,6 +148,7 @@ export class PostgresWorkflowOutboxStore {
          )
          UPDATE eper_workflow_outbox_delivery d
             SET delivery_status = 'processing', attempts = d.attempts + 1,
+                claim_generation = d.claim_generation + 1,
                 locked_at = NOW(), locked_by = $5, updated_at = NOW()
            FROM candidates c
            JOIN eper_workflow_outbox_events e
@@ -153,7 +158,7 @@ export class PostgresWorkflowOutboxStore {
             AND d.event_id = c.event_id
          RETURNING e.event_id, e.tenant_id, e.application_id, e.instance_id,
                    e.transition_id, e.event_type, e.event_version, e.payload,
-                   e.occurred_at, d.attempts`,
+                   e.occurred_at, d.attempts, d.claim_generation`,
         [context.tenantId, context.applicationId, limit, leaseSeconds, options.workerId, maxAttempts],
       );
       await client.query("COMMIT");
@@ -177,12 +182,14 @@ export class PostgresWorkflowOutboxStore {
     eventId: string,
     workerId: string,
     leaseSeconds: number,
+    claimGeneration: number,
   ): Promise<boolean> {
     validateUuid(eventId);
     validateId(workerId, "workerId");
     if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds < 10 || leaseSeconds > 3600) {
       throw new Error("WORKFLOW_OUTBOX_LEASE_SECONDS_INVALID");
     }
+    validateClaimGeneration(claimGeneration);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -193,8 +200,9 @@ export class PostgresWorkflowOutboxStore {
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $4
             AND locked_at > clock_timestamp() - ($5::int * INTERVAL '1 second')
+            AND claim_generation = $6::bigint
           RETURNING event_id`,
-        [context.tenantId, context.applicationId, eventId, workerId, leaseSeconds],
+        [context.tenantId, context.applicationId, eventId, workerId, leaseSeconds, claimGeneration],
       );
       await client.query("COMMIT");
       return Boolean(result.rows[0]);
@@ -251,9 +259,10 @@ export class PostgresWorkflowOutboxStore {
     }
   }
 
-  async markDelivered(context: WorkflowOutboxContext, eventId: string, workerId: string): Promise<void> {
+  async markDelivered(context: WorkflowOutboxContext, eventId: string, workerId: string, claimGeneration: number): Promise<void> {
     validateUuid(eventId);
     validateId(workerId, "workerId");
+    validateClaimGeneration(claimGeneration);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -264,8 +273,9 @@ export class PostgresWorkflowOutboxStore {
                 locked_at = NULL, locked_by = NULL, last_error = NULL, updated_at = NOW()
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $4
+            AND claim_generation = $5::bigint
           RETURNING event_id`,
-        [context.tenantId, context.applicationId, eventId, workerId],
+        [context.tenantId, context.applicationId, eventId, workerId, claimGeneration],
       );
       if (!result.rows[0]) throw new Error("WORKFLOW_OUTBOX_LEASE_NOT_HELD");
       await client.query("COMMIT");
@@ -282,6 +292,7 @@ export class PostgresWorkflowOutboxStore {
   ): Promise<WorkflowOutboxFailureResult> {
     validateUuid(eventId);
     validateId(options.workerId, "workerId");
+    validateClaimGeneration(options.claimGeneration);
     if (!Number.isSafeInteger(options.maxAttempts) || options.maxAttempts < 1 || options.maxAttempts > 100) {
       throw new Error("WORKFLOW_OUTBOX_MAX_ATTEMPTS_INVALID");
     }
@@ -305,9 +316,10 @@ export class PostgresWorkflowOutboxStore {
                 updated_at = NOW()
           WHERE tenant_id = $1 AND application_id = $2 AND event_id = $3
             AND delivery_status = 'processing' AND locked_by = $7
+            AND claim_generation = $8::bigint
           RETURNING delivery_status, attempts`,
         [context.tenantId, context.applicationId, eventId, options.error.slice(0, 2000),
-          options.maxAttempts, options.retryDelaySeconds, options.workerId],
+          options.maxAttempts, options.retryDelaySeconds, options.workerId, options.claimGeneration],
       );
       if (!result.rows[0]) throw new Error("WORKFLOW_OUTBOX_LEASE_NOT_HELD");
       await client.query("COMMIT");
@@ -319,6 +331,11 @@ export class PostgresWorkflowOutboxStore {
   }
 }
 
+function validateClaimGeneration(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error("WORKFLOW_OUTBOX_CLAIM_GENERATION_INVALID");
+  }
+}
 function validateUuid(value: string): void {
   if (typeof value !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
