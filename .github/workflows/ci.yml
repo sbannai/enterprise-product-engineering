@@ -100,13 +100,18 @@ jobs:
             IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_assets' AND policyname='customer_asset_application_read')
               OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_assets' AND policyname='customer_asset_application_insert')
               OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_assets' AND policyname='customer_asset_application_update')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_asset_application_links' AND policyname='customer_asset_application_link_isolation')
+              OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_asset_upload_sessions' AND policyname='customer_asset_upload_session_isolation')
               OR NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='eper_customer_asset_scan_jobs' AND policyname='customer_asset_scan_job_application_isolation') THEN
               RAISE EXCEPTION 'customer asset RLS policies missing after replay';
             END IF;
             IF NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_assets','SELECT')
+              OR NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_assets','INSERT')
+              OR NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_assets','UPDATE')
+              OR has_table_privilege('eper_customer_asset_access','public.eper_customer_assets','DELETE')
               OR NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_asset_upload_sessions','INSERT')
               OR NOT has_table_privilege('eper_customer_asset_access','public.eper_customer_asset_scan_jobs','UPDATE') THEN
-              RAISE EXCEPTION 'customer asset least-privilege grants missing after replay';
+              RAISE EXCEPTION 'customer asset least-privilege grants missing or DELETE unexpectedly granted';
             END IF;
             IF NOT EXISTS (SELECT 1 FROM eper_customer_assets WHERE tenant_id='ci-asset-replay' AND asset_id='00000000-0000-4000-8000-000000000021' AND display_name='Replay sentinel') THEN
               RAISE EXCEPTION 'customer asset data was not preserved across migration replay';
