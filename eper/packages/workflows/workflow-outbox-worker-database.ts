@@ -5,11 +5,19 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
   try {
     const identity = await client.query<{
       role_name: string;
+      can_login: boolean;
       is_superuser: boolean;
+      can_create_database: boolean;
+      can_create_role: boolean;
+      can_replicate: boolean;
       bypasses_rls: boolean;
     }>(`
       SELECT current_user::text AS role_name,
+             r.rolcanlogin AS can_login,
              r.rolsuper AS is_superuser,
+             r.rolcreatedb AS can_create_database,
+             r.rolcreaterole AS can_create_role,
+             r.rolreplication AS can_replicate,
              r.rolbypassrls AS bypasses_rls
         FROM pg_roles r
        WHERE r.rolname = current_user
@@ -18,7 +26,11 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
     if (!role || role.role_name !== expectedRole) {
       throw new Error("WORKFLOW_OUTBOX_DATABASE_ROLE_MISMATCH");
     }
-    if (role.is_superuser || role.bypasses_rls) {
+    if (!role.can_login) {
+      throw new Error("WORKFLOW_OUTBOX_DATABASE_LOGIN_REQUIRED");
+    }
+    if (role.is_superuser || role.can_create_database || role.can_create_role ||
+        role.can_replicate || role.bypasses_rls) {
       throw new Error("WORKFLOW_OUTBOX_DATABASE_ROLE_PRIVILEGED");
     }
 
