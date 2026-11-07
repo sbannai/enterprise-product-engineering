@@ -52,6 +52,8 @@ The command:
 3. Runs TypeScript typecheck and build.
 4. Applies all seven PostgreSQL migration groups in the same order as CI: payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity (including durable OIDC state and customer-session schema).
 5. Re-runs all seven migration groups in that same order to prove migration repeatability; no group is omitted from the repeatability pass.
+   - The audit group includes customer-asset migrations 021–023. This second runner pass verifies migration-ledger repeatability; because an applied migration is checksum-ledgered, it is not by itself proof that the SQL file can be executed twice.
+   - The dedicated PostgreSQL 16 CI replay gate separately executes asset migrations 021, 022 and 023 twice against the same database. It inserts a sentinel asset between executions and verifies data preservation, ENABLE/FORCE RLS, expected policies and least-privilege grants (including no DELETE grant).
 6. Runs the full `npm test` suite with live identity tenant/actor assignment and capability PostgreSQL integration tests enabled, and scheduler PostgreSQL integration pointed at the same local database.
 
 Expected final marker: `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`. A skipped opt-in integration test is not proof of live PostgreSQL behavior; inspect test output and confirm the relevant tests report as passed.
