@@ -6,6 +6,7 @@ on:
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
       - "eper/packages/integrations/**"
       - "eper/packages/assets/**"
+      - "eper/apps/worker/customer-asset-scan-main.ts"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
@@ -13,6 +14,9 @@ on:
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs"
+      - "eper/tests/customer-asset-scan-worker.test.mjs"
+      - "eper/tests/storage-malware-scan-adapter.test.mjs"
+      - "eper/tests/storage-upload-verification-adapter.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -22,6 +26,7 @@ on:
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
       - "eper/packages/integrations/**"
       - "eper/packages/assets/**"
+      - "eper/apps/worker/customer-asset-scan-main.ts"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
@@ -29,6 +34,9 @@ on:
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs"
+      - "eper/tests/customer-asset-scan-worker.test.mjs"
+      - "eper/tests/storage-malware-scan-adapter.test.mjs"
+      - "eper/tests/storage-upload-verification-adapter.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -82,3 +90,5 @@ jobs:
         run: node --test tests/postgres-customer-asset-migration-assurance.integration.test.mjs
       - name: Verify customer-asset legacy upgrade and provider-outcome backfill on PostgreSQL 16
         run: node --test tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs
+      - name: Exercise customer-asset scan worker and fail-closed storage adapters
+        run: node --test tests/customer-asset-scan-worker.test.mjs tests/storage-malware-scan-adapter.test.mjs tests/storage-upload-verification-adapter.test.mjs
