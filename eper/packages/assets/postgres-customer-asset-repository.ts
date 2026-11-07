@@ -582,30 +582,40 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const locked = await client.query<{
+      // All lifecycle writers lock upload session -> asset -> scan job.
+      // Avoid joined FOR UPDATE: PostgreSQL's plan may choose a different row-lock order.
+      const lockedSession = await client.query<{
         upload_session_id: string; asset_id: string; actor_id: string;
         expected_size_bytes: number | string; expires_at: string | Date;
-        upload_status: string; asset_mime_type: string; asset_upload_status: string;
-        session_not_expired: boolean;
+        upload_status: string; session_not_expired: boolean;
       }>(
-        `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
-          s.expires_at, s.upload_status, (s.expires_at > now()) AS session_not_expired,
-          a.mime_type AS asset_mime_type, a.upload_status AS asset_upload_status
-         FROM eper_customer_asset_upload_sessions s
-         JOIN eper_customer_assets a
-           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         WHERE s.tenant_id = $1 AND s.upload_session_id = $2
-           AND a.lifecycle_status = 'active'
-         FOR UPDATE OF s, a`,
-        [input.tenantId, input.uploadSessionId],
+        `SELECT upload_session_id, asset_id, actor_id, expected_size_bytes,
+          expires_at, upload_status, (expires_at > clock_timestamp()) AS session_not_expired
+         FROM eper_customer_asset_upload_sessions
+         WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+         FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
       );
-      const session = locked.rows[0];
+      const session = lockedSession.rows[0];
       if (!session) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const lockedAsset = await client.query<{
+        mime_type: string; upload_status: string; lifecycle_status: string;
+      }>(
+        `SELECT mime_type, upload_status, lifecycle_status
+           FROM eper_customer_assets
+          WHERE tenant_id = $1 AND asset_id = $2
+          FOR UPDATE`,
+        [input.tenantId, session.asset_id],
+      );
+      const asset = lockedAsset.rows[0];
+      if (!asset || asset.lifecycle_status !== "active") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      }
       if (session.actor_id !== input.actorId) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ACTOR_MISMATCH");
       if (session.upload_status !== "initiated" && session.upload_status !== "in_progress") {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_COMPLETABLE");
       }
-      if (session.asset_upload_status !== "pending") {
+      if (asset.upload_status !== "pending") {
         throw new Error("EPER_CUSTOMER_ASSET_NOT_PENDING_UPLOAD");
       }
       if (!session.session_not_expired) {
@@ -614,7 +624,7 @@ export class PostgresCustomerAssetRepository {
       if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SIZE_MISMATCH");
       }
-      if (session.asset_mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
+      if (asset.mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_MIME_MISMATCH");
       }
       // Upload completion is not a scanner attestation. Always hold the asset
