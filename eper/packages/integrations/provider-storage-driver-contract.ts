@@ -3,12 +3,8 @@ import type {
   StorageUploadProviderCapabilities,
   StorageUploadProviderOutcome,
 } from "../assets/storage-upload-provider-contract.js";
-import type {
-  StorageDownloadRequest,
-  StorageDownloadResult,
-  StorageUploadGrant,
-  StorageUploadRequest,
-} from "../assets/storage-upload-adapter.js";
+import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
+import type { StorageUploadGrant, StorageUploadRequest } from "../assets/storage-upload-adapter.js";
 
 export type ProviderObjectVerificationOutcome =
   | { kind: "verified"; sizeBytes: number; mimeType: string; sha256: string }
