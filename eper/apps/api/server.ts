@@ -1819,7 +1819,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       const fileName = body.fileName;
       const mimeType = body.mimeType;
       const idempotencyKey = request.headers["idempotency-key"];
-      if (!Number.isSafeInteger(expectedSizeBytes) || typeof expectedSizeBytes !== "number" ||
+      if (typeof expectedSizeBytes !== "number" || !Number.isSafeInteger(expectedSizeBytes) ||
           typeof fileName !== "string" || typeof mimeType !== "string" ||
           typeof idempotencyKey !== "string" || !/^[a-zA-Z0-9._:-]{16,128}$/.test(idempotencyKey)) {
         sendJson(request, response, 400, { error: "invalid_upload_request" }); return;
