@@ -253,13 +253,21 @@ test("outbox worker stops renewing a non-cooperative dispatch after shutdown", a
     async markFailed() {},
   };
   const shutdown = new AbortController();
+  let dispatchStarted;
+  const started = new Promise(resolve => { dispatchStarted = resolve; });
   const worker = new WorkflowOutboxWorker(store, {
     async dispatch() {
+      dispatchStarted();
       await new Promise(() => {});
     },
   }, { workerId: "worker-01", leaseSeconds: 10 });
-  void worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1, shutdown.signal);
+  const running = worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1, shutdown.signal);
+  await started;
   shutdown.abort(new Error("host shutdown"));
+  const result = await running;
+  assert.deepEqual(result, {
+    claimed: 1, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 1,
+  }, "shutdown must release the worker pass even if the dispatcher ignores AbortSignal");
   await new Promise(resolve => setTimeout(resolve, 3_600));
   assert.deepEqual(renewals, [], "a non-cooperative dispatcher must not keep extending its lease after shutdown");
 });

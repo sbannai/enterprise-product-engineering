@@ -57,7 +57,7 @@ Optional bounded settings:
 - `EPER_WORKFLOW_OUTBOX_BASE_RETRY_DELAY_SECONDS` (0–86,400; default 5)
 - `EPER_WORKFLOW_OUTBOX_MAX_RETRY_DELAY_SECONDS` (at least base delay, at most 86,400; default 3,600)
 
-SIGINT/SIGTERM are converted to an AbortSignal. Shutdown stops lease heartbeats, leaves ambiguous in-flight outcomes for lease-expiry recovery, removes signal handlers and closes the PostgreSQL pool. The process emits structured pass counters for claimed, delivered, retried, dead-lettered, lease-lost and interrupted work. Run under an external process supervisor with restart backoff and alerting on process exit, pass errors, backlog age/depth and dead-letter growth.
+SIGINT/SIGTERM are converted to an AbortSignal. Shutdown stops lease heartbeats, leaves ambiguous in-flight outcomes for lease-expiry recovery, removes signal handlers and closes the PostgreSQL pool. The dispatcher must honor the supplied AbortSignal and cancel provider I/O before starting or continuing a side effect; a non-cooperative dispatcher can still leave an external outcome ambiguous even though the worker releases its pass and stops lease heartbeats. The process emits structured pass counters for claimed, delivered, retried, dead-lettered, lease-lost and interrupted work. Run under an external process supervisor with restart backoff and alerting on process exit, pass errors, backlog age/depth and dead-letter growth.
 
 ## Deployment and safety limitations
 
