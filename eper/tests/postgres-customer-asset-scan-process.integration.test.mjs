@@ -81,6 +81,37 @@ async function createPendingScanFixture(pool, repository, prefix) {
   });
   return { tenantId, applicationId, actorId, assetId, correlationId, uploadSessionId: reservation.uploadSessionId };
 }
+async function createWorkerLogin(pool, prefix) {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+  const role = "eper_scan_" + prefix + "_" + suffix;
+  const password = randomUUID().replaceAll("-", "");
+  await pool.query(
+    `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+       NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+  );
+  await pool.query(`GRANT eper_customer_asset_access TO "${role}"`);
+  const url = new URL(connectionString);
+  url.username = role;
+  url.password = password;
+  const workerPool = new Pool({ connectionString: url.toString(), max: 1 });
+  try {
+    const check = await workerPool.query(`
+      SELECT current_user,
+        has_table_privilege(current_user, 'eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_scan_jobs,
+        has_table_privilege(current_user, 'eper_customer_assets', 'UPDATE') AS can_update_assets,
+        has_table_privilege(current_user, 'eper_customer_assets', 'DELETE') AS can_delete_assets,
+        (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypasses_security
+    `);
+    assert.equal(check.rows[0].can_update_scan_jobs, true);
+    assert.equal(check.rows[0].can_update_assets, true);
+    assert.equal(check.rows[0].can_delete_assets, false);
+    assert.equal(check.rows[0].bypasses_security, false);
+  } finally {
+    await workerPool.end();
+  }
+  return { role, connectionString: url.toString() };
+}
+
 function baseWorkerEnv(fixture) {
   return {
     ...process.env,
@@ -100,6 +131,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     const pool = new Pool({ connectionString, max: 4 });
     const repository = new PostgresCustomerAssetRepository(pool);
     const fixture = await createPendingScanFixture(pool, repository, "scan-process");
+    const workerLogin = await createWorkerLogin(pool, "scan");
     const scannerPath = resolve("dist/packages/assets/scanners/ci-postgres-test-scanner.js");
     let child;
     try {
@@ -113,6 +145,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
       child = spawn(process.execPath, ["dist/apps/worker/customer-asset-scan-main.js"], {
         env: {
           ...baseWorkerEnv(fixture),
+          EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ENABLED: "true",
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: "ci-asset-scanner:process-test",
@@ -146,6 +179,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     } finally {
       if (child) await stopChild(child).catch(() => {});
       await rm(scannerPath, { force: true });
+      await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
   });
@@ -155,6 +189,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
     const pool = new Pool({ connectionString, max: 4 });
     const repository = new PostgresCustomerAssetRepository(pool);
     const fixture = await createPendingScanFixture(pool, repository, "recovery-process");
+    const workerLogin = await createWorkerLogin(pool, "recovery");
     const workerId = "ci-recovery-expired-worker";
     let child;
     try {
@@ -176,6 +211,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
           ...process.env,
           DATABASE_URL: connectionString,
           EPER_PAYMENT_DATABASE_URL: connectionString,
+          EPER_CUSTOMER_ASSET_SCAN_DATABASE_URL: workerLogin.connectionString,
           EPER_CUSTOMER_ASSET_PERSISTENCE: "postgres",
           EPER_AUDIT_PERSISTENCE: "postgres",
           EPER_AUDIT_ENVIRONMENT: "sandbox",
@@ -215,6 +251,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
       assert.equal(audit.rowCount, 1, "recovery transition and audit must commit together");
     } finally {
       if (child) await stopChild(child).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
   });
