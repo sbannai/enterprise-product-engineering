@@ -590,3 +590,8 @@ No approved requirement or chapter was changed by this reporting update.
 ### Exact-head CI correction — 2026-11-07 08:17 IST
 
 On reporting commit `4c14305b97dadfb0977e80826b0ff9d1c8c50f38`, exact-head EPER CI run 42330877424 failed only in `postgres-customer-asset-upload-recovery.integration.test.mjs`. The assertion filtered both upload-completion and scan-completion audit events by the asset ID. The repository intentionally keys `customer.asset.upload.complete` by the durable upload-session ID (and carries the asset ID in its payload), while `customer.asset.scan.complete` is keyed by the asset ID. The test is corrected to assert those two distinct resource identities and their linkage. No production code, migration or data behavior was changed. The correction must pass on its new exact main SHA before EPER CI is considered green.
+
+
+### Exact-head CI follow-up — 2026-11-07 08:20 IST
+
+The first follow-up on `b610603755c65f91517191ecce12e2e2b9d273b2` (EPER CI run 42331126001) still failed in the corrected audit assertion: PostgreSQL result columns are exposed as `resource_id` and `resource_type`, not camelCase property names. The test now uses the returned snake_case fields. This remains a test-only correction; no production code or migration was changed. The new exact-main run must pass before EPER CI is considered green.

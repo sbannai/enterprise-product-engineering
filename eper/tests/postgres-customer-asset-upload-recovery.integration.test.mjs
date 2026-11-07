@@ -201,14 +201,14 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       const uploadCompleteAudit = scanAudit.rows.find((row) =>
         row.action === "customer.asset.upload.complete" &&
         row.outcome === "success" &&
-        row.resourceId === scanReservation.uploadSessionId);
+        row.resource_id === scanReservation.uploadSessionId);
       assert.ok(uploadCompleteAudit, "upload completion audit must be keyed by its durable upload session");
       assert.equal(uploadCompleteAudit.payload?.assetId, scanAssetId,
         "upload completion audit must retain the linked asset ID in its payload");
       const scanCompleteAudit = scanAudit.rows.find((row) =>
         row.action === "customer.asset.scan.complete" &&
         row.outcome === "success" &&
-        row.resourceId === scanAssetId);
+        row.resource_id === scanAssetId);
       assert.ok(scanCompleteAudit, "trusted scan completion audit must be keyed by the asset ID");
     } finally {
       await pool.end();
