@@ -82,6 +82,10 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
       truncate_assignments: boolean;
       truncate_events: boolean;
       truncate_delivery: boolean;
+      read_assignment_extra_columns: boolean;
+      write_assignment_columns: boolean;
+      write_event_columns: boolean;
+      write_delivery_columns: boolean;
     }>(`
       SELECT
         (
@@ -122,7 +126,38 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
         has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'DELETE') AS delete_delivery,
         has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'TRUNCATE') AS truncate_assignments,
         has_table_privilege(current_user, 'public.eper_workflow_outbox_events', 'TRUNCATE') AS truncate_events,
-        has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'TRUNCATE') AS truncate_delivery
+        has_table_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'TRUNCATE') AS truncate_delivery,
+        EXISTS (
+          SELECT 1 FROM pg_attribute a
+           WHERE a.attrelid = 'public.eper_tenant_application_assignment'::regclass
+             AND a.attnum > 0 AND NOT a.attisdropped
+             AND a.attname <> ALL (ARRAY['tenant_id','application_id','assignment_status'])
+             AND has_column_privilege(current_user, a.attrelid, a.attname, 'SELECT')
+        ) AS read_assignment_extra_columns,
+        EXISTS (
+          SELECT 1 FROM pg_attribute a
+           WHERE a.attrelid = 'public.eper_tenant_application_assignment'::regclass
+             AND a.attnum > 0 AND NOT a.attisdropped
+             AND (has_column_privilege(current_user, a.attrelid, a.attname, 'INSERT')
+               OR has_column_privilege(current_user, a.attrelid, a.attname, 'UPDATE'))
+        ) AS write_assignment_columns,
+        EXISTS (
+          SELECT 1 FROM pg_attribute a
+           WHERE a.attrelid = 'public.eper_workflow_outbox_events'::regclass
+             AND a.attnum > 0 AND NOT a.attisdropped
+             AND (has_column_privilege(current_user, a.attrelid, a.attname, 'INSERT')
+               OR has_column_privilege(current_user, a.attrelid, a.attname, 'UPDATE'))
+        ) AS write_event_columns,
+        EXISTS (
+          SELECT 1 FROM pg_attribute a
+           WHERE a.attrelid = 'public.eper_workflow_outbox_delivery'::regclass
+             AND a.attnum > 0 AND NOT a.attisdropped
+             AND a.attname <> ALL (ARRAY[
+               'delivery_status','attempts','available_at','locked_at',
+               'locked_by','last_error','delivered_at','updated_at'
+             ])
+             AND has_column_privilege(current_user, a.attrelid, a.attname, 'UPDATE')
+        ) AS write_delivery_columns
     `);
     const grants = privileges.rows[0];
     if (!grants || !grants.read_assignment_scope_columns || grants.read_assignment_table ||
@@ -130,7 +165,9 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
         !grants.update_delivery_columns || grants.update_delivery_table ||
         grants.write_assignments || grants.write_events ||
         grants.insert_delivery || grants.delete_delivery ||
-        grants.truncate_assignments || grants.truncate_events || grants.truncate_delivery) {
+        grants.truncate_assignments || grants.truncate_events || grants.truncate_delivery ||
+        grants.read_assignment_extra_columns || grants.write_assignment_columns ||
+        grants.write_event_columns || grants.write_delivery_columns) {
       throw new Error("WORKFLOW_OUTBOX_DATABASE_GRANTS_INVALID");
     }
 
