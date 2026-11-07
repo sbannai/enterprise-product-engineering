@@ -13,7 +13,7 @@ import type { StorageUploadLookupOutcome, StorageUploadLookupRequest, StorageUpl
 
 export type ProviderStorageOperation =
   | { kind: "create_upload"; request: StorageUploadRequest }
-  | { kind: "lookup_upload"; request: { uploadSessionId: string } }
+  | { kind: "lookup_upload"; request: StorageUploadLookupRequest }
   | { kind: "renew_upload"; request: StorageUploadRequest & { providerUploadReference: string } }
   | { kind: "verify_object"; request: ProviderObjectVerificationRequest }
   | { kind: "create_download"; request: StorageDownloadRequest }
