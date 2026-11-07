@@ -9,7 +9,7 @@ import { assertProviderStorageDriver } from "./provider-storage-driver-contract.
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
 import type { StorageUploadRequest } from "../assets/storage-upload-adapter.js";
-import type { StorageUploadLookupOutcome, StorageUploadProviderOutcome } from "../assets/storage-upload-provider-contract.js";
+import type { StorageUploadLookupOutcome, StorageUploadLookupRequest, StorageUploadProviderOutcome } from "../assets/storage-upload-provider-contract.js";
 
 export type ProviderStorageOperation =
   | { kind: "create_upload"; request: StorageUploadRequest }
