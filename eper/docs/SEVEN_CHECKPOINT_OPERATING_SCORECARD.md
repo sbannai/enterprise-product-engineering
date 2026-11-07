@@ -1082,3 +1082,36 @@ Next safe slice: test the complete retry/dead-letter/replay lifecycle with two r
 7. Release/continuity: **RED/AMBER** — no production dispatcher, secret resolver, supervised deployment or Business UAT evidence/authorization.
 
 Next safe slice: exercise a real worker host under a fake process supervisor with SIGTERM during a long-running synthetic dispatch, proving heartbeats stop, the in-flight event is left for lease recovery, the DB pool closes and restart can reclaim safely. Keep all provider calls disabled. No chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 21:10 IST
+
+### Abortable worker shutdown — PR #446 merged
+- PR #446 merged to main by squash at `d9591cde579efacfee2e5ceac859a7a30951b941`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `408641f1d53361c0a5f65c2e358fc31074bd1bf7`.
+- 15 check runs succeeded; one duplicate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted. The separate 228 matrix workflow, chapter-pilot-matrix and same-commit integrated gate succeeded.
+- Worker lifecycle suite: **37 passed, 0 failed, 0 skipped**. The test now awaits shutdown while a deliberately non-cooperative synthetic dispatcher never settles; the worker pass returns as interrupted, lease heartbeats stop and no acknowledgement/failure mutation is issued.
+- Dispatcher approval suite: **9 passed, 0 failed, 0 skipped**. An already-aborted signal or shutdown during the final approval lookup prevents adapter invocation.
+- Dispatch promise is raced against the worker AbortSignal; eventual promise rejection remains observed to avoid unhandled rejection. The host can proceed to pool closure after the worker pass releases.
+- Typecheck/build, PostgreSQL 16 privilege/startup, claim-generation, two-login concurrency, retry/dead-letter/audited replay, same-commit integrated gate, fresh-clone PostgreSQL, release, UAT technical simulation, payment and capability checks passed.
+- Concrete dispatchers are required to honor AbortSignal and cancel provider I/O before/while performing side effects. A non-cooperative real dispatcher can still leave an external outcome ambiguous; idempotency and lease recovery remain mandatory.
+- No real dispatcher/provider, network call, worker activation, cloud resource or Business UAT authorization.
+
+### #436 lifecycle status
+- Completed on main: restricted worker role (#439); startup privilege/RLS and approval-denial gate (#440); claim-generation fencing (#441); standalone worker host (#442); two-login claim/takeover proof (#443); final approval/idempotency contract (#444); retry/dead-letter/audited replay/redelivery integration (#445); abortable worker shutdown (#446).
+- Remaining: owner-approved provider dispatcher and secret resolver; provider-side durable approval revalidation and idempotency; actual external process supervisor/restart/backoff/metrics; deployment readiness and production acceptance evidence.
+- Worker remains disabled and unlaunched. No provider module or credentials are present. Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER improved** — synthetic end-to-end delivery lifecycle is proven; no real provider.
+2. CI/persistence: **AMBER improved** — PostgreSQL 16 least-privilege, claim fencing, concurrency and replay proofs are green.
+3. Architecture/identity: **AMBER improved** — explicit approval, identity and abort boundaries are enforced.
+4. Workflow/runtime: **AMBER improved** — standalone process, retries, replay and bounded worker-pass shutdown are on main; external dispatcher cancellation/supervision remains.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, matrix workflow and fresh-clone PostgreSQL passed; duplicate path-filter-skipped check is not counted.
+6. PR governance: **AMBER improved** — #446 individually validated and merged.
+7. Release/continuity: **RED/AMBER** — no approved provider integration, secret resolver, production supervisor or Business UAT evidence/authorization.
+
+Next safe slice: implement an explicit production activation gate and deployment preflight that requires a signed-off dispatcher, secret-resolver contract, provider idempotency key, approval-revocation proof, process supervisor and telemetry before the worker can be enabled outside CI. Keep the worker disabled and use no provider credentials, chargeable cloud resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
