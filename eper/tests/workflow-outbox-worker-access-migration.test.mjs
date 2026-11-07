@@ -21,6 +21,6 @@ test("worker role migration is ordered immediately after workflow migration 014"
   const names = (await readdir(new URL("../packages/workflows/migrations/", import.meta.url)))
     .filter((name) => /^[0-9]{3}_[a-z0-9_]+\.sql$/.test(name))
     .sort();
-  assert.equal(names.at(-2), "014_workflow_definition_drafts.sql");
-  assert.equal(names.at(-1), "015_workflow_outbox_worker_access.sql");
+  assert.equal(names.at(-2), "015_workflow_outbox_worker_access.sql");
+  assert.equal(names.at(-1), "016_workflow_outbox_claim_generation.sql");
 });
