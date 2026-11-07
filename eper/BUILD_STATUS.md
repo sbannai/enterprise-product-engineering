@@ -2,17 +2,18 @@
 
 **Source of truth:** GitHub `main`  
 **EPER scope:** Chapters 463–500 / 228 requirements  
-**Current main SHA:** `6bf4ae6206b1d6dae1e292fc32ede4828d78326c`  
-**Current main commit:** `docs(governance): align contribution guide with main-only delivery`  
+**Current main SHA:** `1720234672d4e7e6ede08692aee196661b1bc41c`  
+**Current main commit:** `docs(status): reconcile build status to current main SHA`  
 **Last mainline functional CI evidence:** `2c380d79c55c9183a42ed534ffd1a504f7d41316` — 2026-11-03 16:36 UTC  
 **Status updated:** 2026-11-07
 
 ## Mainline verification
 
-The current main contains two governance/documentation-only commits after the last mainline functional CI checkpoint:
+The current main contains three governance/documentation-only commits after the last mainline functional CI checkpoint:
 
 - `5a644f62ecfe8f6e1be5a6ae7a36c7d09e522d8e` — establishes the main-only functional delivery policy.
 - `6bf4ae6206b1d6dae1e292fc32ede4828d78326c` — aligns `CONTRIBUTING.md` with that policy.
+- `1720234672d4e7e6ede08692aee196661b1bc41c` — reconciles this build-status report with the current main SHA.
 
 The latest main-branch Actions query returned eight successful push-triggered workflows for the prior functional baseline `2c380d79c55c9183a42ed534ffd1a504f7d41316`:
 
@@ -25,7 +26,7 @@ The latest main-branch Actions query returned eight successful push-triggered wo
 - Controlled QA Re-Execution
 - Controlled UAT Technical Simulation
 
-**Important:** those successful runs are for `2c380d79...`, not the current main SHA `6bf4ae6...`. The current main SHA has not yet been verified by a fresh mainline CI run. The two intervening commits are documentation-only, but the current exact SHA must still receive a fresh baseline validation before being labelled green.
+**Important:** those successful runs are for `2c380d79...`, not the current main SHA `6bf4ae6...`. The current main SHA has not yet been verified by a fresh mainline CI run. The three intervening commits are documentation-only, but the current exact SHA must still receive a fresh baseline validation before being labelled green.
 
 ## Implementation inventory — baseline claims
 
