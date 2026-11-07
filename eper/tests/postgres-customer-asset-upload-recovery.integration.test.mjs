@@ -94,13 +94,13 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       const audit = await pool.query(
         `SELECT action, outcome, payload
            FROM eper_audit_events
-          WHERE tenant_id = $1 AND application_id = $2
+          WHERE tenant_id = $1 AND application_id IN ($2, $5)
             AND resource_id IN ($3, $4)
             AND action IN ('customer.asset.metadata.create',
                            'customer.asset.upload.reserve',
                            'customer.asset.upload.grant.recover')
           ORDER BY occurred_at`,
-        [tenantId, applicationId, first.uploadSessionId, assetId],
+        [tenantId, applicationId, first.uploadSessionId, assetId, otherApplicationId],
       );
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.reserve" && row.outcome === "success"));
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.grant.recover" && row.outcome === "success"));
