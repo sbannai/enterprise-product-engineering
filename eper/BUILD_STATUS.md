@@ -24,6 +24,7 @@
 
 ## Customer asset upload recovery — 2026-11-07 engineering update
 
+- **Verified CI evidence:** EPER CI run [42326834172](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42326834172) completed successfully on exact main SHA `2885710f9eeca3f356d6e279dce622233bd40de6` at 2026-11-07 01:59:17 UTC. Typecheck, build, the new upload-recovery/provider-binding/migration tests, audit migration chain and PostgreSQL 16 customer-asset migration replay all passed. This validates the schema/service unit-test foundation only; it does not substitute for live PostgreSQL repository replay/identity tests or API/browser acceptance.
 - Added the upload reservation service and PostgreSQL repository recovery methods directly on main. The service persists the reservation before requesting a provider capability, derives a canonical SHA-256 fingerprint from tenant/application/actor/asset/file name/MIME type/expected size, and reuses the persisted session on matching retries.
 - Grant renewal is bound to the existing provider object reference. The storage adapter rejects a provider response that returns a different external object reference. Provider calls receive the stable idempotency key; signed URLs/tokens remain response-only and are not persisted.
 - Added service regression coverage for reserve-before-provider ordering, matching replay, metadata conflict, provider-object mismatch, terminal session states and provider outage retry. Added adapter coverage for provider object binding.
