@@ -56,7 +56,7 @@ test("rejects a runtime selection that does not match the requested tenant/appli
   const f = fixture({ selection: { tenantId: "tenant-other" } });
   await assert.rejects(() => f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
-    operation: { kind: "lookup_upload", request: { uploadSessionId: "session" } },
+    operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session" } },
   }), error => error instanceof ProviderStorageDispatchError &&
     error.code === "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
   assert.equal(f.calls.some(call => call[0] === "lookup"), false);
