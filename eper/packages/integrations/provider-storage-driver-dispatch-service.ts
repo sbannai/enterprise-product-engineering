@@ -55,7 +55,8 @@ function validOperationRequest(operation: ProviderStorageOperation): boolean {
         validText(request.mimeType, 256) && Number.isSafeInteger(request.sizeBytes) &&
         (request.sizeBytes as number) > 0;
     case "lookup_upload":
-      return validText(request.uploadSessionId, 128);
+      return validText(request.tenantId, 128) && validText(request.applicationId, 128) &&
+        validText(request.uploadSessionId, 128);
     case "renew_upload":
       return validText(request.tenantId, 128) && validText(request.applicationId, 128) &&
         validText(request.actorId, 128) && validText(request.assetId, 128) &&
