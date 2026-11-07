@@ -801,3 +801,29 @@ No PR merge/closure, branch deletion, chargeable cloud provisioning, production 
 7. Release/continuity: **RED/AMBER** — no new off-host recovery, production provider, or release evidence; Business UAT remains unauthorized.
 
 Next safe engineering action: keep #397 open and obtain an approved server-side secret-manager integration and provider driver ownership/implementation before changing the API composition root. Then implement a small current-main-based adapter slice and run exact-head API, PostgreSQL, security and integrated checks. Preserve the 228 approved requirements / 38 chapters. No cloud resource, real provider call, customer binary, deployment, merge, or Business UAT authorization is made by this checkpoint.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 19:42 IST
+
+### Mainline CI confirmation
+- Dynamically resolved `main`: `4f88bc33c830eb26da256c1dc53be3c907228d81`.
+- All 13 exact-SHA check runs completed successfully, including the same-commit integrated gate, PostgreSQL/payment/receipt contracts, UAT technical/readiness audit, release/G9 checks, six-family HTTP/container smoke, and the 228 requirements / 38 chapter pilot matrix.
+- This is technical verification only; it does not authorize Business UAT.
+
+### Workflow worker consolidation — #436
+- Re-inspected current-main workflow outbox implementation. Main already contains the PostgreSQL outbox store, context discovery, bounded worker, continuous process loop, runtime composition and SIGINT/SIGTERM host adapter. It does not yet contain the independent executable worker entrypoint, restricted database login privilege gate/migrations, approved-dispatcher module boundary, or package launch script.
+- PR #400 contains a candidate implementation for those missing deployment-boundary pieces, but it is based on `2c380d79c55c9183a42ed534ffd1a504f7d41316`; comparison with current main shows 31 commits ahead and 136 behind, with divergent history. Its exact-head checks passed on its old base, but do not validate current main. Do not merge it wholesale.
+- PR #387 is also 22 commits ahead and 136 behind current main. Its historical green checks are not current-main evidence. Leave it draft pending a small, reconciled extraction.
+- Issue #408 is closed with claim-generation fencing implemented in a draft PR #411; that branch is also not a substitute for a current-main PostgreSQL concurrency test. Keep the fencing acceptance in #436 until re-proven on current main.
+- Current main has not been shown to execute the complete worker lifecycle through an independent process against a dedicated restricted PostgreSQL login. The worker remains a code-level foundation, not an operationally activated service.
+
+### Next controlled slice
+1. Reconcile the worker-access migration numbers and actual current-main outbox/assignment schema before adding migrations 015/016.
+2. Port the restricted-role assertion and least-privilege grants as a main-based slice, proving the live dedicated login, FORCE RLS, no owner/elevated membership, column-only assignment discovery, and column-scoped delivery updates.
+3. Add the separately launchable entrypoint and bounded config; require explicit opt-in and an owner-approved dispatcher module, with no default/no-op implementation.
+4. Prove claim, renewal, immediate approval recheck, dispatch idempotency, retries/dead-letter, claim-generation fencing, SIGTERM shutdown and pool closure in fresh-clone plus PostgreSQL 16 integration on the exact resulting SHA.
+5. Keep deployment, dispatcher activation, cloud provisioning, external actions and Business UAT out of scope until separately approved.
+
+No PR was merged or closed; no branch was deleted; no requirements changed; no cloud resources or external actions were triggered.
