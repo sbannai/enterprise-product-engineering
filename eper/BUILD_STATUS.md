@@ -2,8 +2,8 @@
 
 **Source of truth:** GitHub `main`  
 **EPER scope:** Chapters 463–500 / 228 requirements  
-**Current main SHA:** `1720234672d4e7e6ede08692aee196661b1bc41c`  
-**Current main commit:** `docs(status): reconcile build status to current main SHA`  
+**Main SHA immediately before this status refresh:** `1720234672d4e7e6ede08692aee196661b1bc41c`  
+**Status refresh commit:** `docs(status): correct build status to latest main SHA`  
 **Last mainline functional CI evidence:** `2c380d79c55c9183a42ed534ffd1a504f7d41316` — 2026-11-03 16:36 UTC  
 **Status updated:** 2026-11-07
 
@@ -26,7 +26,7 @@ The latest main-branch Actions query returned eight successful push-triggered wo
 - Controlled QA Re-Execution
 - Controlled UAT Technical Simulation
 
-**Important:** those successful runs are for `2c380d79...`, not the current main SHA `6bf4ae6...`. The current main SHA has not yet been verified by a fresh mainline CI run. The three intervening commits are documentation-only, but the current exact SHA must still receive a fresh baseline validation before being labelled green.
+**Important:** those successful runs are for `2c380d79...`, not the mainline status-refresh commit `c886df095050f094eba73f791554735547f3fd88` or its successor. No fresh mainline CI run is recorded for the status-refresh commit; do not label it green. The three intervening commits are documentation-only, but the current exact SHA must still receive a fresh baseline validation before being labelled green.
 
 ## Implementation inventory — baseline claims
 
