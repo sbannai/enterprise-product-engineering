@@ -2,7 +2,7 @@
 
 **Source of truth:** GitHub `main`  
 **EPER scope:** Chapters 463–500 / 228 requirements  
-**Main SHA at start of this status refresh:** `72466c20eea91231c17efea3f5b5cf3947df38ef`  
+**Main SHA at start of this status refresh:** `9c389a0ef376a491dbfeac8706845b6a67bad381`  
 **Status updated:** 2026-11-07
 
 ## Delivery and validation status
@@ -31,7 +31,9 @@
 
 ## Backlog and management
 
-- Last live backlog snapshot: 31 open PRs and 32 open issues (2026-11-07). Refresh before publishing a later count.
+- Live backlog snapshot after the 2026-11-07 purge: **29 open PRs and 31 open issues**. GitHub search classifies all 29 open PRs as Draft; 0 are ready for review. Refresh before publishing a later count.
+- Purged: PR #428 (replay-safety scope superseded by main), PR #389 (comparative engine evaluation superseded by owner decision), and Issue #388 (PostgreSQL target decision recorded in ADR-EPER-DATA-001). PR #428's related validation issue #427 remains open until exact-SHA CI is observed. PR #377 remains open because its unique documentation updates are not yet in main.
+- Merge policy: do not merge a Draft PR to reduce counts. For each draft, reconcile scope against main; close only if superseded/obsolete, otherwise refresh dependencies and evidence before requesting review.
 - Do not mass-close PRs/issues. Close only after verifying that the scope is delivered on main or has an explicit documented disposition.
 - Every status report should identify exact main SHA, commit purpose, test/run evidence, remaining risks, owner decisions and next action.
 
