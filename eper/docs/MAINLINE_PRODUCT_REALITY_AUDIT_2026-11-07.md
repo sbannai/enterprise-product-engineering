@@ -252,7 +252,7 @@ All 29 pre-existing open PRs were individually compared with current main. Every
 
 ### Mainline and audit CI confirmation
 
-Current main `2f42e87b0b88a74ef856a9b709d68d1d39eba1de` has all 9 observed workflows successful, including EPER CI, integrated validation and fresh-clone setup. Audit PR #432 was retargeted to current main; its exact head `9fe162ad07953750b93dd386ea70ac051731447c` has all 9 observed workflows successful and is now 4 commits ahead / 0 behind. It remains draft and unmerged pending review of this report.
+Current main `2f42e87b0b88a74ef856a9b709d68d1d39eba1de` has all 9 observed workflows successful, including EPER CI, integrated validation and fresh-clone setup. Audit PR #432 is retargeted to current main and remains mergeable/draft. Its latest head `03a89432ee6140670d413d4d161857290dc94735` is 6 commits ahead / 1 behind in GitHub's compare graph because it does not contain the mainline test-fixture correction commit; 8 of 9 workflows have completed successfully and integrated validation is still running. The prior head `9fe162ad07953750b93dd386ea70ac051731447c` passed all 9 workflows. Do not merge the latest head until its final check completes and the one-commit divergence is reconciled.
 
 ### Next safe execution order
 
