@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createApprovedWorkflowOutboxDispatcher } from "../dist/packages/workflows/workflow-outbox-dispatcher-adapter.js";
+import { WorkflowOutboxDispatchNotApprovedError } from "../dist/packages/workflows/workflow-outbox-errors.js";
 
 const event = {
   eventId: "11111111-1111-4111-8111-111111111111",
@@ -78,7 +79,7 @@ test("dispatcher must revalidate approval at the side-effect boundary", async ()
     },
     async dispatch(received) {
       // Synthetic adapter's final durable read; no network/provider is called.
-      if (!approvalActive) throw new Error("WORKFLOW_OUTBOX_DISPATCH_NOT_APPROVED");
+      if (!approvalActive) throw new WorkflowOutboxDispatchNotApprovedError();
       externalEffects += 1;
     },
   });
