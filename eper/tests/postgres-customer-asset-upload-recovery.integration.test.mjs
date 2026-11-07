@@ -108,6 +108,91 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         "actor, fingerprint and cross-application idempotency conflicts must leave durable denial evidence");
       const serializedAudit = JSON.stringify(audit.rows);
       assert.doesNotMatch(serializedAudit, /https:\/\/|signed_url|bearer_token|access_token/i);
+
+      // Exercise the real PostgreSQL upload-completion -> transactional scan
+      // outbox -> leased worker -> trusted scanner result lifecycle.
+      const scanAssetId = randomUUID();
+      const scanIdempotencyKey = "asset-scan-" + suffix.slice(0, 32);
+      const scanFingerprint = createHash("sha256").update("scan-lifecycle-" + suffix).digest("hex");
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox",
+        correlationId: correlationId + "-scan", assetId: scanAssetId,
+        scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Scan lifecycle integration fixture", originalFileName: "scan-fixture.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 2048, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-scan-object-" + suffix,
+      });
+      const scanReservation = await repository.reserveUpload({
+        tenantId, applicationId, actorId, environment: "sandbox",
+        correlationId: correlationId + "-scan", assetId: scanAssetId,
+        expectedSizeBytes: 2048, idempotencyKey: scanIdempotencyKey,
+        requestFingerprint: scanFingerprint,
+      });
+      await repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox",
+        correlationId: correlationId + "-scan", assetId: scanAssetId,
+        uploadSessionId: scanReservation.uploadSessionId,
+        requestFingerprint: scanFingerprint,
+        providerUploadReference: "opaque-scan-provider-ref-" + suffix,
+        grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const checksum = createHash("sha256").update("verified-binary-content-" + suffix).digest("hex");
+      const completed = await repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "sandbox",
+        correlationId: correlationId + "-scan",
+        uploadSessionId: scanReservation.uploadSessionId,
+        receivedSizeBytes: 2048, observedMimeType: "application/pdf",
+        checksumSha256: checksum, scanStatus: "pending",
+      });
+      assert.equal(completed.uploadStatus, "scanning");
+      assert.equal(completed.scanStatus, "pending");
+      assert.equal(completed.checksumSha256, checksum);
+
+      const [scanJob] = await repository.claimScanJobs({
+        tenantId, applicationId, workerId: "asset-scan-worker-" + suffix.slice(0, 16),
+        scannerServiceId: "asset-scanner-" + suffix.slice(0, 16),
+        environment: "sandbox", limit: 5, leaseMs: 60_000,
+      });
+      assert.ok(scanJob, "completion must enqueue a scan job atomically");
+      assert.equal(scanJob.uploadSessionId, scanReservation.uploadSessionId);
+      const workerId = "asset-scan-worker-" + suffix.slice(0, 16);
+      const scanInput = await repository.getUploadSessionForScanning(
+        tenantId, applicationId, scanReservation.uploadSessionId, workerId,
+      );
+      assert.ok(scanInput);
+      assert.equal(scanInput.checksumSha256, checksum);
+      assert.equal(scanInput.providerUploadReference, "opaque-scan-provider-ref-" + suffix);
+      await assert.rejects(
+        repository.recordScanResult({
+          tenantId, applicationId, scannerServiceId: "asset-scanner-" + suffix.slice(0, 16),
+          workerId: "different-worker-" + suffix.slice(0, 16), environment: "sandbox",
+          correlationId: correlationId + "-scan", uploadSessionId: scanReservation.uploadSessionId,
+          scanStatus: "clean",
+        }),
+        { message: "EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST" },
+        "a worker without the active lease cannot publish a clean result",
+      );
+      const scanned = await repository.recordScanResult({
+        tenantId, applicationId, scannerServiceId: "asset-scanner-" + suffix.slice(0, 16),
+        workerId, environment: "sandbox", correlationId: correlationId + "-scan",
+        uploadSessionId: scanReservation.uploadSessionId, scanStatus: "clean",
+      });
+      assert.equal(scanned.uploadStatus, "available");
+      assert.equal(scanned.scanStatus, "clean");
+      assert.equal(scanned.lifecycleStatus, "active");
+      const visible = await repository.listForApplication(tenantId, applicationId);
+      assert.ok(visible.some(asset => asset.assetId === scanAssetId),
+        "only the clean, completed asset becomes visible in application listing");
+      const scanAudit = await pool.query(
+        `SELECT action, outcome FROM eper_audit_events
+          WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3
+            AND action IN ('customer.asset.upload.complete', 'customer.asset.scan.complete')
+          ORDER BY occurred_at`,
+        [tenantId, applicationId, scanAssetId],
+      );
+      assert.ok(scanAudit.rows.some(row => row.action === "customer.asset.upload.complete" && row.outcome === "success"));
+      assert.ok(scanAudit.rows.some(row => row.action === "customer.asset.scan.complete" && row.outcome === "success"));
     } finally {
       await pool.end();
     }
