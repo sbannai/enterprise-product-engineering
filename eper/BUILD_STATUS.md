@@ -8,8 +8,8 @@
 ## Delivery and validation status
 
 - The last independently observed successful functional CI baseline is `2c380d79c55c9183a42ed534ffd1a504f7d41316` (2026-11-03 16:36 UTC).
-- The governance/status commits after that baseline are documentation-only. They do not constitute product functionality or replace validation.
-- The combined-status query for main SHA `72466c20eea91231c17efea3f5b5cf3947df38ef` returned no checks. Subsequent customer-asset migration commits are newer; their CI evidence must be queried independently.
+- Mainline now includes the customer-asset persistence schema (migrations 021–022), replay-safe policy replacement, and a PostgreSQL 16 CI replay gate. These are persistence-foundation changes, not a complete customer-facing upload feature; exact-SHA CI is still required.
+- The combined-status query for the latest customer-asset implementation SHA has not yet returned check evidence through the connected integration. Do not call the latest mainline green until the push-triggered run is observed and its head SHA verified.
 - The focused `.github/workflows/ci.yml` workflow is configured for `workflow_dispatch` and pushes to `main` affecting `eper/**`. A status-file push is therefore expected to trigger that lane. The run and its checked-out head SHA must be independently verified before marking the resulting mainline green.
 - No workflow run for the current status-refresh commit has yet been confirmed.
 
