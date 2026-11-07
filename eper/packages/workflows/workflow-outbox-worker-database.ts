@@ -42,6 +42,7 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
       delivery_rls: boolean | null;
       events_force_rls: boolean | null;
       delivery_force_rls: boolean | null;
+      assignments_owner: string | null;
       events_owner: string | null;
       delivery_owner: string | null;
     }>(`
@@ -52,6 +53,7 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
              (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_delivery')) AS delivery_rls,
              (SELECT relforcerowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_events')) AS events_force_rls,
              (SELECT relforcerowsecurity FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_delivery')) AS delivery_force_rls,
+             (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass('public.eper_tenant_application_assignment')) AS assignments_owner,
              (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_events')) AS events_owner,
              (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = to_regclass('public.eper_workflow_outbox_delivery')) AS delivery_owner
     `);
@@ -61,7 +63,7 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
     }
     if (tables.events_rls !== true || tables.delivery_rls !== true ||
         tables.events_force_rls !== true || tables.delivery_force_rls !== true ||
-        tables.events_owner === expectedRole || tables.delivery_owner === expectedRole) {
+        tables.assignments_owner === expectedRole || tables.events_owner === expectedRole || tables.delivery_owner === expectedRole) {
       throw new Error("WORKFLOW_OUTBOX_RLS_BOUNDARY_INVALID");
     }
 
