@@ -97,6 +97,17 @@ test("role definition accepts provider connection permissions for application-sc
   ));
 });
 
+test("role definition accepts explicit customer asset upload permission", async () => {
+  const permissions = ["customer.asset.upload"];
+  const { calls, pool } = fixture({ permissions });
+  const result = await new PostgresWorkflowRoleDefinitionStore(pool).replace({ ...input, permissions });
+  assert.deepEqual(result.permissions, permissions);
+  assert.ok(calls.some(call =>
+    call.sql.includes("INSERT INTO eper_workflow_role_definition") &&
+    JSON.stringify(call.values).includes("customer.asset.upload"),
+  ));
+});
+
 test("role definition rejects unknown or duplicate permissions before database access", async () => {
   const { calls, pool } = fixture();
   await assert.rejects(
