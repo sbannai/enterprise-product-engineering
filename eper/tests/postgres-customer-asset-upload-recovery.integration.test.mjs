@@ -99,7 +99,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
             AND action IN ('customer.asset.metadata.create',
                            'customer.asset.upload.reserve',
                            'customer.asset.upload.grant.recover')
-          ORDER BY created_at`,
+          ORDER BY occurred_at`,
         [tenantId, applicationId, first.uploadSessionId],
       );
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.reserve" && row.outcome === "success"));
