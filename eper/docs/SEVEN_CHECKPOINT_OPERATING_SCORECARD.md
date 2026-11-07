@@ -1173,3 +1173,23 @@ Next reconciliation targets: inspect remaining open PRs by dependency graph and 
 - Continue with three current-main work packages: (1) PostgreSQL 16 migration/legacy upgrade proof for 023–024 (#425), (2) scan worker vertical slice (#435), and (3) upload-expiry worker vertical slice (#404).
 - Provider vendor activation remains disabled until owner-approved credentials, adapter capabilities, secret resolution and real-provider evidence exist.
 - Approved 228 requirements / 38 chapters unchanged. No cloud resources provisioned; Business UAT remains unauthorized.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 22:05 IST
+
+### Customer-asset PostgreSQL 16 execution enabled and passed
+- Main commit: `4a77ae585db8553f254a83c3050152268f8879da` — extended the existing PostgreSQL 16 Provider Operation Lifecycle workflow to trigger on customer-asset package/test changes, set `EPER_CUSTOMER_ASSET_LIVE_TESTS=1`, and execute `tests/postgres-customer-asset-upload-recovery.integration.test.mjs` after the audit migration runner.
+- GitHub Actions run: [42389288035](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42389288035) — completed successfully.
+- Verified job log: customer-asset PostgreSQL integration **1 passed / 0 failed / 0 skipped**; provider-operation PostgreSQL lifecycle **1 passed / 0 failed / 0 skipped**; build and payment/audit migrations passed.
+- Issue #425 title/body corrected to current-main migrations 023–024; migration 026 from divergent PR #423 is no longer treated as the target.
+
+### What this evidence proves — and does not prove
+- Proven on ephemeral PostgreSQL 16: upload reservation/replay concurrency, actor/fingerprint conflict behavior, provider grant recovery, definitive rejection outcome and audit, cross-application isolation, upload completion to scan outbox, worker lease ownership, trusted scan result and audit linkage.
+- Still open in #425: populated legacy upgrade fixture and provider-outcome backfill assertions; rerun and checksum-drift rejection tests for the actual runner; exact index/constraint catalog assertions; direct database-role RLS ENABLE/FORCE, tenant/application isolation and least-privilege grant verification.
+- CI used only an ephemeral GitHub Actions PostgreSQL service. No AWS/cloud or production database resources were provisioned.
+- Business UAT remains unauthorized; this is technical integration evidence, not business acceptance.
+
+### Next safe engineering slice
+Build the missing migration assurance tests for current-main 023–024 (legacy upgrade/backfill, checksum drift, catalog definitions and DB-role security) without editing applied migrations. Keep scan/expiry worker gaps #435/#404 separately scoped.
