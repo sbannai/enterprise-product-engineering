@@ -159,7 +159,34 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(completed.status, "completed");
       assert.equal(completed.version, 3);
       assert.equal(completed.currentActivityId, null);
-      const successfulApprovalIndex = approvalResults.findIndex(result => result.status === "fulfilled");
+
+      // The customer work queue exposes only summary metadata, never the private
+      // workflow payload, and its total remains accurate when a page is empty.
+      const ownQueue = await service.listVisibleInstances({
+        tenantId, applicationId, actorId, correlationId, environment, limit: 10, offset: 0,
+      });
+      assert.equal(ownQueue.total, 1);
+      assert.equal(ownQueue.items.length, 1);
+      assert.equal(ownQueue.items[0].instanceId, started.instanceId);
+      assert.equal(Object.hasOwn(ownQueue.items[0], "data"), false);
+      const emptyPage = await service.listVisibleInstances({
+        tenantId, applicationId, actorId, correlationId, environment, limit: 10, offset: 10,
+      });
+      assert.equal(emptyPage.items.length, 0);
+      assert.equal(emptyPage.total, 1, "total must not collapse to zero on an empty page");
+
+      const crossApplicationQueue = await service.listVisibleInstances({
+        tenantId, applicationId: otherApplicationId, actorId, correlationId, environment,
+      });
+      assert.equal(crossApplicationQueue.total, 0);
+      assert.equal(crossApplicationQueue.items.length, 0);
+      const crossTenantQueue = await service.listVisibleInstances({
+        tenantId: otherTenantId, applicationId, actorId: otherActorId, correlationId, environment,
+      });
+      assert.equal(crossTenantQueue.total, 0);
+      assert.equal(crossTenantQueue.items.length, 0);
+
+const successfulApprovalIndex = approvalResults.findIndex(result => result.status === "fulfilled");
       const successfulApprovalInput = approveInputs[successfulApprovalIndex];
 
       // A new service object simulates process recreation; the database is the authority.
@@ -263,6 +290,23 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         try { await verify.query("ROLLBACK"); } catch { /* preserve original failure */ }
         throw error;
       } finally { verify.release(); }
+      // Revocation must immediately cut off even creator-visible queue summaries.
+      const revokeClient = await pool.connect();
+      try {
+        await revokeClient.query(
+          `UPDATE eper_actor_application_assignment
+              SET assignment_status = 'revoked', revoked_at = NOW(), revoked_by = $4,
+                  updated_at = NOW(), updated_by = $4, version = version + 1
+            WHERE tenant_id = $1 AND actor_id = $2 AND application_id = $3`,
+          [tenantId, actorId, applicationId, "workflow-security-test"],
+        );
+      } finally { revokeClient.release(); }
+      await assert.rejects(
+        service.listVisibleInstances({
+          tenantId, applicationId, actorId, correlationId, environment,
+        }),
+        error => error.code === "WORKFLOW_EXECUTION_ACTOR_APPLICATION_NOT_ACTIVE" && error.statusCode === 403,
+      );
     } finally {
       // Workflow transition, idempotency, definition and audit ledgers are append-only;
       // the integration database is ephemeral, so test-scoped evidence is retained.
@@ -557,7 +601,7 @@ test("PostgreSQL action approval store persists proposals, maker-checker decisio
         }),
         /ACTION_APPROVAL_GATE_DENIED:APPROVAL_REVOKED/,
       );
-    } finally {
+          } finally {
       await pool.end();
     }
   });

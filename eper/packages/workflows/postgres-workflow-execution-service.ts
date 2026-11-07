@@ -374,6 +374,137 @@ export class PostgresWorkflowExecutionService {
     }
   }
 
+  /** Lists only instances visible to this actor in the requested tenant/application scope. */
+  async listVisibleInstances(input: WorkflowExecutionContext & { limit?: number; offset?: number }): Promise<{
+    items: Array<Pick<WorkflowInstanceRecord, "instanceId" | "workflowId" | "status" | "currentActivityId" | "businessReference" | "version" | "createdAt" | "updatedAt" | "completedAt">>; total: number; limit: number; offset: number;
+  }> {
+    validateContext(input);
+    const limit = input.limit ?? 25;
+    const offset = input.offset ?? 0;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+        !Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) {
+      throw new WorkflowExecutionError("WORKFLOW_EXECUTION_LIST_PAGINATION_INVALID", 400);
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await setRlsContext(client, input.tenantId, input.applicationId);
+      await assertMembership(client, input);
+      const result = await client.query<Pick<InstanceRow,
+        "tenant_id" | "application_id" | "instance_id" | "workflow_id" | "definition_version" |
+        "definition_digest" | "status" | "current_activity_id" | "business_reference" |
+        "version" | "created_by" | "created_at" | "updated_at" | "completed_at"> & { total_count: number | string }>(
+        `SELECT i.tenant_id, i.application_id, i.instance_id, i.workflow_id,
+                i.definition_version, i.definition_digest, i.status, i.current_activity_id,
+                i.business_reference, i.version, i.created_by, i.created_at, i.updated_at,
+                i.completed_at, COUNT(*) OVER()::int AS total_count
+           FROM eper_workflow_instances i
+           JOIN eper_workflow_definition_versions v
+             ON v.tenant_id = i.tenant_id AND v.application_id = i.application_id
+            AND v.workflow_id = i.workflow_id
+            AND v.definition_version = i.definition_version
+            AND v.definition_digest = i.definition_digest
+           LEFT JOIN LATERAL jsonb_array_elements(v.definition->'activities') AS current_activity(activity)
+             ON current_activity.activity->>'id' = i.current_activity_id
+          WHERE i.tenant_id = $1 AND i.application_id = $2
+            AND (
+              i.created_by = $3
+              OR EXISTS (
+                SELECT 1 FROM eper_workflow_actor_role_assignment r
+                  JOIN eper_actor_application_assignment aa
+                    ON aa.tenant_id = r.tenant_id AND aa.application_id = r.application_id
+                   AND aa.actor_id = r.actor_id AND aa.assignment_status = 'active'
+                  JOIN eper_tenant_application_assignment ta
+                    ON ta.tenant_id = r.tenant_id AND ta.application_id = r.application_id
+                   AND ta.assignment_status = 'active'
+                  JOIN eper_workflow_role_definition rd
+                    ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+                   AND rd.role_id = r.role_id AND rd.role_status = 'active'
+                 WHERE r.tenant_id = i.tenant_id AND r.application_id = i.application_id
+                   AND r.actor_id = $3 AND r.assignment_status = 'active'
+                   AND r.role_id = current_activity.activity->>'roleId'
+                   AND rd.permissions ? (current_activity.activity->>'permission')
+              )
+              OR EXISTS (
+                SELECT 1 FROM eper_workflow_actor_role_assignment r
+                  JOIN eper_workflow_role_definition rd
+                    ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+                   AND rd.role_id = r.role_id AND rd.role_status = 'active'
+                 WHERE r.tenant_id = i.tenant_id AND r.application_id = i.application_id
+                   AND r.actor_id = $3 AND r.assignment_status = 'active'
+                   AND (rd.permissions ? 'workflow:view' OR rd.permissions ? 'workflow:admin')
+              )
+            )
+          ORDER BY i.updated_at DESC, i.instance_id DESC
+          LIMIT $4 OFFSET $5`,
+        [input.tenantId, input.applicationId, input.actorId, limit, offset],
+      );
+      // Window counts are absent when OFFSET is beyond the last row. Preserve
+      // the true total for clients paging to an empty final page.
+      const totalResult = result.rows.length ? null : await client.query<{ total_count: number | string }>(
+        `SELECT COUNT(*)::int AS total_count
+           FROM eper_workflow_instances i
+           JOIN eper_workflow_definition_versions v
+             ON v.tenant_id = i.tenant_id AND v.application_id = i.application_id
+            AND v.workflow_id = i.workflow_id
+            AND v.definition_version = i.definition_version
+            AND v.definition_digest = i.definition_digest
+           LEFT JOIN LATERAL jsonb_array_elements(v.definition->'activities') AS current_activity(activity)
+             ON current_activity.activity->>'id' = i.current_activity_id
+          WHERE i.tenant_id = $1 AND i.application_id = $2
+            AND (
+              i.created_by = $3
+              OR EXISTS (
+                SELECT 1 FROM eper_workflow_actor_role_assignment r
+                  JOIN eper_actor_application_assignment aa
+                    ON aa.tenant_id = r.tenant_id AND aa.application_id = r.application_id
+                   AND aa.actor_id = r.actor_id AND aa.assignment_status = 'active'
+                  JOIN eper_tenant_application_assignment ta
+                    ON ta.tenant_id = r.tenant_id AND ta.application_id = r.application_id
+                   AND ta.assignment_status = 'active'
+                  JOIN eper_workflow_role_definition rd
+                    ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+                   AND rd.role_id = r.role_id AND rd.role_status = 'active'
+                 WHERE r.tenant_id = i.tenant_id AND r.application_id = i.application_id
+                   AND r.actor_id = $3 AND r.assignment_status = 'active'
+                   AND r.role_id = current_activity.activity->>'roleId'
+                   AND rd.permissions ? (current_activity.activity->>'permission')
+              )
+              OR EXISTS (
+                SELECT 1 FROM eper_workflow_actor_role_assignment r
+                  JOIN eper_workflow_role_definition rd
+                    ON rd.tenant_id = r.tenant_id AND rd.application_id = r.application_id
+                   AND rd.role_id = r.role_id AND rd.role_status = 'active'
+                 WHERE r.tenant_id = i.tenant_id AND r.application_id = i.application_id
+                   AND r.actor_id = $3 AND r.assignment_status = 'active'
+                   AND (rd.permissions ? 'workflow:view' OR rd.permissions ? 'workflow:admin')
+              )
+            )`,
+        [input.tenantId, input.applicationId, input.actorId],
+      );
+      await client.query("COMMIT");
+      return {
+        // The queue is a summary/read model. Workflow payload data may contain
+        // personal, financial or otherwise sensitive fields; fetch and expose it
+        // only through a separately authorized detail/activity endpoint.
+        items: result.rows.map(row => ({
+          instanceId: row.instance_id, workflowId: row.workflow_id, status: row.status,
+          currentActivityId: row.current_activity_id, businessReference: row.business_reference,
+          version: Number(row.version), createdAt: new Date(row.created_at).toISOString(),
+          updatedAt: new Date(row.updated_at).toISOString(),
+          completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+        })),
+        total: result.rows.length ? Number(result.rows[0].total_count) : Number(totalResult?.rows[0]?.total_count ?? 0),
+        limit, offset,
+      };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async start(input: StartWorkflowInstanceInput): Promise<WorkflowInstanceRecord> {
     validateContext(input);
     validateId(input.workflowId, "workflowId");
