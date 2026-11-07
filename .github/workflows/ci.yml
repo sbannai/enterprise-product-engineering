@@ -146,8 +146,10 @@ jobs:
         run: node --test tests/workflow-outbox-worker-access.integration.test.mjs
       - name: Verify worker startup privilege gate with dedicated PostgreSQL 16 login
         run: node --test tests/workflow-outbox-worker-database.integration.test.mjs
-      - name: Verify worker configuration and approval dispatcher contracts
-        run: node --test tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs
+      - name: Prove PostgreSQL claim-generation fencing against stale worker acknowledgements
+        run: node --test tests/workflow-outbox-claim-generation.integration.test.mjs
+      - name: Verify worker configuration, claim fencing, store and approval dispatcher contracts
+        run: node --test tests/workflow-outbox-claim-generation-migration.test.mjs tests/workflow-outbox-worker-access-migration.test.mjs tests/workflow-outbox-store.test.mjs tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs
       - name: Live PostgreSQL workflow execution integration
         run: node --test tests/postgres-workflow-execution.integration.test.mjs
       - name: Live PostgreSQL tenant and actor application assignment integration
