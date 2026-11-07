@@ -77,3 +77,12 @@
 - **Verified exact-SHA evidence:** [EPER CI run 42328038566](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42328038566) completed successfully on `6257d74b6685c358d39210a92ce9e8c700a470ea`. Typecheck, build, upload authorization/recovery/provider-binding tests, PostgreSQL 16 migration replay/RLS, live PostgreSQL upload recovery including durable denial audit, workflow/assignment/tariff integrations, capability conformance and UAT preflight all passed.
 - Issue #421 remains open. The helper is not yet wired to a mounted customer upload route. Browser CSRF validation, PostgreSQL asset repository startup wiring, trusted provider configuration, upload grant endpoint and end-to-end browser transfer/recovery tests remain outstanding. Do not claim customer-facing upload is complete.
 - Business UAT remains NOT AUTHORIZED. No cloud database or chargeable AWS resources were provisioned.
+
+## Browser upload authorization composition — 2026-11-07
+
+- Added `authorizeCustomerAssetUploadBrowserRequest()` to compose the security boundary in the required order: validate the session-bound double-submit CSRF token and exact Origin first; resolve the live PostgreSQL browser session and tenant/application plus actor/application membership second; then resolve active durable role assignments and require explicit `customer.asset.upload` permission.
+- The helper never consumes a browser/OIDC role label. Identity and role stores are re-read for each request; store failures propagate and cannot be interpreted as permission grants.
+- Added regressions for origin mismatch, missing/duplicate CSRF cookies, successful durable role authorization, missing actor/application assignment, missing upload permission and authorization database outage. CI now includes this new test file.
+- Commits: `e564c016382da4894ab0ca061a97dd1bd847d4b0` (guard), `1f9bf316ac9c238bdccec84735b22763c19cffeb` (tests), `f5d5b7b42536e28f959675fa059994dd1e00fa96` (CI invocation).
+- **Verification pending:** the first run on the code/test commit was cancelled by a subsequent workflow-file commit before completion. A fresh exact-SHA EPER CI run is required to verify this added test.
+- **Not yet mounted:** this is a reusable authorization boundary, not a live upload endpoint. Main API routing, provider grant construction, durable asset repository injection, upload audit and browser transfer/recovery remain outstanding. Issue #421 remains open; Business UAT remains unauthorized.
