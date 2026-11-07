@@ -29,7 +29,7 @@ The returned dispatcher must implement:
 - `authorizeDispatch(event, signal)`: consult durable approval for this exact event and return true only when approval is valid and current.
 - `dispatch(event, signal)`: perform the approved delivery and deduplicate using `event.eventId`.
 
-Authorization is checked immediately before dispatch. A denied event is parked in dead-letter for review, not retried as a transient provider failure. Transient failures use bounded retry/backoff. The store's monotonic `claim_generation` is returned with every claim and required for lease renewal, acknowledgement and failure mutation; a stale process cannot mutate a later takeover, even if it reuses the same worker ID.
+The host performs an initial approval check and a second check at the dispatch boundary. The adapter must also revalidate the same durable approval immediately before its external side effect, because a revocation can race the final host check. It must deduplicate by immutable event ID. A denied event is parked in dead-letter for review, not retried as a transient provider failure. Transient failures use bounded retry/backoff. The store's monotonic `claim_generation` is returned with every claim and required for lease renewal, acknowledgement and failure mutation; a stale process cannot mutate a later takeover, even if it reuses the same worker ID.
 
 ## Restricted PostgreSQL login
 
