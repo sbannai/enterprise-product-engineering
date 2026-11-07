@@ -90,7 +90,7 @@ function options(calls, withProvider = false) {
             value: {
               url: "https://uploads.example.test/put/object?signature=redacted",
               method: "PUT",
-              expiresAt: "2026-11-07T02:35:00.000Z",
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
               headers: { "content-type": "application/pdf" },
             },
           };
