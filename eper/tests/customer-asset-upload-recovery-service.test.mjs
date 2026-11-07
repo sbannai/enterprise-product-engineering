@@ -243,3 +243,30 @@ test("not-found without idempotent-create guarantee and unavailable lookup remai
     assert.equal(issued, 0);
   }
 });
+
+
+test("new reservation fails closed unless provider guarantees idempotent create", async () => {
+  let issued = 0;
+  const result = await startCustomerAssetUpload(input, {
+    now: () => now,
+    providerCapabilities: { idempotentCreateByUploadSessionId: false, lookupByUploadSessionId: true, renewByProviderReference: true },
+    repository: { reserveUpload: async () => reservation(), recordUploadGrant: async () => assert.fail("must not persist"), recordUploadProviderRejection: async () => assert.fail("must not reject") },
+    issueGrant: async () => { issued++; return { kind: "succeeded", ...grant() }; },
+  });
+  assert.equal(result, null);
+  assert.equal(issued, 0);
+});
+
+test("replayed found object requires exact-reference renewal capability", async () => {
+  const prior = reservation({ disposition: "replayed" });
+  let issued = 0;
+  const result = await startCustomerAssetUpload(input, {
+    now: () => now,
+    providerCapabilities: { idempotentCreateByUploadSessionId: false, lookupByUploadSessionId: true, renewByProviderReference: false },
+    lookupUpload: async () => ({ kind: "found", providerUploadReference: "provider-object-existing" }),
+    repository: { reserveUpload: async () => prior, recordUploadGrant: async () => assert.fail("must not persist"), recordUploadProviderRejection: async () => assert.fail("must not reject") },
+    issueGrant: async () => { issued++; return { kind: "succeeded", ...grant("provider-object-existing") }; },
+  });
+  assert.equal(result, null);
+  assert.equal(issued, 0);
+});

@@ -69,11 +69,18 @@ export async function startCustomerAssetUpload(
   // Only authoritative not-found plus a declared idempotent-create guarantee
   // permits a create retry, and that retry retains the exact same session ID.
   let providerUploadReference = reservation.providerUploadReference;
+  // New reservations may create only with a provider idempotency guarantee.
+  // Replayed reservations without a reference must look up first: a found object
+  // can be renewed by exact ref even if create-idempotency is not supported.
+  if (reservation.disposition === "created" && !providerUploadReference &&
+      !dependencies.providerCapabilities?.idempotentCreateByUploadSessionId) return null;
+  if (providerUploadReference && !dependencies.providerCapabilities?.renewByProviderReference) return null;
   if (reservation.disposition === "replayed" && !providerUploadReference) {
     if (!dependencies.providerCapabilities?.lookupByUploadSessionId || !dependencies.lookupUpload) return null;
     const lookup = await dependencies.lookupUpload(reservation.uploadSessionId, input.correlationId);
     if (lookup.kind === "found") {
       if (!lookup.providerUploadReference.trim() || lookup.providerUploadReference.length > 2048) return null;
+      if (!dependencies.providerCapabilities.renewByProviderReference) return null;
       providerUploadReference = lookup.providerUploadReference;
     } else if (lookup.kind === "not_found") {
       if (!dependencies.providerCapabilities.idempotentCreateByUploadSessionId) return null;
