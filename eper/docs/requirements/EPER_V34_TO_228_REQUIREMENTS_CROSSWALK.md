@@ -101,7 +101,7 @@ The v34 HTML is a prototype and the 45 source rows are wireframe-defined. This c
 
 Initial repository inspection confirms:
 - Customer ticket APIs and PostgreSQL ticket persistence exist, with tenant/actor/application checks and idempotent customer submission paths.
-- The served customer portal is explicitly a preview and uses a server-side configured bearer-credential mapping; it is not yet a production browser authentication/session lifecycle.
+- Customer browser identity has since advanced beyond the initial bearer-mapping baseline: merged PRs #310, #324 and #329 provide durable OIDC login transactions, PostgreSQL browser sessions, host-only Secure/HttpOnly/SameSite cookies, CSRF protection, tenant/application assignment checks, a least-privilege customer role, and a synthetic-IdP Chromium journey covering ticket submission/reply, assigned-application settings, logout and persisted session revocation. This is technical synthetic-IdP evidence, not proof of production IdP onboarding, discovery/JWKS rotation or credential/key lifecycle. The Product Admin/support queue remains bearer-credential authenticated; no support-admin OIDC browser session is evidenced.
 - Scheduler schema, worker code and dispatch controls exist; complete provider dispatch, worker supervision, production operations and end-to-end customer visibility remain to be evidenced.
 - Notification provider topology/secret management, native CRM, KPI data feeds, content/asset management, Help Center and admin ticket operations need feature-by-feature verification; a design or placeholder UI is not implementation evidence.
 
@@ -139,3 +139,47 @@ The v1.6.0 register now carries ten owner-directed commercial additions, EPER-CW
 ### Implementation evidence boundary
 
 The commercial requirements are traceable here, but their implementation status must be assessed independently across UI, API, PostgreSQL, audit, authorization and executable tests. In particular, customer lifecycle enforcement is not equivalent to a complete Admin lifecycle-management UI; tariff catalogue publication is not equivalent to metering/deviation monitoring; and tariff acceptance is not complete price-integrity integration through quote, invoice, payment and receipt. Do not infer implementation or operational readiness from this crosswalk.
+
+
+## 8. Owner-directed workflow and customer-settings additions — separate from the 45 v34 source rows
+
+The v1.6.0 draft register also contains four owner-directed additions, EPER-CW-056 through EPER-CW-059. They are **not** additional rows from the original v34 wireframe export. This section records their relationship to reusable 228-baseline controls without inventing exact REQ-463xx…REQ-500xx matches.
+
+| Candidate ID | Additive capability | Supporting baseline controls | Shared capability families | Disposition |
+|---|---|---|---|---|
+| EPER-CW-056 | Tenant/application-scoped configurable workflow Rule Engine | SRS-002, SRS-003, SRS-009, SRS-010, SRS-011, SRS-017; XX01/XX02/XX03/XX04/XX05 | Authoritative records, authorization, validation, audit, exceptions | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-057 | Versioned visual Workflow Designer with draft, validation, simulation and controlled publication | SRS-002, SRS-003, SRS-009, SRS-010, SRS-011, SRS-017, SRS-018; XX01/XX02/XX03/XX04/XX05/XX06 | Authoritative records, authorization, validation, audit, exceptions, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-058 | Customer-wide alert/video defaults inherited by applications with authorized application overrides | SRS-002, SRS-003, SRS-014, SRS-017, SRS-018; XX01/XX02/XX03/XX04/XX05/XX06 | Authoritative records, authorization, validation, audit, exceptions, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+| EPER-CW-059 | Central platform/customer policy boundaries over inherited and application-specific alert/video settings | SRS-002, SRS-003, SRS-014, SRS-017, SRS-018, SRS-019; XX02/XX03/XX04/XX05/XX06 | Authorization, validation, audit, exceptions, governed reporting | OWNER_DIRECTED_ADDITIVE_1_6_0_DRAFT |
+
+### Workflow/settings crosswalk interpretation
+
+1. EPER-CW-056–059 are four separate owner-directed v1.6.0 draft additions. They do not increase or alter the original 45 v34 source rows.
+2. The SRS/XX references identify reusable cross-cutting controls only. They are not exact chapter-level requirement matches and do not establish that the workflow designer, settings UI or provider operations are implemented.
+3. No exact REQ-463xx…REQ-500xx locator is asserted for these additions. The approved 228 requirement IDs, 38 chapters and their acceptance states remain unchanged.
+4. Owner disposition of the additive scope remains pending. Recording these candidates in the crosswalk is traceability work, not owner approval or implementation acceptance.
+
+### Implementation evidence boundary
+
+Implementation must still be assessed independently across customer/admin UI, API, PostgreSQL persistence, tenant/application authorization, audit, workflow execution, provider configuration and executable acceptance tests. In particular, workflow Rule Engine/Designer drafts are not equivalent to a published, supervised runtime; inherited alert/video settings are not equivalent to live provider dispatch. Do not infer feature completion from this crosswalk.
+
+
+## 9. Later draft reconciliation and implementation evidence correction — 2026-11-05
+
+### CW-060 version conflict
+
+Two cumulative change-control drafts reuse EPER-CW-060 with materially different acceptance criteria:
+
+- **v1.6.0 draft (PR #380):** defines CW-060 as a tenant-isolated customer-level asset repository and adds CW-061 as a separate workflow-driven customer application experience.
+- **v1.7.0 draft (PR #385):** redefines CW-060 to add customer-wide defaults, per-application INHERIT/ALLOW/DENY, role-level permissions, quarantine/malware scanning, retention, legal hold and asynchronous purge.
+
+This is an acceptance-criteria change, not a harmless wording edit. Do not silently merge the two CW-060 definitions, treat them as two distinct IDs, or infer owner approval. Preserve both draft source documents, keep CW-061 separate, and obtain an explicit owner disposition before promoting either definition. This conflict does not change the approved 228 requirements or 38 chapters.
+
+### Current implementation evidence boundary
+
+- Customer OIDC browser login and the customer ticket journey are implemented and browser-tested on merged PR #329 (head `4d4d217bbe56ec9ab1501de58afae82fd55b5328`; browser run `41385533343`). The test uses a synthetic IdP and verifies secure host-only cookies, durable PostgreSQL session state, role/assignment checks, ticket submission/reply, settings access, logout and revocation. It does not prove production IdP onboarding or key/JWKS lifecycle.
+- The support-admin console still accepts a server-issued bearer credential. Ticket triage, status, assignment, severity/P1 rationale, customer-visible versus internal replies, tenant/application scoping and filtered CSV export have API/store/UI tests. The ticket schema does not yet implement first-response/resolution deadlines, SLA breach detection or escalation.
+- Customer asset upload remains an open candidate, not a mainline capability. PR #399 tests inject synthetic upload-grant and verification resolvers; its browser E2E is the OIDC journey and does not upload file bytes. The candidate API composition root does not wire a concrete storage upload/download, verification or malware-scanner adapter. No real storage/scanning provider or cloud resource is configured.
+- Campaign scheduler worker code is a continuous claim/recover/dispatch loop with lease renewal/fencing, retry/dead-letter and a fail-closed policy gate. Its deployment-owned adapter is still required. The independent workflow-outbox process is proposed in open PR #400; it requires an explicit dispatcher module. Independent process supervision, a metrics/alert sink and an operational recovery rehearsal remain unproven.
+
+These corrections update implementation evidence only. They do not mark any additive candidate accepted, alter the approved baseline, enable external dispatch, or authorize UAT.
