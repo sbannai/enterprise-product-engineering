@@ -25,7 +25,7 @@ function configure() {
     EPER_CUSTOMER_OIDC_ENABLED: "true",
   })) process.env[key] = value;
 }
-function options(calls, withProvider = false) {
+function options(calls, withProvider = false, replay = false) {
   return {
     adminConfigEnvironment: "uat",
     customerOidcPublicOrigin: origin,
@@ -65,7 +65,7 @@ function options(calls, withProvider = false) {
         if (!withProvider) throw new Error("must not reserve without a provider");
         assert.equal(input.applicationId, "app-alpha");
         return {
-          disposition: "created", uploadSessionId: "session-upload-001", providerUploadReference: null,
+          disposition: replay ? "replayed" : "created", uploadSessionId: "session-upload-001", providerUploadReference: null,
           uploadStatus: "initiated", expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
           providerGrantExpiresAt: null,
         };
@@ -80,11 +80,18 @@ function options(calls, withProvider = false) {
     },
     ...(withProvider ? {
       assetUploadProviderCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
+      ...(replay ? { assetUploadLookup: async (sessionId, requestId) => {
+        calls.push("lookup");
+        assert.equal(sessionId, "session-upload-001");
+        assert.equal(requestId, "upload-api-correlation-001");
+        return { kind: "found", providerUploadReference: "opaque-provider-object-reference" };
+      } } : {}),
       assetUploadPort: {
         async invoke(request, requestId, operationId) {
           calls.push("provider");
           assert.equal(request.uploadSessionId, "session-upload-001");
           assert.equal(request.applicationId, "app-alpha");
+          if (replay) assert.equal(request.providerUploadReference, "opaque-provider-object-reference");
           assert.equal(requestId, "upload-api-correlation-001");
           assert.equal(operationId, "session-upload-001");
           return {
@@ -102,12 +109,12 @@ function options(calls, withProvider = false) {
     } : {}),
   };
 }
-async function withServer(t, handler, withProvider = false) {
+async function withServer(t, handler, withProvider = false, replay = false) {
   const previous = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
   configure();
   if (withProvider) process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["uploads.example.test"]);
   const calls = [];
-  const server = createAppServer(options(calls, withProvider));
+  const server = createAppServer(options(calls, withProvider, replay));
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -168,4 +175,21 @@ test("upload grant endpoint reserves, invokes allowlisted provider, persists ref
     assert.equal(JSON.stringify(payload).includes("opaque-provider-object-reference"), false);
     assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission", "reserve", "provider", "record-grant"]);
   }, true);
+});
+
+
+test("upload grant endpoint wires provider lookup for replay and renews the exact recovered object", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/upload-grant", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf, "x-correlation-id": "upload-api-correlation-001",
+        "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
+      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.uploadSessionId, "session-upload-001");
+    assert.equal(JSON.stringify(payload).includes("opaque-provider-object-reference"), false);
+    assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission", "reserve", "lookup", "provider", "record-grant"]);
+  }, true, true);
 });
