@@ -5,6 +5,19 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - "eper/DEVELOPER_SETUP.md"
+      - "eper/docker-compose.local.yml"
+      - "eper/scripts/dev-verify.mjs"
+      - "eper/package.json"
+      - "eper/package-lock.json"
+      - "eper/apps/api/**"
+      - "eper/packages/**"
+      - "eper/tests/**"
+      - ".github/workflows/eper-local-developer-setup.yml"
+      - ".github/workflows/eper-payment-postgres-integration.yml"
   pull_request:
     paths:
       - "eper/DEVELOPER_SETUP.md"
