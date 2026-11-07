@@ -68,3 +68,12 @@
 3. Implement durable upload reservation recovery and verified customer-session binding as a complete mainline feature slice.
 4. Wire customer-asset API and UI only after persistence and authorization behavior is proven.
 5. Keep Business UAT blocked until every entry gate is evidenced and explicitly approved.
+
+## Customer asset upload authorization — 2026-11-07 latest verified checkpoint
+
+- Current verified main SHA for this checkpoint: `6257d74b6685c358d39210a92ce9e8c700a470ea`.
+- Added `customer.asset.upload` to the durable workflow role permission allowlist and authorization query. Added `hasCustomerAssetUploadPermission()`, which resolves active roles for the exact tenant/application/actor and checks the explicit permission. It does not trust browser/OIDC role labels; invalid application scope denies before store access, and authorization-store errors propagate (fail closed).
+- Added unit regressions for allowed role, no active role, missing permission, invalid scope and authorization-store outage. CI explicitly runs these tests.
+- **Verified exact-SHA evidence:** [EPER CI run 42328038566](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42328038566) completed successfully on `6257d74b6685c358d39210a92ce9e8c700a470ea`. Typecheck, build, upload authorization/recovery/provider-binding tests, PostgreSQL 16 migration replay/RLS, live PostgreSQL upload recovery including durable denial audit, workflow/assignment/tariff integrations, capability conformance and UAT preflight all passed.
+- Issue #421 remains open. The helper is not yet wired to a mounted customer upload route. Browser CSRF validation, PostgreSQL asset repository startup wiring, trusted provider configuration, upload grant endpoint and end-to-end browser transfer/recovery tests remain outstanding. Do not claim customer-facing upload is complete.
+- Business UAT remains NOT AUTHORIZED. No cloud database or chargeable AWS resources were provisioned.
