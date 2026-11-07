@@ -149,7 +149,7 @@ jobs:
       - name: Prove PostgreSQL claim-generation fencing against stale worker acknowledgements
         run: node --test tests/workflow-outbox-claim-generation.integration.test.mjs
       - name: Verify worker configuration, claim fencing, store and approval dispatcher contracts
-        run: node --test tests/workflow-outbox-claim-generation-migration.test.mjs tests/workflow-outbox-worker-access-migration.test.mjs tests/workflow-outbox-store.test.mjs tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs
+        run: node --test tests/workflow-outbox-claim-generation-migration.test.mjs tests/workflow-outbox-worker-access-migration.test.mjs tests/workflow-outbox-store.test.mjs tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs tests/workflow-outbox-dispatcher-module.test.mjs tests/workflow-outbox-worker-main.test.mjs
       - name: Live PostgreSQL workflow execution integration
         run: node --test tests/postgres-workflow-execution.integration.test.mjs
       - name: Live PostgreSQL tenant and actor application assignment integration
