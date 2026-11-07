@@ -24,6 +24,9 @@
 
 ## Customer asset work — current mainline boundary
 
+- 2026-11-07 follow-up: migration `023_customer_asset_upload_recovery.sql` adds a canonical request-fingerprint slot, provider-grant expiry metadata and recovery timestamp to durable upload sessions. The static migration contract test covers the metadata/no-secret contract. PostgreSQL 16 CI now replays migration 023 twice after migrations 021–022. Latest main SHA: `c5fdd997ca6c0462d3d1401f610c60a04f9a9fa7`.
+- This is a **persistence prerequisite only**, not the complete retry fix: runtime service code is not present in main yet, request fingerprint computation/comparison and provider-grant reissue/resume are still outstanding. Existing sessions remain compatible because the fingerprint column is nullable during rollout; the runtime must populate it for every new reservation and fail closed on mismatched retries.
+
 - Issue #427's migration 021 replay correction is now present on main. The CI workflow now directly executes migrations 021 and 022 twice against its PostgreSQL 16 service and asserts ENABLE/FORCE RLS, expected policies and selected grants. This remains pending an observed exact-SHA CI run.
 - Issue #425 requires real PostgreSQL 16 execution, upgrade, replay, RLS, checksum and data-preservation tests for the customer-asset upload recovery migration. This remains open.
 - Runtime upload reservation recovery, session binding, idempotent retries and provider-outcome recovery remain incomplete until implemented and verified on main.
