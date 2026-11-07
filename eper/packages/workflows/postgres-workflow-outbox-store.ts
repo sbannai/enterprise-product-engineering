@@ -60,6 +60,7 @@ type EventRow = {
   event_id: string; tenant_id: string; application_id: string; instance_id: string;
   transition_id: string; event_type: WorkflowOutboxEventType; event_version: number | string;
   payload: Record<string, unknown> | string; occurred_at: string | Date; attempts: number | string;
+  claim_generation: number | string;
 };
 
 function validateId(value: string, name: string): void {
