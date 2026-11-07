@@ -117,7 +117,7 @@ export class WorkflowOutboxWorker {
       renewalInFlight = (async () => {
         try {
           const renewed = await this.store.renewLease(
-            context, event.eventId, this.options.workerId, this.leaseSeconds,
+            context, event.eventId, this.options.workerId, this.leaseSeconds, event.claimGeneration,
           );
           if (!renewed) {
             leaseLost = true;
@@ -144,7 +144,7 @@ export class WorkflowOutboxWorker {
       if (heartbeat) clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       if (leaseLost) throw new WorkflowOutboxLeaseLostError();
-      await this.store.markDelivered(context, event.eventId, this.options.workerId);
+      await this.store.markDelivered(context, event.eventId, this.options.workerId, event.claimGeneration);
       result.delivered += 1;
     } catch (error) {
       if (heartbeat) clearInterval(heartbeat);
@@ -169,6 +169,7 @@ export class WorkflowOutboxWorker {
       );
       const failure = await this.store.markFailed(context, event.eventId, {
         workerId: this.options.workerId,
+        claimGeneration: event.claimGeneration,
         // A missing human approval is deterministic: park immediately for review.
         maxAttempts: approvalDenied ? event.attempts : this.maxAttempts,
         retryDelaySeconds: delay,
