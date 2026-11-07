@@ -46,7 +46,7 @@ function validSha256(value: unknown): value is string {
 function validOperationRequest(operation: ProviderStorageOperation): boolean {
   if (!operation || typeof operation !== "object" || !operation.request ||
       typeof operation.request !== "object" || Array.isArray(operation.request)) return false;
-  const request = operation.request as Record<string, unknown>;
+  const request = operation.request as unknown as Record<string, unknown>;
   switch (operation.kind) {
     case "create_upload":
       return validText(request.tenantId, 128) && validText(request.applicationId, 128) &&
