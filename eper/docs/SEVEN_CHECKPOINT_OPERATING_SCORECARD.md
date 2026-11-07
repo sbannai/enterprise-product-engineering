@@ -827,3 +827,30 @@ Next safe engineering action: keep #397 open and obtain an approved server-side 
 5. Keep deployment, dispatcher activation, cloud provisioning, external actions and Business UAT out of scope until separately approved.
 
 No PR was merged or closed; no branch was deleted; no requirements changed; no cloud resources or external actions were triggered.
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:08 IST
+
+### Exact mainline CI
+- Dynamically re-resolved `main`: `4c45f951ee974cf71de862852fcba1a911600d69`.
+- All 13 exact-SHA check runs completed successfully, including the same-commit integrated gate, PostgreSQL/payment/receipt contracts, UAT readiness/technical audit, six-family HTTP/container checks, G9/release checks, and 228 requirements / 38 chapter pilot matrix.
+- Technical verification only; Business UAT remains unauthorized.
+
+### #436 worker migration reconciliation
+- Current workflow migration chain ends at `014_workflow_definition_drafts.sql`; candidate #400 migrations 015/016 have no numeric collision with the current workflow chain.
+- Current audit migration 008 defines `eper_tenant_application_assignment` with `tenant_id`, `application_id`, and `assignment_status`; these are the only columns required by the worker context-discovery query.
+- Current workflow migration 006 defines the outbox events and delivery tables with ENABLE + FORCE ROW LEVEL SECURITY. Candidate worker role/table privileges are compatible in principle with the current schema.
+- Candidate #400 migration 015 grants table-wide SELECT on assignment metadata, while migration 016 narrows that to three columns in a later transaction. This is not accepted as-is: a failed/interrupted migration sequence after 015 leaves the wider grant in place. Port one atomic least-privilege migration granting only SELECT on `tenant_id`, `application_id`, and `assignment_status` from the outset.
+- Existing audit migration 016 establishes a precedent for NOLOGIN restricted group roles with operator-provisioned LOGIN memberships. Role creation still requires a migration identity with CREATEROLE or an operator-run bootstrap. No login/password is to be stored in the repository.
+- Issue #436 updated with the exact findings and acceptance conditions (comment 6707976445).
+
+### Next acceptance slice
+1. Port one atomic restricted-role migration from current main, with column-only assignment discovery and column-scoped delivery updates.
+2. Add privilege tests for no table-wide/metadata reads, no assignment/event writes, no delivery insert/delete/truncate, FORCE RLS, and no owner/elevated membership.
+3. Port the independently launchable worker boundary as a small current-main slice, disabled by default and restricted to a deployment-bundled approved dispatcher.
+4. Prove the real dedicated LOGIN on PostgreSQL 16, then current-main concurrency/fencing, approval revocation, retries/dead-letter, shutdown and pool closure.
+5. Do not activate the worker, dispatcher, production integrations, external actions, cloud resources or Business UAT as part of this slice.
+
+No PR was merged or closed; no branch was deleted; no approved requirement or chapter changed; no cloud resource or external action was triggered.
