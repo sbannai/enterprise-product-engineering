@@ -95,15 +95,17 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         `SELECT action, outcome, payload
            FROM eper_audit_events
           WHERE tenant_id = $1 AND application_id = $2
-            AND resource_id = $3
+            AND resource_id IN ($3, $4)
             AND action IN ('customer.asset.metadata.create',
                            'customer.asset.upload.reserve',
                            'customer.asset.upload.grant.recover')
           ORDER BY occurred_at`,
-        [tenantId, applicationId, first.uploadSessionId],
+        [tenantId, applicationId, first.uploadSessionId, assetId],
       );
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.reserve" && row.outcome === "success"));
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.grant.recover" && row.outcome === "success"));
+      assert.ok(audit.rows.filter(row => row.action === "customer.asset.upload.reserve" && row.outcome === "denied").length >= 3,
+        "actor, fingerprint and cross-application idempotency conflicts must leave durable denial evidence");
       const serializedAudit = JSON.stringify(audit.rows);
       assert.doesNotMatch(serializedAudit, /https:\/\/|signed_url|bearer_token|access_token/i);
     } finally {
