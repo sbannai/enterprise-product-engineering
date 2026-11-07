@@ -147,6 +147,10 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         }
         return driver.createUploadGrant(context, input.operation.request, input.requestId);
       case "lookup_upload":
+        if (input.operation.request.tenantId !== input.tenantId ||
+            input.operation.request.applicationId !== input.applicationId) {
+          throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+        }
         if (!driver.capabilities.lookupByUploadSessionId) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         return driver.lookupUpload(context, input.operation.request.uploadSessionId, input.requestId);
       case "renew_upload":
