@@ -28,7 +28,7 @@ export interface CustomerAssetUploadStartDependencies {
   /** Capability declaration must come from the configured provider, never from caller input. */
   providerCapabilities?: StorageUploadProviderCapabilities;
   /** Lookup uses the durable uploadSessionId and a separate request correlation ID. */
-  lookupUpload?: (uploadSessionId: string, requestId: string) => Promise<StorageUploadLookupOutcome>;
+  lookupUpload?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>;
   now?: () => number;
 }
 function fingerprint(input: CustomerAssetUploadStartInput): string {
@@ -77,7 +77,7 @@ export async function startCustomerAssetUpload(
   if (providerUploadReference && !dependencies.providerCapabilities?.renewByProviderReference) return null;
   if (reservation.disposition === "replayed" && !providerUploadReference) {
     if (!dependencies.providerCapabilities?.lookupByUploadSessionId || !dependencies.lookupUpload) return null;
-    const lookup = await dependencies.lookupUpload(reservation.uploadSessionId, input.correlationId);
+    const lookup = await dependencies.lookupUpload(reservation.uploadSessionId, input.correlationId, { tenantId: input.tenantId, applicationId: input.applicationId });
     if (lookup.kind === "found") {
       if (!lookup.providerUploadReference.trim() || lookup.providerUploadReference.length > 2048) return null;
       if (!dependencies.providerCapabilities.renewByProviderReference) return null;

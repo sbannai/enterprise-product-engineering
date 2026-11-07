@@ -188,8 +188,8 @@ test("replayed reservation recovers the existing provider object by the same dur
   const result = await startCustomerAssetUpload(input, {
     now: () => now,
     providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
-    lookupUpload: async (sessionId, correlationId) => {
-      lookupSeen = { sessionId, correlationId };
+    lookupUpload: async (sessionId, correlationId, scope) => {
+      lookupSeen = { sessionId, correlationId, scope };
       return { kind: "found", providerUploadReference: "provider-object-recovered" };
     },
     repository: {
@@ -202,7 +202,7 @@ test("replayed reservation recovers the existing provider object by the same dur
       return { kind: "succeeded", ...grant("provider-object-recovered") };
     },
   });
-  assert.deepEqual(lookupSeen, { sessionId: prior.uploadSessionId, correlationId: input.correlationId });
+  assert.deepEqual(lookupSeen, { sessionId: prior.uploadSessionId, correlationId: input.correlationId, scope: { tenantId: input.tenantId, applicationId: input.applicationId } });
   assert.equal(issueSeen.uploadSessionId, prior.uploadSessionId);
   assert.equal(issueSeen.providerUploadReference, "provider-object-recovered");
   assert.equal(persisted.providerUploadReference, "provider-object-recovered");
