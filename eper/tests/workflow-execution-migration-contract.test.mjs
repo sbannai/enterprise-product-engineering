@@ -124,3 +124,14 @@ test("outbox claim sweep dead-letters crash-expired claims at the finite attempt
   const worker = await readFile(new URL("../packages/workflows/workflow-outbox-worker.ts", import.meta.url), "utf8");
   assert.match(worker, /maxAttempts: this\.maxAttempts/);
 });
+
+
+test("workflow outbox worker role is a restricted non-login group with column-scoped delivery access", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/015_workflow_outbox_worker_access.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE ROLE eper_workflow_outbox_worker_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS/);
+  assert.match(sql, /ALTER ROLE eper_workflow_outbox_worker_access[\s\S]*NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS/);
+  assert.match(sql, /GRANT SELECT ON eper_tenant_application_assignment,[\s\S]*eper_workflow_outbox_events,[\s\S]*eper_workflow_outbox_delivery/);
+  assert.match(sql, /GRANT UPDATE \(\s*delivery_status,\s*attempts,\s*available_at,\s*locked_at,\s*locked_by,\s*last_error,\s*delivered_at,\s*updated_at\s*\) ON eper_workflow_outbox_delivery/);
+  assert.doesNotMatch(sql, /GRANT (?:INSERT|DELETE|TRUNCATE) ON/);
+  assert.doesNotMatch(sql, /GRANT UPDATE ON eper_workflow_outbox_delivery/);
+});
