@@ -102,7 +102,7 @@ test("customer asset 023-024 upgrade backfills only legacy rows with persisted p
         });
 
         const outcomes = await fixturePool.query(`
-          SELECT upload_session_id, provider_outcome
+          SELECT upload_session_id, provider_outcome, request_fingerprint
             FROM eper_customer_asset_upload_sessions
            WHERE tenant_id = $1 AND application_id = $2
            ORDER BY upload_session_id
@@ -112,6 +112,10 @@ test("customer asset 023-024 upgrade backfills only legacy rows with persisted p
           "only a persisted provider reference is evidence of legacy provider success");
         assert.equal(bySession.get(unknownSession), "unknown",
           "a missing provider reference must remain unknown, never inferred as rejection or success");
+        assert.equal(outcomes.rows.find(row => row.upload_session_id === withReferenceSession).request_fingerprint, null,
+          "legacy rows without request identity must retain NULL fingerprint and cannot be silently upgraded to a trusted retry identity");
+        assert.equal(outcomes.rows.find(row => row.upload_session_id === unknownSession).request_fingerprint, null,
+          "legacy NULL fingerprints must remain fail-closed rather than receiving a fabricated identity");
       } finally {
         await fixturePool.end();
       }
