@@ -1,3 +1,4 @@
+import { WorkflowOutboxDispatchNotApprovedError } from "./workflow-outbox-errors.js";
 import {
   PostgresWorkflowOutboxStore,
   type WorkflowOutboxContext,
@@ -158,14 +159,20 @@ export class WorkflowOutboxWorker {
         result.leaseLost += 1;
         return;
       }
-      const message = error instanceof Error ? error.message : "WORKFLOW_OUTBOX_DISPATCH_FAILED";
-      const delay = Math.min(
+      const approvalDenied = error instanceof WorkflowOutboxDispatchNotApprovedError;
+      const message = approvalDenied
+        ? error.code
+        : error instanceof Error ? error.message : "WORKFLOW_OUTBOX_DISPATCH_FAILED";
+      const delay = approvalDenied ? 0 : Math.min(
         this.baseRetryDelaySeconds * (2 ** Math.max(0, event.attempts - 1)),
         this.maxRetryDelaySeconds,
       );
       const failure = await this.store.markFailed(context, event.eventId, {
-        workerId: this.options.workerId, maxAttempts: this.maxAttempts,
-        retryDelaySeconds: delay, error: message,
+        workerId: this.options.workerId,
+        // A missing human approval is deterministic: park immediately for review.
+        maxAttempts: approvalDenied ? event.attempts : this.maxAttempts,
+        retryDelaySeconds: delay,
+        error: message,
       });
       if (failure.status === "dead_letter") result.deadLettered += 1;
       else result.retried += 1;
