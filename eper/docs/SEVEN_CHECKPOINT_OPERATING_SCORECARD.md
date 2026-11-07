@@ -1018,3 +1018,34 @@ Next safe slice: prove two independently connected restricted worker logins comp
 7. Release/continuity: **RED/AMBER** — no production dispatcher, credentials, supervisor or Business UAT evidence/authorization.
 
 Next safe slice: use a synthetic/local dispatcher only to test approval revocation immediately before dispatch, event-ID idempotency, transient retry/backoff, dead-letter/replay and real process SIGTERM shutdown. Keep provider integrations and external side effects disabled. No chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
+
+
+
+---
+
+## Append-only checkpoint — 2026-11-07 20:54 IST
+
+### Approval revocation boundary and synthetic idempotency — PR #444 merged
+- PR #444 merged to main by squash at `1b770a2d71cfd1422290b304670f1361cbd4446b`; main was re-resolved and confirmed at this exact SHA.
+- Exact validated PR head: `214fb9093cd01e2fea7d8ad3b5e5d2dd3b40cdc7`.
+- 14 check runs succeeded; one duplicate `228 requirements / 38 chapter pilot matrix` check was skipped by path filtering and is not counted. The separate pilot matrix workflow, chapter-pilot-matrix and same-commit integrated gate passed.
+- Host now performs initial and final durable approval checks before invoking the dispatcher adapter. The adapter contract explicitly requires another durable revalidation immediately before its external side effect, because revocation can race the host's last check.
+- Synthetic tests prove revocation between host checks prevents dispatch; revocation after the final host check is still caught by adapter-side final revalidation before any fake side effect; repeated at-least-once event delivery is deduplicated by immutable event ID.
+- Dispatcher approval/idempotency suite: **7 passed, 0 failed, 0 skipped**. Build/typecheck, workflow execution, claim fencing, two-login PostgreSQL concurrency, startup privilege, same-commit integrated gate, 228 pilot matrix workflow, fresh-clone PostgreSQL, release and technical UAT checks passed.
+- No real provider dispatcher, secret resolver, network call, worker activation, cloud resource or Business UAT authorization.
+
+### #436 lifecycle status
+- Completed on main: restricted worker login and role (#439); startup privilege/RLS gate and approval-denial parking (#440); claim-generation fencing (#441); standalone worker host and realpath containment (#442); two-login PostgreSQL concurrency/takeover proof (#443); approval revocation boundary and synthetic event-ID idempotency contract (#444).
+- Remaining: real owner-approved dispatcher and secret resolver; durable provider-side approval revalidation and provider idempotency implementation; full live retry/backoff/dead-letter/replay lifecycle with two independent workers; actual process-supervisor restart/backoff and metrics; production deployment configuration and acceptance.
+- Worker remains disabled and unlaunched. No real dispatcher/provider integration exists. Stale PRs #400/#387/#411 remain extraction references only; no wholesale merge.
+
+### Seven-checkpoint impact
+1. Product/customer journey: **AMBER improved** — approval and idempotency boundaries are defined/tested synthetically; no real provider delivery.
+2. CI/persistence: **AMBER improved** — PostgreSQL 16 two-login concurrency and claim-generation fencing are green.
+3. Architecture/identity: **AMBER improved** — least-privilege startup and explicit approval rechecks are on main.
+4. Workflow/runtime: **AMBER improved** — process host, lease takeover and final approval boundary exist; provider implementation and supervision remain.
+5. Integrated validation: **AMBER improved** — exact-head same-commit gate, pilot matrix workflow and fresh-clone PostgreSQL checks passed; duplicate path-filter-skipped check is not counted.
+6. PR governance: **AMBER improved** — #444 individually validated and merged; stale branches not bulk-merged.
+7. Release/continuity: **RED/AMBER** — no real provider, production secret resolver, supervisor or Business UAT evidence/authorization.
+
+Next safe slice: test the complete retry/dead-letter/replay lifecycle with two restricted logins against PostgreSQL 16 and a synthetic dispatcher, then test process supervision/restart and shutdown. Do not connect real provider credentials or trigger external side effects. No chargeable AWS resources or Business UAT authorization. Preserve all 228 approved requirements and 38 chapters.
