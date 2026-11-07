@@ -106,3 +106,41 @@ test("synthetic dispatcher deduplicates at-least-once retries by immutable event
   await dispatcher.dispatch(event);
   assert.deepEqual(sideEffects, [event.eventId]);
 });
+
+
+test("shutdown during final approval lookup prevents dispatcher invocation", async () => {
+  const controller = new AbortController();
+  let checks = 0;
+  let dispatchCalls = 0;
+  const dispatcher = createApprovedWorkflowOutboxDispatcher({
+    async authorizeDispatch() {
+      checks += 1;
+      if (checks === 2) controller.abort(new Error("host shutdown"));
+      return true;
+    },
+    async dispatch() { dispatchCalls += 1; },
+  });
+  await assert.rejects(
+    dispatcher.dispatch(event, controller.signal),
+    /host shutdown/,
+  );
+  assert.equal(checks, 2);
+  assert.equal(dispatchCalls, 0);
+});
+
+test("already-aborted host signal prevents approval lookup and dispatch", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("host shutdown"));
+  let checks = 0;
+  let dispatchCalls = 0;
+  const dispatcher = createApprovedWorkflowOutboxDispatcher({
+    async authorizeDispatch() { checks += 1; return true; },
+    async dispatch() { dispatchCalls += 1; },
+  });
+  await assert.rejects(
+    dispatcher.dispatch(event, controller.signal),
+    /host shutdown/,
+  );
+  assert.equal(checks, 0);
+  assert.equal(dispatchCalls, 0);
+});
