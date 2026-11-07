@@ -179,6 +179,58 @@ export class PostgresProviderConnectionRepository {
     }
   }
 
+  /**
+   * Server-runtime-only secret reference read. Requires the exact active tenant /
+   * application binding, capability and connection version selected immediately
+   * before dispatch. The opaque reference is never added to public read models.
+   */
+  async getRuntimeSecretReference(input: {
+    tenantId: string; applicationId: string; connectionId: string;
+    expectedVersion: number; providerKey: string; capability: string;
+  }): Promise<{ secretReference: string; authMode: string }> {
+    this.validateIdentity(input.tenantId, "TENANT");
+    this.validateIdentity(input.applicationId, "APPLICATION_ID");
+    this.validateIdentity(input.connectionId, "CONNECTION_ID");
+    this.validateIdentity(input.providerKey, "PROVIDER_KEY");
+    this.validateIdentity(input.capability, "CAPABILITY");
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw new Error("PROVIDER_RUNTIME_CONNECTION_VERSION_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setTenantContext(client, input.tenantId);
+      await this.setApplicationContext(client, input.applicationId);
+      const result = await client.query<{
+        secret_reference: string; auth_mode: string;
+      }>(
+        `SELECT c.secret_reference, c.auth_mode
+           FROM eper_provider_connections c
+           JOIN eper_provider_connection_applications b
+             ON b.tenant_id = c.tenant_id AND b.connection_id = c.connection_id
+          WHERE c.tenant_id = $1 AND b.application_id = $2
+            AND c.connection_id = $3 AND c.provider_key = $4
+            AND c.version = $5 AND c.connection_status = 'ACTIVE'
+            AND b.binding_status = 'ACTIVE'
+            AND $6 = ANY(b.allowed_capabilities)
+          FOR SHARE OF c, b`,
+        [input.tenantId, input.applicationId, input.connectionId,
+          input.providerKey, input.expectedVersion, input.capability],
+      );
+      const row = result.rows[0];
+      if (!row || typeof row.secret_reference !== "string" || !row.secret_reference.trim()) {
+        throw new Error("PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE");
+      }
+      await client.query("COMMIT");
+      return { secretReference: row.secret_reference, authMode: row.auth_mode };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async get(tenantId: string, connectionId: string): Promise<ProviderConnection | null> {
     this.validateIdentity(tenantId, "TENANT");
     this.validateIdentity(connectionId, "CONNECTION_ID");
