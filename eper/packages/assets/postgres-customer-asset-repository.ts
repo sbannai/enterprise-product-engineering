@@ -258,8 +258,10 @@ export class PostgresCustomerAssetRepository {
       throw new Error("EPER_CUSTOMER_ASSET_REQUEST_FINGERPRINT_INVALID");
     }
     const client = await this.pool.connect();
+    let transactionOpen = false;
     try {
       await client.query("BEGIN");
+      transactionOpen = true;
       await this.setContext(client, input.tenantId, input.applicationId);
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         "eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey,
@@ -283,10 +285,28 @@ export class PostgresCustomerAssetRepository {
         if (row.application_id !== input.applicationId || row.actor_id !== input.actorId ||
             row.asset_id !== input.assetId || Number(row.expected_size_bytes) !== input.expectedSizeBytes ||
             row.request_fingerprint !== input.requestFingerprint) {
+          // Persist a denial after rolling back the reservation transaction. Do not
+          // disclose the prior session id or fingerprint in the denial event.
           await client.query("ROLLBACK");
+          transactionOpen = false;
+          await client.query("BEGIN");
+          transactionOpen = true;
+          await this.setContext(client, input.tenantId, input.applicationId);
+          await appendAuditEventInTransaction(client as AuditSqlClient, {
+            tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+            actorType: "human", actorId: input.actorId, action: "customer.asset.upload.reserve",
+            outcome: "denied", reasonCode: "idempotency_conflict",
+            resourceType: "customer-asset-upload", resourceId: input.assetId,
+            correlationId: input.correlationId, source: "api",
+            operationName: "POST /customer/assets/:assetId/uploads",
+            payload: { assetId: input.assetId, conflict: true },
+          });
+          await client.query("COMMIT");
+          transactionOpen = false;
           throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
         }
         await client.query("COMMIT");
+        transactionOpen = false;
         return {
           uploadSessionId: row.upload_session_id,
           providerUploadReference: row.provider_upload_reference,
@@ -325,12 +345,15 @@ export class PostgresCustomerAssetRepository {
           requestFingerprint: input.requestFingerprint },
       });
       await client.query("COMMIT");
+      transactionOpen = false;
       return {
         uploadSessionId: sessionId, providerUploadReference: null,
         uploadStatus: "initiated", expiresAt, providerGrantExpiresAt: null,
       };
     } catch (error) {
-      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      if (transactionOpen) {
+        try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      }
       throw error;
     } finally { client.release(); }
   }
