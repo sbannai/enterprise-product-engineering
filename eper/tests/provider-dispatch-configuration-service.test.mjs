@@ -151,3 +151,30 @@ test("dispatch rejects malformed policy provenance and invalid tenant-default ve
       && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
   }
 });
+
+test("dispatch rejects credential-shaped keys in effective policy, including nested keys", async () => {
+  for (const policy of [
+    { client_secret: "must-not-dispatch" },
+    { storage: { apiKey: "must-not-dispatch" } },
+    { headers: [{ authorization: "must-not-dispatch" }] },
+  ]) {
+    const { instance } = service([connection()], {
+      tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+      policy, source: "TENANT_DEFAULT", tenantDefaultVersion: 1,
+    });
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+  }
+});
+test("dispatch rejects missing or undefined tenant-default version metadata", async () => {
+  const { instance } = service([connection()], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    policy: { retryLimit: 1 }, source: "TENANT_DEFAULT",
+  });
+  await assert.rejects(() => instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+  }), error => error instanceof ProviderDispatchConfigurationError
+    && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+});

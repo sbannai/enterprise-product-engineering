@@ -30,6 +30,16 @@ export class ProviderDispatchConfigurationError extends Error {
   }
 }
 
+const sensitivePolicyKey = /(password|passwd|secret|token|authorization|cookie|api[_-]?key|client[_-]?secret|credential|private[_-]?key)/i;
+
+function containsSensitivePolicyKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsSensitivePolicyKey);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, nested]) => sensitivePolicyKey.test(key) || containsSensitivePolicyKey(nested),
+  );
+}
+
 function eligible(connection: ApplicationProviderConnection, capabilityKey: string): boolean {
   return connection.status === "ACTIVE"
     && connection.bindingStatus === "ACTIVE"
@@ -85,8 +95,9 @@ export class ProviderDispatchConfigurationService {
     }
     if ((effective.source !== "APPLICATION_OVERRIDE" && effective.source !== "TENANT_DEFAULT") ||
         !effective.policy || typeof effective.policy !== "object" || Array.isArray(effective.policy) ||
-        (effective.tenantDefaultVersion !== null &&
-          (!Number.isSafeInteger(effective.tenantDefaultVersion) || effective.tenantDefaultVersion < 1))) {
+        containsSensitivePolicyKey(effective.policy) ||
+        !(effective.tenantDefaultVersion === null ||
+          (Number.isSafeInteger(effective.tenantDefaultVersion) && effective.tenantDefaultVersion >= 1))) {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_INVALID");
     }
 
