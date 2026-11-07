@@ -133,3 +133,35 @@ A feature cannot skip stages based on a green workflow badge.
 - No Business UAT authorization.
 - Keep API, UI and database maturity aligned.
 - Report only evidence observed on the exact main SHA or clearly label branch-only evidence.
+
+
+## 7. Execution update — 2026-11-07 03:07 UTC
+
+### PR reconciliation first pass completed
+
+Live open PR inventory after creating the audit PR: 30 open, all 30 draft. The 29 pre-existing PR heads were each compared against main `97bf4a3de60dd3f6002db068e9c16488ec4916d3`.
+
+- All 29 pre-existing PRs are diverged from main and 74 commits behind.
+- Ahead counts range from 4 to 270 commits.
+- Large asset/provider stacks have broad overlapping changes across API composition, asset repositories, migrations, provider payload lifecycle and tests.
+- #400 (workflow outbox worker) is 31 ahead / 74 behind; #411 (claim fencing) is 43 ahead / 74 behind.
+- Smaller documentation PRs #380, #385, #378 and #379 are 4–8 commits ahead but still 74 behind; they also require baseline reconciliation.
+- Audit PR #432 itself is one commit ahead / zero behind and documentation-only.
+
+This is a branch divergence finding, not a disposition decision. No pre-existing PR was merged, closed or deleted. A per-PR feature/overlap/issue-link/CI freshness matrix is still required before retirement or extraction decisions.
+
+### Audit PR CI failure root cause and narrow correction
+
+Audit PR #432 triggered nine workflows: six passed and three failed. All three failures shared one underlying test in `eper/tests/customer-asset-upload-api.test.mjs`: its reservation fixture expiry was hard-coded to `2026-11-07T03:00:00.000Z`. The workflows ran after 03:00 UTC, so `startCustomerAssetUpload` correctly rejected the expired reservation. The test expected HTTP 200 but received HTTP 503. The full EPER suite showed 1 failure among 1,435 tests in that run; this same test caused the CI and integrated-validation failures.
+
+A narrow main-based test-only correction is proposed in [PR #433](https://github.com/sbannai/enterprise-product-engineering/pull/433): set the fixture expiry to five minutes after test execution. No production expiry validation was weakened. At the time of this update, PR #433 is one commit ahead / zero behind main and its ten workflows are running. Do not merge until exact-head checks pass.
+
+### Updated ETA
+
+- PR compare/base divergence first pass: complete for 29 pre-existing PRs.
+- Full per-PR scope/overlap/issue-link/CI freshness disposition: target within the remainder of the first working day.
+- 228-requirement evidence crosswalk and prioritized gap register: target within two working days, dependent on the authoritative requirement/acceptance artefacts.
+- First P0/P1 engineering closure: estimate 3–5 working days after scope and dependencies are confirmed.
+- Business UAT: no responsible ETA until all 13 entry gates and 48 case-level approval/preparation gaps have owners and evidence; current audit still records 228/228 not run and 0/228 accepted.
+
+No mainline product change, migration change, bulk PR closure, branch deletion, chargeable cloud resource or Business UAT authorization has been made.
