@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
+const uploadRecoveryMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_recovery.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -57,4 +58,17 @@ test("scan dispatch migration creates a tenant/application-isolated transactiona
   assert.ok(scanDispatchMigration.includes("FORCE ROW LEVEL SECURITY"));
   assert.ok(scanDispatchMigration.includes("application_id = current_setting('eper.application_id', true)"));
   assert.ok(scanDispatchMigration.includes("GRANT SELECT, INSERT, UPDATE ON eper_customer_asset_scan_jobs TO eper_customer_asset_access"));
+});
+
+
+test("customer asset upload recovery persists immutable request identity without provider secrets", () => {
+  assert.ok(uploadRecoveryMigration.includes("ADD COLUMN IF NOT EXISTS request_fingerprint char(64)"));
+  assert.ok(uploadRecoveryMigration.includes("request_fingerprint ~ '^[a-f0-9]{64}$'"));
+  assert.ok(uploadRecoveryMigration.includes("provider_grant_expires_at timestamptz"));
+  assert.ok(uploadRecoveryMigration.includes("last_recovered_at timestamptz"));
+  assert.ok(uploadRecoveryMigration.includes("tenant_id, application_id, actor_id, idempotency_key"));
+  assert.ok(uploadRecoveryMigration.includes("never the signed URL or token"));
+  assert.doesNotMatch(uploadRecoveryMigration, /signed_url|bearer_token|access_token/i);
+  assert.ok(uploadRecoveryMigration.includes("BEGIN;"));
+  assert.ok(uploadRecoveryMigration.includes("COMMIT;"));
 });
