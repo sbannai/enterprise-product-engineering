@@ -60,6 +60,9 @@ import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-sch
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
+import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
+import { createStorageUploadAdapter, type StorageUploadGrant, type StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
+import { authorizeCustomerAssetUploadBrowserRequest } from "../../packages/assets/customer-asset-upload-request-authorization.js";
 import type { PostgresProviderConnectionRepository } from "../../packages/integrations/postgres-provider-connection-repository.js";
 import type { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { authorizeProviderConnectionRequest, PostgresProviderRoleAuthorizer } from "../../packages/integrations/provider-connection-authorization.js";
@@ -520,7 +523,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -591,6 +594,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
   } catch {
     configuredAssetStorageHosts = [];
   }
+  const assetUploadGrantIssuer = options.assetUploadPort && configuredAssetStorageHosts.length > 0
+    ? createStorageUploadAdapter(options.assetUploadPort, { allowedHosts: configuredAssetStorageHosts })
+    : undefined;
   const assetDownloadResolver: CustomerAssetDownloadResolver | undefined = options.assetDownloadResolver ?? (
     options.assetStoragePort && configuredAssetStorageHosts.length > 0
       ? createStorageDownloadAdapter(options.assetStoragePort, { allowedHosts: configuredAssetStorageHosts })
@@ -1766,6 +1772,95 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       sendMethodNotAllowed(request, response, "GET, HEAD"); return;
     }
 
+
+    // Direct upload grants are issued only after CSRF, durable session, application
+    // assignment and explicit role permission checks; the storage provider remains injected.
+    const assetUploadMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{2,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/upload-grant$/.exec(requestUrl.pathname);
+    if (assetUploadMatch) {
+      if (process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED !== "true") {
+        sendJson(request, response, 404, { error: "not_found" }); return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      const [applicationId, assetId] = [assetUploadMatch[1], assetUploadMatch[2]];
+      let authorization;
+      try {
+        authorization = await authorizeCustomerAssetUploadBrowserRequest({
+          method: request.method,
+          origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+          cookieHeader: request.headers.cookie,
+          csrfHeader: typeof request.headers["x-csrf-token"] === "string" ? request.headers["x-csrf-token"] : undefined,
+          applicationId,
+        }, {
+          expectedOrigin: options.customerOidcPublicOrigin ?? "",
+          csrfSecret: options.customerCsrfSecret ?? "",
+          sessionStore: options.customerIdentitySessionStore!,
+          tenantAssignments: options.tenantApplicationAssignmentStore!,
+          actorAssignments: options.actorApplicationAssignmentStore!,
+          roleAssignments: options.workflowActorRoleAssignmentStore!,
+        });
+      } catch {
+        sendJson(request, response, 503, { error: "customer_asset_upload_authorization_unavailable" }); return;
+      }
+      if (!authorization.allowed) {
+        const status = authorization.reason === "csrf_invalid" ? 403 :
+          authorization.reason === "identity_unavailable" ? 401 : 403;
+        sendJson(request, response, status, { error: authorization.reason }); return;
+      }
+      if (!options.customerAssetRepository || !assetUploadGrantIssuer || !options.adminConfigEnvironment) {
+        sendJson(request, response, 503, { error: "customer_asset_upload_provider_unavailable" }); return;
+      }
+      let body: Record<string, unknown>;
+      try { body = await readJson(request); }
+      catch (error) {
+        const tooLarge = error instanceof Error && error.message === "REQUEST_BODY_TOO_LARGE";
+        sendJson(request, response, tooLarge ? 413 : 400, { error: tooLarge ? "request_body_too_large" : "invalid_json" }); return;
+      }
+      const expectedSizeBytes = body.expectedSizeBytes;
+      const fileName = body.fileName;
+      const mimeType = body.mimeType;
+      const idempotencyKey = request.headers["idempotency-key"];
+      if (!Number.isSafeInteger(expectedSizeBytes) || typeof expectedSizeBytes !== "number" ||
+          typeof fileName !== "string" || typeof mimeType !== "string" ||
+          typeof idempotencyKey !== "string" || !/^[a-zA-Z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+        sendJson(request, response, 400, { error: "invalid_upload_request" }); return;
+      }
+      try {
+        const grant = await startCustomerAssetUpload({
+          tenantId: authorization.identity.tenantId,
+          applicationId,
+          actorId: authorization.identity.actorId,
+          environment: options.adminConfigEnvironment,
+          correlationId: resolveApiRequestId(request),
+          assetId,
+          expectedSizeBytes,
+          idempotencyKey,
+          fileName,
+          mimeType,
+        }, {
+          repository: options.customerAssetRepository,
+          issueGrant: assetUploadGrantIssuer,
+        });
+        if (!grant) {
+          sendJson(request, response, 503, { error: "customer_asset_upload_provider_unavailable" }); return;
+        }
+        sendJson(request, response, 200, {
+          uploadSessionId: grant.uploadSessionId,
+          upload: { url: grant.url, method: grant.method, expiresAt: grant.expiresAt, headers: grant.headers },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const conflicts = message === "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" ||
+          message === "EPER_CUSTOMER_ASSET_PROVIDER_REFERENCE_CONFLICT";
+        const missingAsset = message === "EPER_CUSTOMER_ASSET_NOT_FOUND";
+        const invalid = message.startsWith("EPER_CUSTOMER_ASSET_") &&
+          !message.includes("SESSION_") && !message.includes("PROVIDER_");
+        sendJson(request, response, conflicts ? 409 : missingAsset ? 404 : invalid ? 400 : 503, {
+          error: conflicts ? "upload_idempotency_conflict" : missingAsset ? "asset_not_found" :
+            invalid ? "invalid_upload_request" : "customer_asset_upload_unavailable",
+        });
+      }
+      return;
+    }
 
     // Single-call client asset manifest across every application assigned to this customer.
     // Returns safe metadata and opaque storage references only; binary content is fetched separately.
