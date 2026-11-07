@@ -14,3 +14,10 @@ export interface StorageUploadProviderCapabilities {
   /** Provider can renew a grant for one exact persisted provider reference. */
   renewByProviderReference: boolean;
 }
+
+/** Authoritative provider lookup result for a durable upload operation ID. */
+export type StorageUploadLookupOutcome =
+  | { kind: "found"; providerUploadReference: string }
+  | { kind: "not_found" }
+  | { kind: "unknown" }
+  | { kind: "unavailable" };

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { StorageUploadRequest } from "./storage-upload-adapter.js";
-import type { StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
+import type { StorageUploadLookupOutcome, StorageUploadProviderCapabilities, StorageUploadProviderOutcome } from "./storage-upload-provider-contract.js";
 
 export interface CustomerAssetUploadGrant {
   uploadSessionId: string;
@@ -25,6 +25,10 @@ type UploadReservation = {
 export interface CustomerAssetUploadStartDependencies {
   repository: Pick<PostgresCustomerAssetRepository, "reserveUpload" | "recordUploadGrant" | "recordUploadProviderRejection">;
   issueGrant: (request: StorageUploadRequest, requestId: string) => Promise<StorageUploadProviderOutcome>;
+  /** Capability declaration must come from the configured provider, never from caller input. */
+  providerCapabilities?: StorageUploadProviderCapabilities;
+  /** Lookup uses the durable uploadSessionId and a separate request correlation ID. */
+  lookupUpload?: (uploadSessionId: string, requestId: string) => Promise<StorageUploadLookupOutcome>;
   now?: () => number;
 }
 function fingerprint(input: CustomerAssetUploadStartInput): string {
@@ -60,10 +64,24 @@ export async function startCustomerAssetUpload(
   if (!["initiated", "in_progress"].includes(reservation.uploadStatus)) {
     throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_" + reservation.uploadStatus.toUpperCase());
   }
-  // A replay without a persisted provider reference is ambiguous: the first
-  // provider create may have succeeded even if its response was lost. Never
-  // issue another create until authoritative lookup/reconciliation is available.
-  if (reservation.disposition === "replayed" && !reservation.providerUploadReference) return null;
+  // A replay without a persisted reference must reconcile against the provider
+  // using the original durable operation ID before any create/renew operation.
+  // Only authoritative not-found plus a declared idempotent-create guarantee
+  // permits a create retry, and that retry retains the exact same session ID.
+  let providerUploadReference = reservation.providerUploadReference;
+  if (reservation.disposition === "replayed" && !providerUploadReference) {
+    if (!dependencies.providerCapabilities?.lookupByUploadSessionId || !dependencies.lookupUpload) return null;
+    const lookup = await dependencies.lookupUpload(reservation.uploadSessionId, input.correlationId);
+    if (lookup.kind === "found") {
+      if (!lookup.providerUploadReference.trim() || lookup.providerUploadReference.length > 2048) return null;
+      providerUploadReference = lookup.providerUploadReference;
+    } else if (lookup.kind === "not_found") {
+      if (!dependencies.providerCapabilities.idempotentCreateByUploadSessionId) return null;
+    } else {
+      // Unknown/unavailable is not proof that the provider object does not exist.
+      return null;
+    }
+  }
   if (Date.parse(reservation.expiresAt) <= (dependencies.now ?? Date.now)()) {
     throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
   }
@@ -72,8 +90,8 @@ export async function startCustomerAssetUpload(
     assetId: input.assetId, uploadSessionId: reservation.uploadSessionId,
     fileName: input.fileName.normalize("NFC"), mimeType: input.mimeType.trim().toLowerCase(),
     sizeBytes: input.expectedSizeBytes,
-    ...(reservation.providerUploadReference
-      ? { providerUploadReference: reservation.providerUploadReference } : {}),
+    ...(providerUploadReference
+      ? { providerUploadReference } : {}),
   };
   // Keep request tracing separate from the client key. The durable provider
   // operation identity is request.uploadSessionId; adapters receive the API
@@ -92,8 +110,8 @@ export async function startCustomerAssetUpload(
   const now = (dependencies.now ?? Date.now)();
   const expiry = Date.parse(grant.expiresAt);
   if (!Number.isFinite(expiry) || expiry <= now || expiry - now > 15 * 60_000) return null;
-  if (reservation.providerUploadReference &&
-      reservation.providerUploadReference !== grant.providerUploadReference) {
+  if (providerUploadReference &&
+      providerUploadReference !== grant.providerUploadReference) {
     throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REFERENCE_CONFLICT");
   }
   await dependencies.repository.recordUploadGrant({

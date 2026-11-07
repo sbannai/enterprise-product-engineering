@@ -172,3 +172,74 @@ test("only a definitive typed provider rejection is persisted as terminal reject
   assert.equal(rejected.uploadSessionId, reservation().uploadSessionId);
   assert.equal(rejected.rejectionCode, "policy_denied");
 });
+
+
+test("replayed reservation recovers the existing provider object by the same durable session ID", async () => {
+  const prior = reservation({ disposition: "replayed" });
+  let lookupSeen;
+  let issueSeen;
+  let persisted;
+  const result = await startCustomerAssetUpload(input, {
+    now: () => now,
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
+    lookupUpload: async (sessionId, correlationId) => {
+      lookupSeen = { sessionId, correlationId };
+      return { kind: "found", providerUploadReference: "provider-object-recovered" };
+    },
+    repository: {
+      reserveUpload: async () => prior,
+      recordUploadGrant: async value => { persisted = value; },
+      recordUploadProviderRejection: async () => assert.fail("must not reject recovered object"),
+    },
+    issueGrant: async request => {
+      issueSeen = request;
+      return { kind: "succeeded", ...grant("provider-object-recovered") };
+    },
+  });
+  assert.deepEqual(lookupSeen, { sessionId: prior.uploadSessionId, correlationId: input.correlationId });
+  assert.equal(issueSeen.uploadSessionId, prior.uploadSessionId);
+  assert.equal(issueSeen.providerUploadReference, "provider-object-recovered");
+  assert.equal(persisted.providerUploadReference, "provider-object-recovered");
+  assert.equal(result.uploadSessionId, prior.uploadSessionId);
+});
+
+test("authoritative not-found permits same-session create only with declared idempotency", async () => {
+  const prior = reservation({ disposition: "replayed" });
+  let issued = 0;
+  const result = await startCustomerAssetUpload(input, {
+    now: () => now,
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
+    lookupUpload: async sessionId => { assert.equal(sessionId, prior.uploadSessionId); return { kind: "not_found" }; },
+    repository: {
+      reserveUpload: async () => prior, recordUploadGrant: async () => {},
+      recordUploadProviderRejection: async () => assert.fail("unexpected rejection"),
+    },
+    issueGrant: async request => {
+      issued++;
+      assert.equal(request.uploadSessionId, prior.uploadSessionId);
+      assert.equal("providerUploadReference" in request, false);
+      return { kind: "succeeded", ...grant("provider-object-created-same-session") };
+    },
+  });
+  assert.equal(issued, 1);
+  assert.equal(result.uploadSessionId, prior.uploadSessionId);
+});
+
+test("not-found without idempotent-create guarantee and unavailable lookup remain pending", async () => {
+  const prior = reservation({ disposition: "replayed" });
+  for (const [lookup, capabilities] of [
+    [{ kind: "not_found" }, { idempotentCreateByUploadSessionId: false, lookupByUploadSessionId: true, renewByProviderReference: true }],
+    [{ kind: "unavailable" }, { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true }],
+    [{ kind: "unknown" }, { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true }],
+  ]) {
+    let issued = 0;
+    const result = await startCustomerAssetUpload(input, {
+      now: () => now, providerCapabilities: capabilities,
+      lookupUpload: async () => lookup,
+      repository: { reserveUpload: async () => prior, recordUploadGrant: async () => assert.fail("must not persist"), recordUploadProviderRejection: async () => assert.fail("must not reject") },
+      issueGrant: async () => { issued++; return { kind: "succeeded", ...grant() }; },
+    });
+    assert.equal(result, null);
+    assert.equal(issued, 0);
+  }
+});
