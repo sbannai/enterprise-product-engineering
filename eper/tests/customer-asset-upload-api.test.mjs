@@ -102,8 +102,9 @@ function options(calls, withProvider = false) {
 async function withServer(t, handler, withProvider = false) {
   const previous = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
   configure();
+  if (withProvider) process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["uploads.example.test"]);
   const calls = [];
-  const server = createAppServer(options(calls));
+  const server = createAppServer(options(calls, withProvider));
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
