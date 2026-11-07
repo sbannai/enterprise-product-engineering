@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { WorkflowOutboxWorker } from "../dist/packages/workflows/workflow-outbox-worker.js";
+import { WorkflowOutboxDispatchNotApprovedError } from "../dist/packages/workflows/workflow-outbox-errors.js";
 
 const events = [
   { eventId: "11111111-1111-4111-8111-111111111111", eventType: "workflow.instance.started", attempts: 1 },
@@ -259,4 +260,30 @@ test("outbox worker stops renewing a non-cooperative dispatch after shutdown", a
   shutdown.abort(new Error("host shutdown"));
   await new Promise(resolve => setTimeout(resolve, 3_600));
   assert.deepEqual(renewals, [], "a non-cooperative dispatcher must not keep extending its lease after shutdown");
+});
+
+test("unapproved workflow outbox dispatch is parked immediately without transient retry", async () => {
+  const event = events[0];
+  const failures = [];
+  const store = {
+    async claim() { return [event]; },
+    async renewLease() { return true; },
+    async markDelivered() { throw new Error("unapproved event must not be delivered"); },
+    async markFailed(_context, _eventId, options) {
+      failures.push(options);
+      return { status: "dead_letter", attempts: event.attempts };
+    },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch() { throw new WorkflowOutboxDispatchNotApprovedError(); },
+  }, { workerId: "worker-01", maxAttempts: 8, baseRetryDelaySeconds: 5 });
+
+  const result = await worker.runOnce({ tenantId: event.tenantId, applicationId: event.applicationId }, 1);
+  assert.deepEqual(result, {
+    claimed: 1, delivered: 0, retried: 0, deadLettered: 1, leaseLost: 0, interrupted: 0,
+  });
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].maxAttempts, event.attempts);
+  assert.equal(failures[0].retryDelaySeconds, 0);
+  assert.equal(failures[0].error, "WORKFLOW_OUTBOX_DISPATCH_NOT_APPROVED");
 });
