@@ -5,10 +5,12 @@ on:
     paths:
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
       - "eper/packages/integrations/**"
+      - "eper/packages/assets/**"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -17,10 +19,12 @@ on:
     paths:
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
       - "eper/packages/integrations/**"
+      - "eper/packages/assets/**"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -49,6 +53,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://eper:eper_test_password@localhost:5432/eper_test
+      EPER_CUSTOMER_ASSET_LIVE_TESTS: "1"
     defaults:
       run:
         working-directory: eper
@@ -67,3 +72,5 @@ jobs:
         run: npm run migrate:audit
       - name: Exercise durable provider-operation concurrency, fencing and recovery
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
+      - name: Exercise customer-asset upload recovery and scan lifecycle on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
