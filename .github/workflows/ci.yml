@@ -136,18 +136,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          worker_password="$(openssl rand -hex 32)"
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_test WITH LOGIN PASSWORD '${worker_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_workflow_outbox_worker_test"
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker_test"
-          echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL=postgres://eper_workflow_outbox_worker_test:${worker_password}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          worker_password_a="$(openssl rand -hex 32)"
+          worker_password_b="$(openssl rand -hex 32)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_test WITH LOGIN PASSWORD '${worker_password_a}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_test_b WITH LOGIN PASSWORD '${worker_password_b}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_workflow_outbox_worker_test, eper_workflow_outbox_worker_test_b"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker_test, eper_workflow_outbox_worker_test_b"
+          echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL=postgres://eper_workflow_outbox_worker_test:${worker_password_a}@localhost:5432/eper_test" >> "$GITHUB_ENV"
           echo "EPER_WORKFLOW_OUTBOX_EXPECTED_DATABASE_ROLE=eper_workflow_outbox_worker_test" >> "$GITHUB_ENV"
+          echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL_B=postgres://eper_workflow_outbox_worker_test_b:${worker_password_b}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          echo "EPER_WORKFLOW_OUTBOX_EXPECTED_DATABASE_ROLE_B=eper_workflow_outbox_worker_test_b" >> "$GITHUB_ENV"
       - name: Verify dedicated workflow outbox login privileges on PostgreSQL 16
         run: node --test tests/workflow-outbox-worker-access.integration.test.mjs
       - name: Verify worker startup privilege gate with dedicated PostgreSQL 16 login
         run: node --test tests/workflow-outbox-worker-database.integration.test.mjs
       - name: Prove PostgreSQL claim-generation fencing against stale worker acknowledgements
         run: node --test tests/workflow-outbox-claim-generation.integration.test.mjs
+      - name: Prove two restricted PostgreSQL logins compete safely for the same outbox event
+        run: node --test tests/workflow-outbox-two-worker-concurrency.integration.test.mjs
       - name: Verify worker configuration, claim fencing, store and approval dispatcher contracts
         run: node --test tests/workflow-outbox-claim-generation-migration.test.mjs tests/workflow-outbox-worker-access-migration.test.mjs tests/workflow-outbox-store.test.mjs tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs tests/workflow-outbox-dispatcher-module.test.mjs tests/workflow-outbox-worker-main.test.mjs
       - name: Live PostgreSQL workflow execution integration
