@@ -30,6 +30,7 @@ import { PostgresProviderValidationStore } from "../../packages/integrations/pos
 import { ProviderConnectionValidationService } from "../../packages/integrations/provider-connection-validation-service.js";
 import { SyntheticProviderSecretResolver, SyntheticProviderValidationAdapterRegistry } from "../../packages/integrations/synthetic-provider-validation-adapters.js";
 import { PostgresProviderCatalogueRepository } from "../../packages/integrations/postgres-provider-catalogue-repository.js";
+import { readProviderStorageRuntimeConfiguration } from "../../packages/integrations/provider-storage-runtime-configuration.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
 
@@ -55,6 +56,11 @@ const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENAB
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
 const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
 const customerAssetUploadApiEnabled = process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED === "true";
+const providerStorageRuntimeConfiguration = readProviderStorageRuntimeConfiguration(process.env);
+if (providerStorageRuntimeConfiguration.enabled) {
+  // Runtime contracts are implemented, but no approved real provider drivers or secret-manager adapter are wired into this entrypoint yet.
+  throw new Error("PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED");
+}
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
