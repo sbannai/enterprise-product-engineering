@@ -124,15 +124,17 @@ export function createStorageUploadAdapter(
  */
 export function createStorageUploadLookupAdapter(
   port: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>,
-): (uploadSessionId: string, requestId: string) => Promise<StorageUploadLookupOutcome> {
-  return async (uploadSessionId, requestId) => {
+): (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome> {
+  return async (uploadSessionId, requestId, scope) => {
     if (typeof uploadSessionId !== "string" || !uploadSessionId.trim() || uploadSessionId.length > 128 ||
-        typeof requestId !== "string" || !requestId.trim() || requestId.length > 128) {
+        typeof requestId !== "string" || !requestId.trim() || requestId.length > 128 ||
+        !scope || typeof scope.tenantId !== "string" || !scope.tenantId.trim() || scope.tenantId.length > 128 ||
+        typeof scope.applicationId !== "string" || !scope.applicationId.trim() || scope.applicationId.length > 128) {
       return { kind: "unknown" };
     }
     let outcome;
     try {
-      outcome = await port.invoke({ uploadSessionId }, requestId, uploadSessionId);
+      outcome = await port.invoke({ tenantId: scope.tenantId, applicationId: scope.applicationId, uploadSessionId }, requestId, uploadSessionId);
     } catch {
       return { kind: "unavailable" };
     }
