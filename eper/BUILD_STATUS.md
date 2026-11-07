@@ -9,7 +9,7 @@
 
 - The last independently observed successful functional CI baseline is `2c380d79c55c9183a42ed534ffd1a504f7d41316` (2026-11-03 16:36 UTC).
 - The governance/status commits after that baseline are documentation-only. They do not constitute product functionality or replace validation.
-- The combined-status query for main SHA `72466c20eea91231c17efea3f5b5cf3947df38ef` returned no checks.
+- The combined-status query for main SHA `72466c20eea91231c17efea3f5b5cf3947df38ef` returned no checks. Subsequent customer-asset migration commits are newer; their CI evidence must be queried independently.
 - The focused `.github/workflows/ci.yml` workflow is configured for `workflow_dispatch` and pushes to `main` affecting `eper/**`. A status-file push is therefore expected to trigger that lane. The run and its checked-out head SHA must be independently verified before marking the resulting mainline green.
 - No workflow run for the current status-refresh commit has yet been confirmed.
 
@@ -24,7 +24,7 @@
 
 ## Customer asset work — current mainline boundary
 
-- Issue #427 describes a replay defect in customer-asset migration 021 on a PR foundation. The mainline audit currently lists audit migrations only through 020; migration 021 and its claimed implementation are not yet verified as present on main.
+- Issue #427's migration 021 replay correction is now present on main. The CI workflow now directly executes migrations 021 and 022 twice against its PostgreSQL 16 service and asserts ENABLE/FORCE RLS, expected policies and selected grants. This remains pending an observed exact-SHA CI run.
 - Issue #425 requires real PostgreSQL 16 execution, upgrade, replay, RLS, checksum and data-preservation tests for the customer-asset upload recovery migration. This remains open.
 - Runtime upload reservation recovery, session binding, idempotent retries and provider-outcome recovery remain incomplete until implemented and verified on main.
 - Do not mark either issue complete based on PR-only code or static checks.
@@ -48,8 +48,8 @@
 
 ## Next actions
 
-1. Observe the push-triggered focused CI run and verify its exact head SHA, conclusion, test totals, skips and artifact links.
-2. Reconcile the customer-asset migration foundation directly on main; implement replay-safe DDL and PostgreSQL 16 execution tests without weakening RLS or grants.
+1. Observe the PostgreSQL 16 migration replay lane on exact current main SHA; verify run ID, conclusion and diagnostic evidence.
+2. Complete PostgreSQL 16 upgrade/data-preservation/RLS isolation assertions for the customer-asset schema.
 3. Implement durable upload reservation recovery and verified customer-session binding as a complete mainline feature slice.
-4. Update feature and backlog registers only from verified mainline code and test evidence.
+4. Wire customer-asset API and UI only after persistence and authorization behavior is proven.
 5. Keep Business UAT blocked until every entry gate is evidenced and explicitly approved.
