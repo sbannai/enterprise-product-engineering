@@ -194,3 +194,12 @@ This confirms the near-term critical path is controlled source resolution and re
 ## 9. Test-fixture correction status — 2026-11-07 03:08 UTC
 
 PR #433 changes only the static reservation expiry in `eper/tests/customer-asset-upload-api.test.mjs` to a five-minute relative expiry. On exact PR head `3b8e02cc620a473fbcc84c9d4295ed4d116037a9`, 8 of 10 workflows have completed successfully, including EPER CI and controlled QA re-execution. Integrated validation and fresh-clone setup are still running at this update. The corrected test has not yet been declared fully accepted; wait for all ten exact-head workflows to finish.
+
+
+## 10. Mainline update — 2026-11-07 03:09 UTC
+
+PR #433 completed all 10/10 exact-head workflows successfully and was squash-merged to main. Merge commit: `2f42e87b0b88a74ef856a9b709d68d1d39eba1de`. The change is one test-fixture line: replace the stale fixed reservation expiry with a five-minute relative expiry. Production code and expiry enforcement are unchanged.
+
+This confirms the earlier three workflow failures were all propagated by one time-expired test fixture. The correction was tested on its exact PR head before merge. The merged main SHA is now `2f42e87b0b88a74ef856a9b709d68d1d39eba1de`; post-merge main CI should still be observed rather than assumed.
+
+The requirement source audit is also complete for the relevant register state: all 228 capture rows remain NOT_RUN/PENDING; the 48 B01 case rows are structurally aligned with the capture/gap/acceptance matrices but not prepared/reviewed/authorized. The controlled baseline decision note records approval, but the controlled source-package artifact/locator discrepancy remains unresolved. The v34-to-228 crosswalk explicitly classifies 45 candidate requirements as draft additions and makes zero exact feature-to-228 mappings; these are not to be promoted into the approved baseline without owner change control.
