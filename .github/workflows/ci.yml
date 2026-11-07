@@ -14,6 +14,7 @@ on:
     paths:
       - "eper/**"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main", "reconcile/payment-153-168-integration"]
     paths:
@@ -131,6 +132,17 @@ jobs:
         run: npm run migrate:workflows
       - name: Verify workflow migrations are safely repeatable
         run: npm run migrate:workflows
+      - name: Provision isolated restricted workflow outbox login for privilege proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_password="$(openssl rand -hex 32)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_test WITH LOGIN PASSWORD '${worker_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_workflow_outbox_worker_test"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker_test"
+          echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL=postgres://eper_workflow_outbox_worker_test:${worker_password}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+      - name: Verify dedicated workflow outbox login privileges on PostgreSQL 16
+        run: node --test tests/workflow-outbox-worker-access.integration.test.mjs
       - name: Live PostgreSQL workflow execution integration
         run: node --test tests/postgres-workflow-execution.integration.test.mjs
       - name: Live PostgreSQL tenant and actor application assignment integration
