@@ -95,8 +95,12 @@ export class PostgresCustomerAssetRepository {
       );
       const row = result.rows[0];
       if (!row?.assets || !row.links || !row.sessions || !row.scanJobs) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
-      const recovery = await client.query<{ column_name: string | null }>("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='eper_customer_asset_upload_sessions' AND column_name='request_fingerprint'");
-      if (!recovery.rows[0]?.column_name) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RECOVERY_SCHEMA_NOT_APPLIED");
+      const recovery = await client.query<{ column_name: string | null }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='eper_customer_asset_upload_sessions' AND column_name IN ('request_fingerprint', 'provider_outcome')",
+      );
+      const recoveryColumns = new Set(recovery.rows.map((row) => row.column_name));
+      if (!recoveryColumns.has("request_fingerprint")) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RECOVERY_SCHEMA_NOT_APPLIED");
+      if (!recoveryColumns.has("provider_outcome")) throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_OUTCOME_SCHEMA_NOT_APPLIED");
     } catch (error) {
       if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED") throw error;
       throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_READINESS_FAILED", { cause: error });
@@ -404,6 +408,7 @@ export class PostgresCustomerAssetRepository {
       await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET provider_upload_reference = COALESCE(provider_upload_reference, $4),
+                provider_outcome = 'succeeded',
                 provider_grant_expires_at = $5, last_recovered_at = now(), updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
         [input.tenantId, input.applicationId, input.uploadSessionId,
@@ -416,6 +421,50 @@ export class PostgresCustomerAssetRepository {
         correlationId: input.correlationId,
         source: "api", operationName: "POST /customer/assets/:assetId/uploads",
         payload: { assetId: input.assetId, providerGrantExpiresAt: new Date(expiry).toISOString() },
+      });
+      await client.query("COMMIT");
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Persist only a definitive provider rejection; unknown outcomes must remain recoverable. */
+  async recordUploadProviderRejection(input: {
+    tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
+    correlationId: string; assetId: string; uploadSessionId: string; rejectionCode: string;
+  }): Promise<void> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.assetId, "assetId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(input.rejectionCode)) {
+      throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_CODE_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const updated = await client.query(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET upload_status = 'failed', provider_outcome = 'rejected', updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND actor_id = $4 AND asset_id = $5
+            AND upload_status IN ('initiated', 'in_progress')
+            AND provider_upload_reference IS NULL AND provider_outcome = 'unknown'`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId, input.assetId],
+      );
+      if (updated.rowCount !== 1) {
+        throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_NOT_APPLICABLE");
+      }
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "human", actorId: input.actorId, action: "customer.asset.upload.provider.reject",
+        outcome: "failure", resourceType: "customer-asset-upload", resourceId: input.uploadSessionId,
+        correlationId: input.correlationId, source: "api",
+        operationName: "POST /customer/assets/:assetId/uploads",
+        payload: { assetId: input.assetId, rejectionCode: input.rejectionCode },
       });
       await client.query("COMMIT");
     } catch (error) {

@@ -71,6 +71,45 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(recovered.uploadStatus, "initiated");
       assert.ok(recovered.providerGrantExpiresAt);
 
+      const rejectedAssetId = randomUUID();
+      const rejectedKey = "asset-reject-" + suffix.slice(0, 32);
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: rejectedAssetId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Definitive provider rejection fixture", originalFileName: "rejected.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 512, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-rejected-asset-" + suffix,
+      });
+      const rejectedReservation = await repository.reserveUpload({
+        ...reservationInput, assetId: rejectedAssetId, expectedSizeBytes: 512,
+        idempotencyKey: rejectedKey,
+        requestFingerprint: createHash("sha256").update("rejected-" + suffix).digest("hex"),
+      });
+      await repository.recordUploadProviderRejection({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: rejectedAssetId, uploadSessionId: rejectedReservation.uploadSessionId,
+        rejectionCode: "policy_denied",
+      });
+      const rejectedState = await pool.query(
+        `SELECT upload_status, provider_outcome, provider_upload_reference
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [tenantId, applicationId, rejectedReservation.uploadSessionId],
+      );
+      assert.deepEqual(rejectedState.rows[0], {
+        upload_status: "failed", provider_outcome: "rejected", provider_upload_reference: null,
+      });
+      const rejectionAudit = await pool.query(
+        `SELECT action, outcome, payload FROM eper_audit_events
+          WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3
+            AND action = 'customer.asset.upload.provider.reject'`,
+        [tenantId, applicationId, rejectedReservation.uploadSessionId],
+      );
+      assert.equal(rejectionAudit.rowCount, 1);
+      assert.equal(rejectionAudit.rows[0].outcome, "failure");
+      assert.equal(rejectionAudit.rows[0].payload.rejectionCode, "policy_denied");
+
       await assert.rejects(
         repository.reserveUpload({
           ...reservationInput, applicationId: otherApplicationId,

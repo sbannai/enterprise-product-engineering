@@ -72,3 +72,16 @@ test("customer asset upload recovery persists immutable request identity without
   assert.ok(uploadRecoveryMigration.includes("BEGIN;"));
   assert.ok(uploadRecoveryMigration.includes("COMMIT;"));
 });
+
+const uploadProviderOutcomeMigration = await readFile(new URL("../packages/audit/migrations/024_customer_asset_upload_provider_outcomes.sql", import.meta.url), "utf8");
+
+test("provider outcome migration preserves uncertainty for legacy rows and constrains outcome/reference consistency", () => {
+  assert.ok(uploadProviderOutcomeMigration.includes("ADD COLUMN IF NOT EXISTS provider_outcome varchar(16) NOT NULL DEFAULT 'unknown'"));
+  assert.ok(uploadProviderOutcomeMigration.includes("SET provider_outcome = 'succeeded'"));
+  assert.ok(uploadProviderOutcomeMigration.includes("WHERE provider_upload_reference IS NOT NULL"));
+  assert.ok(uploadProviderOutcomeMigration.includes("provider_outcome IN ('unknown', 'succeeded', 'rejected')"));
+  assert.ok(uploadProviderOutcomeMigration.includes("provider_outcome <> 'succeeded' OR provider_upload_reference IS NOT NULL"));
+  assert.ok(uploadProviderOutcomeMigration.includes("provider_outcome <> 'rejected' OR provider_upload_reference IS NULL"));
+  assert.match(uploadProviderOutcomeMigration, /Legacy rows without a persisted provider reference remain unknown/);
+  assert.ok(!uploadProviderOutcomeMigration.includes("SET provider_outcome = 'rejected'"), "legacy failures must not be reclassified as definitive rejections");
+});
