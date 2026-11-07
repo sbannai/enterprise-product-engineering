@@ -22,6 +22,15 @@
 - Keep PostgreSQL migrations replay-safe; verify RLS ENABLE/FORCE, tenant/application isolation, least-privilege grants, audit immutability and rollback behavior with real PostgreSQL integration tests where applicable.
 - Historical static SQL checks or migration-runner ledger skips are not proof that migration DDL can be executed twice.
 
+## Customer asset upload recovery — 2026-11-07 engineering update
+
+- Added the upload reservation service and PostgreSQL repository recovery methods directly on main. The service persists the reservation before requesting a provider capability, derives a canonical SHA-256 fingerprint from tenant/application/actor/asset/file name/MIME type/expected size, and reuses the persisted session on matching retries.
+- Grant renewal is bound to the existing provider object reference. The storage adapter rejects a provider response that returns a different external object reference. Provider calls receive the stable idempotency key; signed URLs/tokens remain response-only and are not persisted.
+- Added service regression coverage for reserve-before-provider ordering, matching replay, metadata conflict, provider-object mismatch, terminal session states and provider outage retry. Added adapter coverage for provider object binding.
+- CI now explicitly runs the upload recovery service, storage adapter and migration contract tests. PostgreSQL 16 replay of migration 023 remains in the migration lane.
+- Latest direct-main commits in this slice: `691a234` repository recovery; `9347ed6` provider object binding; `043cca9` upload service; `dbcf459` recovery service tests; `fbae15b` provider adapter tests; `dc6e0ab` focused CI test invocation.
+- **Not complete:** API route wiring, exact-SHA CI execution, live PostgreSQL 16 repository integration tests for actor/application/fingerprint replay, lost-provider-response failure injection, durable denial-audit verification, and browser reload/identity-switch tests remain open. Issue #421 stays open. Do not describe this as a released upload feature or authorize Business UAT.
+
 ## Customer asset work — current mainline boundary
 
 - 2026-11-07 follow-up: migration `023_customer_asset_upload_recovery.sql` adds a canonical request-fingerprint slot, provider-grant expiry metadata and recovery timestamp to durable upload sessions. The static migration contract test covers the metadata/no-secret contract. PostgreSQL 16 CI now replays migration 023 twice after migrations 021–022. Latest main SHA: `c5fdd997ca6c0462d3d1401f610c60a04f9a9fa7`.
