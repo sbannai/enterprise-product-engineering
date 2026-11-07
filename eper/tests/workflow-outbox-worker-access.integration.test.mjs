@@ -55,13 +55,14 @@ test("dedicated workflow outbox login has only the approved database privileges"
             has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'delivery_status', 'UPDATE') AS delivery_status,
             has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'attempts', 'UPDATE') AS attempts,
             has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'last_error', 'UPDATE') AS last_error,
-            has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'event_id', 'UPDATE') AS event_id
+            has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'event_id', 'UPDATE') AS event_id,
+            has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'claim_generation', 'UPDATE') AS claim_generation
         `);
         assert.deepEqual(outbox.rows[0], {
           read_events: true, write_events: false, update_events: false, delete_events: false,
           truncate_events: false, read_delivery: true, update_delivery_table: false,
           insert_delivery: false, delete_delivery: false, truncate_delivery: false,
-          delivery_status: true, attempts: true, last_error: true, event_id: false,
+          delivery_status: true, attempts: true, last_error: true, event_id: false, claim_generation: true,
         });
 
         const boundaries = await client.query(`

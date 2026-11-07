@@ -115,6 +115,7 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
           AND has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'last_error', 'UPDATE')
           AND has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'delivered_at', 'UPDATE')
           AND has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'updated_at', 'UPDATE')
+          AND has_column_privilege(current_user, 'public.eper_workflow_outbox_delivery', 'claim_generation', 'UPDATE')
         ) AS update_delivery_columns,
         (has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'INSERT')
           OR has_table_privilege(current_user, 'public.eper_tenant_application_assignment', 'UPDATE')
@@ -154,7 +155,7 @@ export async function assertRestrictedWorkerDatabaseRole(pool: Pool, expectedRol
              AND a.attnum > 0 AND NOT a.attisdropped
              AND a.attname <> ALL (ARRAY[
                'delivery_status','attempts','available_at','locked_at',
-               'locked_by','last_error','delivered_at','updated_at'
+               'locked_by','last_error','delivered_at','updated_at','claim_generation'
              ])
              AND has_column_privilege(current_user, a.attrelid, a.attname, 'UPDATE')
         ) AS write_delivery_columns

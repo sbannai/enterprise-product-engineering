@@ -185,10 +185,11 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       const competingClaim = await outboxStore.claim(outboxContext, { workerId: "worker-b", limit: 10, leaseSeconds: 60 });
       assert.equal(competingClaim.length, 0, "a second worker must not claim unexpired leases");
 
-      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.started"].eventId, "worker-a");
-      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.completed"].eventId, "worker-a");
+      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.started"].eventId, "worker-a", byType["workflow.instance.started"].claimGeneration);
+      await outboxStore.markDelivered(outboxContext, byType["workflow.instance.completed"].eventId, "worker-a", byType["workflow.instance.completed"].claimGeneration);
       const firstFailure = await outboxStore.markFailed(outboxContext, byType["workflow.instance.submitted"].eventId, {
-        workerId: "worker-a", maxAttempts: 2, retryDelaySeconds: 0, error: "simulated transient delivery failure",
+        workerId: "worker-a", claimGeneration: byType["workflow.instance.submitted"].claimGeneration,
+        maxAttempts: 2, retryDelaySeconds: 0, error: "simulated transient delivery failure",
       });
       assert.deepEqual(firstFailure, { status: "pending", attempts: 1 });
       const retry = await outboxStore.claim(outboxContext, { workerId: "worker-b", limit: 10, leaseSeconds: 60 });
@@ -196,7 +197,8 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       assert.equal(retry[0].eventType, "workflow.instance.submitted");
       assert.equal(retry[0].attempts, 2);
       const deadLetter = await outboxStore.markFailed(outboxContext, retry[0].eventId, {
-        workerId: "worker-b", maxAttempts: 2, retryDelaySeconds: 0, error: "simulated terminal delivery failure",
+        workerId: "worker-b", claimGeneration: retry[0].claimGeneration,
+        maxAttempts: 2, retryDelaySeconds: 0, error: "simulated terminal delivery failure",
       });
       assert.deepEqual(deadLetter, { status: "dead_letter", attempts: 2 });
 
