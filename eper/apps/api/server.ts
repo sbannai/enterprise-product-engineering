@@ -2200,7 +2200,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           await audit("failure");
           sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
-        const postgresAssets = process.env.EPER_CUSTOMER_ASSET_PERSISTENCE === "postgres";
+        const postgresAssets = process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED === "true" || process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true";
         let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
         try {
           modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
