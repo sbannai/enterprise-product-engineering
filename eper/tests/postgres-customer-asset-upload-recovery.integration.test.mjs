@@ -328,3 +328,160 @@ test("live PostgreSQL customer asset metadata creation is idempotent across conc
       await pool.end();
     }
   });
+
+
+test("live PostgreSQL download lookup enforces owner and explicit shared-link visibility under the restricted asset role",
+  { skip: !connectionString || process.env.EPER_CUSTOMER_ASSET_LIVE_TESTS !== "1" }, async () => {
+    const pool = new Pool({ connectionString, max: 8 });
+    const suffix = randomUUID().replaceAll("-", "");
+    const tenantId = "asset-download-tenant-" + suffix.slice(0, 18);
+    const otherTenantId = "asset-download-other-" + suffix.slice(0, 16);
+    const ownerApplicationId = "asset-download-owner-" + suffix.slice(0, 16);
+    const sharedApplicationId = "asset-download-shared-" + suffix.slice(0, 16);
+    const otherApplicationId = "asset-download-other-" + suffix.slice(0, 16);
+    const actorId = "asset-download-actor-" + suffix.slice(0, 16);
+    const scannerServiceId = "asset-download-scanner-" + suffix.slice(0, 12);
+    const workerId = "asset-download-worker-" + suffix.slice(0, 12);
+    const roleName = "eper_asset_dl_" + suffix.slice(0, 16);
+    const rolePassword = randomUUID().replaceAll("-", "");
+    const repository = new PostgresCustomerAssetRepository(pool);
+    let restrictedPool;
+
+    async function createAsset(applicationId, scope, scanStatus) {
+      const assetId = randomUUID();
+      const correlationId = "asset-download-" + suffix + "-" + assetId.slice(0, 8);
+      const providerReference = "opaque-provider-reference-" + assetId;
+      const metadataReference = "opaque-metadata-reference-" + assetId;
+      const requestFingerprint = createHash("sha256").update("download-request-" + assetId).digest("hex");
+      const idempotencyKey = "asset-download-" + assetId.replaceAll("-", "");
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId, scope, ...(scope === "application_restricted" ? { ownerApplicationId: applicationId } : {}),
+        displayName: "Download lookup fixture", originalFileName: "fixture.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 4096, storageAdapterKey: "ci-storage",
+        storageObjectReference: metadataReference,
+      });
+      const reservation = await repository.reserveUpload({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId, expectedSizeBytes: 4096, idempotencyKey, requestFingerprint,
+      });
+      await repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId, uploadSessionId: reservation.uploadSessionId, requestFingerprint,
+        providerUploadReference: providerReference,
+        grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      if (scanStatus !== null) {
+        const checksumSha256 = createHash("sha256").update("synthetic-download-bytes-" + assetId).digest("hex");
+        await repository.completeUpload({
+          tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+          uploadSessionId: reservation.uploadSessionId, receivedSizeBytes: 4096,
+          observedMimeType: "application/pdf", checksumSha256, scanStatus: "pending",
+        });
+        const claims = await repository.claimScanJobs({
+          tenantId, applicationId, workerId, scannerServiceId,
+          environment: "sandbox", limit: 1, leaseMs: 60_000,
+        });
+        assert.ok(claims.some(claim => claim.uploadSessionId === reservation.uploadSessionId),
+          "completed upload must produce a claimable scan job");
+        await repository.recordScanResult({
+          tenantId, applicationId, scannerServiceId, workerId, environment: "sandbox",
+          correlationId, uploadSessionId: reservation.uploadSessionId, scanStatus,
+        });
+      }
+      return { assetId, providerReference, metadataReference, uploadSessionId: reservation.uploadSessionId };
+    }
+
+    try {
+      await repository.assertReady();
+      await pool.query(
+        `CREATE ROLE ${roleName} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+          INHERIT NOREPLICATION NOBYPASSRLS PASSWORD '${rolePassword}'`,
+      );
+      await pool.query(`GRANT eper_customer_asset_access TO ${roleName}`);
+      const restrictedUrl = new URL(connectionString);
+      restrictedUrl.username = roleName;
+      restrictedUrl.password = rolePassword;
+      restrictedPool = new Pool({ connectionString: restrictedUrl.toString(), max: 2 });
+      const restrictedRepository = new PostgresCustomerAssetRepository(restrictedPool);
+
+      const ownerAsset = await createAsset(ownerApplicationId, "application_restricted", "clean");
+      const ownerDownload = await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, ownerAsset.assetId);
+      assert.deepEqual(ownerDownload, {
+        accessReference: ownerAsset.providerReference,
+        fileName: "fixture.pdf",
+        mimeType: "application/pdf",
+      }, "owner application receives only the provider upload reference after a clean completed scan");
+      assert.notEqual(ownerDownload?.accessReference, ownerAsset.metadataReference,
+        "download lookup must never return the metadata placeholder");
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, otherApplicationId, ownerAsset.assetId), null,
+        "another application cannot read an application-restricted asset");
+      assert.equal(await restrictedRepository.getDownloadAsset(otherTenantId, ownerApplicationId, ownerAsset.assetId), null,
+        "another tenant cannot read the asset");
+
+      const sharedAsset = await createAsset(ownerApplicationId, "customer_shared", "clean");
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, sharedApplicationId, sharedAsset.assetId), null,
+        "a shared asset is not visible to another application before an explicit link");
+      await repository.link({
+        tenantId, applicationId: sharedApplicationId, actorId, environment: "sandbox",
+        correlationId: "asset-download-link-" + suffix,
+        idempotencyKey: "asset-download-link-" + suffix.slice(0, 32),
+        assetId: sharedAsset.assetId, reason: "customer-shared",
+      });
+      const sharedDownload = await restrictedRepository.getDownloadAsset(tenantId, sharedApplicationId, sharedAsset.assetId);
+      assert.deepEqual(sharedDownload, {
+        accessReference: sharedAsset.providerReference,
+        fileName: "fixture.pdf",
+        mimeType: "application/pdf",
+      }, "explicitly linked customer-shared asset is downloadable from the linked application");
+      assert.notEqual(sharedDownload?.accessReference, sharedAsset.metadataReference);
+
+      const sharedIncompleteAsset = await createAsset(ownerApplicationId, "customer_shared", null);
+      await repository.link({
+        tenantId, applicationId: sharedApplicationId, actorId, environment: "sandbox",
+        correlationId: "asset-download-incomplete-link-" + suffix,
+        idempotencyKey: "asset-download-incomplete-" + suffix.slice(0, 32),
+        assetId: sharedIncompleteAsset.assetId, reason: "customer-shared",
+      });
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, sharedApplicationId, sharedIncompleteAsset.assetId), null,
+        "an explicitly linked but incomplete shared upload cannot be downloaded");
+      const hiddenIncompleteSession = await restrictedPool.query(
+        `SELECT provider_upload_reference
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND upload_session_id = $2`,
+        [tenantId, sharedIncompleteAsset.uploadSessionId],
+      );
+      assert.equal(hiddenIncompleteSession.rowCount, 0,
+        "shared-link RLS must not expose incomplete upload-session references");
+
+      const incompleteAsset = await createAsset(ownerApplicationId, "application_restricted", null);
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, incompleteAsset.assetId), null,
+        "an incomplete upload session never produces a download reference");
+
+      const infectedAsset = await createAsset(ownerApplicationId, "application_restricted", "infected");
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, infectedAsset.assetId), null,
+        "a rejected/quarantined scan result never produces a download reference");
+
+      const inactiveAsset = await createAsset(ownerApplicationId, "application_restricted", "clean");
+      await pool.query(
+        `UPDATE eper_customer_assets
+            SET lifecycle_status = 'deleted', deleted_by = $3, deleted_at = now()
+          WHERE tenant_id = $1 AND asset_id = $2`,
+        [tenantId, inactiveAsset.assetId, actorId],
+      );
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, inactiveAsset.assetId), null,
+        "a deleted/inactive asset never produces a download reference");
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, randomUUID()), null,
+        "a missing asset never produces a download reference");
+    } finally {
+      if (restrictedPool) await restrictedPool.end();
+      await pool.query(`DROP ROLE IF EXISTS ${roleName}`).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_asset_application_links WHERE tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_asset_scan_jobs WHERE tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_asset_metadata_operations WHERE tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM eper_customer_assets WHERE tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.end();
+    }
+  });

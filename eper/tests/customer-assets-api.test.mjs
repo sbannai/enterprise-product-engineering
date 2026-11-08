@@ -389,3 +389,89 @@ test("asset downloads enforce durable tenant ownership and actor membership with
     for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });
+
+
+
+test("PostgreSQL asset downloads use the completed upload-session reference and never fall back to JSON", async () => {
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_METADATA_API_ENABLED",
+    "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
+    "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON",
+    "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "postgres-asset-download-lookup-token-00000001";
+  process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
+  process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
+  });
+  process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON = JSON.stringify({ "tenant-a": ["client-assets"] });
+  process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON = JSON.stringify({ "tenant-a": ["app-a"] });
+  // This legacy entry deliberately contains the metadata placeholder, never a usable object reference.
+  process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON = JSON.stringify({
+    "tenant-a": { "app-a": [
+      { id: "asset-clean", name: "Brief.pdf", mimeType: "application/pdf", accessReference: "pending:metadata-placeholder" },
+      { id: "asset-missing", name: "Missing.pdf", accessReference: "pending:must-not-fallback" },
+      { id: "asset-error", name: "Error.pdf", accessReference: "pending:must-not-reach-resolver" },
+    ] },
+  });
+  const lookups = [];
+  const resolverReferences = [];
+  const audit = [];
+  const server = createAppServer({
+    customerAssetRepository: {
+      async getDownloadAsset(tenantId, applicationId, assetId) {
+        lookups.push([tenantId, applicationId, assetId]);
+        if (assetId === "asset-error") throw new Error("synthetic PostgreSQL lookup failure");
+        return assetId === "asset-clean"
+          ? { accessReference: "provider-upload-session-object-ref", fileName: "Brief.pdf", mimeType: "application/pdf" }
+          : null;
+      },
+    },
+    assetDownloadResolver: async input => {
+      resolverReferences.push(input.accessReference);
+      return { url: "https://storage.example.test/signed-download", expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    },
+    assetAuditWriter: async record => { audit.push(record); },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const base = "http://127.0.0.1:" + address.port;
+    const ok = await fetch(base + "/customer/applications/app-a/assets/asset-clean/download", {
+      headers: { authorization: "Bearer " + token },
+    });
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).fileName, "Brief.pdf");
+    assert.deepEqual(resolverReferences, ["provider-upload-session-object-ref"]);
+    const missing = await fetch(base + "/customer/applications/app-a/assets/asset-missing/download", {
+      headers: { authorization: "Bearer " + token },
+    });
+    assert.equal(missing.status, 404);
+    assert.deepEqual(resolverReferences, ["provider-upload-session-object-ref"],
+      "a missing PostgreSQL row must not reach the resolver via the legacy placeholder");
+    assert.deepEqual(lookups, [
+      ["tenant-a", "app-a", "asset-clean"],
+      ["tenant-a", "app-a", "asset-missing"],
+    ]);
+    const failedLookup = await fetch(base + "/customer/applications/app-a/assets/asset-error/download", {
+      headers: { authorization: "Bearer " + token },
+    });
+    assert.equal(failedLookup.status, 503);
+    assert.deepEqual(resolverReferences, ["provider-upload-session-object-ref"],
+      "a PostgreSQL repository error must fail closed before the download resolver");
+    assert.deepEqual(lookups, [
+      ["tenant-a", "app-a", "asset-clean"],
+      ["tenant-a", "app-a", "asset-missing"],
+      ["tenant-a", "app-a", "asset-error"],
+    ]);
+    assert.deepEqual(audit.map(record => record.outcome), ["success", "denied", "failure"]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
