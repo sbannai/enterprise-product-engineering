@@ -1919,3 +1919,22 @@ All 14 Actions runs for exact head `1d3e2c9574db46c671fca4cc66bb3b5ad67c8ca0` co
 At this checkpoint main was `a27a4380d3ef91b096932aae4f5c1806cf601f90`; PR #449 was 12 commits ahead and 2 behind (both behind commits are scorecard-only). The PR remains open and unmerged. No review submissions or inline review threads exist; the Codex review attempt was unable to complete because of its usage limit. An independent review is still required. Update/retest against the then-current main before merge.
 
 The live PostgreSQL shared-download/RLS gap is fixed on the PR branch, not yet on main. Migration `026_customer_asset_shared_download_session_visibility.sql` now occupies 026; historical expiry branches #402/#413/#414 use incompatible migration 026 and must be renumbered/reconciled before any future port. Do not merge those historical branches wholesale.
+
+## 2026-11-08 11:32 IST — mainline correction after PR #449 merge
+
+This section supersedes the preceding statements that PR #449 remains open/unmerged and that its download fix is only on a PR branch.
+
+- PR #449 merged successfully at 2026-11-08T05:30:57Z. Merge commit and current main at verification: `f52af521bb3ddc81692c8fa5a9dd5e2f21331c3b`.
+- Exact PR head `1d3e2c9574db46c671fca4cc66bb3b5ad67c8ca0): all 14/14 Actions workflows passed, zero failures.
+- Exact post-merge main SHA `f52af521bb3ddc81692c8fa5a9dd5e2f21331c3b): all 11/11 push workflows passed, zero failures. This includes EPER CI, live customer-asset PostgreSQL/provider lifecycle, integrated same-commit validation, Chromium OIDC browser E2E, fresh-clone developer setup, 228/38 matrix, G9, release build, six-family HTTP, container smoke and controlled QA/technical simulation.
+- Download authorization now reads the completed upload-session provider reference from PostgreSQL, never the metadata placeholder. RLS restricts shared session visibility to active/available/clean (or not_required) assets and completed sessions with non-empty provider references. Live restricted-role PostgreSQL coverage includes owner access, explicit shared links, incomplete session invisibility, cross-application/tenant denial, infected/deleted/missing assets. API lookup errors fail closed before provider resolution and record failure audit.
+- Issue #405 was updated with merge and exact-head evidence. This closes only the PostgreSQL download-reference authorization slice; real-byte storage transfer, server-side object verification, real scanner integration and browser end-to-end proof remain open. Business UAT remains unauthorized.
+
+### Upload-expiry branch reconciliation
+
+- PR #402 remains based on `fix/customer-asset-upload-idempotency` at `a1b7341d71a4086c983dd3362a4704c124a52b74`, not main. Compare reports 259 commits main-ahead and 164 commits base-ahead (diverged). PR #413 is stacked on #402.
+- #402 adds `026_customer_asset_upload_retry_lifecycle.sql`; #413 adds `027_customer_asset_cross_application_expiry.sql`. Main already contains `026_customer_asset_shared_download_session_visibility.sql`.
+- The migration runner's ledger keys migrations by complete filename and sorts filenames lexically, so the distinct 026 filenames do not collide in the ledger. Nevertheless, a mainline port should renumber sequentially after main's 026, reconcile the migration order and preserve the merged download RLS policy. Do not merge either historical branch wholesale.
+- The upload-retry and cross-application-expiry behavior remains pending mainline port and exact-head validation. Existing PRs #402/#413 remain historical implementation references, not accepted mainline functionality.
+
+Seven-pointer status remains: workspace/support AMBER (download-reference gate now mainline; real-byte/provider/scanner journey and SLA lifecycle still open); release/continuity RED (main branch protection/rulesets and independent release/restore evidence remain unverified).
