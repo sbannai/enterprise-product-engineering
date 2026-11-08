@@ -36,7 +36,7 @@ test("live PostgreSQL expiry is tenant-bound, cross-application, audited and exa
         });
         const reservation = await repository.reserveUpload({
           tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-          assetId, expectedSizeBytes: 1024, idempotencyKey: "expiry-" + label + "-" + suffix.slice(0, 24),
+          assetId, expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), idempotencyKey: "expiry-" + label + "-" + suffix.slice(0, 24),
           requestFingerprint: "a".repeat(64 - label.length) + label,
         });
         sessions.push({ applicationId, assetId, uploadSessionId: reservation.uploadSessionId });
