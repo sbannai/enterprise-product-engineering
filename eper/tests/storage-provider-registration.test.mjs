@@ -12,25 +12,25 @@ const explicitProviderAllowlist = {
     "aws-s3": {
       adapterKey: "storage.aws-s3",
       adapterVersion: "1.0.0",
-      capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+      capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
       authModes: ["workload_identity"],
     },
     "azure-blob": {
       adapterKey: "storage.azure-blob",
       adapterVersion: "1.0.0",
-      capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+      capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
       authModes: ["workload_identity", "service_principal"],
     },
     "google-cloud-storage": {
       adapterKey: "storage.google-cloud-storage",
       adapterVersion: "1.0.0",
-      capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+      capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
       authModes: ["workload_identity"],
     },
     dropbox: {
       adapterKey: "storage.dropbox",
       adapterVersion: "1.0.0",
-      capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+      capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
       authModes: ["oauth2"],
     },
   },
@@ -237,4 +237,49 @@ test("storage registration rejects non-finite numeric enum values", () => {
     ...provider,
     configurationSchema: { type: "number", enum: [-10, 0, 1.5, 42] },
   }, registries);
+});
+
+
+test("storage catalogue capabilities match the executable provider runtime operations", () => {
+  const required = [
+    "storage.upload.grant",
+    "storage.upload.lookup",
+    "storage.upload.renew",
+    "storage.object.verify",
+    "storage.download.grant",
+    "storage.object.scan",
+  ];
+  for (const provider of STORAGE_PROVIDER_CATALOGUE) {
+    assert.deepEqual([...provider.capabilities].sort(), [...required].sort(), provider.providerKey);
+    assert.ok(!provider.capabilities.includes("storage.delete"), provider.providerKey);
+  }
+});
+
+test("storage registration rejects enum values that contradict declared scalar types", () => {
+  const provider = STORAGE_PROVIDER_CATALOGUE[0];
+  const invalidSchemas = [
+    { type: "string", enum: ["valid", 42] },
+    { type: "integer", enum: [1, 1.5] },
+    { type: "boolean", enum: [true, null] },
+    { type: "number", enum: [1, "2"] },
+    { type: "array", enum: [[], "not-an-array"] },
+    { type: "object", enum: [{ valid: true }, null] },
+  ];
+  for (const configurationSchema of invalidSchemas) {
+    assert.throws(
+      () => validateStorageProviderRegistration({ ...provider, configurationSchema }, explicitProviderAllowlist),
+      /STORAGE_PROVIDER_CONFIGURATION_SCHEMA_INVALID/,
+      JSON.stringify(configurationSchema),
+    );
+  }
+  for (const configurationSchema of [
+    { type: "string", enum: ["one", "two"] },
+    { type: "integer", enum: [1, 2] },
+    { type: "number", enum: [1, 1.5] },
+    { type: "boolean", enum: [true, false] },
+    { type: "array", enum: [[], [1]] },
+    { type: "object", enum: [{ valid: true }] },
+  ]) {
+    validateStorageProviderRegistration({ ...provider, configurationSchema }, explicitProviderAllowlist);
+  }
 });
