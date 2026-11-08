@@ -6,10 +6,12 @@
  * Runtime implementations must be separately registered behind IntegrationPort.
  */
 export const STORAGE_CAPABILITIES = [
-  "storage.upload",
-  "storage.upload.verify",
-  "storage.download",
-  "storage.delete",
+  "storage.upload.grant",
+  "storage.upload.lookup",
+  "storage.upload.renew",
+  "storage.object.verify",
+  "storage.download.grant",
+  "storage.object.scan",
 ] as const;
 
 export type StorageCapability = typeof STORAGE_CAPABILITIES[number];
@@ -104,12 +106,23 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
         !value.items || typeof value.items !== "object" || Array.isArray(value.items)) invalid();
     validateConfigurationSchema(value.items as Record<string, unknown>, depth + 1);
   }
-  if (value.enum !== undefined &&
-      (!Array.isArray(value.enum) || value.enum.length < 1 || value.enum.length > 100 ||
-       value.enum.some(item => item !== null &&
-         (!["string", "number", "boolean"].includes(typeof item) ||
-          (typeof item === "number" && !Number.isFinite(item)))) ||
-       new Set(value.enum.map(item => JSON.stringify(item))).size !== value.enum.length)) invalid();
+  if (value.enum !== undefined) {
+    if (!Array.isArray(value.enum) || value.enum.length < 1 || value.enum.length > 100 ||
+        value.enum.some(item => item !== null &&
+          (!["string", "number", "boolean"].includes(typeof item) ||
+           (typeof item === "number" && !Number.isFinite(item)))) ||
+        new Set(value.enum.map(item => JSON.stringify(item))).size !== value.enum.length) invalid();
+    const declaredType = value.type;
+    if (declaredType !== undefined && value.enum.some(item => {
+      if (declaredType === "string") return typeof item !== "string";
+      if (declaredType === "boolean") return typeof item !== "boolean";
+      if (declaredType === "number") return typeof item !== "number";
+      if (declaredType === "integer") return typeof item !== "number" || !Number.isInteger(item);
+      if (declaredType === "object") return item === null || typeof item !== "object" || Array.isArray(item);
+      if (declaredType === "array") return !Array.isArray(item);
+      return true;
+    })) invalid();
+  }
 
   for (const key of ["minLength", "maxLength"] as const) {
     const bound = value[key];
@@ -226,7 +239,7 @@ export const STORAGE_PROVIDER_CATALOGUE: readonly StorageProviderRegistration[] 
     displayName: "Amazon S3",
     adapterKey: "storage.aws-s3",
     adapterVersion: "1.0.0",
-    capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
     authModes: ["workload_identity"],
     configurationSchema: commonSchema,
   },
@@ -235,7 +248,7 @@ export const STORAGE_PROVIDER_CATALOGUE: readonly StorageProviderRegistration[] 
     displayName: "Azure Blob Storage",
     adapterKey: "storage.azure-blob",
     adapterVersion: "1.0.0",
-    capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
     authModes: ["workload_identity", "service_principal"],
     configurationSchema: commonSchema,
   },
@@ -244,7 +257,7 @@ export const STORAGE_PROVIDER_CATALOGUE: readonly StorageProviderRegistration[] 
     displayName: "Google Cloud Storage",
     adapterKey: "storage.google-cloud-storage",
     adapterVersion: "1.0.0",
-    capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
     authModes: ["workload_identity"],
     configurationSchema: commonSchema,
   },
@@ -253,7 +266,7 @@ export const STORAGE_PROVIDER_CATALOGUE: readonly StorageProviderRegistration[] 
     displayName: "Dropbox",
     adapterKey: "storage.dropbox",
     adapterVersion: "1.0.0",
-    capabilities: ["storage.upload", "storage.upload.verify", "storage.download", "storage.delete"],
+    capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew", "storage.object.verify", "storage.download.grant", "storage.object.scan"],
     authModes: ["oauth2"],
     configurationSchema: {
       type: "object",
