@@ -2389,3 +2389,115 @@ PR #452 is the only open PR directly based on current main. #450 and #451 both u
 7. **Release/continuity — RED:** rulesets are empty; branch-protection live read was unavailable this checkpoint and last recorded as disabled. Off-host backup, independent restore and second-engineer release/rollback are not evidenced.
 
 No application code, provider activation or external action changed in this checkpoint. No PR was merged or closed; no duplicate branch was created.
+
+
+---
+
+## Append-only checkpoint — 2026-11-08 18:50 IST — exact-main and upload-expiry correction
+
+### Dynamically resolved main and exact-main evidence
+
+- Main at audit start: 76ceab292b17a58d27b3f4038bde2626c0807f2f.
+- Compare from application-code baseline c00bf520efe2b32ef6cc40d9cafbf04f305a4a2e: six commits ahead, zero behind; the only changed path is this scorecard. No application source changed between that application baseline and the audit-start main tip.
+- All eight push-triggered workflows for exact main 76ceab2 completed successfully:
+  - EPER CI: run 42475148603.
+  - Integrated validation: run 42475148489.
+  - 228/38 pilot matrix: run 42475148548.
+  - G9 reconciliation: run 42475148504.
+  - Six-family HTTP smoke: run 42475148494.
+  - Container runtime: run 42475148363.
+  - Controlled QA technical validation: run 42475148500.
+  - Technical simulation: run 42475148424.
+- Integrated PostgreSQL job on exact main: 1,569 tests, 1,554 passed, zero failed, 15 skipped.
+- Exact-main matrix: 228 requirements, 38 chapter suites, 259 pilot tests passed, zero failed, 28 checks passed, no failed chapters. G9: 5/5 passed.
+- EPER CI selected live suites: workflow worker 37/37, worker-process integration 3/3, tenant/actor assignment integration 11/11, capability persistence 7/7; zero failures in these suites.
+- The latest code-bearing main fresh-clone run remains attached to application baseline c00bf520 (run 42451299482): 1,585 tests, 1,572 passed, zero failed, 13 skipped; all seven migration groups including identity applied and repeated; disposable PostgreSQL restore 80/80 base tables and seven migration ledgers. The six commits after that application baseline changed only this scorecard, so the run is accurately recorded as code-parent evidence, not a fresh-clone execution on 76ceab2.
+
+### PR #450 — exact-head failure diagnosis and correction
+
+- Current PR head after focused corrections: 0572f0bdd451855ed7b28ccc590f1dcbcf967ee1; base main SHA 76ceab292b17a58d27b3f4038bde2626c0807f2f; open, non-draft, mergeable; compare 57 commits ahead / 5 behind. The changed PR scope is 25 files covering upload retry/expiry, cross-application expiry, restricted worker role, queue-age telemetry, tests and runbook.
+- The earlier head 31b9fb74f477d1c153bc85d9fa09ce1eda7b52ff failed five workflows. Exact job logs traced the primary failure to a PostgreSQL test fixture writing upload status reserved, which is not in the canonical repository status type/constraint.
+- First focused correction 9a2155f2d82b45c4af872b7b6534ae3be0ee7469 changed the fixture to valid in_progress. The next exact-head run exposed a second, independent defect in migration 031: both expiry predicates still included reserved, while the migration contract test required only initiated and in_progress.
+- Second focused correction 0572f0bdd451855ed7b28ccc590f1dcbcf967ee1 removed reserved from both migration 031 predicates. The compare from the preceding head shows exactly two files changed by the two focused corrections: the live PostgreSQL fixture and migration 031.
+- All 15 Actions workflows for exact head 0572f0b completed successfully, zero failures:
+  - Provider/PostgreSQL lifecycle: run 42484671675.
+  - Fresh-clone developer setup: run 42484671592.
+  - EPER CI: run 42484671677.
+  - Integrated validation: run 42484671709.
+  - Chromium customer browser: run 42484671718.
+  - 228/38 matrix: run 42484671629.
+  - G9: run 42484671748.
+  - Controlled QA technical checks: run 42484671627.
+  - Release artifact: run 42484671757.
+  - Six-family HTTP: run 42484671641.
+  - Container smoke: run 42484671720.
+  - PostgreSQL payment-store: run 42484671715.
+  - Workflow configuration: run 42484671663.
+- Exact-head fresh-clone job: npm run dev:verify passed; 1,613 tests, 1,603 passed, zero failed, 10 skipped. It applied and repeated all seven migration groups (payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity). EPER_LOCAL_DEVELOPER_VERIFICATION=PASS. Disposable PostgreSQL 16 backup/restore: EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS, 81 source/restored base tables and seven migration-ledger tables.
+- Exact-head provider lifecycle suites all passed, including the upload-expiry process/restricted-login, cross-application expiry, audit, worker and scan-related suites. EPER CI reports workflow worker 37/37, process integration 3/3, tenant/actor assignments 11/11, restricted-role checks and capability persistence with zero failures.
+- Exact-head Chromium browser log reports customer OIDC workspace/support journey 1/1 and Product Admin remediation browser test 1/1. The browser flow uses an injected OIDC client test double; it does not prove the real protocol client against an issuer or production IdP interoperability.
+- No independent review submission is recorded for #450. Keep it open pending independent review; exact-head CI success is not itself review approval.
+
+### PR #451 — provider-neutral catalogue
+
+- Current exact head: c946a52551d6405d80123958037cc284acdf389d; base main SHA 76ceab2; open, non-draft, mergeable; compare 7 ahead / 5 behind; two changed files (provider registration catalogue and tests).
+- All 12 exact-head Actions workflows passed. Relevant evidence: provider/PostgreSQL lifecycle run 42479835658; fresh clone 42479835718; 228/38 matrix 42479835762; integrated validation 42479835645; EPER CI 42479835790.
+- Fresh-clone job: 1,600 tests, 1,587 passed, zero failed, 13 skipped; npm run dev:verify PASS; all seven migration groups including identity applied and repeated; disposable PostgreSQL restore 80/80 base tables and seven ledgers.
+- Provider lifecycle registration/authorization suites passed. The catalogue describes provider families, adapter/version/capability/auth-mode allowlists and bounded non-secret configuration. It is a registration contract, not executable provider SDK integration, real-byte transfer, malware scanning or production secret-manager integration.
+- No independent review submission is recorded. Retain for independent review; do not merge solely on green CI.
+
+### PR #452 — synthetic storage driver and scan retry safety
+
+- Exact head remains 44bb8193fe367492d105bb766e96ed9b3e05c626; base is the prior scorecard-only main parent b96eb2762f5dac9fc8c290e09288db8632df934d; open, draft, mergeable; compare 6 ahead / 1 behind.
+- All 12 exact-head Actions workflows passed. Relevant provider/PostgreSQL lifecycle run 42474599199; fresh clone 42474599275; integrated validation 42474599180; matrix 42474599239; G9 42474599183; EPER CI 42474599125.
+- Fresh-clone: 1,592 tests, 1,579 passed, zero failed, 13 skipped; all seven migration groups including identity applied/repeated; disposable restore 80/80 base tables and seven ledgers.
+- Scan worker proves timeout/abort and waiting for the original scanner promise to settle before retry; process/concurrency tests passed. Synthetic driver implements upload grant, lookup, renewal, object verification, download grant and scan contracts, but performs no real byte transfer, digest calculation, content inspection or provider call.
+- Keep draft: API provider runtime is still not composed; trusted expected-checksum contract is unresolved; cancellation must propagate through adapter/port/dispatch/driver; a never-settling scanner still needs a bounded supervisor hard-stop and durable lease recovery; production provider SDK and approved secret manager are not supplied.
+
+### Current open-PR inventory — every exact head re-resolved
+
+For every open PR below, Actions were queried using the exact current head SHA and at least one capability-relevant job log was inspected. The selected run is branch-local evidence only. Historical branch success does not establish compatibility with current main.
+
+| PR | Exact current head | Selected exact-head run | Selected job |
+|---|---|---:|---|
+| #450 | 0572f0bdd451855ed7b28ccc590f1dcbcf967ee1 | 42484671675 | Provider/PostgreSQL lifecycle; all 15 workflows on this head passed |
+| #451 | c946a52551d6405d80123958037cc284acdf389d | 42479835658 | Provider/PostgreSQL lifecycle; all 12 workflows on this head passed |
+| #432 | cb49644e3d67cc98b2472e5eba32450cd9baac20 | 42333045813 | 228/38 chapter matrix |
+| #452 | 44bb8193fe367492d105bb766e96ed9b3e05c626 | 42474599199 | Provider/PostgreSQL lifecycle; all 12 workflows on this head passed |
+| #392 | 312a9358150c1967feba9307f1b71fbffd8cb8f5 | 41833626478 | Provider/PostgreSQL lifecycle |
+| #393 | 73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e | 41844357288 | Provider/PostgreSQL lifecycle |
+| #394 | c2b7a2c8e7ff3211869e061544672c7db1eb7261 | 41868477503 | Chromium OIDC browser |
+| #399 | ef9f85c775b41fc7ec8316eb51578e036cec8a64 | 42176207998 | Provider/PostgreSQL lifecycle |
+| #398 | 3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56 | 42159145776 | Provider/PostgreSQL lifecycle |
+| #387 | 53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d | 41784823525 | Same-commit integrated gate; separate exact-head matrix 41784823273 |
+| #384 | 291129b77ab50623e41dd28c4a746ef70da28183 | 41786048922 | Provider/PostgreSQL lifecycle |
+| #377 | 492465759af4e7786e1a8ef51118cf1b354529de | 42208779180 | 228/38 chapter matrix |
+| #386 | a1b7341d71a4086c983dd3362a4704c124a52b74 | 41837639531 | Provider/PostgreSQL lifecycle |
+| #401 | c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f | 41993032652 | Provider/PostgreSQL lifecycle |
+| #385 | 2a2b059b37d06621f8e4efb2e2b6f467520114b5 | 41764308125 | 228/38 chapter matrix |
+| #380 | 55006ab19bcbb685fc3e84c4230fd865087887f3 | 41763251774 | 228/38 chapter matrix |
+| #391 | 7d7e5297b649d0dfe2318c5d2f5a1f81b5457749 | 41820073247 | Provider/PostgreSQL lifecycle |
+| #390 | 3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f | 41805934711 | Provider/PostgreSQL lifecycle |
+| #379 | 82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44 | 41738351657 | Provider/PostgreSQL lifecycle |
+| #378 | 813de84caa4c9cf4eb7c5a2c89a92b30d662ff05 | 41738299039 | Provider/PostgreSQL lifecycle |
+
+- The selected relevant jobs for the 17 older/historical branches completed successfully on their listed heads; those branches remain stacked/diverged and must not be merged wholesale.
+- #450 and #451 are non-draft, mergeable main-targeted candidates with no independent review submissions. #452 remains draft with the integration blockers above. No merge or branch closure was performed.
+- PR #306 merge 6e8dd438e5091b1802d65e4f29951389fe077859 and PR #310 merge 88b9708d748c19dc80a1a2d7ad4960914451db7e were re-compared against current main; both are ancestors (zero commits behind). PR #324, #329 and #449 merge commits were also confirmed as ancestors.
+
+### Seven approved delivery pointers
+
+1. **v34-to-228 — AMBER.** The crosswalk preserves 45 original v34 rows, zero exact full-coverage mappings and 45 partial shared-control links. The 45 additive v1.6.0 candidates and separate CW-046–055 commercial additions remain drafts. Approved 228 requirement IDs and Chapters 463–500 remain unchanged.
+2. **Fresh-clone setup — GREEN for reproducible local development.** Exact code-parent npm run dev:verify and current #450/#451 candidate clean-clone runs pass. Independent second-engineer handover has not been demonstrated.
+3. **PostgreSQL — AMBER.** Seven migration groups including identity apply and repeat; live PostgreSQL integration and local disposable restore pass. #450's additive migrations 027–031 also pass on its exact head. Off-host backup, retention/key custody, approved RPO/RTO and independent restore remain unproven.
+4. **Identity/OIDC — AMBER.** Provider-neutral protocol client unit tests, browser routes, durable sessions, secure cookies, CSRF, revocation and tenant/application/actor assignments are present. Browser E2E injects a client test double; real protocol-to-browser issuer interoperability and production IdP interoperability remain unproven.
+5. **Customer workspace/support — AMBER.** Ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note separation and export are present. SLA deadlines, breach detection and escalation are not evidenced. Customer asset upload/metadata/retry/download lookup foundations exist, but provider-backed bytes, trusted object verification, malware scanning and authorized provider download are not delivered as one mainline journey.
+6. **Scheduler/workflow — AMBER.** Continuous worker host, restricted PostgreSQL identities, lease renewal/fencing, idempotency, retry/dead-letter/audited replay, approval revalidation and graceful shutdown have exact PostgreSQL evidence. Production dispatcher/secret resolver, external supervisor, metrics/alerts and independent recovery rehearsal remain.
+7. **Release/continuity — RED.** Repository rulesets remain empty. Branch-protection endpoint returned HTTP 403 to this integration; the last available live scorecard observation recorded main as unprotected and required checks disabled. Off-host backup, independent restore and second-engineer release/rollback remain unproven. The continuity charter remains proposed pending owner review.
+
+### Guardrails
+
+- No application code was changed on main by this checkpoint; this appendix is documentation-only.
+- No PR was merged or closed, and no branch was deleted.
+- No approved requirement or chapter was changed.
+- No chargeable cloud resource or real external/provider action was used.
