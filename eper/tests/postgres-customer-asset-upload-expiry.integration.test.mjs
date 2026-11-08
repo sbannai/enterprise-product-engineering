@@ -18,6 +18,10 @@ test("live PostgreSQL expiry is tenant-bound, cross-application, audited and exa
     const sessions = [];
 
     try {
+      await pool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true)",
+        [tenantId],
+      );
       await repository.assertReady();
       for (const [applicationId, label] of [[appA, "a"], [appB, "b"]]) {
         const assetId = randomUUID();
@@ -91,7 +95,7 @@ test("live PostgreSQL expiry is tenant-bound, cross-application, audited and exa
         client.release();
       }
     } finally {
-      await pool.query("DELETE FROM eper_audit_events WHERE tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = session_user AND tenant_id = $1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_customer_asset_metadata_operations WHERE tenant_id = $1", [tenantId]).catch(() => {});
       await pool.query("DELETE FROM eper_customer_assets WHERE tenant_id = $1", [tenantId]).catch(() => {});
@@ -174,6 +178,7 @@ test("actual expiry worker LOGIN is confined to operator-registered tenants desp
   } finally {
     await worker?.end();
     await admin.query("DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = $1", [loginRole]).catch(() => {});
+    await admin.query(`REVOKE CONNECT ON DATABASE eper_test FROM "${loginRole}"`).catch(() => {});
     await admin.query(`DROP ROLE IF EXISTS "${loginRole}"`).catch(() => {});
     await admin.end();
   }
