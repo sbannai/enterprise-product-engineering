@@ -26,3 +26,16 @@ test("cross-application expiry uses a tenant-bound NOLOGIN function owner withou
   assert.doesNotMatch(sql, /BYPASSRLS\s*;\s*--/i);
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
+
+
+test("031 binds expiry authorization to an operator-managed authenticated LOGIN scope and canonical active states", async () => {
+  const sql = await readFile(new URL("031_customer_asset_expiry_worker_tenant_scope.sql", migrations), "utf8");
+  assert.match(sql, /PRIMARY KEY \(login_role, tenant_id\)/);
+  assert.match(sql, /scope\.login_role = session_user/);
+  assert.match(sql, /scope\.enabled = true/);
+  assert.match(sql, /EPER_CUSTOMER_ASSET_EXPIRY_WORKER_SCOPE_DENIED/);
+  assert.match(sql, /GRANT SELECT ON public\.eper_customer_asset_upload_expiry_worker_tenant_scope\s+TO eper_customer_asset_upload_expiry_access/);
+  assert.match(sql, /REVOKE ALL ON public\.eper_customer_asset_upload_expiry_worker_tenant_scope\s+FROM eper_customer_asset_upload_expiry_worker_access/);
+  assert.match(sql, /upload_status IN \('initiated', 'in_progress'\)/);
+  assert.doesNotMatch(sql, /'reserved'/);
+});
