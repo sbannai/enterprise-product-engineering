@@ -424,3 +424,24 @@ test("upload grant endpoint rejects missing or malformed expected SHA-256 before
     assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
   }, true);
 });
+
+
+test("legacy upload session without a persisted expected checksum fails closed before provider verification", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST", headers: { origin, cookie, "x-csrf-token": csrf }, body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: "uploaded_object_not_verified" });
+    assert.equal(calls.includes("verify-provider-object"), false);
+    assert.equal(calls.includes("complete-upload"), false);
+  }, false, false, serverOptions => {
+    serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => ({
+      assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
+      expectedSizeBytes: 1024, expectedChecksumSha256: null, expectedMimeType: "application/pdf",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    serverOptions.assetUploadVerification = async () => { throw new Error("legacy checksum must fail before provider verification"); };
+    serverOptions.customerAssetRepository.completeUpload = async () => { throw new Error("legacy checksum must not complete"); };
+  });
+});
