@@ -76,7 +76,8 @@ const pool = createCustomerAssetUploadExpiryPool();
 try {
   const repository = new PostgresCustomerAssetRepository(pool);
   await listen();
-  await repository.assertReady();
+  // The restricted worker login cannot inspect asset-table columns directly.
+  // Readiness is proven by its tenant-bound definer-function and audit grants.
   await repository.assertUploadExpiryWorkerReady();
   await assertAuditStoreReady(pool);
   ready = true;
