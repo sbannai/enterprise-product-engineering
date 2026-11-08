@@ -11,6 +11,7 @@ on:
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
@@ -33,6 +34,7 @@ on:
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
@@ -86,6 +88,8 @@ jobs:
         run: npm run migrate:payments
       - name: Apply provider and audit migrations, including payload references and leases
         run: npm run migrate:audit
+      - name: Verify provider connection dispatch authorization before and after secret resolution
+        run: node --test tests/postgres-provider-connection.integration.test.mjs
       - name: Exercise durable provider-operation concurrency, fencing and recovery
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
       - name: Exercise customer-asset upload recovery and scan lifecycle on PostgreSQL 16
