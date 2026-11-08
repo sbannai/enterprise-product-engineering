@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
 import { sendApiSuccess, sendApiError, sendApiLegacyJson, resolveApiRequestId } from "./api-response.js";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
@@ -169,6 +169,7 @@ interface TrustedCustomerAccessIdentity {
   tenantId: string;
   actorId: string;
   roleKey: string;
+  sessionBinding?: string;
   /** Optional in the shared identity resolver; customer application routes fail closed without it. */
   applicationIds?: string[];
 }
@@ -208,6 +209,7 @@ type CustomerWorkspaceIdentityStores = {
   customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore | null;
   tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore | null;
   actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore | null;
+  customerCsrfSecret?: string;
 };
 
 /**
@@ -235,10 +237,17 @@ async function resolveCustomerWorkspaceIdentity(
       stores.actorApplicationAssignmentStore.listActive(session.tenantId, session.actorId),
     ]);
     const tenantApplicationSet = new Set(tenantApplications);
+    const sessionBinding = stores.customerCsrfSecret
+      ? createHmac("sha256", stores.customerCsrfSecret)
+          .update("eper/customer-session-binding/v1\\0", "utf8")
+          .update(sessionToken, "utf8")
+          .digest("hex")
+      : undefined;
     return {
       tenantId: session.tenantId,
       actorId: session.actorId,
       roleKey: "customer-user",
+      ...(sessionBinding ? { sessionBinding } : {}),
       applicationIds: actorApplications.filter((applicationId) => tenantApplicationSet.has(applicationId)),
     };
   } catch {
@@ -1535,6 +1544,8 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         tenantId: identity.tenantId,
         actorId: identity.actorId,
         roleKey: identity.roleKey,
+        ...(process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres" && identity.sessionBinding
+          ? { sessionBinding: identity.sessionBinding } : {}),
         authentication: process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE === "postgres"
           ? "postgres-browser-session" : "server-bearer-map",
       });
