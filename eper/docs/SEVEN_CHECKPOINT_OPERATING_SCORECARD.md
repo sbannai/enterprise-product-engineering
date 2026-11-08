@@ -1521,3 +1521,114 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 
 
 Inventory comparison note: the ahead/behind values above are anchored to main `474f30c18279fb0f69a66e7160b0b7838de9aa92` immediately before this scorecard-only correction. This correction changes documentation only; application code remains `066be8b2fd3756aa0712cb81c88e639b70f8638b`.
+
+
+---
+
+## 2026-11-08 09:56 IST checkpoint — provider authorization and exact-head inventory refresh
+
+**Inspected application main SHA:** `6de654d4122c2053b0d122aea4998279c0d97207`.  
+This checkpoint supersedes the earlier open-PR inventory in this document. The scorecard-only commit created by this update does not change application code.
+
+### New mainline provider-security delivery
+
+The following code is now on main:
+
+- `dbe43dc62e27ec40e8032d59cc57ba0a23a495c4`: PostgreSQL JSONB capability membership uses the `?` operator for `allowed_capabilities`.
+- `b04e51f63905e777875989ff39cda21898f9c85b`: PostgreSQL provider connection repository adds `assertDispatchAuthorization`, rechecking tenant, application, connection, version, provider, capability and active binding.
+- `3faccf9a92f0474326b3fd8a7162466e7bad1721` and `54efce856ccc3d9837da89b4be96792e19579732`: runtime composition requires the post-secret authorization check.
+- `2ad7e75a776c68b5d33a874330cee43e9a06df78`: tests post-secret authorization revalidation.
+- `b0f49719ffe3570ef7ee010b2e5a9d2b7d19eadb`: provider secret-reference and secret-resolution failures are normalized to stable error codes; raw secret-manager error text is not exposed.
+- `c662fdafbb67837021d8078fe86067e220c75f72`: tests credential-error redaction and the post-secret authorization boundary.
+- `6de654d4122c2053b0d122aea4998279c0d97207`: provider-connection authorization integration is included in the provider PostgreSQL lifecycle workflow path filter.
+
+The provider runtime credential-resolution test reports **4 passed, 0 failed, 0 skipped**. It verifies reference revalidation, normalized/redacted secret-manager errors, post-secret authorization recheck, and that secrets are not resolved when reference/version authorization fails. The live PostgreSQL provider-connection authorization integration reports **1 passed, 0 failed, 0 skipped**.
+
+**Important limit:** `eper/apps/api/main.ts` still fails closed when provider storage runtime is enabled with `PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED`. The entrypoint explicitly states that approved real provider drivers and a secret-manager adapter are not wired there. The new credential-resolution service is a security foundation, not production provider activation or customer binary transfer.
+
+### Current-main workflow evidence
+
+The inspected application baseline is `c662fdafbb67837021d8078fe86067e220c75f72`, with a later workflow-path-only tip `6de654d4122c2053b0d122aea4998279c0d97207`.
+
+| Evidence | Exact run | Result |
+|---|---:|---|
+| Fresh-clone developer setup on code-bearing main | [42446534773](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446534773) | PASS |
+| EPER CI on code-bearing main | [42446534757](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446534757) | PASS |
+| Same-commit integrated validation | [42446534830](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446534830) | PASS |
+| 228 requirements / 38 chapter matrix | [42446534789](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446534789) | PASS |
+| G9 reconciliation | [42446534717](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446534717) | PASS |
+| Provider credential redaction and dispatch authorization, latest main | [42446676771](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446676771) | PASS |
+| Workflow YAML validation, latest main | [42446676743](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446676743) | PASS |
+
+Fresh-clone evidence on `c662fdaf`:
+
+- `npm run dev:verify`: `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- Tests: 1,583 total; 1,571 passed; 0 failed; 12 skipped.
+- All seven migration groups were applied and repeated, including `migrate:identity` / `001_customer_oidc_sessions.sql`.
+- Disposable PostgreSQL 16 backup/restore: `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`.
+- Source/restored base tables: 80 / 80.
+- Migration ledgers: 7.
+
+The integrated mainline test job reports 1,413 tests, 1,407 passed, 0 failed and 6 skipped. The chapter matrix reports 38 chapters, 228 requirements, 259 passed pilot tests, 0 failed chapters and 28 passed checks. These are automated technical checks only; they do not close business acceptance.
+
+Latest provider PostgreSQL lifecycle run `42446676771` includes the provider credential redaction and post-secret authorization tests (4/4), provider-connection authorization integration (1/1), asset migration assurance, legacy upgrade/backfill, scanner/verification adapters (12/12) and process-level scan/recovery worker tests (3/3). All selected suites passed.
+
+### Verified foundational merges
+
+- PR #306 merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; current-main comparison confirms the merge commit is an ancestor.
+- PR #310 merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; current-main comparison confirms the merge commit is an ancestor.
+
+### Current open-PR inventory — 2026-11-08 09:56 IST
+
+The live GitHub API returned **21 open draft PRs**. Each head below was resolved from the live PR record. A relevant Actions run was retrieved for that exact head and its relevant job log inspected. All selected relevant jobs completed successfully. The branch-local results do not prove integration with current main.
+
+Comparison is against application main `6de654d4122c2053b0d122aea4998279c0d97207`; all branches are diverged.
+
+| PR | Exact head SHA | Ahead / behind main | Exact-head workflow evidence |
+|---|---|---:|---|
+| #432 mainline audit | `cb49644e3d67cc98b2472e5eba32450cd9baac20` | 7 / 174 | [42333045813](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42333045813) matrix PASS: 38 chapters, 228 requirements, 259 tests, 28 checks |
+| #414 upload-expiry worker | `9eba0595bce55d51bf8447bd54516cb2168a6478` | 240 / 248 | [42230756607](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42230756607) PostgreSQL lifecycle 1/1 |
+| #413 cross-application expiry | `e86ae5ca65d0eadba18abea62615d2526d2a5006` | 210 / 248 | [42225487935](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42225487935) PostgreSQL lifecycle 1/1 |
+| #402 expired reservation recovery | `576796fb5bf81388f922ce04e7dad411a9b2a7c2` | 194 / 248 | [42219623095](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42219623095) PostgreSQL lifecycle 1/1 |
+| #401 PostgreSQL capacity plan | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | 185 / 248 | [41993032789](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032789) PostgreSQL payment-store integration PASS |
+| #399 customer asset workspace | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | 223 / 248 | [42176208018](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176208018) fresh clone PASS; [42176208027](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176208027) Chromium OIDC 1/1 |
+| #398 provider runtime registry | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | 236 / 248 | [42159145776](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42159145776) PostgreSQL payload integrity 2/2 |
+| #395 provider catalogue | `baa6151a5ef4b9b4f460b72bd8a26aa9326ceeb8` | 183 / 248 | [42156557499](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42156557499) PostgreSQL payload integrity 2/2 |
+| #394 download authorization | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | 178 / 248 | [41868477503](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477503) Chromium OIDC 1/1 |
+| #393 combined asset/provider stack | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | 166 / 248 | [41844357288](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357288) PostgreSQL payload integrity 2/2 |
+| #392 provider worker/payload integrity | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | 39 / 248 | [41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) PostgreSQL payload integrity 2/2 |
+| #391 restricted-role payload RLS | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | 21 / 248 | [41820073247](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073247) provider lifecycle 1/1 |
+| #390 payload-operation integrity | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | 20 / 248 | [41805934711](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934711) provider lifecycle 1/1 |
+| #387 actor-scoped work queue | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | 22 / 248 | [41784823307](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823307) fresh clone PASS; same-commit integrated gate PASS |
+| #386 upload reservation idempotency | `a1b7341d71a4086c983dd3362a4704c124a52b74` | 164 / 248 | [41837639531](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639531) provider lifecycle 1/1 |
+| #385 customer asset requirements | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | 4 / 248 | [41764308125](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308125) matrix PASS |
+| #384 asset repository foundation | `291129b77ab50623e41dd28c4a746ef70da28183` | 140 / 248 | [41786048886](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048886) fresh clone PASS |
+| #380 client asset/workflow UX requirements | `55006ab19bcbb685fc3e84c4230fd865087887f3` | 5 / 248 | [41763251774](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251774) matrix PASS |
+| #379 encrypted PostgreSQL payload store | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | 8 / 248 | [41738351657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351657) provider lifecycle 1/1 |
+| #378 encrypted payload boundary | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | 7 / 248 | [41738299039](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299039) provider lifecycle 1/1 |
+| #377 scorecard/crosswalk addendum | `492465759af4e7786e1a8ef51118cf1b354529de` | 80 / 248 | [42208779180](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42208779180) matrix PASS |
+
+### Closed unmerged browser/session branches
+
+- PR #416 closed unmerged at 2026-11-08T04:02:21Z; do not describe as merged.
+- PR #420 closed unmerged at 2026-11-08T04:12:00Z; do not describe as merged.
+- PR #447 closed unmerged at 2026-11-08T02:27:51Z; its server-side opaque session-binding capability is present on main, but the browser retry client still does not consume `sessionBinding`.
+- PR #448 closed unmerged at 2026-11-08T02:30:32Z; its verified-completion boundary is present on main, but the API entrypoint still lacks the complete provider-backed byte-transfer composition.
+
+### Seven-pointer disposition
+
+1. **v34-to-228:** AMBER. Preserve 228 IDs and 38 chapters. The automated matrix proves structural/technical pilot coverage, not exact source acceptance traceability. The matrix reports 228 requirements, 38 chapters, 259 passed pilot tests, 0 failed chapters and 28 checks. Business acceptance remains 0 in the readiness audit.
+2. **Fresh clone:** GREEN for local/CI reproducibility. `npm run dev:verify` passes; 7 migration groups including identity are applied and repeated; local PostgreSQL 16 restore smoke passes (80/80 base tables, 7 ledgers). Independent second-engineer handover rehearsal remains open.
+3. **PostgreSQL:** AMBER. Fresh-clone, live integration, migration repeatability, checksum/RLS, identity migration and disposable restore are evidenced. Off-host backup, retention/key custody, approved RPO/RTO and independent restore remain open.
+4. **Identity/OIDC:** AMBER. Provider-neutral protocol client, browser routes, durable sessions, secure cookies, CSRF, tenant/application assignment checks and local test-issuer browser E2E are present. Production IdP interoperability is not established. Server-side session binding is present; browser retry consumption remains open.
+5. **Customer workspace/support:** AMBER. Ticket submission/history/replies, tenant/application scope, admin triage/assignment/severity, internal-note separation and export have test evidence. SLA policy/deadlines/breach/escalation/reporting and complete binary asset journey remain incomplete.
+6. **Scheduler/workflow:** AMBER. Worker lease/fencing, idempotency, retry/dead-letter/replay, approval revalidation, restricted roles, shutdown and PostgreSQL concurrency are tested. Production dispatcher, secret resolver, supervisor, metrics/alerts and recovery rehearsal remain open.
+7. **Release/continuity:** RED. Live main branch metadata remains `protected=false`; repository rulesets endpoint is empty. Off-host recovery and independent second-engineer release/rollback are not evidenced. Charter remains proposed pending owner review.
+
+### Continuity and safety
+
+- Main branch protection is disabled; repository rulesets are empty.
+- Off-host backup/retention/key custody, RPO/RTO, independent restore and second-engineer release/rollback remain unproven.
+- The Engineering Continuity and Independence Charter remains a proposed operating standard requiring owner review.
+- No chargeable cloud resources, production credentials, real provider calls or external storage actions were used.
+- Preserve the approved 228 requirements and 38 chapters. Do not report business acceptance from automated pilot results.
