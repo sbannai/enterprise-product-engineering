@@ -52,7 +52,7 @@ test("application session context requires durable browser session and both acti
     assert.equal(sessionResponse.status, 200);
     const sessionEnvelope = await sessionResponse.json();
     const expectedBinding = createHmac("sha256", sessionBindingSecret)
-      .update("eper/customer-session-binding/v1\\0", "utf8").update(token, "utf8").digest("hex");
+      .update("eper/customer-session-binding/v1\0", "utf8").update(token, "utf8").digest("hex");
     assert.equal(sessionEnvelope.data.sessionBinding, expectedBinding);
     assert.match(sessionEnvelope.data.sessionBinding, /^[a-f0-9]{64}$/);
     const newLoginResponse = await fetch(sessionUrl, { headers: { cookie: "__Host-eper_session=" + "t".repeat(43) } });
