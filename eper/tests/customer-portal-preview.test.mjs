@@ -78,7 +78,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(path!=="\/customer\/session"&&!authenticated\)throw new Error\("customer_session_disconnected"\)/, "customer API calls must fail closed without an authenticated browser session");
     assert.match(html, /const generation=\+\+sessionGeneration/, "a new connection attempt must invalidate prior session requests");
     assert.match(html, /if\(generation!==sessionGeneration\)return;/, "late connection responses must not overwrite the active session");
-    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests and clear customer data");
+    assert.match(html, /sessionGeneration\+\+;viewLoadSequence\+\+;clearPendingCustomerAssetOperation\(\);authenticated=false;enabledModules\.clear\(\);cards\.replaceChildren\(\)/, "logout must invalidate in-flight requests, clear pending upload retries and clear customer data");
     assert.match(html, /requestSessionGeneration!==sessionGeneration/, "ticket responses from an earlier session must be ignored");
     assert.match(html, /ticketViewSessionGeneration=sessionGeneration/, "ticket view application bootstrap must capture its session");
     assert.match(html, /if\(ticketViewSessionGeneration!==sessionGeneration\)return;const assigned=/, "late assigned-application responses must not mutate a stale ticket view");
@@ -87,8 +87,18 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /if\(submissionSessionGeneration!==sessionGeneration\)return;result\.textContent="Ticket submitted\./, "late ticket success must not update the UI after a session change");
     assert.match(html, /if\(submissionSessionGeneration===sessionGeneration\)\{form\.dataset\.submitting="false";submitButton\.disabled=application\.disabled\|\|!application\.value;\}/, "late ticket completion must not mutate stale form controls");
     assert.match(html, /if\(renderSequence!==viewLoadSequence\)return;/, "late view responses must not overwrite the currently selected section");
-    assert.match(html, /loadAllClientAssets\(\)\.then\(initialItems=>\{if\(renderSequence!==viewLoadSequence\)return;/, "late asset-manifest responses must not replace another active view");
+    assert.match(html, /Promise\.all\(\[loadAllClientAssets\(\),api\("\/customer\/applications"\)\]\)\.then\(\(\[initialItems,applicationPayload\]\)=>\{if\(renderSequence!==viewLoadSequence\)return;/, "asset manifest and assigned applications must load within the active view generation");
     assert.match(html, /api\("\/customer\/assets\?all=true"\)/, "all client assets are fetched with one API request");
+    assert.ok(html.includes("assetUploadForm"), "client asset view exposes an upload form");
+    assert.ok(html.includes("assetUploadApplication"), "uploads must select a server-assigned application");
+    assert.ok(html.includes("customerAssetMetadataFingerprint"), "retry identity must be bound to immutable upload metadata");
+    assert.ok(html.includes("sessionStorage.setItem(pendingCustomerAssetStorageKey"), "opaque retry identity must persist before network requests");
+    assert.ok(html.includes("idempotency-key"), "metadata create must send its stable idempotency key in the request header");
+    assert.ok(html.includes("pendingCustomerAssetUploadIdempotencyKey"), "upload reservation retries must reuse a stable idempotency key");
+    assert.ok(html.includes('created.assetId'), "metadata creation must consume the top-level API assetId response");
+    assert.ok(html.includes('started.uploadSessionId'), "upload completion must use the top-level uploadSessionId response");
+    assert.ok(html.includes('target.protocol!=="https:"'), "browser upload grants must require HTTPS");
+    assert.ok(html.includes('clearPendingCustomerAssetOperation();authenticated=false'), "logout must clear persisted upload retry identity");
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
     assert.ok(html.includes("Current accepted plan"), "customer can review the accepted tariff snapshot");
     assert.ok(html.includes("acceptanceReference"), "tariff switching requires a contract or acceptance reference");
