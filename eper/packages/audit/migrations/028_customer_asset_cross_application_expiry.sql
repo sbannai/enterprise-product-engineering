@@ -34,7 +34,8 @@ CREATE POLICY customer_asset_upload_expiry_tenant_scope
 
 CREATE OR REPLACE FUNCTION public.eper_expire_customer_asset_upload_sessions(
   p_tenant_id varchar,
-  p_limit integer
+  p_limit integer,
+  p_asset_id uuid DEFAULT NULL
 )
 RETURNS TABLE (
   application_id varchar,
@@ -64,6 +65,7 @@ BEGIN
         FROM public.eper_customer_asset_upload_sessions AS s
        WHERE s.tenant_id = p_tenant_id
          AND s.upload_status IN ('initiated', 'in_progress')
+         AND (p_asset_id IS NULL OR s.asset_id = p_asset_id)
          AND s.expires_at <= pg_catalog.clock_timestamp()
        ORDER BY s.expires_at, s.application_id, s.upload_session_id
        LIMIT p_limit
@@ -77,19 +79,20 @@ BEGIN
        AND s.application_id = c.application_id
        AND s.upload_session_id = c.upload_session_id
        AND s.upload_status IN ('initiated', 'in_progress')
+       AND (p_asset_id IS NULL OR s.asset_id = p_asset_id)
        AND s.expires_at <= pg_catalog.clock_timestamp()
     RETURNING s.application_id, s.upload_session_id, s.asset_id;
 END
 $function$;
 
 GRANT CREATE ON SCHEMA public TO eper_customer_asset_upload_expiry_access;
-ALTER FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)
+ALTER FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)
   OWNER TO eper_customer_asset_upload_expiry_access;
 REVOKE CREATE ON SCHEMA public FROM eper_customer_asset_upload_expiry_access;
 
-REVOKE ALL ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)
+REVOKE ALL ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)
   FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer)
+GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)
   TO eper_customer_asset_access;
 
 COMMIT;
