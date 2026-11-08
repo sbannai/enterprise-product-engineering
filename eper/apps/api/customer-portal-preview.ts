@@ -105,8 +105,8 @@ function persistPendingCustomerAssetOperation(){sessionStorage.setItem(pendingCu
 function clearPendingCustomerAssetOperation(){pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";pendingCustomerAssetIdentityFingerprint="";try{sessionStorage.removeItem(pendingCustomerAssetStorageKey);}catch{}}
 async function customerAssetMetadataFingerprint(metadata){if(!window.crypto?.subtle)throw new Error("asset_upload_retry_fingerprint_unavailable");const digest=await window.crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(metadata)));return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");}
 async function customerIdentityFingerprint(session){
-if(!session||session.authenticated!==true||typeof session.tenantId!=="string"||!session.tenantId||typeof session.actorId!=="string"||!session.actorId||typeof session.roleKey!=="string"||!session.roleKey||typeof session.sessionBinding!=="string"||!/^[a-f0-9]{64}$/.test(session.sessionBinding))throw new Error("customer_session_identity_invalid");
-if(!window.crypto?.subtle)throw new Error("customer_session_fingerprint_unavailable");
+if(!session||session.authenticated!==true||typeof session.tenantId!=="string"||!session.tenantId||typeof session.actorId!=="string"||!session.actorId||typeof session.roleKey!=="string"||!session.roleKey)throw new Error("customer_session_identity_invalid");
+if(typeof session.sessionBinding!=="string"||!/^[a-f0-9]{64}$/.test(session.sessionBinding)||!window.crypto?.subtle)return "";
 const identity={tenantId:session.tenantId,actorId:session.actorId,roleKey:session.roleKey,sessionBinding:session.sessionBinding};
 const digest=await window.crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(identity)));
 return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
