@@ -325,8 +325,8 @@ test("metadata create endpoint enforces browser authorization and assigns server
         mimeType: "application/pdf", fileExtension: "pdf", sizeBytes: 2048,
       }),
     });
-    assert.equal(response.status, 201);
     const body = await response.json();
+    assert.equal(response.status, 201, `metadata create response: ${JSON.stringify({ body, calls })}`);
     assert.equal(body.assetId, "asset-created-001");
     assert.equal(body.applicationId, "app-alpha");
     assert.equal(body.uploadStatus, "pending");
