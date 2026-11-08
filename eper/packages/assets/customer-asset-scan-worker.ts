@@ -92,21 +92,30 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
+              // Keep the underlying operation visible after timeout. Aborting is a
+              // cancellation request, not proof that the provider call has stopped.
+              // Do not schedule a retry until that original promise has settled.
+              const scanPromise = Promise.resolve().then(() => options.scanner.scan({
+                tenantId: options.tenantId, applicationId: options.applicationId,
+                assetId: session.assetId, uploadSessionId: job.uploadSessionId,
+                providerUploadReference: session.providerUploadReference,
+                checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+              }, job.correlationId, scanController.signal));
               const timeout = new Promise<never>((_, reject) => {
                 scanTimer = setTimeout(() => {
                   scanController.abort();
                   reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
                 }, scanTimeoutMs);
               });
-              outcome = await Promise.race([
-                options.scanner.scan({
-                  tenantId: options.tenantId, applicationId: options.applicationId,
-                  assetId: session.assetId, uploadSessionId: job.uploadSessionId,
-                  providerUploadReference: session.providerUploadReference,
-                  checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-                }, job.correlationId, scanController.signal),
-                timeout,
-              ]);
+              try {
+                outcome = await Promise.race([scanPromise, timeout]);
+              } catch (error) {
+                // If timeout won, wait for the cancelled operation to settle before
+                // allowing retry/dead-letter persistence. This prevents overlap even
+                // when a scanner adapter violates the cooperative-abort contract.
+                await scanPromise.catch(() => undefined);
+                throw error;
+              }
             } catch (error) {
               options.onError?.(error);
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
