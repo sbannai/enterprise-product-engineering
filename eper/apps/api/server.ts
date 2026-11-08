@@ -1978,6 +1978,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     // Single-call client asset manifest across every application assigned to this customer.
     // Returns safe metadata and opaque storage references only; binary content is fetched separately.
     if (requestUrl.pathname === "/customer/assets") {
+      if (request.method === "POST" && process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED !== "true") {
+        response.writeHead(405, { allow: "GET" });
+        response.end();
+        return;
+      }
       if (request.method === "POST" && process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true") {
         const applicationId = requestUrl.searchParams.get("applicationId") ?? "";
         if (!/^[a-zA-Z0-9._:-]{2,128}$/.test(applicationId)) {
