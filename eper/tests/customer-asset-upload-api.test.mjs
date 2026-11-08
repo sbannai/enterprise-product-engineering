@@ -140,7 +140,7 @@ test("upload grant endpoint performs CSRF before database authorization and reje
       method: "POST",
       headers: { origin: "https://attacker.example.test", cookie, "x-csrf-token": csrf,
         "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
-      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+      body: JSON.stringify({ expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), fileName: "brief.pdf", mimeType: "application/pdf" }),
     });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "csrf_invalid" });
@@ -154,7 +154,7 @@ test("upload grant endpoint authorizes durable role but fails closed when no tru
       method: "POST",
       headers: { origin, cookie, "x-csrf-token": csrf,
         "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
-      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+      body: JSON.stringify({ expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), fileName: "brief.pdf", mimeType: "application/pdf" }),
     });
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: "customer_asset_upload_provider_unavailable" });
@@ -168,7 +168,7 @@ test("upload grant endpoint reserves, invokes allowlisted provider, persists ref
       method: "POST",
       headers: { origin, cookie, "x-csrf-token": csrf, "x-correlation-id": "upload-api-correlation-001",
         "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
-      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+      body: JSON.stringify({ expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), fileName: "brief.pdf", mimeType: "application/pdf" }),
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
@@ -187,7 +187,7 @@ test("upload grant endpoint wires provider lookup for replay and renews the exac
       method: "POST",
       headers: { origin, cookie, "x-csrf-token": csrf, "x-correlation-id": "upload-api-correlation-001",
         "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
-      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+      body: JSON.stringify({ expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), fileName: "brief.pdf", mimeType: "application/pdf" }),
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
@@ -216,7 +216,7 @@ test("upload completion verifies the persisted provider object and atomically ha
       assert.deepEqual([tenantId, applicationId, uploadSessionId], ["tenant-alpha", "app-alpha", "session-upload-001"]);
       return {
         assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
-        expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
       };
     };
     serverOptions.assetUploadVerification = async (request, requestId) => {
@@ -225,7 +225,7 @@ test("upload completion verifies the persisted provider object and atomically ha
       assert.deepEqual(request, {
         tenantId: "tenant-alpha", applicationId: "app-alpha", assetId: "asset-01",
         uploadSessionId: "session-upload-001", providerUploadReference: "opaque-provider-object-reference",
-        expectedSizeBytes: 1024, expectedMimeType: "application/pdf",
+        expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), expectedMimeType: "application/pdf",
       });
       return { sizeBytes: 1024, detectedMimeType: "application/pdf", checksumSha256: "a".repeat(64) };
     };
@@ -255,7 +255,7 @@ test("upload completion rejects unverified provider objects without completing o
   }, false, false, (serverOptions, calls) => {
     serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => ({
       assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
-      expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
     serverOptions.assetUploadVerification = async () => { calls.push("verify-provider-object"); return null; };
     serverOptions.customerAssetRepository.completeUpload = async () => { calls.push("complete-upload"); throw new Error("must not complete"); };
@@ -303,7 +303,7 @@ test("upload completion rejects malformed or mismatched trusted verification met
   }, false, false, (serverOptions, calls) => {
     serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => ({
       assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
-      expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
     serverOptions.assetUploadVerification = async () => ({
       sizeBytes: 2048, detectedMimeType: "application/pdf", checksumSha256: "a".repeat(64),
