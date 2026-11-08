@@ -1940,7 +1940,7 @@ This section supersedes the preceding statements that PR #449 remains open/unmer
 Seven-pointer status remains: workspace/support AMBER (download-reference gate now mainline; real-byte/provider/scanner journey and SLA lifecycle still open); release/continuity RED (main branch protection/rulesets and independent release/restore evidence remain unverified).
 
 
-## 2026-11-08 11:36 IST — PR #449 merged; audit composition corrected on main
+## 2026-11-08 11:07 IST — PR #449 merged; audit composition corrected on main (timestamp corrected)
 
 ### Merge and exact-main verification
 
@@ -2002,3 +2002,71 @@ The PR #449 merge has no submitted review or inline review-thread record; GitHub
 7. Release/continuity — RED: main remains unprotected, repository rulesets empty, and off-host recovery/independent second-engineer release and rollback are not evidenced.
 
 No real provider/external action or chargeable cloud resource was triggered.
+
+## 2026-11-08 12:08 IST — current main, restricted expiry worker and provider catalogue
+
+### Integrated main baseline
+
+- Latest main at this checkpoint: `757711ab8619c8aec2fb26d3b621ebaebcbc0c89`.
+- Its application-code parent is `c00bf520efe2b32ef6cc40d9cafbf04f305a4a2e`; comparison shows the only file changed between the two is this scorecard. No application source changed after the code parent.
+- Exact main-tip workflows: EPER CI [42451514719](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514719), integrated validation [42451514758](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514758), 228/38 matrix [42451514730](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514730), G9 [42451514749](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514749), six-family HTTP [42451514727](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514727), container smoke [42451514760](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514760), and controlled technical/QA checks [42451514773](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514773) / [42451514782](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451514782): all passed on the exact main tip.
+- Code-parent fresh clone [42451299482](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299482): `npm run dev:verify` PASS; 1,585 tests, 1,572 passed, 0 failed, 13 skipped; seven migration groups including identity applied/repeated; disposable restore 80/80 base tables and 7 migration ledgers.
+- Code-parent Chromium OIDC browser [42451299510](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299510): browser lifecycle 1/1 passed. Local test issuer only; production IdP interoperability is not evidenced.
+- Main-tip matrix: 228 requirements, 38 chapters, 259 pilot tests passed, 0 failed, 28 checks passed, no failed chapters. G9 passed 5/5. Main CI: workflow lifecycle 37/37, dispatcher/shutdown 3/3, tenant/actor assignment integration 11/11.
+- PR #306 is merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 is merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Both merge commits are ancestors of current main.
+
+### Current main-based customer asset expiry candidate
+
+PR #450 is open, not merged, and based directly on current main:
+
+- Base SHA: `757711ab8619c8aec2fb26d3b621ebaebcbc0c89`.
+- Exact current head: `98338525107c131ea5bfc9e88a3401394dc96e0e`; 38 commits ahead, 0 behind; GitHub reports clean mergeability.
+- All 15 Actions workflows for this exact head passed. The current PR description contains the complete run list.
+- Fresh clone [42455373842](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373842): 1,611 tests, 1,601 passed, 0 failed, 10 skipped; `npm run dev:verify` PASS. All seven migration groups applied/repeated, including identity. Main's 026 shared-download visibility migration is preserved; this candidate adds audit migrations 027 retry lifecycle, 028 cross-application expiry, 029 restricted worker role, and 030 queue-age telemetry. The audit group repeatability check passed. Disposable restore: 80/80 base tables, 7 migration ledgers.
+- Provider PostgreSQL lifecycle [42455373896](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373896): expiry suite 7/7, 0 skipped. It proves the actual worker process uses an ephemeral non-superuser login granted only the worker access group, expires a reservation, appends exactly one audit event, and shuts down on SIGTERM. The role boundary denies direct customer/session, payment and provider reads. Competing workers prove tenant-bound cross-application expiry and exactly-once aggregate transitions.
+- EPER CI [42455373898](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373898): worker lifecycle 37/37, dispatcher/shutdown 3/3, assignments 11/11; asset recovery and metadata idempotency passed.
+- Chromium browser [42455373799](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373799): OIDC browser lifecycle 1/1 and Product Admin browser regression 1/1.
+- Matrix [42455373828](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373828): 259 passed, 0 failed, 28 checks. G9 [42455373895](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373895): 5/5. Integrated gate [42455373812](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373812) passed; its matrix subjob was path-filtered/skipped and the separate exact-head matrix passed.
+- Other exact-head workflows—PostgreSQL payment-store, payment gateway contract, release build, six-family HTTP, container, controlled QA/technical checks, and workflow configuration validation—also passed.
+- The worker's generic asset readiness check was corrected: a restricted worker must not query `information_schema.columns` for asset tables it cannot read. Readiness now checks only schema usage, the tenant-bound definer function and required audit append/chain-head privileges. The process integration test exercises the restricted login, not a superuser.
+- Independent review remains outstanding; no review submissions or requested reviewers are recorded. Do not merge until lock ordering, function ownership/grants, RLS and audit transaction boundaries receive independent review.
+- This PR does not implement provider-backed object transfer, server-side object verification, malware scanning or signed download. External process supervision and owner-approved alert routing remain operational work.
+
+### Provider-neutral storage catalogue candidate
+
+PR #451 is open, not merged, and based directly on current main:
+
+- Base SHA: `757711ab8619c8aec2fb26d3b621ebaebcbc0c89`.
+- Exact head: `7b0bb993e36b94cff602d672e51d10f36a7a5921`; 2 commits ahead, 0 behind; clean mergeability.
+- All 12 exact-head workflows passed. Fresh clone [42454552600](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42454552600): 1,598 tests, 1,585 passed, 0 failed, 13 skipped; seven migration groups and identity repeatability pass; restore 80/80 base tables and 7 ledgers.
+- The 13 storage registration tests pass. The contract binds four provider families to explicit adapter/version/capability/auth-mode allowlists and validates bounded non-secret configuration schemas.
+- This is metadata only: no SDK drivers, credential resolution, network calls, provider dispatch, binary transfer or malware scanning.
+- No independent review is recorded; retain for review, not merge.
+
+### Superseded historical PRs
+
+- PR #395 was closed as a duplicate of #451 after both changed files were confirmed byte-for-byte identical.
+- PRs #402, #413 and #414 were closed as superseded by #450. Their historical migration numbering conflicted with main's existing 026; #450 ports the retry/expiry/worker behavior additively as 027–030 and proves it on the current main base.
+- Their commit histories remain available for reference. Do not merge their historical branches.
+
+### Remaining open-PR disposition
+
+The live open inventory is 19 PRs. Only #450 and #451 are based directly on the current main SHA. The remaining open PRs are historical main snapshots or stacked feature branches. Exact-head Actions and selected feature-relevant job logs were inspected for each; green results are branch-local and do not prove compatibility with current main.
+
+- Customer asset/provider history: #393, #394, #398, #399, #384, #386, #401. Reconcile unique deltas against current main; do not merge combined historical stacks wholesale. #394's old download route is superseded by merged #449; retain only any unique stale-scan lease tests that are not already represented on main.
+- Workflow: #387 actor-scoped work queue. Its exact-head matrix passed separately; rebase/extract only unique queue behavior onto current main.
+- Audit/requirements documents: #432, #377, #385, #380. Preserve unique traceability/UX material without changing the approved 228 requirement IDs or 38 chapters.
+- Provider payload/security stack: #392, #378, #379, #390, #391. These remain separate historical work; reconcile encryption/key lifecycle, payload referential integrity and restricted-role RLS with current migration lineage before any port.
+- #395/#402/#413/#414 are closed as superseded, not counted as merged.
+
+### Seven-pointer state
+
+1. v34-to-228: AMBER — 228 IDs/38 chapters preserved; 45 partial shared-control links and 0 exact full-coverage v34 mappings; source acceptance traceability remains incomplete.
+2. Fresh-clone: GREEN — current main and #450 exact-head fresh-clone commands pass; all seven migration groups including identity repeat; local disposable restore passes.
+3. PostgreSQL: AMBER — migrations, repeatability, live PostgreSQL/RLS, restricted worker login and disposable restore pass; off-host backup, retention, encryption/key custody, RPO/RTO and independent restore remain unproven.
+4. Identity/OIDC: AMBER — provider-neutral protocol, browser routes, secure cookies, CSRF, durable sessions, tenant/application assignments and local test-issuer browser lifecycle pass; production IdP interoperability remains unproven.
+5. Workspace/support: AMBER — ticket create/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note SQL filtering, export, upload form/session-bound retry, metadata and download lookup are present; real provider-backed bytes/object verification/scanning/signed download and SLA lifecycle remain incomplete.
+6. Scheduler/workflow: AMBER — continuous worker process, lease/fencing, idempotency, retry/dead-letter/replay, approval revalidation and restricted worker tests pass; external process supervision, production metrics/alerts and recovery rehearsal remain outstanding.
+7. Release/continuity: RED — main remains unprotected, rulesets empty, and off-host recovery plus independent second-engineer release/rollback are not evidenced.
+
+No chargeable cloud resources or real external/provider actions were used for this checkpoint.
