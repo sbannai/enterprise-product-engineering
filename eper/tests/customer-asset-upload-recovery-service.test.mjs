@@ -300,11 +300,11 @@ test("same idempotency key with a different expected SHA-256 changes the immutab
   };
   await startCustomerAssetUpload(input, deps);
   const changed = { ...input, expectedChecksumSha256: "b".repeat(64) };
-  await startCustomerAssetUpload(changed, { ...deps, repository: {
+  await assert.rejects(() => startCustomerAssetUpload(changed, { ...deps, repository: {
     ...deps.repository,
     reserveUpload: async value => {
       assert.notEqual(value.requestFingerprint, originalFingerprint);
       throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
     },
-  } });
+  } }), /IDEMPOTENCY_CONFLICT/);
 });
