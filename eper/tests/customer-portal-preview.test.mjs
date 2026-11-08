@@ -104,7 +104,7 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes('created.assetId'), "metadata creation must consume the top-level API assetId response");
     assert.ok(html.includes('started.uploadSessionId'), "upload completion must use the top-level uploadSessionId response");
     assert.ok(html.includes('target.protocol!=="https:"'), "browser upload grants must require HTTPS");
-    assert.ok(html.includes('clearPendingCustomerAssetOperation();authenticated=false'), "logout must clear persisted upload retry identity");
+    assert.ok(html.includes('clearPendingCustomerAssetOperation();verifiedCustomerIdentityFingerprint="";authenticated=false'), "logout must clear persisted upload retry identity");
     assert.ok(html.includes("assetSearch"), "client asset view provides text search");
     assert.ok(html.includes("Current accepted plan"), "customer can review the accepted tariff snapshot");
     assert.ok(html.includes("acceptanceReference"), "tariff switching requires a contract or acceptance reference");
