@@ -272,3 +272,42 @@ test("upload completion fails closed when trusted verification is not configured
     assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
   });
 });
+
+
+test("upload completion rejects invalid CSRF origin before session or repository access", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST",
+      headers: { origin: "https://attacker.example.test", cookie, "x-csrf-token": csrf },
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "csrf_invalid" });
+    assert.deepEqual(calls, []);
+  }, false, false, (serverOptions, calls) => {
+    serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => {
+      calls.push("load-upload-session"); throw new Error("must not access repository");
+    };
+    serverOptions.assetUploadVerification = async () => { calls.push("verify-provider-object"); return null; };
+  });
+});
+
+test("upload completion rejects malformed or mismatched trusted verification metadata", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf },
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: "uploaded_object_not_verified" });
+    assert.equal(calls.includes("complete-upload"), false);
+  }, false, false, (serverOptions, calls) => {
+    serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => ({
+      assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
+      expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    serverOptions.assetUploadVerification = async () => ({
+      sizeBytes: 2048, detectedMimeType: "application/pdf", checksumSha256: "a".repeat(64),
+    });
+    serverOptions.customerAssetRepository.completeUpload = async () => { calls.push("complete-upload"); throw new Error("must not complete"); };
+  });
+});
