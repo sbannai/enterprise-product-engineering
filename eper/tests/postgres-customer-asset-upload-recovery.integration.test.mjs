@@ -128,7 +128,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       );
 
       const persisted = await pool.query(
-        `SELECT upload_session_id, actor_id, request_fingerprint,
+        `SELECT upload_session_id, actor_id, request_fingerprint, expected_checksum_sha256,
                 provider_upload_reference, provider_grant_expires_at, last_recovered_at
            FROM eper_customer_asset_upload_sessions
           WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3`,
