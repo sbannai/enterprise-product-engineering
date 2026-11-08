@@ -42,9 +42,9 @@ test("live PostgreSQL expiry is tenant-bound, cross-application, audited and exa
         sessions.push({ applicationId, assetId, uploadSessionId: reservation.uploadSessionId });
       }
 
-      // Exercise reserved independently from the initiated lifecycle state.
+      // Exercise in_progress independently from the initiated lifecycle state.
       await pool.query(
-        "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'reserved' WHERE tenant_id = $1 AND upload_session_id = $2",
+        "UPDATE eper_customer_asset_upload_sessions SET upload_status = 'in_progress' WHERE tenant_id = $1 AND upload_session_id = $2",
         [tenantId, sessions[0].uploadSessionId],
       );
       await pool.query(
