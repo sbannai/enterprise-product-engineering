@@ -525,10 +525,36 @@ export class PostgresCustomerAssetRepository {
     } catch (error) {
       if (transactionOpen) {
         try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+        transactionOpen = false;
       }
       const databaseError = error as { code?: string; constraint?: string };
       if (databaseError.code === "23505" &&
           databaseError.constraint === "eper_customer_asset_upload_active_asset_uq") {
+        // The reservation itself rolled back, so record the denial in a new
+        // transaction under the requesting application's RLS context. Do not
+        // disclose which other application owns the active reservation.
+        try {
+          await client.query("BEGIN");
+          transactionOpen = true;
+          await this.setContext(client, input.tenantId, input.applicationId);
+          await appendAuditEventInTransaction(client as AuditSqlClient, {
+            tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+            actorType: "human", actorId: input.actorId, action: "customer.asset.upload.reserve",
+            outcome: "denied", reasonCode: "active_upload_conflict",
+            resourceType: "customer-asset-upload", resourceId: input.assetId,
+            correlationId: input.correlationId, source: "api",
+            operationName: "POST /customer/assets/:assetId/uploads",
+            payload: { assetId: input.assetId, conflict: true },
+          });
+          await client.query("COMMIT");
+          transactionOpen = false;
+        } catch (auditError) {
+          if (transactionOpen) {
+            try { await client.query("ROLLBACK"); } catch { /* preserve audit error */ }
+            transactionOpen = false;
+          }
+          throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_DENIAL_AUDIT_FAILED", { cause: auditError });
+        }
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE", { cause: error });
       }
       throw error;
