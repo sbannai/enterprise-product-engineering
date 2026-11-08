@@ -45,13 +45,21 @@ BEGIN
 
   -- session_user remains the authenticated LOGIN inside SECURITY DEFINER.
   -- Neither tenant nor application GUCs grant authority.
-  IF NOT EXISTS (
-    SELECT 1
-      FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope AS scope
-     WHERE scope.login_role = session_user
-       AND scope.tenant_id = p_tenant_id
-       AND scope.enabled = true
-  ) THEN
+  -- Apply the protected registry to authenticated members of the dedicated
+  -- worker group only. Application/API roles retain the tenant-context contract;
+  -- worker LOGINs cannot bypass the registry by setting a tenant GUC.
+  IF pg_catalog.pg_has_role(
+       session_user,
+       'eper_customer_asset_upload_expiry_worker_access',
+       'MEMBER'
+     )
+     AND NOT EXISTS (
+       SELECT 1
+         FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope AS scope
+        WHERE scope.login_role = session_user
+          AND scope.tenant_id = p_tenant_id
+          AND scope.enabled = true
+     ) THEN
     RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_EXPIRY_WORKER_SCOPE_DENIED';
   END IF;
   IF pg_catalog.current_setting('eper.tenant_id', true) IS DISTINCT FROM p_tenant_id THEN
