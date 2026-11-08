@@ -5,7 +5,7 @@ import { startCustomerAssetUpload } from "../dist/packages/assets/customer-asset
 const input = {
   tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
   environment: "sandbox", correlationId: "asset-recovery-test-001",
-  assetId: "asset-001", expectedSizeBytes: 2048,
+  assetId: "asset-001", expectedSizeBytes: 2048, expectedChecksumSha256: "a".repeat(64),
   idempotencyKey: "asset-upload-idempotency-001",
   fileName: "plan.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
