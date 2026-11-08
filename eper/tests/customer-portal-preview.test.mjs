@@ -92,6 +92,12 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes("assetUploadForm"), "client asset view exposes an upload form");
     assert.ok(html.includes("assetUploadApplication"), "uploads must select a server-assigned application");
     assert.ok(html.includes("customerAssetMetadataFingerprint"), "retry identity must be bound to immutable upload metadata");
+    assert.ok(html.includes("verifiedCustomerIdentityFingerprint"), "retry restoration must wait for verified customer identity");
+    assert.match(html, /restorePendingCustomerAssetOperation\(identityFingerprint\)/, "retry state must restore only after the server session is verified");
+    assert.match(html, /value.identityFingerprint!==identityFingerprint/, "retry state from a different browser session must be discarded");
+    assert.match(html, /sessionBinding:session.sessionBinding/, "session fingerprint must include the server-derived opaque session binding");
+    assert.match(html, /const currentSession=await api\("\/customer\/session"\)/, "upload must revalidate the active server session before replay");
+    assert.match(html, /currentIdentityFingerprint!==verifiedCustomerIdentityFingerprint/, "session changes must invalidate pending upload retry state");
     assert.ok(html.includes("sessionStorage.setItem(pendingCustomerAssetStorageKey"), "opaque retry identity must persist before network requests");
     assert.ok(html.includes("idempotency-key"), "metadata create must send its stable idempotency key in the request header");
     assert.ok(html.includes("pendingCustomerAssetUploadIdempotencyKey"), "upload reservation retries must reuse a stable idempotency key");
