@@ -1298,3 +1298,30 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 2. Obtain the provider + secret-manager ownership decision for #397; until then preserve the fail-closed runtime.
 3. Complete #405 only after the approved runtime and retry/expiry dependencies are integrated on main.
 4. Reconcile #434's mainline protection design without silently imposing PR-only delivery.
+
+
+---
+
+## Append-only checkpoint — 2026-11-08 (PR review pass)
+
+### Live baseline and inventory
+- Dynamically resolved main: 7657d7480e62012ba384e65930911f2b9581047e; this is a scorecard-only commit whose parent is f2983d7a48437c693053fa9d4d996789b53f993a. No application source changed in that mainline step.
+- Live inventory at review: 25 open PRs and 31 open issues. Counts are point-in-time, not closure targets.
+- main remains unprotected (protected=false; required status checks disabled). Issue #434 remains open; no repository settings changed.
+
+### Exact-head technical review comments
+- PR #447 head bc66cf724388bc95a6e1aa18c1c293fd3d4faac3: 18 check-runs; 17 success, 1 skipped (228/38 pilot-matrix job). All returned check-run head SHAs matched the reviewed head. Technical review comment recorded as review ID 5816128798. No blocking defect identified in the narrow server-side HMAC session-binding slice.
+- PR #448 head 9409ffcf5267d19919e185a6806efe8060db54fb: 18 check-runs; 17 success, 1 skipped (228/38 pilot-matrix job). All returned check-run head SHAs matched the reviewed head. Technical review comment recorded as review ID 5816129019. No blocking defect identified in the narrow upload-completion API boundary.
+- Formal APPROVE reviews were rejected by GitHub because the connected repository identity is the PR author. The comments are technical review feedback, not approvals. An independent human reviewer is still required before either PR can merge.
+- Neither PR was merged. No branch was deleted and no functionality was counted as mainline-delivered.
+
+### Scope boundaries retained
+- #447 still needs browser consumption of the server session binding before session-bound retry recovery is complete.
+- #448 still needs concrete provider runtime composition and full browser transfer -> provider verification -> malware scan -> authorized download evidence. Synthetic/injected test boundaries are not production provider readiness.
+- The 228/38 job was skipped on both PR runs; do not label all check-runs as passed. Separate pilot-matrix evidence remains separate.
+- No cloud resources, production credentials, real provider calls, production enablement or Business UAT authorization.
+
+### Next actions
+1. Obtain an independent human review for #447 and #448.
+2. Continue #397 provider/secret-resolver implementation and #405 browser lifecycle evidence on current main.
+3. Keep the fail-closed runtime and preserve the 228 requirements / 38 chapters unchanged.
