@@ -217,6 +217,8 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByRole("button",{name:"Upload file"}).click();
     await page.getByText("A previous upload has an uncertain result. Re-select the same file and keep all metadata unchanged before retrying.").waitFor();
     assert.equal(uploadIdempotencyKeys.length,2,"changed metadata must be rejected before another network request");
+    await page.getByRole("button",{name:"Tickets & Feedback"}).click();
+    await page.getByRole("button",{name:"View conversation"}).waitFor();
     await page.getByRole("button",{name:"View conversation"}).click();
     await page.getByLabel("Reply to support").fill("Additional details from the customer browser session.");
     await page.getByRole("button",{name:"Send reply"}).click();
