@@ -20,6 +20,12 @@ CREATE POLICY customer_asset_upload_session_shared_read
        WHERE a.tenant_id = eper_customer_asset_upload_sessions.tenant_id
          AND a.asset_id = eper_customer_asset_upload_sessions.asset_id
          AND a.repository_scope = 'customer_shared'
+         AND a.lifecycle_status = 'active'
+         AND a.upload_status = 'available'
+         AND a.scan_status IN ('clean', 'not_required')
+         AND eper_customer_asset_upload_sessions.upload_status = 'completed'
+         AND eper_customer_asset_upload_sessions.provider_upload_reference IS NOT NULL
+         AND btrim(eper_customer_asset_upload_sessions.provider_upload_reference) <> ''
          AND l.application_id = current_setting('eper.application_id', true)
     )
   );
