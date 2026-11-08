@@ -52,6 +52,12 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.match(html, /Promise\.all\(\[api\("\/customer\/portal\/context"\),api\("\/customer\/workspace\/modules"\)\]\)/, "workspace context and module requests must run concurrently after authentication");
     assert.match(html, /cache:\s*"no-store"/i, "customer API responses must not be cached");
     assert.match(html, /\/customer\/applications\/\"\+encodeURIComponent\(applicationId\)\+\"\/assets\//, "asset downloads must use the authenticated application-scoped download API");
+    assert.ok(html.includes("async function customerAssetFileSha256(file)"), "customer uploads must calculate the selected file SHA-256 before requesting a grant");
+    assert.ok(html.includes('window.crypto.subtle.digest("SHA-256",await file.arrayBuffer())'), "customer upload checksum must be computed from the selected file bytes");
+    assert.ok(html.includes("customerAssetMetadataFingerprint({...metadata,expectedChecksumSha256})"), "upload retry identity must include the expected file checksum");
+    assert.ok(html.includes('"/upload-grant"'), "customer workspace must call the API upload-grant route");
+    assert.ok(html.includes('headers:{"idempotency-key":pendingCustomerAssetUploadIdempotencyKey}'), "upload grant must send the stable idempotency key in the request header");
+    assert.ok(html.includes("expectedSizeBytes:file.size,expectedChecksumSha256"), "upload grant must send the API size and trusted expected-checksum fields");
     assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
     assert.ok(html.includes("Tickets for selected application"), "customer ticket history must be clearly labeled as application-level");
     for (const replyContract of ["View conversation", "data-open-ticket-conversation", "data-ticket-reply-form", "Send reply", "/tickets/\"+encodeURIComponent(ticketId)+\"/replies", "Reply sent.", "Reply not sent", "authorRole===\"support\"?\"Support\":\"You\""]) {
