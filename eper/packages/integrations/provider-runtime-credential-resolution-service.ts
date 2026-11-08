@@ -7,6 +7,16 @@ export type ProviderRuntimeWithCredentials<TAdapter, TCredentials> = {
   credentials: TCredentials;
 };
 
+export class ProviderRuntimeCredentialResolutionError extends Error {
+  constructor(readonly code:
+    | "PROVIDER_RUNTIME_SECRET_REFERENCE_UNAVAILABLE"
+    | "PROVIDER_RUNTIME_SECRET_RESOLUTION_FAILED"
+    | "PROVIDER_RUNTIME_AUTHORIZATION_CHANGED") {
+    super(code);
+    this.name = "ProviderRuntimeCredentialResolutionError";
+  }
+}
+
 /**
  * Trusted server-side composition boundary: revalidate the selected tenant /
  * application binding and connection version, fetch its opaque secret reference,
@@ -26,34 +36,49 @@ export class ProviderRuntimeCredentialResolutionService<TAdapter, TCredentials> 
     capability: string;
   }): Promise<ProviderRuntimeWithCredentials<TAdapter, TCredentials>> {
     const runtime = await this.runtime.resolve(input);
-    const connection = await this.connections.getRuntimeSecretReference({
-      tenantId: runtime.selection.tenantId,
-      applicationId: runtime.selection.applicationId,
-      connectionId: runtime.selection.connectionId,
-      expectedVersion: runtime.selection.connectionVersion,
-      providerKey: runtime.selection.providerKey,
-      capability: runtime.selection.capabilityKey,
-    });
-    const credentials = await this.secrets.resolve({
-      secretReference: connection.secretReference,
-      context: {
+    let connection: { secretReference: string; authMode: string };
+    try {
+      connection = await this.connections.getRuntimeSecretReference({
         tenantId: runtime.selection.tenantId,
         applicationId: runtime.selection.applicationId,
         connectionId: runtime.selection.connectionId,
+        expectedVersion: runtime.selection.connectionVersion,
         providerKey: runtime.selection.providerKey,
-        authMode: connection.authMode,
-      },
-    });
+        capability: runtime.selection.capabilityKey,
+      });
+    } catch {
+      // Database/connection errors are normalized; never surface raw driver details.
+      throw new ProviderRuntimeCredentialResolutionError("PROVIDER_RUNTIME_SECRET_REFERENCE_UNAVAILABLE");
+    }
+    let credentials: TCredentials;
+    try {
+      credentials = await this.secrets.resolve({
+        secretReference: connection.secretReference,
+        context: {
+          tenantId: runtime.selection.tenantId,
+          applicationId: runtime.selection.applicationId,
+          connectionId: runtime.selection.connectionId,
+          providerKey: runtime.selection.providerKey,
+          authMode: connection.authMode,
+        },
+      });
+    } catch {
+      throw new ProviderRuntimeCredentialResolutionError("PROVIDER_RUNTIME_SECRET_RESOLUTION_FAILED");
+    }
     // Recheck revocation, suspension, version and capability after the secret
     // manager returns and immediately before any adapter can receive credentials.
-    await this.connections.assertDispatchAuthorization({
-      tenantId: runtime.selection.tenantId,
-      applicationId: runtime.selection.applicationId,
-      connectionId: runtime.selection.connectionId,
-      expectedVersion: runtime.selection.connectionVersion,
-      providerKey: runtime.selection.providerKey,
-      capability: runtime.selection.capabilityKey,
-    });
+    try {
+      await this.connections.assertDispatchAuthorization({
+        tenantId: runtime.selection.tenantId,
+        applicationId: runtime.selection.applicationId,
+        connectionId: runtime.selection.connectionId,
+        expectedVersion: runtime.selection.connectionVersion,
+        providerKey: runtime.selection.providerKey,
+        capability: runtime.selection.capabilityKey,
+      });
+    } catch {
+      throw new ProviderRuntimeCredentialResolutionError("PROVIDER_RUNTIME_AUTHORIZATION_CHANGED");
+    }
     return { runtime, credentials };
   }
 }
