@@ -54,6 +54,10 @@ async function createPendingScanFixture(pool, repository, prefix) {
   const correlationId = prefix + "-correlation-" + suffix.slice(0, 12);
   const idempotencyKey = prefix + "-key-" + suffix.slice(0, 20);
   const fingerprint = createHash("sha256").update(prefix + suffix).digest("hex");
+  // The scanner process receives the exact same synthetic bytes whose digest
+  // and size are persisted as the completed upload's server-observed metadata.
+  const testObjectBytes = Buffer.from(("EPER synthetic customer asset bytes " + suffix + "\\n").repeat(16), "utf8");
+  const checksumSha256 = createHash("sha256").update(testObjectBytes).digest("hex");
   await repository.create({
     tenantId, applicationId, actorId, environment: "sandbox", correlationId,
     assetId, scope: "application_restricted", ownerApplicationId: applicationId,
@@ -74,12 +78,11 @@ async function createPendingScanFixture(pool, repository, prefix) {
   });
   await repository.completeUpload({
     tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-    uploadSessionId: reservation.uploadSessionId, receivedSizeBytes: 512,
-    observedMimeType: "application/pdf",
-    checksumSha256: createHash("sha256").update("process-file-" + suffix).digest("hex"),
-    scanStatus: "pending",
+    uploadSessionId: reservation.uploadSessionId, receivedSizeBytes: testObjectBytes.length,
+    observedMimeType: "application/pdf", checksumSha256, scanStatus: "pending",
   });
-  return { tenantId, applicationId, actorId, assetId, correlationId, uploadSessionId: reservation.uploadSessionId };
+  return { tenantId, applicationId, actorId, assetId, correlationId,
+    uploadSessionId: reservation.uploadSessionId, testObjectBytes };
 }
 async function createWorkerLogin(pool, prefix) {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
@@ -133,11 +136,21 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     const fixture = await createPendingScanFixture(pool, repository, "scan-process");
     const workerLogin = await createWorkerLogin(pool, "scan");
     const scannerPath = resolve("dist/packages/assets/scanners/ci-postgres-test-scanner.js");
+    const objectPath = resolve("dist/packages/assets/scanners/ci-postgres-test-object-" + randomUUID() + ".bin");
     let child;
     try {
       await mkdir(dirname(scannerPath), { recursive: true });
-      await writeFile(scannerPath, `export async function createCustomerAssetScanner({ env }) {
-  return { async scan() {
+      await writeFile(objectPath, fixture.testObjectBytes);
+      await writeFile(scannerPath, `import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+export async function createCustomerAssetScanner({ env }) {
+  return { async scan(input) {
+    const bytes = await readFile(env.EPER_CUSTOMER_ASSET_TEST_OBJECT_PATH);
+    const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
+    if (bytes.length !== input.sizeBytes || checksumSha256 !== input.checksumSha256 ||
+        input.mimeType !== "application/pdf") {
+      return { scanStatus: "infected", scannerServiceId: env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID };
+    }
     return { scanStatus: "clean", scannerServiceId: env.EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID };
   } };
 }
@@ -150,6 +163,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
           EPER_CUSTOMER_ASSET_SCANNER_SERVICE_ID: "ci-asset-scanner",
           EPER_CUSTOMER_ASSET_SCAN_WORKER_ID: "ci-asset-scanner:process-test",
           EPER_CUSTOMER_ASSET_SCANNER_MODULE: "./dist/packages/assets/scanners/ci-postgres-test-scanner.js",
+          EPER_CUSTOMER_ASSET_TEST_OBJECT_PATH: objectPath,
           EPER_CUSTOMER_ASSET_SCAN_POLL_INTERVAL_MS: "100",
           EPER_CUSTOMER_ASSET_SCAN_LEASE_MS: "5000",
           EPER_CUSTOMER_ASSET_SCAN_BATCH_SIZE: "2",
@@ -179,6 +193,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     } finally {
       if (child) await stopChild(child).catch(() => {});
       await rm(scannerPath, { force: true });
+      await rm(objectPath, { force: true });
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
