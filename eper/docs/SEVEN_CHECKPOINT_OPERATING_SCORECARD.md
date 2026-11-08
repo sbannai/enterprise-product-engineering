@@ -1632,3 +1632,73 @@ Comparison is against application main `6de654d4122c2053b0d122aea4998279c0d97207
 - The Engineering Continuity and Independence Charter remains a proposed operating standard requiring owner review.
 - No chargeable cloud resources, production credentials, real provider calls or external storage actions were used.
 - Preserve the approved 228 requirements and 38 chapters. Do not report business acceptance from automated pilot results.
+
+
+## 2026-11-08 10:00 IST correction — latest code-bearing main and customer asset retry
+
+This correction supersedes the earlier 09:56 subsection's use of `c662fdaf` as the latest code-bearing main snapshot. The latest inspected code-bearing main commit is `ccf2f2c81abd7c41360629b9268fdeacc9736df5`; the current main tip at the time of this correction is `5a037e21fe51ad22737edafa0f450472640ecf5f`, whose only change after `ccf2f2c` is this scorecard file. No application source changed after the `ccf2f2c` code-bearing snapshot.
+
+### Fresh-clone and browser evidence on latest code-bearing main
+
+| Evidence | Exact run | Result |
+|---|---|---|
+| Fresh-clone developer setup | [42446851573](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446851573) | PASS |
+| Chromium customer OIDC browser E2E | [42446851532](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446851532) | PASS, 1/1 |
+| EPER CI | [42446851537](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446851537) | PASS |
+| Same-commit integrated validation | [42446851531](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446851531) | PASS |
+| 228/38 matrix | [42446851555](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446851555) | PASS |
+| G9 reconciliation | [42446851620](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42446851620) | PASS |
+
+Fresh-clone log for `ccf2f2c`:
+
+- `npm run dev:verify`: PASS.
+- 1,583 tests; 1,571 passed; 0 failed; 12 skipped.
+- Applied all seven migration groups: payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity.
+- Repeated all seven groups, including identity.
+- Identity migration applied `001_customer_oidc_sessions.sql`.
+- Disposable PostgreSQL 16 backup/restore: PASS; source/restored base tables 80/80; migration ledgers 7.
+
+The browser E2E on `ccf2f2c` passes 1/1. It verifies the local test-issuer OIDC/session lifecycle, customer workspace/support access, CSRF cookie, opaque session binding, upload retry identity, changed-metadata rejection before another network call, session-binding change cleanup, expired/revoked session cleanup, malformed persisted retry cleanup and logout revocation/cleanup. This is local test-issuer evidence, not production identity-provider interoperability.
+
+### Customer asset workspace correction
+
+The current customer portal **does contain an upload form and a session-bound retry client**. The earlier 09:56 note that the browser retry client did not consume `sessionBinding` is superseded.
+
+Current `eper/apps/api/customer-portal-preview.ts`:
+- obtains the verified browser session and requires a 64-character opaque `sessionBinding`;
+- incorporates tenant, actor, role and `sessionBinding` into the retry identity fingerprint;
+- persists only operation/idempotency keys and metadata/identity fingerprints in session storage;
+- reuses the same upload idempotency key after a same-session retry/reload;
+- rejects changed metadata before another request;
+- clears retry state when the verified session changes or expires;
+- calls the customer metadata-create API, upload-grant API, browser transfer, and upload-completion API.
+
+The Chromium test uses a deterministic local issuer and intercepts the storage-unavailable path. It proves retry/session isolation and fail-closed behavior, **not real-byte transfer**.
+
+The API entrypoint still throws `PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED` when provider storage runtime is enabled. The entrypoint does not yet wire approved real provider drivers and a secret-manager adapter into all six customer asset ports. Therefore:
+- customer asset upload UI and session-bound retry safety: implemented and browser-tested;
+- metadata creation and verified-completion API boundaries: present;
+- real provider-backed upload → checksum/object verification → malware scan → authorized download: not yet evidenced.
+
+### Current main tip — exact-head validation
+
+Current main tip at this checkpoint: `5a037e21fe51ad22737edafa0f450472640ecf5f` (scorecard-only commit after `ccf2f2c)).
+
+Exact current-tip workflows all completed successfully:
+
+- [EPER CI 42447113650](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42447113650): 1,567 tests; 1,553 passed; 0 failed; 14 skipped.
+- [Integrated validation 42447113504](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42447113504): same-commit gate PASS.
+- [228/38 matrix 42447113597](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42447113597): 38 chapters, 228 requirements, 259 pilot tests passed, 0 failed chapters, 28 checks.
+- [G9 42447113702](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42447113702): 5/5 checks passed.
+- [Six-family HTTP smoke 42447113593](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42447113593): PASS.
+- [Container runtime smoke 42447113534](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42447113534): PASS.
+
+The fresh-clone and browser runs above are on the immediate code-bearing parent `ccf2f2c`, not on the documentation-only `5a037e21` tip. They are recorded with that exact SHA; they are not described as exact-tip runs. The `092a552e` run set was cancelled during rapid superseding commits and is not counted.
+
+### Corrected seven-pointer assessment
+
+- Pointer 4 (identity/OIDC): AMBER. Browser login/session lifecycle and session-bound retry behavior are browser-tested on `ccf2f2c`; production IdP interoperability remains unproven.
+- Pointer 5 (customer workspace/support): AMBER. Customer asset upload UI, session-bound retry, ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note filtering and export have evidence. Actual provider-backed bytes and SLA policy/deadlines/breach/escalation/reporting remain open.
+- Pointer 6 (provider/workflow operations): AMBER. Credential resolution now revalidates connection authorization after secret resolution and normalizes/redacts secret-manager failures. API provider runtime remains fail-closed; approved secret-manager adapter, real provider drivers, dispatcher and operational supervision/metrics/recovery remain open.
+
+Do not count automated browser/technical tests as production IdP interoperability, real provider transfer, business acceptance or release evidence.
