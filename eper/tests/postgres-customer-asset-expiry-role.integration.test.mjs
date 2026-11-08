@@ -12,6 +12,10 @@ test("expiry worker group can expire and append audit but cannot read customer o
     const tenantId = "expiry-role-tenant-" + randomUUID();
     const applicationId = "expiry-role-app-" + randomUUID();
     try {
+      await pool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true)",
+        [tenantId],
+      );
       const role = await client.query(`
         SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
         FROM pg_roles WHERE rolname = 'eper_customer_asset_upload_expiry_worker_access'
@@ -68,6 +72,10 @@ test("expiry worker group can expire and append audit but cannot read customer o
       await client.query("ROLLBACK TO SAVEPOINT deny_session_read");
       await client.query("ROLLBACK");
     } finally {
+      await pool.query(
+        "DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = session_user AND tenant_id = $1",
+        [tenantId],
+      ).catch(() => {});
       client.release();
       await pool.end();
     }
