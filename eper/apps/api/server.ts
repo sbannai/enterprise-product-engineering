@@ -2200,11 +2200,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           await audit("failure");
           sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
+        const postgresAssets = process.env.EPER_CUSTOMER_ASSET_PERSISTENCE === "postgres";
         let modulesConfig: unknown, assignmentsConfig: unknown, assetsConfig: unknown;
         try {
           modulesConfig = JSON.parse(process.env.EPER_CUSTOMER_WORKSPACE_MODULES_JSON ?? "");
           if (!options.tenantApplicationAssignmentStore) assignmentsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? "");
-          assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
+          if (!postgresAssets) assetsConfig = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSETS_JSON ?? "");
         } catch { sendJson(request, response, 503, { error: "customer_assets_unavailable" }); return; }
         const objectRecord = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
         const modules = objectRecord(modulesConfig)?.[identity.tenantId];
@@ -2214,17 +2215,36 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const actorAssigned = options.actorApplicationAssignmentStore
           ? await options.actorApplicationAssignmentStore.isAssigned(identity.tenantId, identity.actorId, applicationId)
           : identity.applicationIds?.includes(applicationId) === true;
-        const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
         if (!Array.isArray(modules) || !modules.includes("client-assets") || !Array.isArray(assignments) ||
-            !assignments.includes(applicationId) || !actorAssigned || !tenantAssets) {
+            !assignments.includes(applicationId) || !actorAssigned) {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
-        const applicationAssets = tenantAssets[applicationId];
-        const asset = Array.isArray(applicationAssets) ? applicationAssets.find((item) => item && typeof item === "object" && !Array.isArray(item) && (item as Record<string, unknown>).id === assetId) as Record<string, unknown> | undefined : undefined;
-        if (!asset || typeof asset.accessReference !== "string" || !asset.accessReference.trim() || typeof asset.name !== "string") {
+        let asset: { accessReference: string; fileName: string; mimeType?: string } | null = null;
+        if (postgresAssets) {
+          // Durable mode is PostgreSQL-only: no legacy manifest fallback on missing rows or DB errors.
+          if (!options.customerAssetRepository) throw new Error("CUSTOMER_ASSET_REPOSITORY_REQUIRED_IN_POSTGRES_MODE");
+          const stored = await options.customerAssetRepository.getDownloadAsset(identity.tenantId, applicationId, assetId);
+          if (stored) asset = stored;
+        } else {
+          const tenantAssets = objectRecord(objectRecord(assetsConfig)?.[identity.tenantId]);
+          const applicationAssets = tenantAssets?.[applicationId];
+          const legacyAsset = Array.isArray(applicationAssets)
+            ? applicationAssets.find((item) => item && typeof item === "object" && !Array.isArray(item) &&
+                (item as Record<string, unknown>).id === assetId) as Record<string, unknown> | undefined
+            : undefined;
+          if (legacyAsset && typeof legacyAsset.accessReference === "string" && legacyAsset.accessReference.trim() &&
+              typeof legacyAsset.name === "string") {
+            asset = {
+              accessReference: legacyAsset.accessReference,
+              fileName: legacyAsset.name,
+              ...(typeof legacyAsset.mimeType === "string" ? { mimeType: legacyAsset.mimeType } : {}),
+            };
+          }
+        }
+        if (!asset) {
           await audit("denied"); sendJson(request, response, 404, { error: "asset_not_found" }); return;
         }
-        const result = await assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.name, ...(typeof asset.mimeType === "string" ? { mimeType: asset.mimeType } : {}) }, requestId);
+        const result = await assetDownloadResolver({ tenantId: identity.tenantId, actorId: identity.actorId, applicationId, assetId, accessReference: asset.accessReference, fileName: asset.fileName, ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) }, requestId);
         if (!result || typeof result.url !== "string" || !result.url || typeof result.expiresAt !== "string") {
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
@@ -2234,7 +2254,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           await audit("failure"); sendJson(request, response, 503, { error: "asset_storage_provider_unavailable" }); return;
         }
         await audit("success");
-        sendJson(request, response, 200, { downloadUrl: url.toString(), expiresAt: new Date(expiresAt).toISOString(), fileName: asset.name });
+        sendJson(request, response, 200, { downloadUrl: url.toString(), expiresAt: new Date(expiresAt).toISOString(), fileName: asset.fileName });
       } catch {
         try { await audit("failure"); } catch { /* Audit failure is intentionally fail-closed. */ }
         sendJson(request, response, 503, { error: "asset_audit_or_storage_unavailable" });
