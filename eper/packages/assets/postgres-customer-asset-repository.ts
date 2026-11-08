@@ -141,6 +141,57 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  /** Returns a downloadable provider reference only for a completed, clean asset visible to this application. */
+  async getDownloadAsset(tenantId: string, applicationId: string, assetId: string): Promise<{
+    accessReference: string; fileName: string; mimeType: string;
+  } | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(assetId, "assetId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<{
+        provider_upload_reference: string; original_file_name: string; mime_type: string;
+      }>(
+        `SELECT s.provider_upload_reference, a.original_file_name, a.mime_type
+         FROM eper_customer_assets a
+         JOIN eper_customer_asset_upload_sessions s
+           ON s.tenant_id = a.tenant_id AND s.asset_id = a.asset_id
+         WHERE a.tenant_id = $1 AND a.asset_id = $2
+           AND s.application_id = $3
+           AND s.upload_status = 'completed'
+           AND s.provider_upload_reference IS NOT NULL
+           AND btrim(s.provider_upload_reference) <> ''
+           AND a.lifecycle_status = 'active'
+           AND a.upload_status = 'available'
+           AND a.scan_status IN ('clean', 'not_required')
+           AND (
+             (a.repository_scope = 'application_restricted' AND a.owner_application_id = $3)
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = a.asset_id
+             ))
+           )`,
+        [tenantId, assetId, applicationId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      if (result.rows.length !== 1 || !row) return null;
+      return {
+        accessReference: row.provider_upload_reference,
+        fileName: row.original_file_name,
+        mimeType: row.mime_type,
+      };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async getPendingUploadAsset(tenantId: string, applicationId: string, assetId: string): Promise<CustomerAsset | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
