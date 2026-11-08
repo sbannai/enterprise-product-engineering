@@ -343,6 +343,46 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async expireStaleUploadSessions(input: {
+    tenantId: string; applicationId: string; environment: AuditEnvironment;
+    correlationId: string; limit?: number;
+  }): Promise<number> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const expired = await client.query<{
+        application_id: string; upload_session_id: string; asset_id: string;
+      }>(
+        "SELECT application_id, upload_session_id, asset_id FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
+        [input.tenantId, limit],
+      );
+      for (const row of expired.rows) {
+        await this.setContext(client, input.tenantId, row.application_id);
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: row.application_id, environment: input.environment,
+          actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
+          outcome: "success", resourceType: "customer-asset-upload", resourceId: row.upload_session_id,
+          correlationId: input.correlationId, source: "job",
+          operationName: "customer-asset-upload-expiry-worker",
+          payload: { assetId: row.asset_id, reason: "reservation_expired" },
+        });
+      }
+      await client.query("COMMIT");
+      return expired.rows.length;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
     correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
