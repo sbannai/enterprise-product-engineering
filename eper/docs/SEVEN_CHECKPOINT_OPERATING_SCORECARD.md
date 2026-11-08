@@ -1895,3 +1895,27 @@ No review submissions or inline review threads exist. The Codex review attempt d
 7. Release/continuity: RED — main remains unprotected, rulesets empty, and off-host recovery/independent second-engineer release and rollback are not evidenced.
 
 Do not merge #449 or any historical branch in this correction. No real provider/external action or chargeable cloud resource was used.
+
+
+## 2026-11-08 11:05 IST — final PR #449 head and live shared-download proof
+
+This is a correction to the preceding 11:00 section: PR #449 moved again while validation was running. The current exact head is `1d3e2c9574db46c671fca4cc66bb3b5ad67c8ca0`; the earlier `28a24...` head is superseded and must not be used as current PR evidence.
+
+The current PR head adds:
+- a live PostgreSQL restricted-role assertion that an explicitly linked customer-shared application cannot read the upload-session provider reference until the upload is completed, the asset is available/active and the scan is clean;
+- assertions that deleted/inactive and missing assets produce no download reference;
+- an API regression in which a PostgreSQL repository lookup exception returns HTTP 503, records failure audit and never invokes the download resolver.
+
+All 14 Actions runs for exact head `1d3e2c9574db46c671fca4cc66bb3b5ad67c8ca0` completed successfully:
+- provider PostgreSQL lifecycle [42450791726](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791726): migration 026 applied; live restricted-role download lookup, upload recovery, migration/RLS, scan and recovery lanes passed;
+- fresh clone [42450791750](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791750): `npm run dev:verify` PASS; 1,585 tests, 1,572 passed, 0 failed, 13 skipped; all seven migration groups applied and repeated including identity; disposable PostgreSQL restore 80/80 base tables and 7 ledgers. The new live download test is skipped in generic dev-verify and runs in the dedicated provider lifecycle workflow with `EPER_CUSTOMER_ASSET_LIVE_TESTS=1`;
+- Chromium OIDC browser [42450791685](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791685): 1/1 passed;
+- EPER CI [42450791740](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791740): worker 37/37, dispatcher/shutdown 3/3, assignment integration 11/11, restricted worker login/role checks and two-worker retry/dead-letter/audit-replay/idempotent redelivery passed with no skips in those live lanes;
+- PostgreSQL payment-store integration [42450791745](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791745): passed;
+- matrix [42450791744](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791744): 259 passed, 0 failed, 28 checks; G9 [42450791756](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791756): 5/5 passed;
+- integrated gate [42450791687](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791687): PASS; its matrix subjob was path-filtered/skipped and the separate exact-head matrix above passed;
+- release candidate [42450791818](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791818), six-family HTTP smoke [42450791758](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791758) and container smoke [42450791699](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450791699): passed.
+
+At this checkpoint main was `a27a4380d3ef91b096932aae4f5c1806cf601f90`; PR #449 was 12 commits ahead and 2 behind (both behind commits are scorecard-only). The PR remains open and unmerged. No review submissions or inline review threads exist; the Codex review attempt was unable to complete because of its usage limit. An independent review is still required. Update/retest against the then-current main before merge.
+
+The live PostgreSQL shared-download/RLS gap is fixed on the PR branch, not yet on main. Migration `026_customer_asset_shared_download_session_visibility.sql` now occupies 026; historical expiry branches #402/#413/#414 use incompatible migration 026 and must be renumbered/reconciled before any future port. Do not merge those historical branches wholesale.
