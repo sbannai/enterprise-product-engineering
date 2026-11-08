@@ -40,7 +40,7 @@ function input(overrides = {}) {
     }],
     dispatch: { async resolve() { throw new Error("not invoked in composition test"); } },
     catalogue: { async get() { return null; } },
-    connections: { async getRuntimeSecretReference() { throw new Error("not invoked"); } },
+    connections: { async getRuntimeSecretReference() { throw new Error("not invoked"); }, async assertDispatchAuthorization() { throw new Error("not invoked"); } },
     secretResolver: { async resolve() { return { token: "test" }; } },
     scannerIdentity: "scanner-v1",
     allowedHosts: ["storage.example.com"],
