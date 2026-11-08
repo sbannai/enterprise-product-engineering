@@ -134,7 +134,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.ok(persisted.rows[0].last_recovered_at);
 
       const audit = await pool.query(
-        `SELECT action, outcome, payload
+        `SELECT application_id, action, reason_code, outcome, payload
            FROM eper_audit_events
           WHERE tenant_id = $1 AND application_id IN ($2, $5)
             AND resource_id IN ($3, $4)
