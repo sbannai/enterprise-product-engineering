@@ -22,7 +22,7 @@ export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   registrations?: readonly ProviderStorageRuntimeRegistration<TCredentials>[];
   dispatch?: Pick<ProviderDispatchConfigurationService, "resolve">;
   catalogue?: Pick<PostgresProviderCatalogueRepository, "get">;
-  connections?: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference">;
+  connections?: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference" | "assertDispatchAuthorization">;
   secretResolver?: ProviderSecretResolverPort<TCredentials>;
   scannerIdentity?: string;
   allowedHosts?: readonly string[];
