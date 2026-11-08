@@ -13,7 +13,7 @@ export interface CustomerAssetUploadGrant {
 }
 export interface CustomerAssetUploadStartInput {
   tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
-  correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
+  correlationId: string; assetId: string; expectedSizeBytes: number; expectedChecksumSha256: string; idempotencyKey: string;
   fileName: string; mimeType: string;
 }
 type UploadReservation = {
@@ -36,6 +36,7 @@ function fingerprint(input: CustomerAssetUploadStartInput): string {
     tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
     assetId: input.assetId, fileName: input.fileName.normalize("NFC"),
     mimeType: input.mimeType.trim().toLowerCase(), expectedSizeBytes: input.expectedSizeBytes,
+    expectedChecksumSha256: input.expectedChecksumSha256,
   });
   return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
@@ -46,6 +47,7 @@ export async function startCustomerAssetUpload(
   if (!Number.isSafeInteger(input.expectedSizeBytes) || input.expectedSizeBytes <= 0) {
     throw new Error("EPER_CUSTOMER_ASSET_EXPECTED_SIZE_INVALID");
   }
+  if (!/^[a-f0-9]{64}$/.test(input.expectedChecksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_EXPECTED_CHECKSUM_INVALID");
   if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
   if (!/^[a-zA-Z0-9._:-]{16,128}$/.test(input.idempotencyKey)) {
     throw new Error("EPER_CUSTOMER_ASSET_IDEMPOTENCY_KEY_INVALID");
@@ -58,7 +60,8 @@ export async function startCustomerAssetUpload(
   const reservation: UploadReservation = await dependencies.repository.reserveUpload({
     tenantId: input.tenantId, applicationId: input.applicationId, actorId: input.actorId,
     environment: input.environment, correlationId: input.correlationId, assetId: input.assetId,
-    expectedSizeBytes: input.expectedSizeBytes, idempotencyKey: input.idempotencyKey,
+    expectedSizeBytes: input.expectedSizeBytes, expectedChecksumSha256: input.expectedChecksumSha256,
+    idempotencyKey: input.idempotencyKey,
     requestFingerprint, uploadSessionId: randomUUID(),
   });
   if (!["initiated", "in_progress"].includes(reservation.uploadStatus)) {
