@@ -8,6 +8,7 @@ export interface StorageUploadVerificationRequest {
   providerUploadReference: string;
   expectedSizeBytes: number;
   expectedMimeType: string;
+  expectedSha256: string;
 }
 
 export interface StorageUploadVerificationResult {
@@ -39,9 +40,11 @@ export function createStorageUploadVerificationAdapter(
     if (!Number.isSafeInteger(value.sizeBytes) || value.sizeBytes <= 0 ||
         typeof value.detectedMimeType !== "string" || !value.detectedMimeType.trim() ||
         value.detectedMimeType.length > 128 ||
-        !/^[a-f0-9]{64}$/.test(value.checksumSha256)) return null;
+        !/^[a-f0-9]{64}$/.test(value.checksumSha256) ||
+        !/^[a-f0-9]{64}$/.test(request.expectedSha256)) return null;
     if (value.sizeBytes !== request.expectedSizeBytes ||
-        value.detectedMimeType.toLowerCase() !== request.expectedMimeType.toLowerCase()) return null;
+        value.detectedMimeType.toLowerCase() !== request.expectedMimeType.toLowerCase() ||
+        value.checksumSha256 !== request.expectedSha256) return null;
     return {
       sizeBytes: value.sizeBytes,
       detectedMimeType: value.detectedMimeType,
