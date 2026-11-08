@@ -1978,6 +1978,110 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     // Single-call client asset manifest across every application assigned to this customer.
     // Returns safe metadata and opaque storage references only; binary content is fetched separately.
     if (requestUrl.pathname === "/customer/assets") {
+      if (request.method === "POST") {
+        if (process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED !== "true") {
+          sendJson(request, response, 404, { error: "not_found" }); return;
+        }
+        const applicationId = requestUrl.searchParams.get("applicationId") ?? "";
+        if (!/^[a-zA-Z0-9._:-]{2,128}$/.test(applicationId)) {
+          sendJson(request, response, 400, { error: "invalid_application_id" }); return;
+        }
+        let authorization;
+        try {
+          authorization = await authorizeCustomerAssetUploadBrowserRequest({
+            method: request.method,
+            origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+            cookieHeader: request.headers.cookie,
+            csrfHeader: typeof request.headers["x-csrf-token"] === "string" ? request.headers["x-csrf-token"] : undefined,
+            applicationId,
+          }, {
+            expectedOrigin: options.customerOidcPublicOrigin ?? "",
+            csrfSecret: options.customerCsrfSecret ?? "",
+            sessionStore: options.customerIdentitySessionStore!,
+            tenantAssignments: options.tenantApplicationAssignmentStore!,
+            actorAssignments: options.actorApplicationAssignmentStore!,
+            roleAssignments: options.workflowActorRoleAssignmentStore!,
+          });
+        } catch {
+          sendJson(request, response, 503, { error: "customer_asset_metadata_authorization_unavailable" }); return;
+        }
+        if (!authorization.allowed) {
+          const status = authorization.reason === "csrf_invalid" ? 403 :
+            authorization.reason === "identity_unavailable" ? 401 : 403;
+          sendJson(request, response, status, { error: authorization.reason }); return;
+        }
+        if (!options.customerAssetRepository || !options.adminConfigEnvironment) {
+          sendJson(request, response, 503, { error: "customer_asset_metadata_persistence_unavailable" }); return;
+        }
+        let body: Record<string, unknown>;
+        try { body = await readJson(request); }
+        catch (error) {
+          const tooLarge = error instanceof Error && error.message === "REQUEST_BODY_TOO_LARGE";
+          sendJson(request, response, tooLarge ? 413 : 400, { error: tooLarge ? "request_body_too_large" : "invalid_json" }); return;
+        }
+        const operationId = request.headers["idempotency-key"];
+        const scope = body.scope;
+        const displayName = body.displayName;
+        const originalFileName = body.originalFileName;
+        const mimeType = body.mimeType;
+        const mediaCategory = body.mediaCategory;
+        const fileExtension = body.fileExtension;
+        const sizeBytes = body.sizeBytes;
+        if (typeof operationId !== "string" || !/^[a-f0-9]{32,64}$/i.test(operationId) ||
+            (scope !== "customer_shared" && scope !== "application_restricted") ||
+            typeof displayName !== "string" || !displayName.trim() || displayName.length > 200 ||
+            typeof originalFileName !== "string" || !originalFileName.trim() || originalFileName.length > 255 ||
+            typeof mimeType !== "string" || !mimeType.trim() || mimeType.length > 128 ||
+            !["image", "video", "document", "other"].includes(String(mediaCategory)) ||
+            typeof fileExtension !== "string" || !/^[a-zA-Z0-9]{1,15}$/.test(fileExtension.replace(/^\./, "")) ||
+            typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) {
+          sendJson(request, response, 400, { error: "invalid_customer_asset_metadata" }); return;
+        }
+        try {
+          const asset = await options.customerAssetRepository.create({
+            tenantId: authorization.identity.tenantId,
+            applicationId,
+            actorId: authorization.identity.actorId,
+            environment: options.adminConfigEnvironment,
+            correlationId: resolveApiRequestId(request),
+            clientOperationId: operationId,
+            scope,
+            ...(scope === "application_restricted" ? { ownerApplicationId: applicationId } : {}),
+            displayName: displayName.trim(),
+            originalFileName: originalFileName.trim(),
+            mediaCategory: mediaCategory as "image" | "video" | "document" | "other",
+            mimeType: mimeType.trim().toLowerCase(),
+            fileExtension: fileExtension.replace(/^\./, "").toLowerCase(),
+            sizeBytes,
+            // Server-owned placeholder only. It is not a provider key, URL or
+            // client-controlled reference. Provider operations remain disabled
+            // until the approved adapter is wired and verified.
+            storageAdapterKey: "pending",
+            storageObjectReference: "pending:" + randomUUID(),
+          });
+          sendJson(request, response, 201, {
+            assetId: asset.assetId,
+            applicationId,
+            scope: asset.scope,
+            displayName: asset.displayName,
+            originalFileName: asset.originalFileName,
+            mediaCategory: asset.mediaCategory,
+            mimeType: asset.mimeType,
+            fileExtension: asset.fileExtension,
+            sizeBytes: asset.sizeBytes,
+            uploadStatus: asset.uploadStatus,
+            scanStatus: asset.scanStatus,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          const conflict = message === "EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT";
+          const invalid = message.startsWith("EPER_CUSTOMER_ASSET_") && !message.includes("SCHEMA");
+          sendJson(request, response, conflict ? 409 : invalid ? 400 : 503, {
+            error: conflict ? "metadata_idempotency_conflict" : invalid ? "invalid_customer_asset_metadata" : "customer_asset_metadata_create_unavailable",
+          });
+        }
+        return;
+      }
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
