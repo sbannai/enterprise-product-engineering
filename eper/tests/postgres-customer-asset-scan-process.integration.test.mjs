@@ -56,6 +56,10 @@ async function createPendingScanFixture(pool, repository, prefix) {
   const fingerprint = createHash("sha256").update(prefix + suffix).digest("hex");
   // The scanner process receives the exact same synthetic bytes whose digest
   // and size are persisted as the completed upload's server-observed metadata.
+  await pool.query(
+    "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
+    [tenantId],
+  );
   const testObjectBytes = Buffer.alloc(512, suffix.charCodeAt(0));
   const checksumSha256 = createHash("sha256").update(testObjectBytes).digest("hex");
   await repository.create({
