@@ -311,3 +311,62 @@ test("upload completion rejects malformed or mismatched trusted verification met
     serverOptions.customerAssetRepository.completeUpload = async () => { calls.push("complete-upload"); throw new Error("must not complete"); };
   });
 });
+
+
+test("metadata create endpoint enforces browser authorization and assigns server-owned pending storage identity", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/assets?applicationId=app-alpha", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf, "idempotency-key": "a".repeat(32),
+        "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "application_restricted", displayName: "Project brief",
+        originalFileName: "brief.pdf", mediaCategory: "document",
+        mimeType: "application/pdf", fileExtension: "pdf", sizeBytes: 2048,
+      }),
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.assetId, "asset-created-001");
+    assert.equal(body.applicationId, "app-alpha");
+    assert.equal(body.uploadStatus, "pending");
+    assert.equal("storageObjectReference" in body, false);
+    assert.equal("providerUploadReference" in body, false);
+    assert.ok(calls.includes("create"));
+    assert.ok(calls.includes("session"));
+    assert.ok(calls.includes("permission"));
+  }, false, false, serverOptions => {
+    process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
+    serverOptions.customerAssetRepository.create = async input => {
+      // Scope owner is derived from the authorized path, not browser-supplied data.
+      assert.equal(input.tenantId, "tenant-alpha");
+      assert.equal(input.applicationId, "app-alpha");
+      assert.equal(input.actorId, "actor-alpha");
+      assert.equal(input.ownerApplicationId, "app-alpha");
+      assert.equal(input.clientOperationId, "a".repeat(32));
+      assert.equal(input.storageAdapterKey, "pending");
+      assert.match(input.storageObjectReference, /^pending:/);
+      calls.push("create");
+      return {
+        assetId: "asset-created-001", scope: input.scope, displayName: input.displayName,
+        originalFileName: input.originalFileName, mediaCategory: input.mediaCategory,
+        mimeType: input.mimeType, fileExtension: input.fileExtension, sizeBytes: input.sizeBytes,
+        uploadStatus: "pending", scanStatus: "pending",
+      };
+    };
+  });
+});
+
+test("metadata create endpoint rejects invalid CSRF before identity or repository access", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/assets?applicationId=app-alpha", {
+      method: "POST",
+      headers: { origin: "https://attacker.example.test", cookie, "x-csrf-token": csrf,
+        "idempotency-key": "b".repeat(32), "content-type": "application/json" },
+      body: JSON.stringify({ scope: "application_restricted" }),
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "csrf_invalid" });
+    assert.deepEqual(calls, []);
+  }, false, false, () => { process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true"; });
+});
