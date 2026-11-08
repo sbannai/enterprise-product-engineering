@@ -10,7 +10,7 @@ The worker remains disabled by default. Do not enable it in production or UAT un
 
 Apply the audit migrations through 030 before configuring the worker.
 
-The migration creates `eper_customer_asset_upload_expiry_worker_access` as a NOLOGIN, NOSUPERUSER, NOBYPASSRLS group role. It can:
+Migrations 029–030 create `eper_customer_asset_upload_expiry_worker_access` as a NOLOGIN, NOSUPERUSER, NOBYPASSRLS group role. It can:
 - Execute `eper_expire_customer_asset_upload_sessions(tenant, limit)`, which requires the caller's already-bound tenant context.
 - Insert append-only audit events.
 - Read the single audit chain head and update only its hash/timestamp fields.
@@ -58,7 +58,7 @@ Required:
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_SCOPES_JSON`
 
 Optional bounded settings:
-- `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX`: 1–10, default 2
+- `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POOL_MAX`: 1–5, default 2
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS`: 100–60,000, default 5,000
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE`: 1–500, default 100
 - `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_MAX_BACKOFF_MS`: 100–300,000, default 60,000; must be at least the poll interval
@@ -69,7 +69,7 @@ Optional bounded settings:
 
 The process exposes:
 - `GET /health/live`: 200 while the process is alive and not shutting down.
-- `GET /health/ready`: 200 only after the asset schema and append-only audit store pass readiness checks; otherwise 503.
+- `GET /health/ready`: 200 only after the asset schema, expiry-function privilege and append-only audit store pass readiness checks; otherwise 503.
 
 Bind health checks to the deployment's internal network. Health responses contain only a generic status; they do not disclose tenant IDs, application IDs, session IDs, database errors, or secrets.
 
@@ -93,7 +93,7 @@ Proposed starting alert thresholds (not owner-approved): readiness unavailable f
 
 ## Rollout
 
-1. Apply migrations through 029 in a non-production PostgreSQL environment.
+1. Apply migrations through 030 in a non-production PostgreSQL environment.
 2. Provision the dedicated login and grant only the worker access group role.
 3. Run the privilege contract: worker function execution and audit append succeed; direct asset/session, payment and provider reads/writes fail.
 4. Configure one or more approved tenant scopes and keep the enable flag false.
