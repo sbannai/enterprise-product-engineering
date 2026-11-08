@@ -314,6 +314,7 @@ test("upload completion rejects malformed or mismatched trusted verification met
 
 
 test("metadata create endpoint enforces browser authorization and assigns server-owned pending storage identity", async t => {
+  let createdInput;
   await withServer(t, async (base, calls) => {
     const response = await fetch(base + "/customer/assets?applicationId=app-alpha", {
       method: "POST",
@@ -338,14 +339,7 @@ test("metadata create endpoint enforces browser authorization and assigns server
   }, false, false, serverOptions => {
     process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
     serverOptions.customerAssetRepository.create = async input => {
-      // Scope owner is derived from the authorized path, not browser-supplied data.
-      assert.equal(input.tenantId, "tenant-alpha");
-      assert.equal(input.applicationId, "app-alpha");
-      assert.equal(input.actorId, "actor-alpha");
-      assert.equal(input.ownerApplicationId, "app-alpha");
-      assert.equal(input.clientOperationId, "a".repeat(32));
-      assert.equal(input.storageAdapterKey, "pending");
-      assert.match(input.storageObjectReference, /^pending:/);
+      createdInput = input;
       calls.push("create");
       return {
         assetId: "asset-created-001", scope: input.scope, displayName: input.displayName,
@@ -355,6 +349,13 @@ test("metadata create endpoint enforces browser authorization and assigns server
       };
     };
   });
+  assert.equal(createdInput.tenantId, "tenant-alpha");
+  assert.equal(createdInput.applicationId, "app-alpha");
+  assert.equal(createdInput.actorId, "actor-alpha");
+  assert.equal(createdInput.ownerApplicationId, "app-alpha");
+  assert.equal(createdInput.clientOperationId, "a".repeat(32));
+  assert.equal(createdInput.storageAdapterKey, "pending");
+  assert.match(createdInput.storageObjectReference, /^pending:/);
 });
 
 test("metadata create endpoint rejects invalid CSRF before identity or repository access", async t => {
