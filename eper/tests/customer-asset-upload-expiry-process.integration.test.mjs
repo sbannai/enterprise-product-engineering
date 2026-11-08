@@ -80,8 +80,9 @@ test("restricted expiry worker login processes an expired reservation, appends a
     let uploadSessionId;
     try {
       const identity = await workerPool.query("SELECT current_user AS role_name");
+      const workerLoginRole = identity.rows[0]?.role_name;
       const expectedRole = process.env.EPER_EXPECTED_EXPIRY_WORKER_DATABASE_ROLE;
-      if (expectedRole) assert.equal(identity.rows[0]?.role_name, expectedRole);
+      if (expectedRole) assert.equal(workerLoginRole, expectedRole);
 
       const repository = new PostgresCustomerAssetRepository(adminPool);
       await repository.assertReady();
@@ -100,6 +101,10 @@ test("restricted expiry worker login processes an expired reservation, appends a
         requestFingerprint: "a".repeat(64),
       });
       uploadSessionId = reservation.uploadSessionId;
+      await adminPool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES ($1, $2, true)",
+        [workerLoginRole, tenantId],
+      );
       await adminPool.query(
         "UPDATE eper_customer_asset_upload_sessions SET expires_at = now() - interval '2 minutes' WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
         [tenantId, applicationId, uploadSessionId],
@@ -177,6 +182,10 @@ test("restricted expiry worker login processes an expired reservation, appends a
         child.kill("SIGTERM");
         await Promise.race([once(child, "exit"), sleep(5_000)]);
       }
+      await adminPool.query(
+        "DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE tenant_id = $1",
+        [tenantId],
+      ).catch(() => {});
       if (uploadSessionId) {
         await adminPool.query(
           "DELETE FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
