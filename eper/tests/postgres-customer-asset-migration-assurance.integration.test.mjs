@@ -36,10 +36,11 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
            'eper_customer_assets',
            'eper_customer_asset_application_links',
            'eper_customer_asset_upload_sessions',
-           'eper_customer_asset_scan_jobs'
+           'eper_customer_asset_scan_jobs',
+           'eper_customer_asset_metadata_operations'
          )
       `);
-      assert.equal(catalog.rowCount, 4, "all customer-asset tables must exist");
+      assert.equal(catalog.rowCount, 5, "all customer-asset tables, including metadata idempotency, must exist");
       for (const table of catalog.rows) {
         assert.equal(table.relrowsecurity, true, table.relname + " must ENABLE RLS");
         assert.equal(table.relforcerowsecurity, true, table.relname + " must FORCE RLS");
@@ -82,6 +83,23 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
       assert.match(constraintDefinitions, /provider_outcome.*'succeeded'.*provider_upload_reference.*IS NOT NULL/);
       assert.match(constraintDefinitions, /provider_outcome.*'rejected'.*provider_upload_reference.*IS NULL/);
 
+      const metadataConstraints = await pool.query(`
+        SELECT conname, pg_get_constraintdef(oid) AS definition
+          FROM pg_constraint
+         WHERE conrelid = 'eper_customer_asset_metadata_operations'::regclass
+         ORDER BY conname
+      `);
+      assert.ok(metadataConstraints.rows.some(row => row.conname === "eper_customer_asset_metadata_operations_pkey"),
+        "metadata operation identity must be unique per tenant/application/actor/operation");
+      assert.ok(metadataConstraints.rows.some(row => row.definition.includes("UNIQUE (tenant_id, asset_id)")),
+        "one metadata operation must own one asset per tenant");
+      const metadataPolicy = await pool.query(`
+        SELECT policyname, qual, with_check FROM pg_policies
+         WHERE schemaname = current_schema() AND tablename = 'eper_customer_asset_metadata_operations'
+      `);
+      assert.equal(metadataPolicy.rowCount, 1);
+      assert.match(metadataPolicy.rows[0].qual, /tenant_id.*eper\.tenant_id.*application_id.*eper\.application_id/);
+      assert.match(metadataPolicy.rows[0].with_check, /tenant_id.*eper\.tenant_id.*application_id.*eper\.application_id/);
       const role = await pool.query(`
         SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolinherit
           FROM pg_roles WHERE rolname = 'eper_customer_asset_access'
