@@ -107,13 +107,15 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
     validateConfigurationSchema(value.items as Record<string, unknown>, depth + 1);
   }
   if (value.enum !== undefined) {
-    if (!Array.isArray(value.enum) || value.enum.length < 1 || value.enum.length > 100 ||
-        value.enum.some(item => item !== null &&
+    const enumValues: unknown = value.enum;
+    if (!Array.isArray(enumValues)) invalid();
+    if (enumValues.length < 1 || enumValues.length > 100 ||
+        enumValues.some((item: unknown) => item !== null &&
           (!["string", "number", "boolean"].includes(typeof item) ||
            (typeof item === "number" && !Number.isFinite(item)))) ||
-        new Set(value.enum.map(item => JSON.stringify(item))).size !== value.enum.length) invalid();
+        new Set(enumValues.map((item: unknown) => JSON.stringify(item))).size !== enumValues.length) invalid();
     const declaredType = value.type;
-    if (declaredType !== undefined && value.enum.some(item => {
+    if (declaredType !== undefined && enumValues.some((item: unknown) => {
       if (declaredType === "string") return typeof item !== "string";
       if (declaredType === "boolean") return typeof item !== "boolean";
       if (declaredType === "number") return typeof item !== "number";
