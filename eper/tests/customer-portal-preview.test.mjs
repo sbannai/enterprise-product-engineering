@@ -58,6 +58,8 @@ test("customer portal preview has customer navigation separate from admin wirefr
     assert.ok(html.includes('"/upload-grant"'), "customer workspace must call the API upload-grant route");
     assert.ok(html.includes('headers:{"idempotency-key":pendingCustomerAssetUploadIdempotencyKey}'), "upload grant must send the stable idempotency key in the request header");
     assert.ok(html.includes("expectedSizeBytes:file.size,expectedChecksumSha256"), "upload grant must send the API size and trusted expected-checksum fields");
+    assert.ok(html.includes("customer_asset_upload_provider_unavailable"), "provider-unavailable API errors must produce actionable customer-safe guidance");
+    assert.ok(html.includes("upload_idempotency_conflict"), "checksum/idempotency conflicts must not be presented as generic network failures");
     assert.match(html, /window\.open\("about:blank"/, "download UI must open the destination only after an explicit user click");
     assert.ok(html.includes("Tickets for selected application"), "customer ticket history must be clearly labeled as application-level");
     for (const replyContract of ["View conversation", "data-open-ticket-conversation", "data-ticket-reply-form", "Send reply", "/tickets/\"+encodeURIComponent(ticketId)+\"/replies", "Reply sent.", "Reply not sent", "authorRole===\"support\"?\"Support\":\"You\""]) {
