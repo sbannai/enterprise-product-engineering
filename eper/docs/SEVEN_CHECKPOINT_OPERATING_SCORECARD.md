@@ -1267,3 +1267,34 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 - **Disposition:** no cherry-pick or merge of #402/#413/#414 as-is. Build a current-main implementation slice after deciding and testing idempotency scope, preserving request fingerprint/provider outcome recovery, reconciling `initiated` versus `reserved`, enforcing one active attempt per asset, and retaining session→asset lock order. Require clean replay from 021–024 through new migrations plus PostgreSQL upgrade, concurrency, cross-application and retry tests on the resulting exact main SHA.
 - Evidence/comments: issue #417 comments 6715742299 (diverged ancestry), 6715749365 (migration chain), 6715756775 (migration 026 compatibility review). PR #402 has eight changed files; #413 four; #414 sixteen. Their branch-level CI evidence is not current-main integration evidence.
 - **Status:** blocked promotion / mainline port not yet implemented. No code or migration was changed and no new tests were run in this review. No cloud provisioning, real provider dispatch, production release or Business UAT authorization.
+
+
+---
+
+## Append-only checkpoint — 2026-11-08 (current main, upload boundary and governance)
+
+### Exact baseline
+- Current `main`: `f2983d7a48437c693053fa9d4d996789b53f993a`; branch compare confirms the reviewed SHA is identical to main at this checkpoint.
+- Eight GitHub Actions check suites completed successfully on this exact main SHA. This is CI evidence only; it does not imply Business UAT acceptance or production readiness.
+- Repository metadata still reports `main.protected=false`. No branch-protection or ruleset settings were changed; issue #434 remains open to reconcile protection with the owner's direct-to-main delivery model.
+
+### Upload delivery slices — branch-local until reviewed and integrated
+- PR #447: `bc66cf724388bc95a6e1aa18c1c293fd3d4faac3`, five commits ahead / zero behind main; all 13 exact-head GitHub Actions check suites succeeded. It adds a server-generated opaque HMAC session binding for durable PostgreSQL customer sessions. It is ready for independent review, open and unmerged; no review submissions are recorded. Browser consumption remains separate.
+- PR #448: `9409ffcf5267d19919e185a6806efe8060db54fb`, six commits ahead / zero behind main; all 13 exact-head GitHub Actions check suites succeeded. One subordinate check-run was skipped; the separate 228-requirement pilot-matrix workflow passed. It adds the CSRF/session/tenant/application/role-authorized upload completion route, trusted verifier boundary and transactional scan handoff. It is ready for independent review, open and unmerged; no review submissions are recorded.
+- Neither PR has been merged. Their green CI is branch-local evidence and does not alter current main functionality. Do not count either as a completed mainline feature.
+
+### Provider-runtime and browser acceptance boundary
+- Current main still deliberately rejects `EPER_PROVIDER_STORAGE_RUNTIME_ENABLED=true` with `PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED`; the six-operation runtime is not wired into the API composition root.
+- Issue #397 remains blocked on an owner-approved server-side secret-manager integration and concrete storage/object-verification/download/malware-scanning provider adapter ownership. Do not substitute synthetic credentials/drivers for production configuration.
+- Issue #405 remains the end-to-end acceptance gate for real-byte browser transfer, verification, clean-scan gating, authorized download, lost-response/reload retry, and tenant/application/audit assertions.
+- PR #447/#448 and issue updates are recorded as intermediate delivery evidence only. No real provider dispatch, cloud provisioning, production enablement or Business UAT authorization occurred.
+
+### Live PR governance snapshot
+- Live open PR search returned 25 open PRs at this checkpoint. The two current main-based upload slices (#447/#448) are ready for independent review; the remaining open inventory includes historical draft/stacked candidates and must be reconciled individually against current main before promotion or closure.
+- No mass merge, mass closure, branch deletion or functionality promotion was performed.
+
+### Next controlled actions
+1. Obtain independent reviews for #447 and #448; merge only after review and a fresh exact-head check.
+2. Obtain the provider + secret-manager ownership decision for #397; until then preserve the fail-closed runtime.
+3. Complete #405 only after the approved runtime and retry/expiry dependencies are integrated on main.
+4. Reconcile #434's mainline protection design without silently imposing PR-only delivery.
