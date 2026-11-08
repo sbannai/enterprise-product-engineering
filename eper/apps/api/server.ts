@@ -1916,6 +1916,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             !session.providerUploadReference) {
           sendJson(request, response, 404, { error: "upload_session_not_found" }); return;
         }
+        const correlationId = resolveApiRequestId(request);
         const verified = await options.assetUploadVerification({
           tenantId: authorization.identity.tenantId,
           applicationId,
@@ -1924,7 +1925,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           providerUploadReference: session.providerUploadReference,
           expectedSizeBytes: session.expectedSizeBytes,
           expectedMimeType: session.expectedMimeType,
-        }, resolveApiRequestId(request));
+        }, correlationId);
         if (!verified || !Number.isSafeInteger(verified.sizeBytes) || verified.sizeBytes <= 0 ||
             verified.sizeBytes !== session.expectedSizeBytes ||
             typeof verified.detectedMimeType !== "string" || !verified.detectedMimeType.trim() ||
@@ -1938,7 +1939,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           applicationId,
           actorId: authorization.identity.actorId,
           environment: options.adminConfigEnvironment,
-          correlationId: resolveApiRequestId(request),
+          correlationId,
           uploadSessionId,
           receivedSizeBytes: verified.sizeBytes,
           observedMimeType: verified.detectedMimeType,
