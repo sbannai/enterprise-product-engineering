@@ -178,6 +178,7 @@ test("actual expiry worker LOGIN is confined to operator-registered tenants desp
   } finally {
     await worker?.end();
     await admin.query("DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = $1", [loginRole]).catch(() => {});
+    await admin.query(`REVOKE eper_customer_asset_upload_expiry_worker_access FROM "${loginRole}"`).catch(() => {});
     await admin.query(`REVOKE CONNECT ON DATABASE eper_test FROM "${loginRole}"`).catch(() => {});
     await admin.query(`DROP ROLE IF EXISTS "${loginRole}"`).catch(() => {});
     await admin.end();
