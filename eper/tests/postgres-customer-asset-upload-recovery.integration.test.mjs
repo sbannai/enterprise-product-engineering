@@ -444,6 +444,18 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
       const infectedAsset = await createAsset(ownerApplicationId, "application_restricted", "infected");
       assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, infectedAsset.assetId), null,
         "a rejected/quarantined scan result never produces a download reference");
+
+      const inactiveAsset = await createAsset(ownerApplicationId, "application_restricted", "clean");
+      await pool.query(
+        `UPDATE eper_customer_assets
+            SET lifecycle_status = 'deleted', deleted_by = $3, deleted_at = now()
+          WHERE tenant_id = $1 AND asset_id = $2`,
+        [tenantId, inactiveAsset.assetId, actorId],
+      );
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, inactiveAsset.assetId), null,
+        "a deleted/inactive asset never produces a download reference");
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, randomUUID()), null,
+        "a missing asset never produces a download reference");
     } finally {
       if (restrictedPool) await restrictedPool.end();
       await pool.query(`DROP ROLE IF EXISTS ${roleName}`).catch(() => {});
