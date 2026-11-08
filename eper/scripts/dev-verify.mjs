@@ -82,6 +82,9 @@ const testEnv = {
   ...env,
   EPER_IDENTITY_ASSIGNMENT_LIVE_TESTS: "1",
   EPER_CAPABILITY_LIVE_TESTS: "1",
+  // These integration tests are safe only because dev:verify enforces loopback PostgreSQL.
+  EPER_CUSTOMER_ASSET_LIVE_TESTS: "1",
+  EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_DATABASE_URL: databaseUrl,
 };
 run("Full EPER test suite with live PostgreSQL integration enabled", ["test"], testEnv);
 console.log("\nEPER_LOCAL_DEVELOPER_VERIFICATION=PASS");
