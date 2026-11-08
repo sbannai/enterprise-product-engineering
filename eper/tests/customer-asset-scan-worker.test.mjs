@@ -110,3 +110,25 @@ test("customer asset scan worker waits for an in-flight lease renewal before job
   });
   assert.equal(renewalFinished, true, "worker must not return while its lease renewal query is still running");
 });
+
+
+test("customer asset scan worker waits for a timed-out scanner promise to settle before retry", async () => {
+  const f = fixture("clean");
+  let scanSettled = false;
+  f.scanner.scan = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1_150));
+    scanSettled = true;
+    f.calls.push(["scan-settled"]);
+    return { scanStatus: "clean", scannerServiceId: "asset-scanner" };
+  };
+  await runCustomerAssetScanWorker({
+    ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    scanTimeoutMs: 1_000,
+    onJob() { f.controller.abort(); },
+  });
+  const settledIndex = f.calls.findIndex((call) => call[0] === "scan-settled");
+  const retryIndex = f.calls.findIndex((call) => call[0] === "retry");
+  assert.ok(settledIndex >= 0, "underlying provider operation must settle");
+  assert.ok(retryIndex > settledIndex, "retry must not begin before the original scan settles");
+});
