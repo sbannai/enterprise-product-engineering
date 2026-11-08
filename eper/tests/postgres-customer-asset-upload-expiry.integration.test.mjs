@@ -132,18 +132,24 @@ test("actual expiry worker LOGIN is confined to operator-registered tenants desp
         [tenantA],
       )).rows[0].n, 0);
       await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantB]);
+      await client.query("SAVEPOINT deny_other_tenant");
       await assert.rejects(
         client.query("SELECT * FROM public.eper_expire_customer_asset_upload_sessions($1, 5)", [tenantB]),
         /EPER_CUSTOMER_ASSET_EXPIRY_WORKER_SCOPE_DENIED/,
       );
+      await client.query("ROLLBACK TO SAVEPOINT deny_other_tenant");
+      await client.query("SAVEPOINT deny_registry_read");
       await assert.rejects(
         client.query("SELECT * FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope"),
         /permission denied/i,
       );
+      await client.query("ROLLBACK TO SAVEPOINT deny_registry_read");
+      await client.query("SAVEPOINT deny_registry_write");
       await assert.rejects(
         client.query("INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id) VALUES ($1, $2)", [loginRole, tenantB]),
         /permission denied/i,
       );
+      await client.query("ROLLBACK TO SAVEPOINT deny_registry_write");
       await client.query("ROLLBACK");
     } finally {
       client.release();
