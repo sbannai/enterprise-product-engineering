@@ -219,6 +219,16 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByRole("button",{name:"Upload file"}).click();
     await page.getByText("A previous upload has an uncertain result. Re-select the same file and keep all metadata unchanged before retrying.").waitFor();
     assert.equal(uploadIdempotencyKeys.length,2,"changed metadata must be rejected before another network request");
+    await page.getByLabel("Display name").fill("Browser retry brief");
+    const sessionBindingOverride=async route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({data:{authenticated:true,tenantId,actorId,roleKey:"customer-user",sessionBinding:"f".repeat(64),authentication:"postgres-browser-session"}})});
+    await page.route("**/customer/session",sessionBindingOverride);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Your organization session changed. Confirm the selected customer account and retry.");
+    assert.equal(uploadIdempotencyKeys.length,2,"a changed verified session must not replay an earlier upload operation");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"a changed verified session must clear persisted retry state");
+    await page.unroute("**/customer/session",sessionBindingOverride);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
     await page.getByRole("button",{name:"View conversation"}).waitFor();
     await page.getByRole("button",{name:"View conversation"}).click();
