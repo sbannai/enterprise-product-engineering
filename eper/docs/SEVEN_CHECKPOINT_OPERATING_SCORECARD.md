@@ -1325,3 +1325,45 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 1. Obtain an independent human review for #447 and #448.
 2. Continue #397 provider/secret-resolver implementation and #405 browser lifecycle evidence on current main.
 3. Keep the fail-closed runtime and preserve the 228 requirements / 38 chapters unchanged.
+
+
+---
+
+## Append-only checkpoint — 2026-11-08 (mainline session-binding delivery)
+
+### Live baseline and exact-main validation
+- Main source commit: `da962a5163e96fb150b2a2cee2acf2a6726d17b8`.
+- All 10 GitHub Actions workflows returned for this exact SHA completed successfully:
+  - EPER CI: `42438522380`
+  - Customer OIDC browser E2E: `42438522358`
+  - Fresh-clone developer/PostgreSQL verification: `42438522427`
+  - Same-commit integrated validation: `42438522335`
+  - 228 requirement / 38 chapter pilot matrix: `42438522289`
+  - G9 reconciliation: `42438522405`
+  - Six-family capability HTTP smoke: `42438522354`
+  - Container runtime smoke: `42438522448`
+  - Controlled QA re-execution: `42438522362`
+  - Controlled UAT technical simulation: `42438522364`
+- EPER CI typecheck, build, customer asset upload recovery/provider-binding regression, PostgreSQL 16 migration/RLS, live asset recovery, workflow/outbox and capability persistence checks passed.
+- Fresh-clone verification and PostgreSQL 16 backup/restore passed. Chromium OIDC login, protected access, logout/revocation and Product Admin browser checks passed.
+- Integrated validation passed payment/PostgreSQL/receipt contracts, all six capability families, the 228/38 pilot matrix, release artifact and G9 evidence, and the UAT readiness audit.
+
+### Mainline session-binding slice
+- Ported the narrow server-side session-binding implementation from PR #447 directly to main. The PostgreSQL-backed `GET /customer/session` now returns a domain-separated HMAC-SHA256 opaque binding derived from the verified session cookie using the configured server-side CSRF secret.
+- The response does not expose the raw cookie, OIDC issuer or subject. Legacy bearer-map compatibility mode does not emit a binding.
+- Added an HTTP regression asserting stable binding for the same session and a different binding for a new login by the same actor.
+- PR #447 is closed as superseded by this mainline implementation; it was not merged and its branch was not deleted.
+- Issue #419 remains open: browser-side persistence/recovery must consume this binding only after successful session verification. On mismatch, account/session switch, expiry/revocation or logout/re-login, stale retry state must be discarded. The current main customer portal still lacks the asset-upload form from the divergent #399/#416 stack; do not merge that stack wholesale.
+
+### Live inventory and controls
+- Open PRs: 24. Open issues: 31. Point-in-time counts only.
+- Main remains unprotected (`protected=false`; required status checks disabled); issue #434 remains open. No repository settings changed.
+- Issue #397 remains blocked on owner-approved secret-manager integration and concrete storage/object-verification/download/malware-scanner provider ownership. Keep provider runtime disabled and fail-closed.
+- Issue #405 remains open for the complete real-byte browser upload, verification, clean-scan, authorized-download and retry/reload lifecycle.
+- No real provider dispatch, production credentials, cloud provisioning, production enablement or Business UAT authorization. Preserve the approved 228 requirements / 38 chapters.
+
+### Next controlled actions
+1. Port the customer asset upload UI and session-bound retry recovery as a minimal current-main slice, only with the verified session binding and fail-closed server boundaries.
+2. Resolve the #397 provider and secret-manager ownership decision before executable provider composition.
+3. Complete #405 browser E2E only after the required upload/verification/scanner runtime boundaries exist on main.
+4. Reconcile #434 mainline protections without blocking the owner's direct-to-main delivery model.
