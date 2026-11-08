@@ -72,7 +72,7 @@ async function createPendingScanFixture(pool, repository, prefix) {
   });
   const reservation = await repository.reserveUpload({
     tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-    assetId, expectedSizeBytes: 512, idempotencyKey, requestFingerprint: fingerprint,
+    assetId, expectedSizeBytes: 512, expectedChecksumSha256: checksumSha256, idempotencyKey, requestFingerprint: fingerprint,
   });
   await repository.recordUploadGrant({
     tenantId, applicationId, actorId, environment: "sandbox", correlationId,
