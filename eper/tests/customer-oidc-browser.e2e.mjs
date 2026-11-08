@@ -23,7 +23,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
   for (const key of proxyKeys) delete process.env[key];
   process.env.NO_PROXY = "127.0.0.1,localhost";
   process.env.no_proxy = process.env.NO_PROXY;
-  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE","EPER_ADMIN_CONFIG_API_ENABLED","EPER_ADMIN_CONFIG_PERSISTENCE","EPER_AUDIT_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
+  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE","EPER_ADMIN_CONFIG_API_ENABLED","EPER_ADMIN_CONFIG_PERSISTENCE","EPER_AUDIT_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON","EPER_CUSTOMER_ASSETS_API_ENABLED","EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   const state="s".repeat(43), nonce="n".repeat(43);
   const issuer="https://idp.example.test";
@@ -41,7 +41,9 @@ test("browser OIDC login grants the customer workspace and support journey, logo
       EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE:"postgres",
       EPER_ADMIN_CONFIG_API_ENABLED:"true", EPER_ADMIN_CONFIG_PERSISTENCE:"postgres", EPER_AUDIT_PERSISTENCE:"postgres",
       EPER_CUSTOMER_PORTAL_API_ENABLED:"true", EPER_TICKETING_API_ENABLED:"true",
-      EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({[tenantId]:["settings","tickets-feedback"]}),
+      EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({[tenantId]:["settings","tickets-feedback","client-assets"]}),
+      EPER_CUSTOMER_ASSETS_API_ENABLED:"true",
+      EPER_CUSTOMER_APPLICATION_ASSETS_JSON:JSON.stringify({[tenantId]:{[applicationId]:[]}}),
       EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({[tenantId]:{[applicationId]:{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
     });
     const store=new PostgresCustomerIdentitySessionStore(pool);
@@ -181,6 +183,40 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(ticketAudit.rows[0].tenant_id,tenantId);
     assert.equal(ticketAudit.rows[0].application_id,applicationId);
     assert.equal(ticketAudit.rows[0].actor_id,actorId);
+    const uploadIdempotencyKeys=[];
+    await page.route("**/customer/assets?applicationId=*",async route=>{
+      if(route.request().method()!=="POST"){await route.continue();return;}
+      uploadIdempotencyKeys.push(route.request().headers()["idempotency-key"]||"");
+      await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"customer_asset_metadata_persistence_unavailable"})});
+    });
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Browser retry brief");
+    const retryFile={name:"brief.pdf",mimeType:"application/pdf",buffer:Buffer.from("%PDF-1.4 browser retry fixture")};
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.getByText("Storage, authorization or trusted verification is not configured. The upload was stopped safely.").waitFor();
+    assert.equal(uploadIdempotencyKeys.length,1);
+    assert.match(uploadIdempotencyKeys[0],/^[a-f0-9]{32}$/);
+    const storedRetryState=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")||"null"));
+    assert.deepEqual(Object.keys(storedRetryState||{}).sort(),["metadataFingerprint","operationId","uploadIdempotencyKey"]);
+    assert.match(storedRetryState.metadataFingerprint,/^[a-f0-9]{64}$/);
+    assert.match(storedRetryState.operationId,/^[a-f0-9]{32}$/);
+    assert.match(storedRetryState.uploadIdempotencyKey,/^[a-f0-9]{32}$/);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Browser retry brief");
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.getByText("Storage, authorization or trusted verification is not configured. The upload was stopped safely.").waitFor();
+    assert.equal(uploadIdempotencyKeys.length,2);
+    assert.equal(uploadIdempotencyKeys[1],uploadIdempotencyKeys[0],"same-tab reload must reuse the original metadata operation key");
+    await page.getByLabel("Display name").fill("Changed display name");
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.getByText("A previous upload has an uncertain result. Re-select the same file and keep all metadata unchanged before retrying.").waitFor();
+    assert.equal(uploadIdempotencyKeys.length,2,"changed metadata must be rejected before another network request");
     await page.getByRole("button",{name:"View conversation"}).click();
     await page.getByLabel("Reply to support").fill("Additional details from the customer browser session.");
     await page.getByRole("button",{name:"Send reply"}).click();
@@ -203,6 +239,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.goto(origin+"/customer-portal-preview");
     await page.getByRole("button",{name:"Sign out"}).click();
     await page.getByRole("link",{name:"Sign in with your organization"}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"logout must clear persisted upload retry identity");
     const denied=await page.goto(origin+"/customer/settings?applicationId="+encodeURIComponent(applicationId));
     assert.equal(denied.status(),401);
     assert.equal((await denied.json()).error.code,"UNAUTHENTICATED");
