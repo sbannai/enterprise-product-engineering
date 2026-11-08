@@ -154,6 +154,25 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(appAConnections[0].connectionId, connectionId);
       assert.deepEqual(appAConnections[0].allowedCapabilities, ["email.send"]);
       assert.equal("secretReference" in appAConnections[0], false);
+      const runtimeReference = await repository.getRuntimeSecretReference({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "email.send",
+      });
+      assert.deepEqual(runtimeReference, {
+        secretReference: "vault://tenant-a/provider/credential-v1", authMode: "oauth",
+      });
+      await repository.assertDispatchAuthorization({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "email.send",
+      });
+      await assert.rejects(() => repository.assertDispatchAuthorization({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "meeting.create",
+      }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/);
+      await assert.rejects(() => repository.getRuntimeSecretReference({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "meeting.create",
+      }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/);
       assert.deepEqual(await repository.listForApplication(tenantA, appB), []);
 
       const secondConnection = await repository.createAndBindApplication({
@@ -381,6 +400,11 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       const rotated = rotations.find(result => result.status === "fulfilled").value;
       assert.equal(rotated.version, 5);
       assert.equal(rotated.status, "PENDING_VALIDATION");
+      await assert.rejects(() => repository.assertDispatchAuthorization({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 5, providerKey, capability: "email.send",
+      }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/,
+      "secret rotation must suspend dispatch until the new credential is validated");
       const rotationAudit = await pool.query(
         "SELECT action FROM eper_audit_events WHERE resource_id=$1 AND action='provider.connection.rotate_secret_reference'",
         [connectionId],
