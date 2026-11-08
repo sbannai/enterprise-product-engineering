@@ -114,8 +114,8 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         repository.reserveUpload({
           ...reservationInput, applicationId: otherApplicationId,
         }),
-        { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
-        "another application must not recover the reservation or learn its session",
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE" },
+        "application-scoped idempotency permits an independent key scope, while tenant-wide active uniqueness prevents a second live upload for the same asset",
       );
 
       const persisted = await pool.query(
