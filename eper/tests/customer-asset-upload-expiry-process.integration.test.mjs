@@ -85,6 +85,10 @@ test("restricted expiry worker login processes an expired reservation, appends a
       if (expectedRole) assert.equal(workerLoginRole, expectedRole);
 
       const repository = new PostgresCustomerAssetRepository(adminPool);
+      await adminPool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true)",
+        [tenantId],
+      );
       await repository.assertReady();
       await repository.create({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
