@@ -8,6 +8,8 @@ on:
       - "eper/packages/assets/**"
       - "eper/apps/worker/customer-asset-scan-main.ts"
       - "eper/apps/worker/customer-asset-scan-recovery-main.ts"
+      - "eper/apps/worker/customer-asset-upload-expiry-main.ts"
+      - "eper/docs/CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_RUNBOOK.md"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
@@ -15,6 +17,9 @@ on:
       - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-upload-expiry.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-expiry-role.integration.test.mjs"
+      - "eper/tests/customer-asset-upload-expiry-process.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-scan-process.integration.test.mjs"
@@ -32,6 +37,8 @@ on:
       - "eper/packages/assets/**"
       - "eper/apps/worker/customer-asset-scan-main.ts"
       - "eper/apps/worker/customer-asset-scan-recovery-main.ts"
+      - "eper/apps/worker/customer-asset-upload-expiry-main.ts"
+      - "eper/docs/CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_RUNBOOK.md"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
@@ -39,6 +46,9 @@ on:
       - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-upload-expiry.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-expiry-role.integration.test.mjs"
+      - "eper/tests/customer-asset-upload-expiry-process.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs"
       - "eper/tests/postgres-customer-asset-scan-process.integration.test.mjs"
@@ -90,6 +100,17 @@ jobs:
         run: npm run migrate:payments
       - name: Apply provider and audit migrations, including payload references and leases
         run: npm run migrate:audit
+      - name: Provision isolated restricted customer-asset expiry worker login
+        run: |
+          worker_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$worker_password"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_customer_asset_upload_expiry_worker_test WITH LOGIN PASSWORD '${worker_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_customer_asset_upload_expiry_worker_test"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_customer_asset_upload_expiry_worker_access TO eper_customer_asset_upload_expiry_worker_test"
+          echo "EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_DATABASE_URL=postgres://eper_customer_asset_upload_expiry_worker_test:${worker_password}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          echo "EPER_EXPECTED_EXPIRY_WORKER_DATABASE_ROLE=eper_customer_asset_upload_expiry_worker_test" >> "$GITHUB_ENV"
+      - name: Exercise tenant-bound expiry and restricted-login worker lifecycle on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-upload-expiry.integration.test.mjs tests/postgres-customer-asset-expiry-role.integration.test.mjs tests/customer-asset-upload-expiry-process.integration.test.mjs
       - name: Verify provider credential error redaction and post-secret authorization boundary
         run: node --test tests/provider-runtime-credential-resolution-service.test.mjs
       - name: Verify provider connection dispatch authorization before and after secret resolution

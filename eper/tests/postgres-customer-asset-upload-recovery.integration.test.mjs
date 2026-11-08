@@ -23,6 +23,10 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
     const repository = new PostgresCustomerAssetRepository(pool);
 
     try {
+      await pool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
+        [tenantId],
+      );
       await repository.assertReady();
       await repository.create({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
@@ -101,7 +105,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         upload_status: "failed", provider_outcome: "rejected", provider_upload_reference: null,
       });
       const rejectionAudit = await pool.query(
-        `SELECT action, outcome, payload FROM eper_audit_events
+        `SELECT application_id, action, reason_code, outcome, payload FROM eper_audit_events
           WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3
             AND action = 'customer.asset.upload.provider.reject'`,
         [tenantId, applicationId, rejectedReservation.uploadSessionId],
@@ -114,8 +118,8 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         repository.reserveUpload({
           ...reservationInput, applicationId: otherApplicationId,
         }),
-        { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
-        "another application must not recover the reservation or learn its session",
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE" },
+        "application-scoped idempotency permits an independent key scope, while tenant-wide active uniqueness prevents a second live upload for the same asset",
       );
 
       const persisted = await pool.query(
@@ -134,7 +138,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.ok(persisted.rows[0].last_recovered_at);
 
       const audit = await pool.query(
-        `SELECT action, outcome, payload
+        `SELECT application_id, action, reason_code, outcome, payload
            FROM eper_audit_events
           WHERE tenant_id = $1 AND application_id IN ($2, $5)
             AND resource_id IN ($3, $4)
@@ -148,6 +152,13 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.grant.recover" && row.outcome === "success"));
       assert.ok(audit.rows.filter(row => row.action === "customer.asset.upload.reserve" && row.outcome === "denied").length >= 3,
         "actor, fingerprint and cross-application idempotency conflicts must leave durable denial evidence");
+      assert.ok(audit.rows.some(row =>
+        row.application_id === otherApplicationId &&
+        row.action === "customer.asset.upload.reserve" &&
+        row.outcome === "denied" &&
+        row.reason_code === "active_upload_conflict" &&
+        row.payload.assetId === assetId),
+        "cross-application active-upload denial must be audited in the requesting application without disclosing the owner");
       const serializedAudit = JSON.stringify(audit.rows);
       assert.doesNotMatch(serializedAudit, /https:\/\/|signed_url|bearer_token|access_token/i);
 
@@ -346,6 +357,11 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
     const rolePassword = randomUUID().replaceAll("-", "");
     const repository = new PostgresCustomerAssetRepository(pool);
     let restrictedPool;
+
+    await pool.query(
+      "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
+      [tenantId],
+    );
 
     async function createAsset(applicationId, scope, scanStatus) {
       const assetId = randomUUID();
