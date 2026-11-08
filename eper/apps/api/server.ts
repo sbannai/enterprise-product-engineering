@@ -1925,7 +1925,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           expectedSizeBytes: session.expectedSizeBytes,
           expectedMimeType: session.expectedMimeType,
         }, resolveApiRequestId(request));
-        if (!verified) {
+        if (!verified || !Number.isSafeInteger(verified.sizeBytes) || verified.sizeBytes <= 0 ||
+            verified.sizeBytes !== session.expectedSizeBytes ||
+            typeof verified.detectedMimeType !== "string" || !verified.detectedMimeType.trim() ||
+            verified.detectedMimeType.length > 128 ||
+            verified.detectedMimeType.toLowerCase() !== session.expectedMimeType.toLowerCase() ||
+            !/^[a-f0-9]{64}$/.test(verified.checksumSha256)) {
           sendJson(request, response, 409, { error: "uploaded_object_not_verified" }); return;
         }
         const asset = await options.customerAssetRepository.completeUpload({
