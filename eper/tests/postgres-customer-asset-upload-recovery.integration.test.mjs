@@ -197,6 +197,12 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
       });
       const checksum = createHash("sha256").update("verified-binary-content-" + suffix).digest("hex");
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "sandbox",
+        correlationId: correlationId + "-scan", uploadSessionId: scanReservation.uploadSessionId,
+        receivedSizeBytes: 2048, observedMimeType: "application/pdf",
+        checksumSha256: "f".repeat(64), scanStatus: "pending",
+      }), { message: "EPER_CUSTOMER_ASSET_UPLOAD_CHECKSUM_MISMATCH" });
       const completed = await repository.completeUpload({
         tenantId, applicationId, actorId, environment: "sandbox",
         correlationId: correlationId + "-scan",
