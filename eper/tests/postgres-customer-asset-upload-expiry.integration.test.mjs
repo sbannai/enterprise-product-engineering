@@ -87,7 +87,7 @@ test("live PostgreSQL expiry is tenant-bound, cross-application, audited and exa
         await client.query("SELECT set_config('eper.application_id', $1, true)", [appA]);
         await assert.rejects(
           client.query("SELECT * FROM public.eper_expire_customer_asset_upload_sessions($1, $2)", [otherTenantId, 5]),
-          /EPER_CUSTOMER_ASSET_EXPIRY_TENANT_CONTEXT_MISMATCH/,
+          /EPER_CUSTOMER_ASSET_EXPIRY_WORKER_SCOPE_DENIED/,
           "a caller cannot use a tenant-bound expiry function for another tenant",
         );
         await client.query("ROLLBACK");
