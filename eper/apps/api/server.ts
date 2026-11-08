@@ -1061,11 +1061,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendApiSuccess(request, response, request.method === "POST" ? 201 : 200, { assignment }); return;
         }
         if (workflowDraftCollection) {
-          if (request.method !== "GET") {
-        const allow = process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true" ? "GET, POST" : "GET";
-        sendMethodNotAllowed(request, response, allow);
-        return;
-      }
+          if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
           const drafts = await options.workflowDefinitionDraftStore!.list(identity.tenantId, applicationId);
           sendApiSuccess(request, response, 200, { drafts, applicationId }); return;
         }
@@ -2086,7 +2082,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       if (process.env.EPER_CUSTOMER_ASSETS_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
       }
-      if (request.method !== "GET") { sendMethodNotAllowed(request, response, "GET"); return; }
+      if (request.method !== "GET") {
+        const allow = process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true" ? "GET, POST" : "GET";
+        sendMethodNotAllowed(request, response, allow);
+        return;
+      }
       const identity = await resolveCustomerWorkspaceIdentity(request, options);
       if (!identity) { sendJson(request, response, 401, { error: "unauthorized" }); return; }
       let modulesConfig: unknown;
