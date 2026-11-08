@@ -212,7 +212,7 @@ export class PostgresProviderConnectionRepository {
             AND c.connection_id = $3 AND c.provider_key = $4
             AND c.version = $5 AND c.connection_status = 'ACTIVE'
             AND b.binding_status = 'ACTIVE'
-            AND $6 = ANY(b.allowed_capabilities)
+            AND b.allowed_capabilities ? $6
           FOR SHARE OF c, b`,
         [input.tenantId, input.applicationId, input.connectionId,
           input.providerKey, input.expectedVersion, input.capability],
@@ -262,7 +262,7 @@ export class PostgresProviderConnectionRepository {
             AND c.connection_id = $3 AND c.provider_key = $4
             AND c.version = $5 AND c.connection_status = 'ACTIVE'
             AND b.binding_status = 'ACTIVE'
-            AND $6 = ANY(b.allowed_capabilities)
+            AND b.allowed_capabilities ? $6
           FOR SHARE OF c, b`,
         [input.tenantId, input.applicationId, input.connectionId,
           input.providerKey, input.expectedVersion, input.capability],
