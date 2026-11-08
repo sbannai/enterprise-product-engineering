@@ -55,8 +55,26 @@ test("does not return resolved credentials when binding is revoked during secret
   );
   await assert.rejects(() => service.resolve({
     tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload",
-  }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/);
+  }), /PROVIDER_RUNTIME_AUTHORIZATION_CHANGED/);
   assert.deepEqual(order, ["runtime", "reference", "secret", "revalidate"]);
+});
+
+test("secret manager errors are normalized and never expose credential material", async () => {
+  const service = new ProviderRuntimeCredentialResolutionService(
+    { async resolve() { return runtime; } },
+    {
+      async getRuntimeSecretReference() { return { secretReference: "vault://opaque", authMode: "API_KEY" }; },
+      async assertDispatchAuthorization() {},
+    },
+    { async resolve() { throw new Error("secret=do-not-leak provider token"); } },
+  );
+  await assert.rejects(() => service.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload",
+  }), error => {
+    assert.equal(error.message, "PROVIDER_RUNTIME_SECRET_RESOLUTION_FAILED");
+    assert.equal(error.message.includes("do-not-leak"), false);
+    return true;
+  });
 });
 
 test("does not resolve secret when selected binding/version revalidation fails", async () => {
@@ -68,6 +86,6 @@ test("does not resolve secret when selected binding/version revalidation fails",
   );
   await assert.rejects(() => service.resolve({
     tenantId: "tenant-a", applicationId: "app-a", capability: "storage.upload",
-  }));
+  }), /PROVIDER_RUNTIME_SECRET_REFERENCE_UNAVAILABLE/);
   assert.equal(secretCalls, 0);
 });
