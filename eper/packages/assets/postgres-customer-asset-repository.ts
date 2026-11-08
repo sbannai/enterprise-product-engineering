@@ -160,7 +160,15 @@ export class PostgresCustomerAssetRepository {
          JOIN eper_customer_asset_upload_sessions s
            ON s.tenant_id = a.tenant_id AND s.asset_id = a.asset_id
          WHERE a.tenant_id = $1 AND a.asset_id = $2
-           AND s.application_id = $3
+           AND (
+             s.application_id = $3
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = a.asset_id
+             ))
+           )
            AND s.upload_status = 'completed'
            AND s.provider_upload_reference IS NOT NULL
            AND btrim(s.provider_upload_reference) <> ''
