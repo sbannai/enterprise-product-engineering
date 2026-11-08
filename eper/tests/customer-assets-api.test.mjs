@@ -412,6 +412,7 @@ test("PostgreSQL asset downloads use the completed upload-session reference and 
     "tenant-a": { "app-a": [
       { id: "asset-clean", name: "Brief.pdf", mimeType: "application/pdf", accessReference: "pending:metadata-placeholder" },
       { id: "asset-missing", name: "Missing.pdf", accessReference: "pending:must-not-fallback" },
+      { id: "asset-error", name: "Error.pdf", accessReference: "pending:must-not-reach-resolver" },
     ] },
   });
   const lookups = [];
@@ -421,6 +422,7 @@ test("PostgreSQL asset downloads use the completed upload-session reference and 
     customerAssetRepository: {
       async getDownloadAsset(tenantId, applicationId, assetId) {
         lookups.push([tenantId, applicationId, assetId]);
+        if (assetId === "asset-error") throw new Error("synthetic PostgreSQL lookup failure");
         return assetId === "asset-clean"
           ? { accessReference: "provider-upload-session-object-ref", fileName: "Brief.pdf", mimeType: "application/pdf" }
           : null;
@@ -453,7 +455,18 @@ test("PostgreSQL asset downloads use the completed upload-session reference and 
       ["tenant-a", "app-a", "asset-clean"],
       ["tenant-a", "app-a", "asset-missing"],
     ]);
-    assert.deepEqual(audit.map(record => record.outcome), ["success", "denied"]);
+    const failedLookup = await fetch(base + "/customer/applications/app-a/assets/asset-error/download", {
+      headers: { authorization: "Bearer " + token },
+    });
+    assert.equal(failedLookup.status, 503);
+    assert.deepEqual(resolverReferences, ["provider-upload-session-object-ref"],
+      "a PostgreSQL repository error must fail closed before the download resolver");
+    assert.deepEqual(lookups, [
+      ["tenant-a", "app-a", "asset-clean"],
+      ["tenant-a", "app-a", "asset-missing"],
+      ["tenant-a", "app-a", "asset-error"],
+    ]);
+    assert.deepEqual(audit.map(record => record.outcome), ["success", "denied", "failure"]);
   } finally {
     await new Promise(resolve => server.close(resolve));
     for (const key of keys) {
