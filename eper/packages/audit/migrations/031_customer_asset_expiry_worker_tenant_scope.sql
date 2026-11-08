@@ -72,7 +72,7 @@ BEGIN
       SELECT s.tenant_id, s.application_id, s.upload_session_id
         FROM public.eper_customer_asset_upload_sessions AS s
        WHERE s.tenant_id = p_tenant_id
-         AND s.upload_status IN ('reserved', 'initiated', 'in_progress')
+         AND s.upload_status IN ('initiated', 'in_progress')
          AND (p_asset_id IS NULL OR s.asset_id = p_asset_id)
          AND s.expires_at <= pg_catalog.clock_timestamp()
        ORDER BY s.expires_at, s.application_id, s.upload_session_id
@@ -86,7 +86,7 @@ BEGIN
      WHERE s.tenant_id = c.tenant_id
        AND s.application_id = c.application_id
        AND s.upload_session_id = c.upload_session_id
-       AND s.upload_status IN ('reserved', 'initiated', 'in_progress')
+       AND s.upload_status IN ('initiated', 'in_progress')
        AND (p_asset_id IS NULL OR s.asset_id = p_asset_id)
        AND s.expires_at <= pg_catalog.clock_timestamp()
     RETURNING s.application_id, s.upload_session_id, s.asset_id, s.expires_at;
