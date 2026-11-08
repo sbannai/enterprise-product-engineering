@@ -56,6 +56,8 @@ const commercialTariffAdminEnabled = process.env.EPER_COMMERCIAL_TARIFF_API_ENAB
 const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENABLED === "true";
 const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
 const customerAssetUploadApiEnabled = process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED === "true";
+const customerAssetMetadataApiEnabled = process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true";
+const customerAssetPersistenceApiEnabled = customerAssetUploadApiEnabled || customerAssetMetadataApiEnabled;
 const providerStorageRuntimeConfiguration = readProviderStorageRuntimeConfiguration(process.env);
 if (providerStorageRuntimeConfiguration.enabled) {
   // Runtime contracts are implemented, but no approved real provider drivers or secret-manager adapter are wired into this entrypoint yet.
@@ -64,7 +66,7 @@ if (providerStorageRuntimeConfiguration.enabled) {
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetUploadApiEnabled;
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 
 // Privileged control-plane stores use independent PostgreSQL credentials and pools.
@@ -260,6 +262,11 @@ if (customerAssetUploadApiEnabled && (!paymentPool || auditMode !== "postgres" |
     process.env.EPER_CUSTOMER_OIDC_ENABLED !== "true")) {
   throw new Error("CUSTOMER_ASSET_UPLOAD_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_OIDC_AND_DURABLE_AUDIT");
 }
+if (customerAssetMetadataApiEnabled && (!paymentPool || auditMode !== "postgres" ||
+    customerIdentityPersistenceMode !== "postgres" || actorAssignmentMode !== "postgres" ||
+    process.env.EPER_CUSTOMER_OIDC_ENABLED !== "true")) {
+  throw new Error("CUSTOMER_ASSET_METADATA_API_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_OIDC_AND_DURABLE_AUDIT");
+}
 if (customerIdentityPersistenceMode === "postgres" && actorAssignmentMode !== "postgres") {
   throw new Error("CUSTOMER_IDENTITY_REQUIRES_DURABLE_TENANT_AND_ACTOR_APPLICATION_ASSIGNMENTS");
 }
@@ -381,7 +388,7 @@ const providerValidationService = providerValidationEnabled && paymentPool
     )
   : undefined;
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetUploadApiEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
@@ -405,7 +412,7 @@ if (workflowRoleDelegationEnabled && (!paymentPool || auditMode !== "postgres" |
 const workflowRoleDelegationStore = workflowRoleDelegationEnabled && paymentPool
   ? new PostgresWorkflowRoleDelegationStore(paymentPool)
   : undefined;
-const customerAssetRepository = customerAssetUploadApiEnabled && paymentPool
+const customerAssetRepository = customerAssetPersistenceApiEnabled && paymentPool
   ? new PostgresCustomerAssetRepository(paymentPool)
   : undefined;
 if (customerAssetRepository) await customerAssetRepository.assertReady();
