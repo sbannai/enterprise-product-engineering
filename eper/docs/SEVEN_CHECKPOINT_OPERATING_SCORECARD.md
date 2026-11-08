@@ -1476,33 +1476,33 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 ### Live open-PR inventory — exact-head evidence
 
 - Live GitHub open-PR query returned 23 drafts. For every entry below, the current head was resolved, the selected Actions run was confirmed to have that exact `head_sha`, and the relevant job log was inspected. All selected relevant jobs succeeded. These are branch-local results, not proof of integration into main.
-- GitHub compare against application main `066be8b...` reports every branch as diverged and behind main. #432 is 144 commits behind; the other listed branches are 218 commits behind. Do not merge historical stacks wholesale.
+- GitHub compare against main `474f30c18279fb0f69a66e7160b0b7838de9aa92` reports every branch as diverged and behind main. #432 is 144 commits behind; the other listed branches are 218 commits behind. Do not merge historical stacks wholesale.
 
 | PR | Exact current head SHA | Ahead / behind main | Selected exact-head run |
 |---|---|---:|---|
-| #399 customer asset upload workspace | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | 223 / 218 | [42176207998](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176207998) — provider/PostgreSQL lifecycle PASS |
-| #387 actor-scoped work queue | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | 22 / 218 | [41784823307](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823307) — fresh-clone PASS |
-| #432 mainline product audit | `cb49644e3d67cc98b2472e5eba32450cd9baac20` | 7 / 144 | [42333045836](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42333045836) — CI PASS; separate matrix PASS |
-| #384 asset repository foundation | `291129b77ab50623e41dd28c4a746ef70da28183` | 140 / 218 | [41786048922](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048922) — PostgreSQL lifecycle PASS |
-| #420 verified-session retry binding | `b256e86e4a93eff48a129309b112f62245dc661e` | 238 / 218 | [42241914147](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42241914147) — Chromium OIDC 1/1 |
-| #416 upload retry identity persistence | `5ffdecd5148040858837e540322919cfbd455595` | 229 / 218 | [42236540578](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42236540578) — Chromium OIDC 1/1 |
-| #414 isolated upload-expiry worker | `9eba0595bce55d51bf8447bd54516cb2168a6478` | 240 / 218 | [42230756607](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42230756607) — PostgreSQL lifecycle 1/1 |
-| #413 cross-application upload expiry | `e86ae5ca65d0eadba18abea62615d2526d2a5006` | 210 / 218 | [42225487935](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42225487935) — PostgreSQL lifecycle 1/1 |
-| #402 expired reservation recovery | `576796fb5bf81388f922ce04e7dad411a9b2a7c2` | 194 / 218 | [42219623095](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42219623095) — PostgreSQL lifecycle 1/1 |
-| #377 scorecard/crosswalk addendum | `492465759af4e7786e1a8ef51118cf1b354529de` | 80 / 218 | [42208779180](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42208779180) — matrix 259/259, 28 checks |
-| #386 upload reservation idempotency | `a1b7341d71a4086c983dd3362a4704c124a52b74` | 164 / 218 | [41837639531](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639531) — PostgreSQL lifecycle 1/1 |
-| #395 provider-neutral storage catalogue | `baa6151a5ef4b9b4f460b72bd8a26aa9326ceeb8` | 183 / 218 | [42156557499](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42156557499) — PostgreSQL provider suites PASS |
-| #394 PostgreSQL download authorization | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | 178 / 218 | [41868477503](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477503) — Chromium OIDC 1/1 |
-| #398 fail-closed provider runtime registry | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | 236 / 218 | [42159145776](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42159145776) — PostgreSQL provider suites PASS |
-| #401 PostgreSQL capacity plan | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | 185 / 218 | [41993032789](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032789) — PostgreSQL payment-store PASS |
-| #392 provider worker/payload integrity | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | 39 / 218 | [41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) — PostgreSQL provider suites PASS |
-| #393 combined asset/provider stack | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | 166 / 218 | [41844357288](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357288) — PostgreSQL provider suites PASS |
-| #378 encrypted payload boundary | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | 7 / 218 | [41738299039](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299039) — PostgreSQL lifecycle 1/1 |
-| #379 encrypted PostgreSQL payload store | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | 8 / 218 | [41738351657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351657) — PostgreSQL lifecycle 1/1 |
-| #385 customer asset requirements | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | 4 / 218 | [41764308125](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308125) — matrix 259/259, 28 checks |
-| #380 client asset/workflow UX requirements | `55006ab19bcbb685fc3e84c4230fd865087887f3` | 5 / 218 | [41763251774](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251774) — matrix 259/259, 28 checks |
-| #390 payload-operation referential integrity | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | 20 / 218 | [41805934711](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934711) — PostgreSQL lifecycle 1/1 |
-| #391 restricted-role payload RLS | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | 21 / 218 | [41820073247](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073247) — PostgreSQL lifecycle 1/1 |
+| #399 customer asset upload workspace | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | 223 / 221 | [42176207998](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176207998) — provider/PostgreSQL lifecycle PASS |
+| #387 actor-scoped work queue | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | 22 / 221 | [41784823307](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823307) — fresh-clone PASS |
+| #432 mainline product audit | `cb49644e3d67cc98b2472e5eba32450cd9baac20` | 7 / 147 | [42333045836](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42333045836) — CI PASS; separate matrix PASS |
+| #384 asset repository foundation | `291129b77ab50623e41dd28c4a746ef70da28183` | 140 / 221 | [41786048922](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048922) — PostgreSQL lifecycle PASS |
+| #420 verified-session retry binding | `b256e86e4a93eff48a129309b112f62245dc661e` | 238 / 221 | [42241914147](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42241914147) — Chromium OIDC 1/1 |
+| #416 upload retry identity persistence | `5ffdecd5148040858837e540322919cfbd455595` | 229 / 221 | [42236540578](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42236540578) — Chromium OIDC 1/1 |
+| #414 isolated upload-expiry worker | `9eba0595bce55d51bf8447bd54516cb2168a6478` | 240 / 221 | [42230756607](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42230756607) — PostgreSQL lifecycle 1/1 |
+| #413 cross-application upload expiry | `e86ae5ca65d0eadba18abea62615d2526d2a5006` | 210 / 221 | [42225487935](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42225487935) — PostgreSQL lifecycle 1/1 |
+| #402 expired reservation recovery | `576796fb5bf81388f922ce04e7dad411a9b2a7c2` | 194 / 221 | [42219623095](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42219623095) — PostgreSQL lifecycle 1/1 |
+| #377 scorecard/crosswalk addendum | `492465759af4e7786e1a8ef51118cf1b354529de` | 80 / 221 | [42208779180](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42208779180) — matrix 259/259, 28 checks |
+| #386 upload reservation idempotency | `a1b7341d71a4086c983dd3362a4704c124a52b74` | 164 / 221 | [41837639531](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639531) — PostgreSQL lifecycle 1/1 |
+| #395 provider-neutral storage catalogue | `baa6151a5ef4b9b4f460b72bd8a26aa9326ceeb8` | 183 / 221 | [42156557499](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42156557499) — PostgreSQL provider suites PASS |
+| #394 PostgreSQL download authorization | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | 178 / 221 | [41868477503](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477503) — Chromium OIDC 1/1 |
+| #398 fail-closed provider runtime registry | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | 236 / 221 | [42159145776](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42159145776) — PostgreSQL provider suites PASS |
+| #401 PostgreSQL capacity plan | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | 185 / 221 | [41993032789](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032789) — PostgreSQL payment-store PASS |
+| #392 provider worker/payload integrity | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | 39 / 221 | [41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) — PostgreSQL provider suites PASS |
+| #393 combined asset/provider stack | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | 166 / 221 | [41844357288](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357288) — PostgreSQL provider suites PASS |
+| #378 encrypted payload boundary | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | 7 / 221 | [41738299039](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299039) — PostgreSQL lifecycle 1/1 |
+| #379 encrypted PostgreSQL payload store | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | 8 / 221 | [41738351657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351657) — PostgreSQL lifecycle 1/1 |
+| #385 customer asset requirements | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | 4 / 221 | [41764308125](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308125) — matrix 259/259, 28 checks |
+| #380 client asset/workflow UX requirements | `55006ab19bcbb685fc3e84c4230fd865087887f3` | 5 / 221 | [41763251774](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251774) — matrix 259/259, 28 checks |
+| #390 payload-operation referential integrity | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | 20 / 221 | [41805934711](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934711) — PostgreSQL lifecycle 1/1 |
+| #391 restricted-role payload RLS | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | 21 / 221 | [41820073247](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073247) — PostgreSQL lifecycle 1/1 |
 
 ### Merge and branch disposition
 
@@ -1518,3 +1518,6 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 - Off-host PostgreSQL backup, retention/key custody, approved RPO/RTO, independent restore, second-engineer release path and rollback rehearsal remain unevidenced.
 - The Engineering Continuity and Independence Charter remains a proposed operating standard requiring owner approval.
 - No chargeable cloud resources, production credentials, real provider calls or external storage actions were used. Preserve the approved 228 requirements / 38 chapters.
+
+
+Inventory comparison note: the ahead/behind values above are anchored to main `474f30c18279fb0f69a66e7160b0b7838de9aa92` immediately before this scorecard-only correction. This correction changes documentation only; application code remains `066be8b2fd3756aa0712cb81c88e639b70f8638b`.
