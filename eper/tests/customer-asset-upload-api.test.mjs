@@ -410,3 +410,17 @@ test("upload completion rejects provider-observed checksum that differs from the
     serverOptions.customerAssetRepository.completeUpload = async () => { throw new Error("must not complete"); };
   });
 });
+
+
+test("upload grant endpoint rejects missing or malformed expected SHA-256 before reserving", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/upload-grant", {
+      method: "POST", headers: { origin, cookie, "x-csrf-token": csrf,
+        "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
+      body: JSON.stringify({ expectedSizeBytes: 1024, fileName: "brief.pdf", mimeType: "application/pdf" }),
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "invalid_upload_request" });
+    assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
+  }, true);
+});
