@@ -130,6 +130,8 @@ jobs:
         run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
       - name: Live PostgreSQL customer asset metadata idempotency and migration assurance
         run: node --test tests/postgres-customer-asset-migration-assurance.integration.test.mjs tests/postgres-customer-asset-metadata-idempotency.integration.test.mjs
+      - name: PostgreSQL 16 customer asset scan worker process and recovery integration
+        run: node --test tests/postgres-customer-asset-scan-process.integration.test.mjs
       - name: Apply workflow execution, publication and role migrations to ephemeral CI database
         run: npm run migrate:workflows
       - name: Verify workflow migrations are safely repeatable
