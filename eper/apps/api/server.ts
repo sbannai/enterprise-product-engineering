@@ -1872,7 +1872,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     // Completion accepts no client-supplied checksum or MIME assertion. The API resolves the
     // provider reference from the persisted upload session, verifies the object server-to-server,
     // then atomically completes the upload and enqueues malware scanning.
-    const assetUploadCompleteMatch = /^\\/customer\\/applications\\/([a-zA-Z0-9._:-]{2,128})\\/assets\\/([a-zA-Z0-9._:-]{1,128})\\/uploads\\/([a-zA-Z0-9._:-]{1,128})\\/complete$/.exec(requestUrl.pathname);
+    const assetUploadCompleteMatch = /^\/customer\/applications\/([a-zA-Z0-9._:-]{2,128})\/assets\/([a-zA-Z0-9._:-]{1,128})\/uploads\/([a-zA-Z0-9._:-]{1,128})\/complete$/.exec(requestUrl.pathname);
     if (assetUploadCompleteMatch) {
       if (process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED !== "true") {
         sendJson(request, response, 404, { error: "not_found" }); return;
