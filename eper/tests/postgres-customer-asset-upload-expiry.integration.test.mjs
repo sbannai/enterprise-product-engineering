@@ -98,3 +98,77 @@ test("live PostgreSQL expiry is tenant-bound, cross-application, audited and exa
       await pool.end();
     }
   });
+
+
+test("actual expiry worker LOGIN is confined to operator-registered tenants despite forged tenant GUCs", {
+  skip: !connectionString || process.env.EPER_CUSTOMER_ASSET_LIVE_TESTS !== "1",
+}, async () => {
+  const admin = new pg.Pool({ connectionString, max: 2 });
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 20);
+  const loginRole = "eper_expiry_scope_" + suffix;
+  const password = randomUUID() + randomUUID();
+  const tenantA = "expiry-scope-a-" + suffix;
+  const tenantB = "expiry-scope-b-" + suffix;
+  let worker;
+  try {
+    await admin.query(`CREATE ROLE "${loginRole}" LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS`);
+    await admin.query(`GRANT CONNECT ON DATABASE ${(await admin.query("SELECT current_database() AS name")).rows[0].name.replace(/[^a-zA-Z0-9_]/g, "")} TO "${loginRole}"`);
+    await admin.query(`GRANT eper_customer_asset_upload_expiry_worker_access TO "${loginRole}"`);
+    await admin.query(
+      "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES ($1, $2, true)",
+      [loginRole, tenantA],
+    );
+
+    const parsed = new URL(connectionString);
+    parsed.username = loginRole;
+    parsed.password = password;
+    worker = new pg.Pool({ connectionString: parsed.toString(), max: 1, connectionTimeoutMillis: 5000 });
+    const client = await worker.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantA]);
+      assert.equal((await client.query(
+        "SELECT count(*)::int AS n FROM public.eper_expire_customer_asset_upload_sessions($1, 5)",
+        [tenantA],
+      )).rows[0].n, 0);
+      await client.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantB]);
+      await assert.rejects(
+        client.query("SELECT * FROM public.eper_expire_customer_asset_upload_sessions($1, 5)", [tenantB]),
+        /EPER_CUSTOMER_ASSET_EXPIRY_WORKER_SCOPE_DENIED/,
+      );
+      await assert.rejects(
+        client.query("SELECT * FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope"),
+        /permission denied/i,
+      );
+      await assert.rejects(
+        client.query("INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id) VALUES ($1, $2)", [loginRole, tenantB]),
+        /permission denied/i,
+      );
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+
+    await admin.query(
+      "UPDATE public.eper_customer_asset_upload_expiry_worker_tenant_scope SET enabled = false WHERE login_role = $1 AND tenant_id = $2",
+      [loginRole, tenantA],
+    );
+    const revoked = await worker.connect();
+    try {
+      await revoked.query("BEGIN");
+      await revoked.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantA]);
+      await assert.rejects(
+        revoked.query("SELECT * FROM public.eper_expire_customer_asset_upload_sessions($1, 5)", [tenantA]),
+        /EPER_CUSTOMER_ASSET_EXPIRY_WORKER_SCOPE_DENIED/,
+      );
+      await revoked.query("ROLLBACK");
+    } finally {
+      revoked.release();
+    }
+  } finally {
+    await worker?.end();
+    await admin.query("DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = $1", [loginRole]).catch(() => {});
+    await admin.query(`DROP ROLE IF EXISTS "${loginRole}"`).catch(() => {});
+    await admin.end();
+  }
+});
