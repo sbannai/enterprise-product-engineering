@@ -39,7 +39,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
 
       const reservationInput = {
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-        assetId, expectedSizeBytes: 4096, idempotencyKey, requestFingerprint: fingerprint,
+        assetId, expectedSizeBytes: 4096, expectedChecksumSha256: "a".repeat(64), idempotencyKey, requestFingerprint: fingerprint,
       };
       const [first, concurrentReplay] = await Promise.all([
         repository.reserveUpload(reservationInput),
@@ -179,7 +179,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       const scanReservation = await repository.reserveUpload({
         tenantId, applicationId, actorId, environment: "sandbox",
         correlationId: correlationId + "-scan", assetId: scanAssetId,
-        expectedSizeBytes: 2048, idempotencyKey: scanIdempotencyKey,
+        expectedSizeBytes: 2048, expectedChecksumSha256: createHash("sha256").update("verified-binary-content-" + suffix).digest("hex"), idempotencyKey: scanIdempotencyKey,
         requestFingerprint: scanFingerprint,
       });
       await repository.recordUploadGrant({
@@ -380,7 +380,7 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
       });
       const reservation = await repository.reserveUpload({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-        assetId, expectedSizeBytes: 4096, idempotencyKey, requestFingerprint,
+        assetId, expectedSizeBytes: 4096, expectedChecksumSha256: createHash("sha256").update("synthetic-download-bytes-" + assetId).digest("hex"), idempotencyKey, requestFingerprint,
       });
       await repository.recordUploadGrant({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
