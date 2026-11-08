@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   appendAuditEventInTransaction,
   type AuditEnvironment,
@@ -35,6 +35,7 @@ export interface CreateCustomerAssetInput {
   environment: AuditEnvironment;
   correlationId: string;
   assetId?: string;
+  clientOperationId?: string;
   scope: CustomerAssetScope;
   ownerApplicationId?: string;
   displayName: string;
@@ -179,11 +180,46 @@ export class PostgresCustomerAssetRepository {
     if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) throw new Error("EPER_CUSTOMER_ASSET_SIZE_INVALID");
     if (input.checksumSha256 && !/^[a-f0-9]{64}$/.test(input.checksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    if (input.clientOperationId !== undefined && !/^[a-f0-9]{32,64}$/i.test(input.clientOperationId)) {
+      throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_KEY_INVALID");
+    }
     const assetId = input.assetId ?? randomUUID();
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({
+      applicationId: input.applicationId, actorId: input.actorId, scope: input.scope,
+      ownerApplicationId: input.ownerApplicationId ?? null, displayName: input.displayName,
+      originalFileName: input.originalFileName, mediaCategory: input.mediaCategory,
+      mimeType: input.mimeType, fileExtension: input.fileExtension.toLowerCase(),
+      sizeBytes: input.sizeBytes, storageAdapterKey: input.storageAdapterKey,
+    })).digest("hex");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
+      if (input.clientOperationId) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          "eper-asset-metadata:" + input.tenantId + ":" + input.applicationId + ":" + input.actorId + ":" + input.clientOperationId,
+        ]);
+        const prior = await client.query<AssetRow & { request_fingerprint: string }>(
+          \`SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
+            a.display_name, a.original_file_name, a.media_category, a.mime_type, a.file_extension,
+            a.size_bytes, a.checksum_sha256, a.storage_adapter_key, a.upload_status,
+            a.scan_status, a.lifecycle_status, a.version, a.created_by, a.created_at,
+            o.request_fingerprint
+           FROM eper_customer_asset_metadata_operations o
+           JOIN eper_customer_assets a ON a.tenant_id = o.tenant_id AND a.asset_id = o.asset_id
+           WHERE o.tenant_id = $1 AND o.application_id = $2 AND o.actor_id = $3
+             AND o.client_operation_id = $4
+           FOR UPDATE OF o, a\`,
+          [input.tenantId, input.applicationId, input.actorId, input.clientOperationId],
+        );
+        if (prior.rows[0]) {
+          if (prior.rows[0].request_fingerprint !== requestFingerprint) {
+            throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT");
+          }
+          await client.query("COMMIT");
+          return mapAsset(prior.rows[0]);
+        }
+      }
       await client.query(
         `INSERT INTO eper_customer_assets (
           tenant_id, asset_id, repository_scope, owner_application_id, display_name,
@@ -224,6 +260,14 @@ export class PostgresCustomerAssetRepository {
       );
       const row = selected.rows[0];
       if (!row) throw new Error("EPER_CUSTOMER_ASSET_CREATE_RETURNED_NO_ROW");
+      if (input.clientOperationId) {
+        await client.query(
+          `INSERT INTO eper_customer_asset_metadata_operations
+            (tenant_id, application_id, actor_id, client_operation_id, request_fingerprint, asset_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [input.tenantId, input.applicationId, input.actorId, input.clientOperationId, requestFingerprint, assetId],
+        );
+      }
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.actorId, action: "customer.asset.metadata.create",
