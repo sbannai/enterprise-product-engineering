@@ -437,6 +437,24 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
       }, "explicitly linked customer-shared asset is downloadable from the linked application");
       assert.notEqual(sharedDownload?.accessReference, sharedAsset.metadataReference);
 
+      const sharedIncompleteAsset = await createAsset(ownerApplicationId, "customer_shared", null);
+      await repository.link({
+        tenantId, applicationId: sharedApplicationId, actorId, environment: "sandbox",
+        correlationId: "asset-download-incomplete-link-" + suffix,
+        idempotencyKey: "asset-download-incomplete-" + suffix.slice(0, 32),
+        assetId: sharedIncompleteAsset.assetId, reason: "customer-shared",
+      });
+      assert.equal(await restrictedRepository.getDownloadAsset(tenantId, sharedApplicationId, sharedIncompleteAsset.assetId), null,
+        "an explicitly linked but incomplete shared upload cannot be downloaded");
+      const hiddenIncompleteSession = await restrictedPool.query(
+        `SELECT provider_upload_reference
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND upload_session_id = $2`,
+        [tenantId, sharedIncompleteAsset.uploadSessionId],
+      );
+      assert.equal(hiddenIncompleteSession.rowCount, 0,
+        "shared-link RLS must not expose incomplete upload-session references");
+
       const incompleteAsset = await createAsset(ownerApplicationId, "application_restricted", null);
       assert.equal(await restrictedRepository.getDownloadAsset(tenantId, ownerApplicationId, incompleteAsset.assetId), null,
         "an incomplete upload session never produces a download reference");
