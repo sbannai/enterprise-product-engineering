@@ -256,3 +256,75 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       await pool.end();
     }
   });
+
+
+test("live PostgreSQL customer asset metadata creation is idempotent across concurrent retries",
+  { skip: !connectionString || process.env.EPER_CUSTOMER_ASSET_LIVE_TESTS !== "1" }, async () => {
+    const pool = new Pool({ connectionString, max: 4 });
+    const suffix = randomUUID().replaceAll("-", "");
+    const tenantId = "asset-meta-tenant-" + suffix.slice(0, 18);
+    const applicationId = "asset-meta-app-" + suffix.slice(0, 18);
+    const actorId = "asset-meta-actor-" + suffix.slice(0, 16);
+    const clientOperationId = suffix.slice(0, 32);
+    const correlationId = "asset-meta-idempotency-" + suffix;
+    const repository = new PostgresCustomerAssetRepository(pool);
+
+    try {
+      await repository.assertReady();
+      const input = {
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        clientOperationId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Idempotent metadata fixture", originalFileName: "metadata.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 1024, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-metadata-object-" + suffix,
+      };
+
+      const [first, concurrentReplay] = await Promise.all([
+        repository.create(input),
+        repository.create(input),
+      ]);
+      assert.equal(first.assetId, concurrentReplay.assetId,
+        "concurrent retries with one client operation ID must return the same asset");
+      assert.equal(first.createdAt, concurrentReplay.createdAt,
+        "a replay must return the original durable metadata row");
+
+      const assets = await pool.query(
+        "SELECT count(*)::int AS count FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2",
+        [tenantId, first.assetId],
+      );
+      assert.equal(assets.rows[0].count, 1);
+
+      const operations = await pool.query(
+        `SELECT client_operation_id, request_fingerprint, asset_id
+           FROM eper_customer_asset_metadata_operations
+          WHERE tenant_id = $1 AND application_id = $2 AND actor_id = $3
+            AND client_operation_id = $4`,
+        [tenantId, applicationId, actorId, clientOperationId],
+      );
+      assert.equal(operations.rowCount, 1);
+      assert.equal(operations.rows[0].asset_id, first.assetId);
+      assert.match(operations.rows[0].request_fingerprint, /^[a-f0-9]{64}$/);
+
+      const audit = await pool.query(
+        `SELECT action, resource_id FROM eper_audit_events
+          WHERE tenant_id = $1 AND application_id = $2
+            AND action = 'customer.asset.metadata.create' AND resource_id = $3`,
+        [tenantId, applicationId, first.assetId],
+      );
+      assert.equal(audit.rowCount, 1, "a replay must not duplicate the metadata-create audit event");
+
+      await assert.rejects(
+        repository.create({ ...input, displayName: "Changed metadata payload" }),
+        { message: "EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT" },
+        "reusing one operation ID for a different metadata fingerprint must fail closed",
+      );
+      const afterConflict = await pool.query(
+        "SELECT count(*)::int AS count FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2",
+        [tenantId, first.assetId],
+      );
+      assert.equal(afterConflict.rows[0].count, 1, "a conflicting replay must not create another asset");
+    } finally {
+      await pool.end();
+    }
+  });
