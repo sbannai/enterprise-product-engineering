@@ -114,11 +114,17 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
           has_table_privilege('eper_customer_asset_access', 'eper_customer_assets', 'SELECT') AS can_select_assets,
           has_table_privilege('eper_customer_asset_access', 'eper_customer_assets', 'INSERT') AS can_insert_assets,
           has_table_privilege('eper_customer_asset_access', 'eper_customer_assets', 'UPDATE') AS can_update_assets,
-          has_table_privilege('eper_customer_asset_access', 'eper_customer_assets', 'DELETE') AS can_delete_assets
+          has_table_privilege('eper_customer_asset_access', 'eper_customer_assets', 'DELETE') AS can_delete_assets,
+          has_table_privilege('eper_customer_asset_access', 'eper_customer_asset_metadata_operations', 'SELECT') AS can_select_metadata_operations,
+          has_table_privilege('eper_customer_asset_access', 'eper_customer_asset_metadata_operations', 'INSERT') AS can_insert_metadata_operations,
+          has_table_privilege('eper_customer_asset_access', 'eper_customer_asset_metadata_operations', 'UPDATE') AS can_update_metadata_operations,
+          has_table_privilege('eper_customer_asset_access', 'eper_customer_asset_metadata_operations', 'DELETE') AS can_delete_metadata_operations
       `);
       assert.deepEqual(privileges.rows[0], {
         can_select_assets: true, can_insert_assets: true,
         can_update_assets: true, can_delete_assets: false,
+        can_select_metadata_operations: true, can_insert_metadata_operations: true,
+        can_update_metadata_operations: false, can_delete_metadata_operations: false,
       });
 
       // Seed one restricted asset, then prove the NOLOGIN runtime role cannot
