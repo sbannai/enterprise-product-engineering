@@ -104,6 +104,7 @@ pendingCustomerAssetOperationId=value.operationId;pendingCustomerAssetUploadIdem
 function persistPendingCustomerAssetOperation(){sessionStorage.setItem(pendingCustomerAssetStorageKey,JSON.stringify({operationId:pendingCustomerAssetOperationId,uploadIdempotencyKey:pendingCustomerAssetUploadIdempotencyKey,metadataFingerprint:pendingCustomerAssetMetadataFingerprint,identityFingerprint:pendingCustomerAssetIdentityFingerprint}));}
 function clearPendingCustomerAssetOperation(){pendingCustomerAssetOperationId="";pendingCustomerAssetUploadIdempotencyKey="";pendingCustomerAssetMetadataFingerprint="";pendingCustomerAssetIdentityFingerprint="";try{sessionStorage.removeItem(pendingCustomerAssetStorageKey);}catch{}}
 async function customerAssetMetadataFingerprint(metadata){if(!window.crypto?.subtle)throw new Error("asset_upload_retry_fingerprint_unavailable");const digest=await window.crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(metadata)));return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");}
+async function customerAssetFileSha256(file){if(!window.crypto?.subtle||typeof file?.arrayBuffer!=="function")throw new Error("asset_upload_checksum_unavailable");const digest=await window.crypto.subtle.digest("SHA-256",await file.arrayBuffer());return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");}
 async function customerIdentityFingerprint(session){
 if(!session||session.authenticated!==true||typeof session.tenantId!=="string"||!session.tenantId||typeof session.actorId!=="string"||!session.actorId||typeof session.roleKey!=="string"||!session.roleKey)throw new Error("customer_session_identity_invalid");
 if(typeof session.sessionBinding!=="string"||!/^[a-f0-9]{64}$/.test(session.sessionBinding)||!window.crypto?.subtle)return "";
@@ -126,7 +127,10 @@ const currentIdentityFingerprint=await customerIdentityFingerprint(currentSessio
 if(generation!==sessionGeneration)return;
 if(currentIdentityFingerprint!==verifiedCustomerIdentityFingerprint){clearPendingCustomerAssetOperation();verifiedCustomerIdentityFingerprint=currentIdentityFingerprint;fail("Your organization session changed. Confirm the selected customer account and retry.");return;}
 if(pendingCustomerAssetOperationId&&pendingCustomerAssetIdentityFingerprint!==currentIdentityFingerprint){clearPendingCustomerAssetOperation();fail("The previous upload belongs to a different customer session and cannot be retried here.");return;}
-const fingerprint=await customerAssetMetadataFingerprint(metadata);
+fail("Calculating file integrity checksum…");
+const expectedChecksumSha256=await customerAssetFileSha256(file);
+if(generation!==sessionGeneration)return;
+const fingerprint=await customerAssetMetadataFingerprint({...metadata,expectedChecksumSha256});
 if(pendingCustomerAssetOperationId&&fingerprint!==pendingCustomerAssetMetadataFingerprint){fail("A previous upload has an uncertain result. Re-select the same file and keep all metadata unchanged before retrying.");return;}
 if(!pendingCustomerAssetOperationId){pendingCustomerAssetOperationId=customerAssetIdempotencyKey();pendingCustomerAssetUploadIdempotencyKey=customerAssetIdempotencyKey();pendingCustomerAssetMetadataFingerprint=fingerprint;pendingCustomerAssetIdentityFingerprint=currentIdentityFingerprint;persistPendingCustomerAssetOperation();}
 if(submit)submit.disabled=true;if(progress){progress.hidden=false;progress.value=0;}
@@ -135,7 +139,7 @@ const created=await api("/customer/assets?applicationId="+encodeURIComponent(app
 if(generation!==sessionGeneration)throw new Error("customer_session_changed");
 const assetId=created.assetId;if(typeof assetId!=="string"||!assetId)throw new Error("asset_create_response_invalid");
 fail("Requesting a short-lived upload capability…");
-const started=await api("/customer/applications/"+encodeURIComponent(applicationId)+"/assets/"+encodeURIComponent(assetId)+"/uploads",{method:"POST",body:JSON.stringify({fileName:file.name,mimeType:policy.mimeType,sizeBytes:file.size,idempotencyKey:pendingCustomerAssetUploadIdempotencyKey})});
+const started=await api("/customer/applications/"+encodeURIComponent(applicationId)+"/assets/"+encodeURIComponent(assetId)+"/upload-grant",{method:"POST",headers:{"idempotency-key":pendingCustomerAssetUploadIdempotencyKey},body:JSON.stringify({expectedSizeBytes:file.size,expectedChecksumSha256,fileName:file.name,mimeType:policy.mimeType})});
 const upload=started.upload;if(typeof started.uploadSessionId!=="string"||!upload||typeof upload.url!=="string"||!["PUT","POST"].includes(upload.method))throw new Error("asset_upload_grant_invalid");
 if(generation!==sessionGeneration)throw new Error("customer_session_changed");
 fail("Transferring file to the approved storage endpoint…");if(progress)progress.removeAttribute("value");await uploadCustomerFile(upload,file);if(progress)progress.value=100;
@@ -148,7 +152,7 @@ fail("Upload received and queued for malware scanning. The asset remains unavail
 notify("success","Asset uploaded and queued for security scanning.","Upload received");form.querySelector("#assetUploadFile").value="";form.querySelector("#assetUploadDisplayName").value="";clearPendingCustomerAssetOperation();
 }catch(error){
 if(generation!==sessionGeneration)return;const message=String(error?.message||"");
-fail(message==="HTTP 403"?"You do not have permission to upload assets for this application.":message==="HTTP 400"||message==="HTTP 413"?"The file type or size does not match the configured upload policy.":message==="HTTP 404"?"The upload capability is not enabled for this workspace yet.":message==="HTTP 503"?"Storage, authorization or trusted verification is not configured. The upload was stopped safely.":"Upload could not be completed. Its outcome may be uncertain; retry with the same file and unchanged metadata.");
+fail(message==="asset_upload_checksum_unavailable"?"This browser cannot calculate the required file integrity checksum. Use a supported secure browser and retry.":message==="HTTP 403"?"You do not have permission to upload assets for this application.":message==="HTTP 400"||message==="HTTP 413"?"The file type or size does not match the configured upload policy.":message==="HTTP 404"?"The upload capability is not enabled for this workspace yet.":message==="HTTP 503"?"Storage, authorization or trusted verification is not configured. The upload was stopped safely.":"Upload could not be completed. Its outcome may be uncertain; retry with the same file and unchanged metadata.");
 notify("error",status?.textContent||"Upload could not be completed.","Upload unavailable");
 }finally{if(generation===sessionGeneration&&form.isConnected&&submit)submit.disabled=false;}
 }
