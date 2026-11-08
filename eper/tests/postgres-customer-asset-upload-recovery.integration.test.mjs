@@ -23,6 +23,10 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
     const repository = new PostgresCustomerAssetRepository(pool);
 
     try {
+      await pool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
+        [tenantId],
+      );
       await repository.assertReady();
       await repository.create({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
@@ -353,6 +357,11 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
     const rolePassword = randomUUID().replaceAll("-", "");
     const repository = new PostgresCustomerAssetRepository(pool);
     let restrictedPool;
+
+    await pool.query(
+      "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
+      [tenantId],
+    );
 
     async function createAsset(applicationId, scope, scanStatus) {
       const assetId = randomUUID();
