@@ -195,7 +195,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     const retryFile={name:"brief.pdf",mimeType:"application/pdf",buffer:Buffer.from("%PDF-1.4 browser retry fixture")};
     await page.locator("#assetUploadFile").setInputFiles(retryFile);
     await page.getByRole("button",{name:"Upload file"}).click();
-    await page.getByText("Storage, authorization or trusted verification is not configured. The upload was stopped safely.").waitFor();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
     assert.equal(uploadIdempotencyKeys.length,1);
     assert.match(uploadIdempotencyKeys[0],/^[a-f0-9]{32}$/);
     const storedRetryState=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")||"null"));
@@ -210,7 +210,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.getByLabel("Display name").fill("Browser retry brief");
     await page.locator("#assetUploadFile").setInputFiles(retryFile);
     await page.getByRole("button",{name:"Upload file"}).click();
-    await page.getByText("Storage, authorization or trusted verification is not configured. The upload was stopped safely.").waitFor();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
     assert.equal(uploadIdempotencyKeys.length,2);
     assert.equal(uploadIdempotencyKeys[1],uploadIdempotencyKeys[0],"same-tab reload must reuse the original metadata operation key");
     await page.getByLabel("Display name").fill("Changed display name");
