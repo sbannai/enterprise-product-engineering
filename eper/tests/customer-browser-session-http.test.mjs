@@ -35,10 +35,16 @@ test("application session context requires durable browser session and both acti
     tenantApplicationAssignmentStore: { async listActive(tenantId) {
       assert.equal(tenantId, "tenant-01"); return ["application-01"];
     } },
-    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+    actorApplicationAssignmentStore: {
+      async listActive(tenantId, actorId) {
+        assert.deepEqual([tenantId, actorId], ["tenant-01", "actor-01"]);
+        return ["application-01"];
+      },
+      async isAssigned(tenantId, actorId, applicationId) {
       assert.deepEqual([tenantId, actorId, applicationId], ["tenant-01", "actor-01", "application-01"]);
       return true;
-    } },
+      },
+    },
   });
   try {
     await new Promise((resolve, reject) => {
