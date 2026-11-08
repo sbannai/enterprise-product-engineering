@@ -336,7 +336,7 @@ test("metadata create endpoint enforces browser authorization and assigns server
     assert.ok(calls.includes("create"));
     assert.ok(calls.includes("session"));
     assert.ok(calls.includes("permission"));
-  }, false, false, serverOptions => {
+  }, false, false, (serverOptions, calls) => {
     process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
     serverOptions.customerAssetRepository.create = async input => {
       createdInput = input;
