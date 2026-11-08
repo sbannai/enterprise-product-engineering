@@ -108,3 +108,13 @@ test("expiry queue-age migration retains tenant scope, optional asset filter and
   assert.ok(expiryQueueAgeMigration.includes("clock_timestamp()"));
   assert.ok(expiryQueueAgeMigration.includes("TO eper_customer_asset_access, eper_customer_asset_upload_expiry_worker_access"));
 });
+
+const expectedChecksumMigration = await readFile(new URL("../packages/audit/migrations/032_customer_asset_upload_expected_checksum.sql", import.meta.url), "utf8");
+
+test("expected upload checksum migration is additive, repeatable and fails closed for legacy NULL rows", () => {
+  assert.ok(expectedChecksumMigration.includes("ADD COLUMN IF NOT EXISTS expected_checksum_sha256 char(64)"));
+  assert.ok(expectedChecksumMigration.includes("expected_checksum_sha256 IS NULL OR expected_checksum_sha256 ~ '^[a-f0-9]{64}$'"));
+  assert.ok(expectedChecksumMigration.includes("NULL is legacy-only and fails closed at completion"));
+  assert.ok(expectedChecksumMigration.includes("BEGIN;"));
+  assert.ok(expectedChecksumMigration.includes("COMMIT;"));
+});
