@@ -107,8 +107,8 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
     validateConfigurationSchema(value.items as Record<string, unknown>, depth + 1);
   }
   if (value.enum !== undefined) {
-    const enumValues: unknown = value.enum;
-    if (!Array.isArray(enumValues)) invalid();
+    if (!Array.isArray(value.enum)) invalid();
+    const enumValues = value.enum as unknown[];
     if (enumValues.length < 1 || enumValues.length > 100 ||
         enumValues.some((item: unknown) => item !== null &&
           (!["string", "number", "boolean"].includes(typeof item) ||
