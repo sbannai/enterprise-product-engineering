@@ -225,7 +225,7 @@ test("upload completion verifies the persisted provider object and atomically ha
       assert.deepEqual(request, {
         tenantId: "tenant-alpha", applicationId: "app-alpha", assetId: "asset-01",
         uploadSessionId: "session-upload-001", providerUploadReference: "opaque-provider-object-reference",
-        expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), expectedMimeType: "application/pdf",
+        expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expectedSha256: "a".repeat(64),
       });
       return { sizeBytes: 1024, detectedMimeType: "application/pdf", checksumSha256: "a".repeat(64) };
     };
@@ -385,5 +385,28 @@ test("metadata API advertises GET and POST and rejects unsupported methods", asy
   }, false, false, () => {
     process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
     process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  });
+});
+
+
+test("upload completion rejects provider-observed checksum that differs from the persisted expected checksum", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST", headers: { origin, cookie, "x-csrf-token": csrf }, body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: "uploaded_object_not_verified" });
+    assert.equal(calls.includes("complete-upload"), false);
+  }, false, false, serverOptions => {
+    serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => ({
+      assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
+      expectedSizeBytes: 1024, expectedChecksumSha256: "b".repeat(64), expectedMimeType: "application/pdf",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    serverOptions.assetUploadVerification = async request => {
+      assert.equal(request.expectedSha256, "b".repeat(64));
+      return { sizeBytes: 1024, detectedMimeType: "application/pdf", checksumSha256: "a".repeat(64) };
+    };
+    serverOptions.customerAssetRepository.completeUpload = async () => { throw new Error("must not complete"); };
   });
 });
