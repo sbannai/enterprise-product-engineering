@@ -11,7 +11,7 @@ const sessionToken = "A".repeat(43);
 const csrf = createCustomerCsrfToken(sessionToken, secret);
 const cookie = `${CUSTOMER_SESSION_COOKIE}=${sessionToken}; ${CUSTOMER_CSRF_COOKIE}=${csrf}`;
 const envKeys = [
-  "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_METADATA_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+  "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_METADATA_API_ENABLED", "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
   "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
   "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_OIDC_ENABLED", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
 ];
@@ -370,4 +370,20 @@ test("metadata create endpoint rejects invalid CSRF before identity or repositor
     assert.deepEqual(await response.json(), { error: "csrf_invalid" });
     assert.deepEqual(calls, []);
   }, false, false, () => { process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true"; });
+});
+
+
+test("metadata API advertises GET and POST and rejects unsupported methods", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/assets?applicationId=app-alpha", {
+      method: "PUT",
+      headers: { origin, cookie, "x-csrf-token": csrf, "content-type": "application/json" },
+    });
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get("allow"), "GET, POST");
+    assert.deepEqual(calls, []);
+  }, false, false, () => {
+    process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
+    process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
+  });
 });
