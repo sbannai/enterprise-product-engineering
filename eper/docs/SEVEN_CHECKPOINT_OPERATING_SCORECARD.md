@@ -1253,3 +1253,17 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 - PR #384 remains open as a broader asset-foundation reference. Upload expiry (#404), real-byte customer asset browser journey (#405), workflow worker activation/supervision (#436), and release controls/independent handover (#406) remain separate open work.
 - PR #306 remains merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 remains merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Both merge commits are ancestors of current main.
 - No real provider action or chargeable cloud resource was used in this review.
+
+
+## 2026-11-08 — Upload retry/expiry mainline port review
+
+**Review base:** `8feeaee982f7f4bd46df6467c447392e5e4ad1ba` (main). This entry is an append-only governance record; it does not claim a code change or test execution.
+
+- Current main asset migration chain is 021 `customer_asset_repository`, 022 `customer_asset_scan_dispatch`, 023 `customer_asset_upload_recovery`, and 024 `customer_asset_upload_provider_outcomes`. Migrations 026–029 from the historical upload-expiry PR stack are absent.
+- Main 023 persists the request fingerprint, provider grant expiry and recovery timestamp. Main 024 classifies provider outcomes as `unknown | succeeded | rejected`; unknown provider outcomes must not be treated as definitive rejection.
+- Main repository currently uses tenant-scoped idempotency lookup and uniqueness (`tenant_id + idempotency_key`), checks application/actor/asset/size/fingerprint for conflicts, and begins the reservation in `initiated` state.
+- PR #402 migration 026 proposes application-scoped idempotency (`tenant_id + application_id + idempotency_key`), one-active-session-per-asset uniqueness and changes to the reservation state machine, including `reserved`. Its repository patch changes advisory locking, retry reconciliation and lock ordering. This is not a drop-in migration: schema, repository, API contract and provider-outcome semantics must be adapted together.
+- PR #413 adds tenant-bound cross-application expiry (migration 027); PR #414 adds worker-only DB permissions, queue-age metrics and operational supervision (migrations 028–029). Both are stacked on the historical branch chain and cannot be promoted wholesale.
+- **Disposition:** no cherry-pick or merge of #402/#413/#414 as-is. Build a current-main implementation slice after deciding and testing idempotency scope, preserving request fingerprint/provider outcome recovery, reconciling `initiated` versus `reserved`, enforcing one active attempt per asset, and retaining session→asset lock order. Require clean replay from 021–024 through new migrations plus PostgreSQL upgrade, concurrency, cross-application and retry tests on the resulting exact main SHA.
+- Evidence/comments: issue #417 comments 6715742299 (diverged ancestry), 6715749365 (migration chain), 6715756775 (migration 026 compatibility review). PR #402 has eight changed files; #413 four; #414 sixteen. Their branch-level CI evidence is not current-main integration evidence.
+- **Status:** blocked promotion / mainline port not yet implemented. No code or migration was changed and no new tests were run in this review. No cloud provisioning, real provider dispatch, production release or Business UAT authorization.
