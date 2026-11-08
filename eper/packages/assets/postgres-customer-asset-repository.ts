@@ -200,7 +200,7 @@ export class PostgresCustomerAssetRepository {
           "eper-asset-metadata:" + input.tenantId + ":" + input.applicationId + ":" + input.actorId + ":" + input.clientOperationId,
         ]);
         const prior = await client.query<AssetRow & { request_fingerprint: string }>(
-          \`SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
+          `SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
             a.display_name, a.original_file_name, a.media_category, a.mime_type, a.file_extension,
             a.size_bytes, a.checksum_sha256, a.storage_adapter_key, a.upload_status,
             a.scan_status, a.lifecycle_status, a.version, a.created_by, a.created_at,
@@ -209,7 +209,7 @@ export class PostgresCustomerAssetRepository {
            JOIN eper_customer_assets a ON a.tenant_id = o.tenant_id AND a.asset_id = o.asset_id
            WHERE o.tenant_id = $1 AND o.application_id = $2 AND o.actor_id = $3
              AND o.client_operation_id = $4
-           FOR UPDATE OF o, a\`,
+           FOR UPDATE OF o, a`,
           [input.tenantId, input.applicationId, input.actorId, input.clientOperationId],
         );
         if (prior.rows[0]) {
