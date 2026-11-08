@@ -110,12 +110,14 @@ function options(calls, withProvider = false, replay = false) {
     } : {}),
   };
 }
-async function withServer(t, handler, withProvider = false, replay = false) {
+async function withServer(t, handler, withProvider = false, replay = false, configureOptions = () => {}) {
   const previous = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
   configure();
   if (withProvider) process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["uploads.example.test"]);
   const calls = [];
-  const server = createAppServer(options(calls, withProvider, replay));
+  const serverOptions = options(calls, withProvider, replay);
+  configureOptions(serverOptions, calls);
+  const server = createAppServer(serverOptions);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -193,4 +195,80 @@ test("upload grant endpoint wires provider lookup for replay and renews the exac
     assert.equal(JSON.stringify(payload).includes("opaque-provider-object-reference"), false);
     assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission", "reserve", "lookup", "provider", "record-grant"]);
   }, true, true);
+});
+
+
+test("upload completion verifies the persisted provider object and atomically hands off to scanning", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf, "x-correlation-id": "upload-complete-correlation-01" },
+      body: JSON.stringify({ checksumSha256: "f".repeat(64), scanStatus: "clean" }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload, { assetId: "asset-01", uploadStatus: "scanning", scanStatus: "pending" });
+    assert.equal(JSON.stringify(payload).includes("opaque-provider-object-reference"), false);
+    assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission", "load-upload-session", "verify-provider-object", "complete-upload"]);
+  }, false, false, (serverOptions, calls) => {
+    serverOptions.customerAssetRepository.getUploadSessionForVerification = async (tenantId, applicationId, uploadSessionId) => {
+      calls.push("load-upload-session");
+      assert.deepEqual([tenantId, applicationId, uploadSessionId], ["tenant-alpha", "app-alpha", "session-upload-001"]);
+      return {
+        assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
+        expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      };
+    };
+    serverOptions.assetUploadVerification = async (request, requestId) => {
+      calls.push("verify-provider-object");
+      assert.equal(requestId, "upload-complete-correlation-01");
+      assert.deepEqual(request, {
+        tenantId: "tenant-alpha", applicationId: "app-alpha", assetId: "asset-01",
+        uploadSessionId: "session-upload-001", providerUploadReference: "opaque-provider-object-reference",
+        expectedSizeBytes: 1024, expectedMimeType: "application/pdf",
+      });
+      return { sizeBytes: 1024, detectedMimeType: "application/pdf", checksumSha256: "a".repeat(64) };
+    };
+    serverOptions.customerAssetRepository.completeUpload = async input => {
+      calls.push("complete-upload");
+      assert.deepEqual(input, {
+        tenantId: "tenant-alpha", applicationId: "app-alpha", actorId: "actor-alpha", environment: "uat",
+        correlationId: "upload-complete-correlation-01", uploadSessionId: "session-upload-001",
+        receivedSizeBytes: 1024, observedMimeType: "application/pdf",
+        checksumSha256: "a".repeat(64), scanStatus: "pending",
+      });
+      return { assetId: "asset-01", uploadStatus: "scanning", scanStatus: "pending" };
+    };
+  });
+});
+
+test("upload completion rejects unverified provider objects without completing or trusting client metadata", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf, "content-type": "application/json" },
+      body: JSON.stringify({ checksumSha256: "a".repeat(64), mimeType: "application/pdf", scanStatus: "clean" }),
+    });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { error: "uploaded_object_not_verified" });
+    assert.equal(calls.includes("complete-upload"), false);
+  }, false, false, (serverOptions, calls) => {
+    serverOptions.customerAssetRepository.getUploadSessionForVerification = async () => ({
+      assetId: "asset-01", actorId: "actor-alpha", providerUploadReference: "opaque-provider-object-reference",
+      expectedSizeBytes: 1024, expectedMimeType: "application/pdf", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    serverOptions.assetUploadVerification = async () => { calls.push("verify-provider-object"); return null; };
+    serverOptions.customerAssetRepository.completeUpload = async () => { calls.push("complete-upload"); throw new Error("must not complete"); };
+  });
+});
+
+test("upload completion fails closed when trusted verification is not configured", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/uploads/session-upload-001/complete", {
+      method: "POST", headers: { origin, cookie, "x-csrf-token": csrf },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "customer_asset_upload_verification_unavailable" });
+    assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
+  });
 });
