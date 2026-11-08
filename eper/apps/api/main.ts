@@ -450,6 +450,29 @@ const auditWriter = auditMode === "postgres" && paymentPool
       });
     }
   : undefined;
+
+const assetAuditWriter = auditMode === "postgres" && paymentPool
+  ? async (record: import("./server.js").CustomerAssetAuditRecord): Promise<void> => {
+      await appendAuditEvent(paymentPool, {
+        tenantId: record.tenantId,
+        applicationId: record.applicationId,
+        environment: auditEnvironment as "production" | "uat" | "sandbox",
+        actorType: "human",
+        actorId: record.actorId,
+        action: record.action,
+        outcome: record.outcome,
+        reasonCode: record.outcome === "denied" ? "ASSET_ACCESS_DENIED" :
+          record.outcome === "failure" ? "ASSET_DOWNLOAD_FAILED" : undefined,
+        resourceType: "client-asset",
+        resourceId: record.assetId,
+        requestId: record.requestId,
+        source: "api",
+        operationName: "customer.asset.download",
+        serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
+        payload: { applicationId: record.applicationId },
+      });
+    }
+  : undefined;
 if (auditMode === "postgres" && paymentPool) {
   await assertAuditStoreReady(paymentPool);
 }
@@ -496,7 +519,7 @@ if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady
 
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
-  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, customerLifecycleStore,
+  paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, assetAuditWriter, customerLifecycleStore,
   agentDraftStore, ticketStore, actorApplicationAssignmentStore, tenantApplicationAssignmentStore, customerIdentitySessionStore,
   customerOidcClient, customerOidcPublicOrigin, customerCsrfSecret, adminConfigurationStore, commercialTariffAdminStore, moduleEntitlementService, campaignSchedulerStore,
   adminConfigEnvironment: auditEnvironment as "production" | "uat" | "sandbox",
