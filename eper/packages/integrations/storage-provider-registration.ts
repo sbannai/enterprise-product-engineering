@@ -111,7 +111,7 @@ function validateConfigurationSchema(value: Record<string, unknown>, depth = 0):
     const enumValues = value.enum as unknown[];
     if (enumValues.length < 1 || enumValues.length > 100 ||
         enumValues.some((item: unknown) => item !== null &&
-          (!["string", "number", "boolean"].includes(typeof item) ||
+          (!["string", "number", "boolean", "object"].includes(typeof item) ||
            (typeof item === "number" && !Number.isFinite(item)))) ||
         new Set(enumValues.map((item: unknown) => JSON.stringify(item))).size !== enumValues.length) invalid();
     const declaredType = value.type;
