@@ -178,7 +178,7 @@ export class PostgresCustomerAssetRepository {
       throw new Error("EPER_CUSTOMER_ASSET_SHARED_OWNER_MUST_BE_NULL");
     }
     if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) throw new Error("EPER_CUSTOMER_ASSET_SIZE_INVALID");
-    if (input.checksumSha256 && !/^[a-f0-9]{64}$/.test(input.checksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
+    if (input.checksumSha256 !== undefined && !/^[a-f0-9]{64}$/.test(input.checksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
     if (input.clientOperationId !== undefined && !/^[a-f0-9]{32,64}$/i.test(input.clientOperationId)) {
       throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_KEY_INVALID");
@@ -189,7 +189,8 @@ export class PostgresCustomerAssetRepository {
       ownerApplicationId: input.ownerApplicationId ?? null, displayName: input.displayName,
       originalFileName: input.originalFileName, mediaCategory: input.mediaCategory,
       mimeType: input.mimeType, fileExtension: input.fileExtension.toLowerCase(),
-      sizeBytes: input.sizeBytes, storageAdapterKey: input.storageAdapterKey,
+      sizeBytes: input.sizeBytes, checksumSha256: input.checksumSha256 ?? null,
+      storageAdapterKey: input.storageAdapterKey,
     })).digest("hex");
     const client = await this.pool.connect();
     try {

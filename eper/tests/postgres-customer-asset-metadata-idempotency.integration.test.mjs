@@ -29,7 +29,7 @@ test("customer asset metadata creation replays identical operations and rejects 
       scope: "application_restricted", ownerApplicationId: applicationId,
       displayName: "Evidence document", originalFileName: "evidence.pdf",
       mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
-      sizeBytes: 2048, storageAdapterKey: "ci-storage",
+      sizeBytes: 2048, checksumSha256: "a".repeat(64), storageAdapterKey: "ci-storage",
       storageObjectReference: "opaque-metadata-object-" + suffix,
     };
     try {
@@ -40,9 +40,15 @@ test("customer asset metadata creation replays identical operations and rejects 
       assert.equal(first.assetId, concurrentReplay.assetId, "concurrent duplicate operation must return one durable asset");
       const replay = await repository.create(base);
       assert.equal(replay.assetId, first.assetId, "identical retry must return the original asset");
+      assert.equal(first.checksumSha256, base.checksumSha256, "the persisted checksum must match the immutable metadata request");
       await assert.rejects(
         repository.create({ ...base, displayName: "Changed evidence document" }),
         /EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT/,
+      );
+      await assert.rejects(
+        repository.create({ ...base, checksumSha256: "b".repeat(64) }),
+        /EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT/,
+        "a checksum-only change must not replay the original metadata operation",
       );
       const counts = await pool.query(
         "SELECT (SELECT count(*)::int FROM eper_customer_assets WHERE tenant_id = $1) AS assets, " +
