@@ -7,6 +7,7 @@ on:
     paths:
       - "eper/apps/api/**"
       - "eper/packages/identity/**"
+      - "eper/tests/customer-portal-preview.test.mjs"
       - "eper/tests/customer-oidc-*.mjs"
       - "eper/tests/customer-browser-*.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
@@ -18,6 +19,7 @@ on:
     paths:
       - "eper/apps/api/**"
       - "eper/packages/identity/**"
+      - "eper/tests/customer-portal-preview.test.mjs"
       - "eper/tests/customer-oidc-*.mjs"
       - "eper/tests/customer-browser-*.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
