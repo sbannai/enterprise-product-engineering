@@ -1938,3 +1938,67 @@ This section supersedes the preceding statements that PR #449 remains open/unmer
 - The upload-retry and cross-application-expiry behavior remains pending mainline port and exact-head validation. Existing PRs #402/#413 remain historical implementation references, not accepted mainline functionality.
 
 Seven-pointer status remains: workspace/support AMBER (download-reference gate now mainline; real-byte/provider/scanner journey and SLA lifecycle still open); release/continuity RED (main branch protection/rulesets and independent release/restore evidence remain unverified).
+
+
+## 2026-11-08 11:36 IST — PR #449 merged; audit composition corrected on main
+
+### Merge and exact-main verification
+
+GitHub now records PR #449 as closed/merged by the repository owner at `2026-11-08T05:30:57Z`:
+- merged head: `1d3e2c9574db46c671fca4cc66bb3b5ad67c8ca0`;
+- merge commit and then-current main: `f52af521bb3ddc81692c8fa5a9dd5e2f21331c3b`;
+- merge message: PostgreSQL completed-upload-session download lookup with explicit shared-link visibility and fail-closed API/live PostgreSQL coverage.
+
+All 11 Actions workflows returned for exact merge commit `f52af521bb3ddc81692c8fa5a9dd5e2f21331c3b` completed successfully:
+- provider PostgreSQL lifecycle [42451071371](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071371);
+- fresh-clone [42451071411](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071411);
+- Chromium OIDC browser [42451071341](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071341);
+- EPER CI [42451071352](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071352);
+- 228/38 matrix [42451071423](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071423);
+- G9 [42451071334](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071334);
+- integrated validation [42451071374](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071374);
+- six-family HTTP smoke [42451071360](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071360);
+- container runtime [42451071450](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451071450).
+
+The merge-commit provider lifecycle applied migration `026_customer_asset_shared_download_session_visibility.sql` and passed the live restricted-role download lookup test (3/3, 0 failed, 0 skipped), alongside asset upload recovery, migration/RLS, scan and recovery tests. The merge-commit fresh clone passed `npm run dev:verify`: 1,585 tests, 1,572 passed, 0 failed, 13 skipped; all seven migration groups applied and repeated; disposable PostgreSQL restore 80/80 base tables and 7 ledgers. The three restricted worker live-login cases and the new asset download live test are skipped in generic dev-verify by design; the dedicated EPER CI and provider lifecycle workflows provision their required test roles/flags and pass them. The browser OIDC lifecycle passed 1/1.
+
+### Follow-on mainline audit composition correction
+
+After the merge, inspection of `eper/apps/api/main.ts` showed that the server had a PostgreSQL asset-audit fallback tied to `capabilityPool`, but the normal entrypoint did not always pass that pool for customer-asset-only configuration. The download route correctly failed closed when no audit writer was available, but could not persist its attempt audit under that composition.
+
+This was ported directly to main in:
+- `c00bf520efe2b32ef6cc40d9cafbf04f305a4a2e` — create `assetAuditWriter` from the PostgreSQL payment pool using `appendAuditEvent`, and pass it explicitly to `createAppServer`.
+
+This is the unique audit-writer composition slice previously present in historical PR #394; the old PR's download route was not imported. Exact-current-main workflows on `c00bf520efe2b32ef6cc40d9cafbf04f305a4a2e` all passed:
+- EPER CI [42451299529](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299529);
+- fresh-clone [42451299482](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299482);
+- browser [42451299510](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299510);
+- 228/38 matrix [42451299470](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299470);
+- G9 [42451299468](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299468);
+- integrated validation [42451299467](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299467);
+- six-family HTTP smoke [42451299434](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299434);
+- container runtime [42451299516](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42451299516).
+
+Exact-current-main fresh clone again reports 1,585 tests, 1,572 passed, 0 failed, 13 skipped; all seven migration groups applied/repeated; restore 80/80 base tables and 7 ledgers. Exact-current-main EPER CI reports worker 37/37, dispatcher/shutdown 3/3, assignments 11/11, restricted worker-login/role gates and two-worker retry/dead-letter/audit-replay/idempotent redelivery all passed with no skips in those live lanes. Browser OIDC E2E passed 1/1. Matrix passed 259 tests, 0 failed, 28 checks and no failed chapters; G9 passed 5/5. The exact integrated gate reports all applicable technical lanes on the same commit.
+
+The audit-writer composition makes durable audit available for fail-closed download attempts; it does not compose a provider download resolver or enable storage execution.
+
+### Updated open-PR and merge disposition
+
+The open-PR inventory is now 21; PR #449 is no longer open. The remaining 21 current heads are unchanged from the preceding inventory table. Against current code main `c00bf520efe2b32ef6cc40d9cafbf04f305a4a2e`, 20 remaining branches are diverged and 261 commits behind; PR #432 is diverged and 187 commits behind. Their exact-head Actions and selected relevant logs were inspected before the #449 merge; those head SHAs have not changed. Green historical branch runs are not merge compatibility evidence.
+
+PR #394 remains open because it still contains distinct expiry/stale-scan lease test candidates. Its PostgreSQL download-route slice is superseded by merged #449; its asset-audit-writer composition has been ported in `c00bf520`. A comment records this disposition. Do not merge #394 or the historical asset/provider/expiry stacks wholesale. Migration 026 is now on main; historical expiry branches #402/#413/#414 that define a different migration 026 must be renumbered/reconciled before any port.
+
+The PR #449 merge has no submitted review or inline review-thread record; GitHub shows the repository owner performed the merge. This is recorded as a review-governance exception, not independent review evidence.
+
+### Current seven-pointer status
+
+1. v34-to-228 — AMBER: 228 requirement IDs and 38 chapters preserved; 45 partial shared-control links and 0 exact full-coverage v34 mappings; technical matrix success is not complete business acceptance.
+2. Fresh-clone — GREEN: exact-main `npm run dev:verify`, all seven migration groups/repeatability including identity and audit migration 026, disposable restore 80/80 and 7 ledgers.
+3. PostgreSQL — AMBER: live RLS/download lookup, migration repeatability and local restore pass; off-host backup, retention, encryption/key custody, RPO/RTO and independent restore remain unproven.
+4. Identity/OIDC — AMBER: durable sessions, secure cookies, CSRF, tenant/application assignments and local test-issuer browser lifecycle pass; production IdP interoperability remains unproven.
+5. Workspace/support — AMBER: ticket journey, upload UI/session-bound retry, PostgreSQL download lookup and durable download-attempt audit are on main; real provider-backed bytes/object verification/malware scan/signed URL remain blocked by the uncomposed provider runtime; SLA lifecycle remains unimplemented/unproven.
+6. Scheduler/workflow — AMBER: continuous process, lease/fencing, idempotency, retry/dead-letter, approval gate, restricted roles and two-worker live PostgreSQL proof pass; production dispatcher, host supervision and telemetry/alerts remain deployment duties.
+7. Release/continuity — RED: main remains unprotected, repository rulesets empty, and off-host recovery/independent second-engineer release and rollback are not evidenced.
+
+No real provider/external action or chargeable cloud resource was triggered.
