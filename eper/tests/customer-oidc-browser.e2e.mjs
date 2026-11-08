@@ -155,6 +155,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
       "browser workspace bootstrap failed; message="+connectionMessage+" url="+page.url()+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
     const sessionIdentity=await page.evaluate(async()=>{const response=await fetch("/customer/session");return response.json();});
     assert.equal(sessionIdentity.data?.roleKey,"customer-user","OIDC claims must not elevate the customer workspace role");
+    assert.match(sessionIdentity.data?.sessionBinding||"",/^[a-f0-9]{64}$/,"browser session introspection must expose only the opaque server-derived session binding needed for retry isolation");
     const tariffAttempt=await page.evaluate(async()=>{
       const csrf=document.cookie.split("; ").find(value=>value.startsWith("__Host-eper_csrf="))?.split("=").slice(1).join("=")||"";
       const response=await fetch("/customer/commercial-tariff",{method:"POST",headers:{"content-type":"application/json","x-csrf-token":csrf},body:JSON.stringify({accepted:true,acceptanceReference:"BROWSER-E2E-UNAUTHORIZED",tariffKey:"multi-app",tariffVersion:1,expectedVersion:1,revokeApplications:[]})});
@@ -199,10 +200,11 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(uploadIdempotencyKeys.length,1);
     assert.match(uploadIdempotencyKeys[0],/^[a-f0-9]{32}$/);
     const storedRetryState=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")||"null"));
-    assert.deepEqual(Object.keys(storedRetryState||{}).sort(),["metadataFingerprint","operationId","uploadIdempotencyKey"]);
+    assert.deepEqual(Object.keys(storedRetryState||{}).sort(),["identityFingerprint","metadataFingerprint","operationId","uploadIdempotencyKey"]);
     assert.match(storedRetryState.metadataFingerprint,/^[a-f0-9]{64}$/);
     assert.match(storedRetryState.operationId,/^[a-f0-9]{32}$/);
     assert.match(storedRetryState.uploadIdempotencyKey,/^[a-f0-9]{32}$/);
+    assert.match(storedRetryState.identityFingerprint,/^[a-f0-9]{64}$/);
     await page.reload();
     await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
     await page.getByRole("button",{name:"Client Assets"}).click();
