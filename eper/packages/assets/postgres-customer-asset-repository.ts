@@ -111,14 +111,31 @@ export class PostgresCustomerAssetRepository {
   async assertUploadExpiryWorkerReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ expiry_function_execute: boolean }>(`
-        SELECT coalesce(has_function_privilege(
-          current_user,
-          to_regprocedure('public.eper_expire_customer_asset_upload_sessions(character varying,integer,uuid)')::oid,
-          'EXECUTE'
-        ), false) AS expiry_function_execute
+      // This identity intentionally has no direct SELECT access to asset/session
+      // tables. Validate only the definer-function and append-only audit grants
+      // that the isolated worker actually needs.
+      const result = await client.query<{
+        schema_usage: boolean;
+        expiry_function_execute: boolean;
+        audit_event_insert: boolean;
+        audit_chain_head_select: boolean;
+        audit_chain_hash_update: boolean;
+        audit_chain_timestamp_update: boolean;
+      }>(`
+        SELECT
+          coalesce(has_schema_privilege(current_user, 'public', 'USAGE'), false) AS schema_usage,
+          coalesce(has_function_privilege(
+            current_user,
+            to_regprocedure('public.eper_expire_customer_asset_upload_sessions(character varying,integer,uuid)')::oid,
+            'EXECUTE'
+          ), false) AS expiry_function_execute,
+          coalesce(has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT'), false) AS audit_event_insert,
+          coalesce(has_table_privilege(current_user, 'public.eper_audit_chain_head', 'SELECT'), false) AS audit_chain_head_select,
+          coalesce(has_column_privilege(current_user, 'public.eper_audit_chain_head', 'last_event_hash', 'UPDATE'), false) AS audit_chain_hash_update,
+          coalesce(has_column_privilege(current_user, 'public.eper_audit_chain_head', 'updated_at', 'UPDATE'), false) AS audit_chain_timestamp_update
       `);
-      if (!result.rows[0]?.expiry_function_execute) {
+      const row = result.rows[0];
+      if (!row || !Object.values(row).every((value) => value === true)) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY");
       }
     } catch (error) {
