@@ -106,7 +106,7 @@ test("restricted expiry worker login processes an expired reservation, appends a
       });
       uploadSessionId = reservation.uploadSessionId;
       await adminPool.query(
-        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES ($1, $2, true)",
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES ($1, $2, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
         [workerLoginRole, tenantId],
       );
       await adminPool.query(
