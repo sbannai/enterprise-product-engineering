@@ -56,7 +56,7 @@ async function createPendingScanFixture(pool, repository, prefix) {
   const fingerprint = createHash("sha256").update(prefix + suffix).digest("hex");
   // The scanner process receives the exact same synthetic bytes whose digest
   // and size are persisted as the completed upload's server-observed metadata.
-  const testObjectBytes = Buffer.from(("EPER synthetic customer asset bytes " + suffix + "\\n").repeat(16), "utf8");
+  const testObjectBytes = Buffer.alloc(512, suffix.charCodeAt(0));
   const checksumSha256 = createHash("sha256").update(testObjectBytes).digest("hex");
   await repository.create({
     tenantId, applicationId, actorId, environment: "sandbox", correlationId,
