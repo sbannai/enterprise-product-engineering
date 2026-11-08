@@ -1367,3 +1367,44 @@ Build the missing migration assurance tests for current-main 023–024 (legacy u
 2. Resolve the #397 provider and secret-manager ownership decision before executable provider composition.
 3. Complete #405 browser E2E only after the required upload/verification/scanner runtime boundaries exist on main.
 4. Reconcile #434 mainline protections without blocking the owner's direct-to-main delivery model.
+
+
+---
+
+## Append-only checkpoint — 2026-11-08 08:18 IST (metadata idempotency and exact-main CI)
+
+### Live baseline and exact-head evidence
+- Dynamically resolved current `main`: `2cadca5aa127de5e53aa63937939c833b17d4397` (`ci(assets): run metadata idempotency PostgreSQL integration tests`).
+- This current-tip commit changes only `.github/workflows/ci.yml`; it explicitly adds live PostgreSQL metadata-idempotency and migration/RLS assurance tests to EPER CI.
+- Exact-current-main EPER CI [run 42440743797](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42440743797) and Workflow Configuration Validation [run 42440743756](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42440743756) completed successfully.
+- EPER CI job `128609251216` on the exact current SHA confirms: metadata idempotency integration 1/1; customer-asset migration/RLS/checksum assurance 1/1; claim-generation fencing 1/1; two-restricted-worker retry/dead-letter/audited-replay 1/1; worker lifecycle 37/37; dispatcher approval/shutdown 3/3; tenant/actor assignment integration 11/11; capability conformance 7/7. All these selected suites report zero failures and zero skips.
+- Application-source parent `4e4959995d5c6c693072828ceec7c02663fadf19` has exact fresh-clone run [42440627136](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42440627136): `npm run dev:verify` passed; 1,578 tests, 1,566 passed, 0 failed, 12 skipped; all seven migration groups were applied and repeated, including identity; disposable PostgreSQL backup/restore passed with 80 source/restored base tables and seven migration ledgers. This is parent-SHA evidence, not a fresh-clone run on current tip `2cadca5`; the current-tip change is CI-workflow-only and did not trigger the fresh-clone workflow.
+- The same application-source parent 228/38 matrix [run 42440627174](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42440627174) passed all 38 chapter suites, 259/259 pilot tests and 28 checks, with no failed chapters. G9 [run 42440627178](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42440627178) passed. These are parent-SHA results, not exact-current-tip runs.
+
+### Customer asset metadata and identity boundaries
+- Migration 025 adds `eper_customer_asset_metadata_operations`; repository `assertReady` now requires this table.
+- The PostgreSQL integration test proves concurrent identical client-operation retries return one durable asset, one operation row and one metadata-create audit event; a changed request fingerprint fails closed. The migration assurance test verifies table presence, primary/unique constraints, tenant/application RLS and restricted-role SELECT/INSERT-only privileges.
+- This remains a repository-level idempotency primitive: the customer API does not yet pass `clientOperationId` into metadata creation, and the customer portal still has no upload form or session-bound retry consumer.
+- The verified upload-completion route remains an injectable, fail-closed boundary. No concrete provider/secret resolver, real-byte browser transfer, clean-scan-to-download journey or production provider activation is established.
+- The server-side opaque HMAC session binding is present on main. Its HTTP/session regression passed on application-source parent `4e495999`; no Chromium OIDC/browser E2E run is attached to exact current tip `2cadca5`. No production IdP interoperability or production-login claim is made.
+
+### Live PR inventory and merge disposition
+- Live open-PR search returned 23 drafts. Current exact heads were re-resolved; relevant exact-head Actions runs and job logs were inspected. The branch-local selected checks succeeded, but the feature branches remain divergent from current main and several are stacked on historical feature bases. Exact-head green is not current-main integration evidence; do not merge historical stacks wholesale.
+- PR #306 remains merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 remains merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Both merge commits are ancestors of current main.
+- PRs #447 and #448 are closed unmerged/superseded; their server-side session-binding and verified-completion boundary changes were ported directly to main. Their old branches are not integration dependencies.
+
+### Seven approved pointer disposition
+1. **v34 → 228:** preserve the approved 228 requirement IDs and 38 chapters. The 45 original v34 rows remain; 0 exact full-coverage mappings and 45 partial shared-control links are recorded. Feature-level acceptance traceability remains incomplete.
+2. **Fresh clone:** `npm run dev:verify` is reproducible on application-source parent `4e495999`; do not relabel the parent run as exact-current-tip evidence.
+3. **PostgreSQL:** seven migration groups including identity, repeatability, live PostgreSQL tests, metadata idempotency/RLS, and local disposable backup/restore are demonstrated. Off-host backup, retention/key custody, approved RPO/RTO and independent restore remain open.
+4. **Identity:** OIDC protocol, browser routes, durable sessions, secure cookies, CSRF, HMAC session binding and tenant/application assignments are implemented/tested at HTTP/CI level. Exact-current-tip Chromium E2E and production IdP interoperability are not evidenced.
+5. **Customer workspace/support:** ticket submission/history/replies, tenant/application scoping, admin triage/assignment/severity, internal-note separation and export are present. SLA policy/deadlines/escalation and the complete customer upload/retry/scan/download journey remain incomplete.
+6. **Scheduler/workflow:** independent worker host, restricted logins, lease/fencing, idempotency, retry/dead-letter/audited replay and shutdown are proven in PostgreSQL CI. Approved production dispatcher, secret resolver, supervisor, metrics/alerts and recovery rehearsal remain open.
+7. **Release/continuity:** live branch metadata reports `protected=false`; repository rulesets are empty. Off-host recovery, approved RPO/RTO and independent second-engineer release/rollback are not evidenced. Keep this checkpoint RED.
+
+### Next controlled actions
+1. Add the current-main customer metadata-create API contract and connect the customer upload form/retry state to the verified opaque session binding.
+2. Complete the six-operation provider runtime composition only after approved secret-manager and provider-driver ownership is supplied; keep execution disabled and fail-closed until then.
+3. Finish SLA lifecycle and worker supervision/metrics/recovery.
+4. Owner-approve main protection/rulesets, then establish off-host PostgreSQL recovery and a second-engineer release/rollback rehearsal.
+5. Preserve the approved 228 requirements / 38 chapters; keep v34 additions versioned and separately governed.
