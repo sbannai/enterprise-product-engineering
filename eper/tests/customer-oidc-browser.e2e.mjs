@@ -237,7 +237,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
       metadataSuccessKeys.push(route.request().headers()["idempotency-key"]||"");
       await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({data:{assetId:"asset-browser-e2e",applicationId,uploadStatus:"pending",scanStatus:"pending"}})});
     });
-    await page.route(/\/customer\/applications\/[^/]+\/assets\/[^/]+\/upload-grant$/,async route=>{
+    await page.route("**/customer/applications/*/assets/*/upload-grant",async route=>{
       if(route.request().method()!=="POST"){await route.continue();return;}
       reservationKeys.push(route.request().headers()["idempotency-key"]||"");
       reservationBodies.push(route.request().postDataJSON()||{});
