@@ -1832,3 +1832,66 @@ All selected exact-head jobs in this inventory completed successfully. The other
 7. Release/continuity — RED: main is unprotected, rulesets empty, off-host recovery and independent second-engineer release/rollback path not evidenced.
 
 No PR was merged or deleted in this checkpoint. No production provider/external action or chargeable cloud resource was triggered.
+
+
+## 2026-11-08 11:00 IST — PR #449 exact-head correction and shared-download RLS fix
+
+### Mainline position
+
+At the start of this correction, current main was `22625684565a90a6412dca32113a70094788a1d2`, the scorecard update commit recorded above. Exact-tip push workflows completed successfully:
+- EPER CI [42450268602](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450268602)
+- Integrated validation [42450268608](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450268608)
+- 228/38 matrix [42450268613](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450268613)
+- G9 [42450268552](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450268552)
+- Six-family HTTP smoke [42450268553](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450268553)
+- Container runtime [42450268646](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450268646)
+
+The exact-tip integrated gate reports all applicable technical lanes completed on the same commit. Its matrix subjob was path-filtered/skipped; the separate exact-tip matrix passed 259 pilot tests, 0 failed, 28 checks and no failed chapters. G9 passed 5/5. The exact-tip EPER CI passed 37/37 workflow worker tests, 3/3 dispatcher/shutdown tests, 11/11 live tenant/actor assignment tests, 1/1 restricted worker login privilege test, 2/2 restricted-role/column-grant tests and 1/1 two-restricted-worker retry/dead-letter/audit-replay/idempotent redelivery test.
+
+The latest fresh-clone and provider lifecycle code-bearing main evidence remains on `63dfc0cef7d100932aecce4ebe6fd4da22fb413b` (the subsequent main commits are scorecard-only). Fresh-clone [42449290746](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42449290746) passed 1,583 tests (1,571 passed, 0 failed, 12 skipped), applied and repeated all seven migration groups including identity, and completed disposable PostgreSQL 16 restore with 80/80 base tables and 7 ledgers.
+
+### PR #449 correction — supersedes the earlier head row above
+
+Current exact PR head is now `28a24f11f8c877fed327be5f33e41095d2b49dc9` (branch `fix/mainline-postgres-asset-download-lookup`). It is open, not merged, 8 commits ahead and 1 behind current main. The one-behind commit is the scorecard-only main update `22625684565a90a6412dca32113a70094788a1d2`; the PR must be updated/retested against the latest main tip before merge. The earlier head `219677a7906c70a05edbac38f912c0088b1baf98` is superseded; do not use its green runs as the current PR evidence.
+
+A direct PostgreSQL review found a real bug in the first download lookup: an upload session was RLS-visible only to the application that created it, and the query required `s.application_id = $3`. Therefore an explicitly linked customer-shared asset could not resolve its upload reference from the linked application.
+
+The branch now:
+- adds `026_customer_asset_shared_download_session_visibility.sql`;
+- adds a SELECT-only upload-session RLS policy that allows a linked application to read the session for a `customer_shared` asset only when an explicit application link exists;
+- leaves the original ALL policy in place for INSERT/UPDATE, so session writes remain scoped to the originating application;
+- allows the repository query to use the explicit shared-link predicate while retaining owner-application visibility.
+
+The live PostgreSQL test runs under a separate login inheriting the restricted `eper_customer_asset_access` role and verifies owner-app clean download returns the provider upload reference (not the metadata placeholder), another app is denied before linking, explicit link enables the linked app, cross-application restricted and cross-tenant reads return no row, and incomplete/infected-quarantined assets return no download reference. All references are synthetic; no provider is called.
+
+All 14 Actions runs returned for exact head `28a24f11f8c877fed327be5f33e41095d2b49dc9` completed successfully:
+- Provider lifecycle [42450575098](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575098): new restricted-role shared-download test 1/1; asset upload/scan/recovery and migration/RLS lanes all passed.
+- Fresh clone [42450575115](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575115): 1,585 tests; 1,572 passed; 0 failed; 13 skipped; seven migration groups applied/repeated including identity; disposable restore 80/80 base tables and 7 ledgers. The generic dev-verify skips restricted worker live-login tests; separate EPER CI provisions those roles and passes the live cases.
+- Chromium OIDC browser [42450575106](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575106): 1/1 passed.
+- EPER CI [42450575105](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575105): 37 worker, 3 dispatcher/shutdown, 11 assignment, restricted-role and two-worker live integration lanes passed.
+- PostgreSQL payment-store integration [42450575052](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575052): passed.
+- 228/38 matrix [42450575130](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575130): 259 passed, 0 failed, 28 checks.
+- G9 [42450575065](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575065): 5/5 passed.
+- Same-commit integrated gate [42450575135](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575135): PASS; matrix subjob path-filtered/skipped, separate matrix above passed.
+- Release candidate [42450575369](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575369): PASS.
+- Six-family HTTP smoke [42450575048](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575048): PASS.
+- Container runtime [42450575198](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42450575198): PASS.
+
+Review comments:
+- [Initial direct-PostgreSQL test requirement](https://github.com/sbannai/enterprise-product-engineering/pull/449#issuecomment-6717645463)
+- [Shared-download RLS defect and fix evidence](https://github.com/sbannai/enterprise-product-engineering/pull/449#issuecomment-6717701271)
+- [Final exact-head run evidence](https://github.com/sbannai/enterprise-product-engineering/pull/449#issuecomment-6717715326)
+
+No review submissions or inline review threads exist. The Codex review attempt did not complete due its usage limit. Keep #449 unmerged until an independent review is recorded and the branch is updated/retested against current main. The new mainline migration 026 occupies a number used differently by historical expiry branches #402/#413/#414; those stale branches must not be merged wholesale and any future expiry port must be renumbered/reconciled additively.
+
+### Remaining seven-pointer state
+
+1. v34-to-228: AMBER — 228 IDs/38 chapters preserved; exact source acceptance mapping remains incomplete (45 partial shared-control links, 0 exact full-coverage mappings).
+2. Fresh-clone: GREEN — seven migration groups and repeatability, identity included; local restore passes.
+3. PostgreSQL: AMBER — live PostgreSQL, RLS, identity migrations and disposable restore pass; off-host backup, retention, encryption/key custody, RPO/RTO and independent restore remain unproven.
+4. Identity/OIDC: AMBER — durable sessions, secure cookies, CSRF, tenant/application assignments and local test-issuer browser lifecycle pass; production IdP interoperability remains unproven.
+5. Workspace/support: AMBER — ticket journey, upload form/session-bound retry and a PostgreSQL download-lookup candidate are tested; provider-backed bytes/object verification/scan/authorized download are not yet integrated on main; SLA lifecycle remains unimplemented/unproven.
+6. Scheduler/workflow: AMBER — continuous process, lease/fencing, idempotency, retry/dead-letter, approved-dispatch gate and two-restricted-worker live PostgreSQL proof pass; production dispatcher, host supervision and telemetry/alerts remain deployment duties.
+7. Release/continuity: RED — main remains unprotected, rulesets empty, and off-host recovery/independent second-engineer release and rollback are not evidenced.
+
+Do not merge #449 or any historical branch in this correction. No real provider/external action or chargeable cloud resource was used.
