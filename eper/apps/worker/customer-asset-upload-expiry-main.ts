@@ -1,0 +1,60 @@
+import { randomUUID } from "node:crypto";
+import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
+import { assertAuditStoreReady, type AuditEnvironment } from "../../packages/audit/audit-event-store.js";
+import { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
+import { runCustomerAssetUploadExpiryWorker } from "../../packages/assets/customer-asset-upload-expiry-worker.js";
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(name + "_REQUIRED");
+  return value;
+}
+function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  if (!/^[0-9]+$/.test(raw.trim())) throw new Error(name + "_INVALID");
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(name + "_OUT_OF_RANGE");
+  return value;
+}
+
+if (process.env.EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_ENABLED !== "true") {
+  throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_DISABLED");
+}
+if (process.env.EPER_CUSTOMER_ASSET_PERSISTENCE !== "postgres" ||
+    process.env.EPER_AUDIT_PERSISTENCE !== "postgres") {
+  throw new Error("CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_REQUIRES_POSTGRES");
+}
+const tenantId = required("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_TENANT_ID");
+const applicationId = required("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_APPLICATION_ID");
+const environment = (process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox") as AuditEnvironment;
+if (!["production", "uat", "sandbox"].includes(environment)) throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
+
+const controller = new AbortController();
+let shuttingDown = false;
+function shutdown(): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log("EPER customer asset upload expiry worker shutting down");
+  controller.abort();
+}
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, shutdown);
+
+const pool = createPostgresPaymentPool();
+try {
+  const repository = new PostgresCustomerAssetRepository(pool);
+  await repository.assertReady();
+  await assertAuditStoreReady(pool);
+  console.log("EPER customer asset upload expiry worker started");
+  await runCustomerAssetUploadExpiryWorker({
+    repository, tenantId, applicationId, environment, correlationId: randomUUID(),
+    signal: controller.signal,
+    pollIntervalMs: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_POLL_INTERVAL_MS", 5_000, 100, 60_000),
+    batchSize: boundedInteger("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_SIZE", 100, 1, 500),
+    // Do not emit tenant identifiers, session identifiers or database/provider details.
+    onError() { console.error("EPER customer asset upload expiry worker operation failed"); },
+    onBatch(count) { if (count > 0) console.log("EPER customer asset upload expiry batch", count); },
+  });
+} finally {
+  await pool.end();
+}
