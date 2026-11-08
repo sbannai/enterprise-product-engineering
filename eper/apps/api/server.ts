@@ -239,7 +239,7 @@ async function resolveCustomerWorkspaceIdentity(
     const tenantApplicationSet = new Set(tenantApplications);
     const sessionBinding = stores.customerCsrfSecret
       ? createHmac("sha256", stores.customerCsrfSecret)
-          .update("eper/customer-session-binding/v1\\0", "utf8")
+          .update("eper/customer-session-binding/v1\0", "utf8")
           .update(sessionToken, "utf8")
           .digest("hex")
       : undefined;
