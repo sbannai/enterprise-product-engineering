@@ -16,7 +16,7 @@ export type ProviderRuntimeWithCredentials<TAdapter, TCredentials> = {
 export class ProviderRuntimeCredentialResolutionService<TAdapter, TCredentials> {
   constructor(
     private readonly runtime: Pick<ProviderRuntimeResolutionService<TAdapter>, "resolve">,
-    private readonly connections: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference">,
+    private readonly connections: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference" | "assertDispatchAuthorization">,
     private readonly secrets: Pick<ProviderCredentialResolutionService<TCredentials>, "resolve">,
   ) {}
 
@@ -43,6 +43,16 @@ export class ProviderRuntimeCredentialResolutionService<TAdapter, TCredentials> 
         providerKey: runtime.selection.providerKey,
         authMode: connection.authMode,
       },
+    });
+    // Recheck revocation, suspension, version and capability after the secret
+    // manager returns and immediately before any adapter can receive credentials.
+    await this.connections.assertDispatchAuthorization({
+      tenantId: runtime.selection.tenantId,
+      applicationId: runtime.selection.applicationId,
+      connectionId: runtime.selection.connectionId,
+      expectedVersion: runtime.selection.connectionVersion,
+      providerKey: runtime.selection.providerKey,
+      capability: runtime.selection.capabilityKey,
     });
     return { runtime, credentials };
   }
