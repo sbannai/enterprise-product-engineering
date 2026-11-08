@@ -1832,10 +1832,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, tooLarge ? 413 : 400, { error: tooLarge ? "request_body_too_large" : "invalid_json" }); return;
       }
       const expectedSizeBytes = body.expectedSizeBytes;
+      const expectedChecksumSha256 = body.expectedChecksumSha256;
       const fileName = body.fileName;
       const mimeType = body.mimeType;
       const idempotencyKey = request.headers["idempotency-key"];
       if (typeof expectedSizeBytes !== "number" || !Number.isSafeInteger(expectedSizeBytes) ||
+          typeof expectedChecksumSha256 !== "string" || !/^[a-f0-9]{64}$/.test(expectedChecksumSha256) ||
           typeof fileName !== "string" || typeof mimeType !== "string" ||
           typeof idempotencyKey !== "string" || !/^[a-zA-Z0-9._:-]{16,128}$/.test(idempotencyKey)) {
         sendJson(request, response, 400, { error: "invalid_upload_request" }); return;
@@ -1849,6 +1851,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           correlationId: resolveApiRequestId(request),
           assetId,
           expectedSizeBytes,
+          expectedChecksumSha256,
           idempotencyKey,
           fileName,
           mimeType,
@@ -1927,6 +1930,9 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             !session.providerUploadReference) {
           sendJson(request, response, 404, { error: "upload_session_not_found" }); return;
         }
+        if (!session.expectedChecksumSha256 || !/^[a-f0-9]{64}$/.test(session.expectedChecksumSha256)) {
+          sendJson(request, response, 409, { error: "uploaded_object_not_verified" }); return;
+        }
         const correlationId = resolveApiRequestId(request);
         const verified = await options.assetUploadVerification({
           tenantId: authorization.identity.tenantId,
@@ -1936,13 +1942,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           providerUploadReference: session.providerUploadReference,
           expectedSizeBytes: session.expectedSizeBytes,
           expectedMimeType: session.expectedMimeType,
+          expectedSha256: session.expectedChecksumSha256,
         }, correlationId);
         if (!verified || !Number.isSafeInteger(verified.sizeBytes) || verified.sizeBytes <= 0 ||
             verified.sizeBytes !== session.expectedSizeBytes ||
             typeof verified.detectedMimeType !== "string" || !verified.detectedMimeType.trim() ||
             verified.detectedMimeType.length > 128 ||
             verified.detectedMimeType.toLowerCase() !== session.expectedMimeType.toLowerCase() ||
-            !/^[a-f0-9]{64}$/.test(verified.checksumSha256)) {
+            !/^[a-f0-9]{64}$/.test(verified.checksumSha256) ||
+            verified.checksumSha256 !== session.expectedChecksumSha256) {
           sendJson(request, response, 409, { error: "uploaded_object_not_verified" }); return;
         }
         const asset = await options.customerAssetRepository.completeUpload({
