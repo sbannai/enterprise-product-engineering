@@ -91,11 +91,11 @@ export class PostgresCustomerAssetRepository {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null }>(
-        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\"",
+      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null; metadata_operations: string | null }> (
+        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\", to_regclass('public.eper_customer_asset_metadata_operations')::text AS metadata_operations"
       );
       const row = result.rows[0];
-      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
+      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs || !row.metadata_operations) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
       const recovery = await client.query<{ column_name: string | null }>(
         "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='eper_customer_asset_upload_sessions' AND column_name IN ('request_fingerprint', 'provider_outcome')",
       );
