@@ -8,16 +8,16 @@ The worker remains disabled by default. Do not enable it in production or UAT un
 
 ## Database role and connection
 
-Apply the audit migrations through 030 before configuring the worker.
+Apply the audit migrations through 031 before configuring the worker.
 
-Migrations 029–030 create `eper_customer_asset_upload_expiry_worker_access` as a NOLOGIN, NOSUPERUSER, NOBYPASSRLS group role. It can:
-- Execute `eper_expire_customer_asset_upload_sessions(tenant, limit)`, which requires the caller's already-bound tenant context.
+Migrations 029–031 create `eper_customer_asset_upload_expiry_worker_access` as a NOLOGIN, NOSUPERUSER, NOBYPASSRLS group role. It can:
+- Execute `eper_expire_customer_asset_upload_sessions(tenant, limit)`, which checks the authenticated PostgreSQL `session_user` against the protected tenant-scope registry before processing. The tenant GUC is only a consistency check, never an authorization grant.
 - Insert append-only audit events.
 - Read the single audit chain head and update only its hash/timestamp fields.
 
 It cannot directly read or update upload sessions, asset metadata, application links, scan jobs, payment tables, or provider connections/secrets. The function owner is a separate NOLOGIN/NOBYPASSRLS role with a tenant-only RLS policy; the worker role cannot assume that owner role.
 
-A database operator must provision a dedicated login role outside application migrations and grant it membership in the worker access role. Do not reuse the payment login or a superuser. Store the login credential in the deployment secret manager; never place it in source control or logs.
+A database operator must provision a dedicated login role outside application migrations and grant it membership in the worker access role. Do not reuse the payment login or a superuser. Store the login credential in the deployment secret manager; never place it in source control or logs. The operator must also register each allowed `(login_role, tenant_id)` pair in `eper_customer_asset_upload_expiry_worker_tenant_scope`; only enabled rows authorize expiry. The worker cannot read or change this table. To revoke access, set `enabled = false` or remove the row using the operator connection.
 
 Example membership grant (replace the placeholder with the operator-provisioned login role):
 
@@ -46,7 +46,7 @@ Set `EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_SCOPES_JSON` to an operator-managed JSON 
 - Tenant/application IDs must match the repository identifier format.
 - Environment must be `production`, `uat`, or `sandbox`.
 - The seed application establishes the normal RLS tenant context. The expiry function can then process expired sessions across applications only within that same tenant.
-- The registry is trusted deployment configuration, not an API input. Review and change it through the normal deployment/configuration approval process.
+- The JSON registry configures the worker's processing loops but does not grant database authority. Database authority is independently enforced by migration 031's protected `session_user`-to-tenant table. Register only approved tenant IDs for the dedicated login; keep registry writes in the operator workflow.
 
 ## Configuration
 
@@ -93,13 +93,14 @@ Proposed starting alert thresholds (not owner-approved): readiness unavailable f
 
 ## Rollout
 
-1. Apply migrations through 030 in a non-production PostgreSQL environment.
+1. Apply migrations through 031 in a non-production PostgreSQL environment.
 2. Provision the dedicated login and grant only the worker access group role.
-3. Run the privilege contract: worker function execution and audit append succeed; direct asset/session, payment and provider reads/writes fail.
-4. Configure one or more approved tenant scopes and keep the enable flag false.
-5. Start the process in disabled mode to confirm fail-closed startup; then enable only in the approved environment.
-6. Confirm `/health/live` and `/health/ready`, bounded batches, audit events and redacted metrics.
-7. Review queue age, failure count, and audit-chain readiness before expanding the registry.
+3. Register the exact allowed `(login_role, tenant_id)` pairs through the operator connection; do not grant registry table access to the worker.
+4. Run the live PostgreSQL authorization test: the actual login succeeds for a registered tenant, fails for an unregistered tenant even after forging tenant/application GUCs, cannot read/write the registry, and fails after scope revocation.
+5. Configure matching worker loop scopes and keep the enable flag false.
+6. Start the process in disabled mode to confirm fail-closed startup; then enable only in the approved environment.
+7. Confirm `/health/live` and `/health/ready`, bounded batches, audit events and redacted metrics.
+8. Review queue age, failure count, and audit-chain readiness before expanding the registry.
 
 ## Incident recovery and rollback
 
