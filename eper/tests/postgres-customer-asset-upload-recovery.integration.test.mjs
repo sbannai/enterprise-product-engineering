@@ -101,7 +101,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         upload_status: "failed", provider_outcome: "rejected", provider_upload_reference: null,
       });
       const rejectionAudit = await pool.query(
-        `SELECT action, outcome, payload FROM eper_audit_events
+        `SELECT application_id, action, reason_code, outcome, payload FROM eper_audit_events
           WHERE tenant_id = $1 AND application_id = $2 AND resource_id = $3
             AND action = 'customer.asset.upload.provider.reject'`,
         [tenantId, applicationId, rejectedReservation.uploadSessionId],
@@ -148,6 +148,13 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.ok(audit.rows.some(row => row.action === "customer.asset.upload.grant.recover" && row.outcome === "success"));
       assert.ok(audit.rows.filter(row => row.action === "customer.asset.upload.reserve" && row.outcome === "denied").length >= 3,
         "actor, fingerprint and cross-application idempotency conflicts must leave durable denial evidence");
+      assert.ok(audit.rows.some(row =>
+        row.application_id === otherApplicationId &&
+        row.action === "customer.asset.upload.reserve" &&
+        row.outcome === "denied" &&
+        row.reason_code === "active_upload_conflict" &&
+        row.payload.assetId === assetId),
+        "cross-application active-upload denial must be audited in the requesting application without disclosing the owner");
       const serializedAudit = JSON.stringify(audit.rows);
       assert.doesNotMatch(serializedAudit, /https:\/\/|signed_url|bearer_token|access_token/i);
 
