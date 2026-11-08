@@ -271,6 +271,16 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.unroute("**/customer/session",reservationSessionOverride);
     await page.reload();
     await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    const expiredSession=async route=>route.fulfill({status:401,contentType:"application/json",body:JSON.stringify({error:"unauthorized"})});
+    await page.route("**/customer/session",expiredSession);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Sign in through your organization to open your workspace.");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"an expired or revoked session must discard pending upload retry identity");
+    await page.unroute("**/customer/session",expiredSession);
+    await page.evaluate(()=>sessionStorage.setItem("eper.customerAsset.pendingUpload.v1","{malformed"));
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"malformed persisted retry data must be discarded after session verification");
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
     await page.getByRole("button",{name:"View conversation"}).waitFor();
     await page.getByRole("button",{name:"View conversation"}).click();
