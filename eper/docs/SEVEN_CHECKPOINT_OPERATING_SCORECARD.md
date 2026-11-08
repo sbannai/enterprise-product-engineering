@@ -2193,3 +2193,115 @@ All 19 live open PR heads were re-read. Exact-head Actions were queried for each
 - PR #306 merge is verified at `6e8dd438e5091b1802d65e4f29951389fe077859`; PR #310 merge is verified at `88b9708d748c19dc80a1a2d7ad4960914451db7e`. Both merge commits are ancestors of current main.
 - The browser route E2E evidence correction above supersedes any prior wording that described it as an OIDC issuer protocol E2E.
 - No application source changed in this audit. No PR was merged or closed. No chargeable cloud resource or real external/provider action was used.
+
+
+## 2026-11-08 16:12 IST — dynamic-main delivery and continuity refresh
+
+### Current integrated baseline
+
+- Dynamically resolved `main`: `be002e3a05a0ded1aa9ef00dd73acd42ac21ab31`.
+- Application-code comparison from `c00bf520efe2b32ef6cc40d9cafbf04f305a4a2e` to this main tip is four commits ahead, zero behind, with only this scorecard changed. No application source changed in those four commits.
+- The three commits after the current #450/#451 base `757711ab8619c8aec2fb26d3b621ebaebcbc0c89` also change only this scorecard. #450 and #451 are therefore three documentation commits behind current main; their application-code base has not changed. Their exact-head runs remain valid only for their unchanged heads, and any branch update requires new exact-head validation.
+
+### Exact-main Actions and inspected job logs
+
+All eight push-triggered workflows associated with `be002e3a05a0ded1aa9ef00dd73acd42ac21ab31` completed successfully:
+
+- EPER CI [42467302422](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302422) — exact-main build/test and PostgreSQL job completed. The log includes asset recovery/idempotency, restricted workflow outbox role, claim-generation fencing, two-worker competition, retry/dead-letter/replay, workflow execution and tenant/actor assignment integration.
+- Integrated validation [42467302419](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302419) — same-commit gate and PostgreSQL test job passed; PostgreSQL suite summary: 1,569 tests, 1,554 passed, 0 failed, 15 skipped.
+- 228/38 matrix [42467302408](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302408) — 38 chapter suites passed, 259 pilot tests passed, 0 failed, 28 checks passed, no failed chapters.
+- G9 reconciliation [42467302417](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302417) — 5/5 passed.
+- Six-family HTTP smoke [42467302464](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302464) — health/build identity and all six capability-family HTTP exercises passed.
+- Container runtime [42467302407](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302407) — health, unknown-route 404, package checksum, image reload and packaged-image smoke passed.
+- Controlled QA technical evidence [42467302436](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302436) — completed successfully.
+- Controlled technical simulation [42467302469](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42467302469) — completed successfully.
+
+The integrated PostgreSQL log contains expected negative security probes (RLS denial, append-only guards, injected rollback failures and immutable-record checks). The test summary is green; these logged database errors are deliberate rejection tests, not failed tests. Node.js 20 deprecation warnings remain for older GitHub Actions dependencies; they did not fail these runs.
+
+### Fresh-clone and PostgreSQL evidence
+
+The exact #450 candidate-head fresh-clone job [42455373842](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373842) ran the repository's documented `npm run dev:verify` command on a clean runner:
+
+- 1,611 tests, 1,601 passed, 0 failed, 10 skipped.
+- `EPER_LOCAL_DEVELOPER_VERIFICATION=PASS`.
+- All seven migration groups applied and then repeated: payments, audit, workflows, campaign scheduler, capabilities, ticketing and identity.
+- Disposable PostgreSQL 16 backup/restore emitted `EPER_POSTGRES_BACKUP_RESTORE_SMOKE=PASS`; 80 source and 80 restored base tables; seven migration ledgers.
+
+The same candidate's PostgreSQL lifecycle job [42455373896](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373896) proves the restricted upload-expiry login process: 7/7 expiry tests passed, including least-privilege access denial, tenant-bound cross-application expiry, exactly-once competing-worker transition, audit append and SIGTERM shutdown. This is candidate-branch evidence, not a claim that #450 is merged.
+
+### Foundational merge verification
+
+- PR #306 is closed/merged at `6e8dd438e5091b1802d65e4f29951389fe077859`; comparison confirms it is an ancestor of current main.
+- PR #310 is closed/merged at `88b9708d748c19dc80a1a2d7ad4960914451db7e`; comparison confirms it is an ancestor of current main.
+- PR #449 is merged at `f52af521bb3ddc81692c8fa5a9dd5e2f21331c3b`; comparison confirms it is an ancestor of current main.
+- Successor PRs #416, #420, #447 and #448 are closed unmerged; their closed state is not merge evidence.
+
+### OIDC evidence boundary
+
+The real `ProviderNeutralOidcClient` is present in the API composition and its unit suite exercises fake discovery/JWKS/token endpoints, S256 PKCE, encrypted verifier persistence, state/nonce, token exchange, issuer/audience/signature validation and replay rejection.
+
+The browser test `eper/tests/customer-oidc-browser.e2e.mjs` injects a `customerOidcClient` test double for `beginLogin` and `completeLogin`. It validates browser routes, durable PostgreSQL session creation/revocation, secure host-only cookies, CSRF, server-derived customer role, tenant/application and actor/application assignments, and customer portal/support integration. It does not execute the real protocol client against an issuer.
+
+Correct status: protocol-client unit contract tested; browser/session route integration tested with an injected client double; protocol-to-browser issuer interoperability not evidenced; production identity-provider interoperability not evidenced.
+
+### Provider runtime and customer asset boundary
+
+- Main `eper/apps/api/main.ts` imports provider storage runtime configuration and explicitly throws `PROVIDER_STORAGE_RUNTIME_EXECUTION_NOT_COMPOSED` if storage runtime execution is enabled. No production provider SDK or secret-manager adapter is wired into the main API.
+- Open draft #398 contains a registry, composition factory and server-only credential resolver on a stacked branch. Its exact head `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` has passing provider PostgreSQL lifecycle evidence [42159145776](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42159145776), but the branch is 236 commits ahead and 265 behind current main and its PR body says the API entrypoint is not wired. Treat it as source material for a carefully ported mainline slice, not as a merge candidate.
+- Existing issue [#397](https://github.com/sbannai/enterprise-product-engineering/issues/397) remains the provider-runtime workstream. Do not create a duplicate issue/PR. Next implementation must wire the validated composition behind an explicit disabled-by-default configuration, retain secret-reference-only persistence, recheck binding/version after secret resolution, and use network-free synthetic drivers in CI. No real provider call or cloud resource is permitted.
+- The six-operation synthetic dispatch contract tests already exist on main; do not create another duplicate dispatch-test PR. The missing proof is API-runtime composition through the complete customer asset journey.
+
+### v34-to-228 reconciliation
+
+The current crosswalk `eper/docs/requirements/EPER_V34_TO_228_REQUIREMENTS_CROSSWALK.md` preserves 45 original v34 source rows and all statements/acceptance criteria. It records zero exact full-coverage matches, 45 partial shared-control links and 45 additive v1.6.0 draft candidates. The ten owner-directed commercial additions CW-046–055 are separate from the original 45. The approved 228 IDs and Chapters 463–500 remain unchanged. Shared XX/SRS control links are not exact chapter mappings and do not establish implementation or acceptance. Owner disposition of the additive v1.6.0 draft remains required.
+
+### Support and workflow operations
+
+- PostgreSQL ticket storage supports tenant/application-scoped submission/list/replies, administrator replies, internal-note visibility filtering, audited mutations and idempotent submission. Ticket triage/assignment/severity and export have UI/API tests. Repository code search returned no SLA deadline/breach/escalation implementation evidence; response/resolution timers, breach detection and escalation remain NOT EVIDENCED.
+- Workflow outbox mainline CI proves restricted worker login, continuous process lifecycle, lease renewal/claim-generation fencing, two-worker safety, idempotency, retry/dead-letter, audited replay, approval revalidation and graceful shutdown. The worker requires an externally supplied approved dispatcher module and process supervisor. Production metrics sink/alert routing and independent recovery rehearsal remain outstanding.
+
+### Current open-PR exact-head inventory
+
+The live open list was re-read. For each row, Actions were queried by the exact current head SHA and the listed relevant job log inspected. All selected relevant jobs completed successfully. Green results apply only to the exact listed heads; historical branch success does not prove current-main compatibility.
+
+| PR | Exact head | Ahead / behind current main | Relevant exact-head job |
+|---|---|---:|---|
+| [#450](https://github.com/sbannai/enterprise-product-engineering/pull/450) | `98338525107c131ea5bfc9e88a3401394dc96e0e` | 38 / 3 | [PostgreSQL lifecycle 42455373896](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42455373896) |
+| [#392](https://github.com/sbannai/enterprise-product-engineering/pull/392) | `312a9358150c1967feba9307f1b71fbffd8cb8f5` | 39 / 265 | [PostgreSQL lifecycle 41833626478](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41833626478) |
+| [#393](https://github.com/sbannai/enterprise-product-engineering/pull/393) | `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e` | 166 / 265 | [PostgreSQL lifecycle 41844357288](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41844357288) |
+| [#451](https://github.com/sbannai/enterprise-product-engineering/pull/451) | `7b0bb993e36b94cff602d672e51d10f36a7a5921` | 2 / 3 | [PostgreSQL lifecycle 42454552491](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42454552491) |
+| [#394](https://github.com/sbannai/enterprise-product-engineering/pull/394) | `c2b7a2c8e7ff3211869e061544672c7db1eb7261` | 178 / 265 | [Browser lifecycle 41868477503](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41868477503) |
+| [#399](https://github.com/sbannai/enterprise-product-engineering/pull/399) | `ef9f85c775b41fc7ec8316eb51578e036cec8a64` | 223 / 265 | [PostgreSQL lifecycle 42176207998](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42176207998) |
+| [#398](https://github.com/sbannai/enterprise-product-engineering/pull/398) | `3c1a2b14af7d7335ed0fc91c2cb7a414b10a5c56` | 236 / 265 | [PostgreSQL lifecycle 42159145776](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42159145776) |
+| [#387](https://github.com/sbannai/enterprise-product-engineering/pull/387) | `53c084060b06bc8d7c3f5ef5482ada4cb32f8b3d` | 22 / 265 | [Integrated validation 41784823525](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823525); separate exact-head matrix [41784823273](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41784823273) |
+| [#432](https://github.com/sbannai/enterprise-product-engineering/pull/432) | `cb49644e3d67cc98b2472e5eba32450cd9baac20` | 7 / 191 | [228/38 matrix 42333045813](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42333045813) |
+| [#384](https://github.com/sbannai/enterprise-product-engineering/pull/384) | `291129b77ab50623e41dd28c4a746ef70da28183` | 140 / 265 | [PostgreSQL lifecycle 41786048922](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41786048922) |
+| [#377](https://github.com/sbannai/enterprise-product-engineering/pull/377) | `492465759af4e7786e1a8ef51118cf1b354529de` | 80 / 265 | [228/38 matrix 42208779180](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42208779180) |
+| [#386](https://github.com/sbannai/enterprise-product-engineering/pull/386) | `a1b7341d71a4086c983dd3362a4704c124a52b74` | 164 / 265 | [PostgreSQL lifecycle 41837639531](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41837639531) |
+| [#401](https://github.com/sbannai/enterprise-product-engineering/pull/401) | `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f` | 185 / 265 | [PostgreSQL lifecycle 41993032652](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41993032652) |
+| [#378](https://github.com/sbannai/enterprise-product-engineering/pull/378) | `813de84caa4c9cf4eb7c5a2c89a92b30d662ff05` | 7 / 265 | [PostgreSQL lifecycle 41738299039](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738299039) |
+| [#379](https://github.com/sbannai/enterprise-product-engineering/pull/379) | `82041c8b8be5e1cd2b1f1bdbc801bd358bfe1d44` | 8 / 265 | [PostgreSQL lifecycle 41738351657](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41738351657) |
+| [#385](https://github.com/sbannai/enterprise-product-engineering/pull/385) | `2a2b059b37d06621f8e4efb2e2b6f467520114b5` | 4 / 265 | [228/38 matrix 41764308125](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41764308125) |
+| [#380](https://github.com/sbannai/enterprise-product-engineering/pull/380) | `55006ab19bcbb685fc3e84c4230fd865087887f3` | 5 / 265 | [228/38 matrix 41763251774](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41763251774) |
+| [#390](https://github.com/sbannai/enterprise-product-engineering/pull/390) | `3fd2f46b99d6c1da4a17175a7cdbefe4c2b39f7f` | 20 / 265 | [PostgreSQL lifecycle 41805934711](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41805934711) |
+| [#391](https://github.com/sbannai/enterprise-product-engineering/pull/391) | `7d7e5297b649d0dfe2318c5d2f5a1f81b5457749` | 21 / 265 | [PostgreSQL lifecycle 41820073247](https://github.com/sbannai/enterprise-product-engineering/actions/runs/41820073247) |
+
+#450 and #451 are the only current-main-based delivery candidates. Both are open, non-draft, mergeable without reported conflicts, and have no submitted independent reviews or requested reviewers. Do not merge without independent review. The other open PRs are historical/stacked branches; retain useful unique behavior for controlled extraction and do not merge their divergent ancestry wholesale.
+
+### Release and continuity controls
+
+A fresh read of the main branch endpoint reports `protected=false`, protection disabled, and required-status-check enforcement `off`. The repository rulesets endpoint returns an empty list. No branch-protection mutation was made because the charter requires owner approval.
+
+The continuity charter remains **Proposed operating charter — requires owner review**. Local clean-clone and disposable restore evidence does not prove off-host backup, independent restoration, approved RPO/RTO, second-engineer release/rollback or operational handover.
+
+### Seven-pointer status at this checkpoint
+
+1. **v34-to-228 — AMBER:** approved 228/38 preserved; 45 v34 source rows have 0 exact and 45 partial shared-control mappings; additive candidates remain draft.
+2. **Fresh clone — GREEN for reproducible developer setup:** clean-runner `npm run dev:verify` passed; independent second-engineer handover is not yet evidenced.
+3. **PostgreSQL — AMBER:** seven migration groups including identity, repeatability, live PostgreSQL and disposable 80/80 restore are evidenced; off-host recovery and independent restore remain outstanding.
+4. **Identity/OIDC — AMBER:** durable sessions, secure cookies, CSRF, role/assignment checks and browser routes are present; protocol-to-browser issuer integration and production IdP interoperability are not evidenced.
+5. **Workspace/support — AMBER:** ticketing and asset metadata/retry foundations exist; provider-backed binary journey and SLA lifecycle remain incomplete.
+6. **Scheduler/workflow — AMBER:** continuous workers, lease/fencing, idempotency, retry/dead-letter, audited replay and approval checks are tested; deployment-owned supervision, production metrics/alerts and recovery rehearsal remain outstanding.
+7. **Release/continuity — RED:** main protection/rulesets are absent; off-host backup, independent restore and second-engineer release path are not evidenced.
+
+No application code changed in this checkpoint. No PR was merged or closed. No chargeable cloud resources or real external/provider actions were used.
