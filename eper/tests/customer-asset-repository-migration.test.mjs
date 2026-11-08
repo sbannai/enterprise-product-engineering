@@ -85,3 +85,26 @@ test("provider outcome migration preserves uncertainty for legacy rows and const
   assert.match(uploadProviderOutcomeMigration, /Legacy rows without a persisted provider reference remain unknown/);
   assert.ok(!uploadProviderOutcomeMigration.includes("SET provider_outcome = 'rejected'"), "legacy failures must not be reclassified as definitive rejections");
 });
+
+const expiryWorkerRoleMigration = await readFile(new URL("../packages/audit/migrations/029_customer_asset_upload_expiry_worker_role.sql", import.meta.url), "utf8");
+const expiryQueueAgeMigration = await readFile(new URL("../packages/audit/migrations/030_customer_asset_upload_expiry_queue_age.sql", import.meta.url), "utf8");
+
+test("expiry worker role is non-login and limited to expiry function plus append-only audit", () => {
+  assert.ok(expiryWorkerRoleMigration.includes("CREATE ROLE eper_customer_asset_upload_expiry_worker_access"));
+  assert.ok(expiryWorkerRoleMigration.includes("NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT INSERT ON public.eper_audit_events"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT SELECT ON public.eper_audit_chain_head"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT UPDATE (last_event_hash, updated_at)"));
+  assert.doesNotMatch(expiryWorkerRoleMigration, /GRANT .* ON public\\.eper_customer_asset_(assets|application_links|upload_sessions|scan_jobs)/i);
+  assert.doesNotMatch(expiryWorkerRoleMigration, /eper_payment_|eper_provider_/i);
+});
+
+test("expiry queue-age migration retains tenant scope, optional asset filter and bounded SKIP LOCKED processing", () => {
+  assert.ok(expiryQueueAgeMigration.includes("DROP FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)"));
+  assert.ok(expiryQueueAgeMigration.includes("expires_at timestamptz"));
+  assert.ok(expiryQueueAgeMigration.includes("p_asset_id uuid DEFAULT NULL"));
+  assert.ok(expiryQueueAgeMigration.includes("FOR UPDATE SKIP LOCKED"));
+  assert.ok(expiryQueueAgeMigration.includes("clock_timestamp()"));
+  assert.ok(expiryQueueAgeMigration.includes("TO eper_customer_asset_access, eper_customer_asset_upload_expiry_worker_access"));
+});
