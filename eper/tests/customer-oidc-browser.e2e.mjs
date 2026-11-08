@@ -229,6 +229,48 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.unroute("**/customer/session",sessionBindingOverride);
     await page.reload();
     await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    await page.unroute("**/customer/assets?applicationId=*");
+    const metadataSuccessKeys=[],reservationKeys=[];
+    await page.route("**/customer/assets?applicationId=*",async route=>{
+      if(route.request().method()!=="POST"){await route.continue();return;}
+      metadataSuccessKeys.push(route.request().headers()["idempotency-key"]||"");
+      await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({data:{assetId:"asset-browser-e2e",applicationId,uploadStatus:"pending",scanStatus:"pending"}})});
+    });
+    await page.route(/\/customer\/applications\/[^/]+\/assets\/[^/]+\/uploads$/,async route=>{
+      if(route.request().method()!=="POST"){await route.continue();return;}
+      reservationKeys.push(route.request().postDataJSON()?.idempotencyKey||"");
+      await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"customer_asset_upload_provider_unavailable"})});
+    });
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Reservation retry brief");
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
+    assert.equal(metadataSuccessKeys.length,1);
+    assert.equal(reservationKeys.length,1);
+    assert.match(reservationKeys[0],/^[a-f0-9]{32}$/);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Reservation retry brief");
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
+    assert.equal(metadataSuccessKeys.length,2);
+    assert.equal(metadataSuccessKeys[1],metadataSuccessKeys[0],"metadata-create retries must retain the same operation identity");
+    assert.equal(reservationKeys.length,2);
+    assert.equal(reservationKeys[1],reservationKeys[0],"lost upload-reservation responses must reuse the same idempotency key");
+    const reservationSessionOverride=async route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({data:{authenticated:true,tenantId,actorId,roleKey:"customer-user",sessionBinding:"e".repeat(64),authentication:"postgres-browser-session"}})});
+    await page.route("**/customer/session",reservationSessionOverride);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Your organization session changed. Confirm the selected customer account and retry.");
+    assert.equal(reservationKeys.length,2,"session rotation must block reservation replay");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null);
+    await page.unroute("**/customer/session",reservationSessionOverride);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
     await page.getByRole("button",{name:"Tickets & Feedback"}).click();
     await page.getByRole("button",{name:"View conversation"}).waitFor();
     await page.getByRole("button",{name:"View conversation"}).click();
