@@ -413,7 +413,7 @@ export class PostgresCustomerAssetRepository {
       transactionOpen = true;
       await this.setContext(client, input.tenantId, input.applicationId);
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-        "eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey,
+        "eper-asset-upload:" + input.tenantId + ":" + input.applicationId + ":" + input.idempotencyKey,
       ]);
       const prior = await client.query<{
         upload_session_id: string; application_id: string; actor_id: string; asset_id: string;
@@ -426,8 +426,8 @@ export class PostgresCustomerAssetRepository {
           provider_upload_reference, upload_status, expires_at, provider_grant_expires_at,
           request_fingerprint
          FROM eper_customer_asset_upload_sessions
-         WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
-        [input.tenantId, input.idempotencyKey],
+         WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3 FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.idempotencyKey],
       );
       if (prior.rows[0]) {
         const row = prior.rows[0];
@@ -466,6 +466,27 @@ export class PostgresCustomerAssetRepository {
             ? new Date(row.provider_grant_expires_at).toISOString() : null,
         };
       }
+      // Reconcile the single possible stale active reservation for this asset
+      // across applications before taking the asset row lock. The definer routine
+      // remains tenant-bound and returns only rows it actually expired.
+      const expiredSessions = await client.query<{
+        application_id: string; upload_session_id: string; asset_id: string;
+      }>(
+        "SELECT application_id, upload_session_id, asset_id FROM public.eper_expire_customer_asset_upload_sessions($1, 1, $2)",
+        [input.tenantId, input.assetId],
+      );
+      for (const expired of expiredSessions.rows) {
+        await this.setContext(client, input.tenantId, expired.application_id);
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: expired.application_id, environment: input.environment,
+          actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
+          outcome: "success", resourceType: "customer-asset-upload", resourceId: expired.upload_session_id,
+          correlationId: input.correlationId, source: "job",
+          operationName: "customer-asset-upload-retry-reconciliation",
+          payload: { assetId: expired.asset_id, reason: "reservation_expired_before_retry" },
+        });
+      }
+      await this.setContext(client, input.tenantId, input.applicationId);
       const asset = await client.query<{ asset_id: string }>(
         "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
         [input.tenantId, input.assetId],
@@ -504,6 +525,11 @@ export class PostgresCustomerAssetRepository {
     } catch (error) {
       if (transactionOpen) {
         try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      }
+      const databaseError = error as { code?: string; constraint?: string };
+      if (databaseError.code === "23505" &&
+          databaseError.constraint === "eper_customer_asset_upload_active_asset_uq") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE", { cause: error });
       }
       throw error;
     } finally { client.release(); }
