@@ -61,6 +61,11 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         repository.reserveUpload({ ...reservationInput, requestFingerprint: "a".repeat(64) }),
         { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
       );
+      await assert.rejects(
+        repository.reserveUpload({ ...reservationInput, expectedChecksumSha256: "b".repeat(64),
+          requestFingerprint: createHash("sha256").update("different-expected-checksum-" + suffix).digest("hex") }),
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
+      );
 
       const grantExpiry = new Date(Date.now() + 60_000).toISOString();
       await repository.recordUploadGrant({
@@ -133,6 +138,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(persisted.rows[0].upload_session_id, first.uploadSessionId);
       assert.equal(persisted.rows[0].actor_id, actorId);
       assert.equal(persisted.rows[0].request_fingerprint, fingerprint);
+      assert.equal(persisted.rows[0].expected_checksum_sha256, "a".repeat(64));
       assert.equal(persisted.rows[0].provider_upload_reference, "opaque-provider-object-" + suffix);
       assert.ok(persisted.rows[0].provider_grant_expires_at);
       assert.ok(persisted.rows[0].last_recovered_at);
