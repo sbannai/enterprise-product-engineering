@@ -393,14 +393,14 @@ test("asset downloads enforce durable tenant ownership and actor membership with
 
 
 test("PostgreSQL asset downloads use the completed upload-session reference and never fall back to JSON", async () => {
-  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+  const keys = ["EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_METADATA_API_ENABLED",
     "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON", "EPER_CUSTOMER_WORKSPACE_MODULES_JSON",
     "EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON", "EPER_CUSTOMER_APPLICATION_ASSETS_JSON",
     "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   const token = "postgres-asset-download-lookup-token-00000001";
   process.env.EPER_CUSTOMER_ASSETS_API_ENABLED = "true";
-  process.env.EPER_CUSTOMER_ASSET_PERSISTENCE = "postgres";
+  process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED = "true";
   process.env.EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON = JSON.stringify(["storage.example.test"]);
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "customer", applicationIds: ["app-a"] },
