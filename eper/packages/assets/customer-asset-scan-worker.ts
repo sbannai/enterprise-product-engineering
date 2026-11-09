@@ -93,8 +93,8 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
-              // Abort is a cancellation request, not proof that provider work has stopped.
-              // Retain the original promise and do not retry until it has settled.
+              // Keep the scanner promise in the race so normal completion and rejection are observed.
+              // On timeout, do not await it: cancellation is cooperative and generation fencing rejects late writes.
               const scanPromise = Promise.resolve().then(() => options.scanner.scan({
                 tenantId: options.tenantId, applicationId: options.applicationId,
                 assetId: session.assetId, uploadSessionId: job.uploadSessionId,
