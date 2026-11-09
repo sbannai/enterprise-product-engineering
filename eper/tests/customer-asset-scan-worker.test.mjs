@@ -118,13 +118,9 @@ test("customer asset scan worker stops lease renewal and permits takeover when p
   let scanSignal;
   f.scanner.scan = async (_input, _requestId, signal) => {
     scanSignal = signal;
-    return new Promise((resolve) => {
-      // Deliberately ignore AbortSignal and remain unresolved past worker timeout.
-      setTimeout(() => {
-        scanSettled = true;
-        resolve({ scanStatus: "clean", scannerServiceId: "asset-scanner" });
-      }, 3_000).unref?.();
-    });
+    // Deliberately ignore AbortSignal and never settle; the worker must relinquish
+    // the lease rather than waiting for this provider promise indefinitely.
+    return new Promise(() => {});
   };
   await runCustomerAssetScanWorker({
     ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
