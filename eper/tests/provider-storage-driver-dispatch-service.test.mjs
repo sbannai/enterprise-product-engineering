@@ -211,3 +211,77 @@ test("routes all six storage operations through their exact capability and synth
     assert.equal(JSON.stringify(result).includes("must-not-escape"), false, item.kind);
   }
 });
+
+
+test("forwards AbortSignal through tenant-scoped scan dispatch to the provider driver", async () => {
+  const controller = new AbortController();
+  let receivedSignal;
+  const f = fixture({ driver: { async scanObject(_context, _request, _requestId, signal) {
+    receivedSignal = signal;
+    return { kind: "timeout" };
+  } } });
+  await f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-cancel",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
+    } }, signal: controller.signal,
+  });
+  assert.equal(receivedSignal, controller.signal);
+  controller.abort();
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test("rejects an already-aborted provider operation before resolving credentials", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-aborted",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
+    } }, signal: controller.signal,
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_ABORTED");
+  assert.equal(f.calls.some(call => call[0] === "resolve"), false);
+});
+
+
+test("does not invoke the provider when cancellation occurs during credential resolution", async () => {
+  let releaseResolution;
+  let driverInvoked = false;
+  const resolution = new Promise(resolve => { releaseResolution = resolve; });
+  const adapter = {
+    capabilities,
+    async createUploadGrant() { driverInvoked = true; return { kind: "unknown", reason: "transport" }; },
+    async lookupUpload() { driverInvoked = true; return { kind: "not_found" }; },
+    async renewUploadGrant() { driverInvoked = true; return { kind: "unknown", reason: "transport" }; },
+    async verifyObject() { driverInvoked = true; return { kind: "unknown" }; },
+    async createDownloadGrant() { driverInvoked = true; return null; },
+    async scanObject() { driverInvoked = true; return { kind: "timeout" }; },
+  };
+  const service = new ProviderStorageDriverDispatchService({
+    async resolve(input) {
+      await resolution;
+      return {
+        runtime: {
+          selection: { tenantId: input.tenantId, applicationId: input.applicationId,
+            capabilityKey: input.capability, connectionId: "connection-a", providerKey: "provider-a" },
+          capability: input.capability, adapter,
+        },
+        credentials: { token: "test-only" },
+      };
+    },
+  });
+  const controller = new AbortController();
+  const pending = service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-during-resolution",
+    operation: { kind: "scan_object", request: {
+      assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
+    } }, signal: controller.signal,
+  });
+  controller.abort();
+  releaseResolution();
+  await assert.rejects(pending, error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_ABORTED");
+  assert.equal(driverInvoked, false);
+});

@@ -52,31 +52,37 @@ export interface ProviderStorageDriver<TCredentials> {
     context: ProviderDriverContext<TCredentials>,
     request: StorageUploadRequest,
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<StorageUploadProviderOutcome>;
   lookupUpload(
     context: ProviderDriverContext<TCredentials>,
     uploadSessionId: string,
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<StorageUploadLookupOutcome>;
   renewUploadGrant(
     context: ProviderDriverContext<TCredentials>,
     request: StorageUploadRequest & { providerUploadReference: string },
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<StorageUploadProviderOutcome>;
   verifyObject(
     context: ProviderDriverContext<TCredentials>,
     request: ProviderObjectVerificationRequest,
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<ProviderObjectVerificationOutcome>;
   createDownloadGrant(
     context: ProviderDriverContext<TCredentials>,
     request: StorageDownloadRequest,
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<StorageDownloadResult | null>;
   scanObject(
     context: ProviderDriverContext<TCredentials>,
     request: ProviderMalwareScanRequest,
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<ProviderMalwareScanOutcome>;
 }
 
