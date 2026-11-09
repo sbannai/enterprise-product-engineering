@@ -1,6 +1,7 @@
 -- Monotonic fencing token for every customer-asset scan claim/takeover.
 -- Existing jobs begin at generation zero; the first claim increments to one.
--- A worker must present the exact generation returned by its claim for every
+-- A stale worker must not mutate a newer claim; the current worker must present
+-- the exact generation returned by its claim for every
 -- lease renewal, scan-input lookup, retry and result-finalization mutation.
 BEGIN;
 
