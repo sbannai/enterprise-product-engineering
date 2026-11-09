@@ -23,6 +23,9 @@ test("workflow execution API is opt-in and derives identity from trusted credent
     workflowRoleDefinitionStore: {}, workflowActorRoleAssignmentStore: {},
     workflowDefinitionPublisher: {},
     tenantApplicationAssignmentStore: { async listActive() { return ["app-a"]; } },
+    actorApplicationAssignmentStore: {
+      async isAssigned(_tenantId, _actorId, applicationId) { return applicationId === "app-a"; },
+    },
   });
   try {
     await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
@@ -136,5 +139,74 @@ test("workflow execution routes are hidden when the feature flag is disabled", a
     await new Promise(resolve => server.close(resolve));
     if (previous === undefined) delete process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED;
     else process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = previous;
+  }
+});
+
+
+test("customer workflow work queue GET derives tenant and actor from trusted credentials", async () => {
+  const keys = ["EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_CUSTOMER_ACCESS_IDENTITIES_JSON"];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "workflow-queue-api-test-token-0000000000000001";
+  process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = "true";
+  process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "actor-a", roleKey: "operator", applicationIds: ["app-a"] },
+  });
+  const calls = [];
+  const workflowExecutionService = {
+    async start() { throw new Error("not used"); },
+    async transition() { throw new Error("not used"); },
+    async listVisibleInstances(input) {
+      calls.push(input);
+      return {
+        items: [{
+          instanceId: "instance-a", workflowId: "onboarding", status: "running",
+          currentActivityId: "review", businessReference: "APP-100",
+          version: 1, createdAt: "2026-11-04T00:00:00.000Z",
+          updatedAt: "2026-11-04T00:00:00.000Z", completedAt: null,
+        }],
+        total: 1, limit: input.limit, offset: input.offset,
+      };
+    },
+  };
+  const server = createAppServer({
+    workflowExecutionService,
+    workflowRoleDefinitionStore: {}, workflowActorRoleAssignmentStore: {},
+    workflowDefinitionPublisher: {},
+    tenantApplicationAssignmentStore: { async listActive() { return ["app-a", "app-b"]; } },
+    actorApplicationAssignmentStore: {
+      async isAssigned(_tenantId, _actorId, applicationId) { return applicationId === "app-a"; },
+    },
+  });
+  try {
+    await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const url = "http://127.0.0.1:" + address.port + "/customer/applications/app-a/workflow-instances?limit=15&offset=30";
+    assert.equal((await fetch(url)).status, 401);
+    const unauthorizedApplication = await fetch(
+      "http://127.0.0.1:" + address.port + "/customer/applications/app-b/workflow-instances",
+      { headers: { authorization: "Bearer " + token } },
+    );
+    assert.equal(unauthorizedApplication.status, 403);
+    const response = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.data.total, 1);
+    assert.equal(body.data.limit, 15);
+    assert.equal(body.data.offset, 30);
+    assert.equal(body.data.items.length, 1);
+    assert.equal(Object.hasOwn(body.data.items[0], "data"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "tenantId"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "applicationId"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "createdBy"), false);
+    assert.equal(Object.hasOwn(body.data.items[0], "definitionDigest"), false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].tenantId, "tenant-a");
+    assert.equal(calls[0].actorId, "actor-a");
+    assert.equal(calls[0].applicationId, "app-a");
+    assert.equal(calls[0].limit, 15);
+    assert.equal(calls[0].offset, 30);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
   }
 });

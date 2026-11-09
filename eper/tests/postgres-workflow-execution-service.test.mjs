@@ -43,6 +43,8 @@ function fixture({ tenantStatus = "active", actorStatus = "active", roleAllowed 
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
+      if (sql.includes("COUNT(*) OVER()")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT COUNT(*)::int AS total_count")) return { rows: [{ total_count: 0 }], rowCount: 1 };
       if (sql.includes("FROM eper_workflow_actor_role_assignment r")) {
         return { rows: roleAllowed ? [{ role_id: "employee" }] : [], rowCount: roleAllowed ? 1 : 0 };
       }
@@ -119,6 +121,38 @@ test("workflow execution rejects malformed idempotency keys before database acce
       ...context, workflowId: definition.id, idempotencyKey: "short",
     }),
     /WORKFLOW_EXECUTION_IDEMPOTENCY_KEY_INVALID/,
+  );
+  assert.equal(calls.length, 0);
+});
+
+
+test("customer work queue is tenant/application scoped and resolves permissions from the pinned published definition", async () => {
+  const { calls, pool } = fixture();
+  const result = await new PostgresWorkflowExecutionService(pool).listVisibleInstances({
+    ...context, limit: 20, offset: 40,
+  });
+  assert.deepEqual(result, { items: [], total: 0, limit: 20, offset: 40 });
+  const listCall = calls.find(call => call.sql.includes("COUNT(*) OVER()"));
+  assert.ok(listCall, "work queue query should use a bounded page query");
+  assert.doesNotMatch(listCall.sql, /SELECT\s+i\.\*/i, "queue must not fetch private workflow payloads");
+  assert.doesNotMatch(listCall.sql, /i\.data\b/i, "queue must not select workflow payload data");
+  assert.equal(Object.hasOwn(result.items[0] ?? {}, "data"), false);
+  assert.match(listCall.sql, /i\.tenant_id = \$1 AND i\.application_id = \$2/);
+  assert.match(listCall.sql, /definition_version = i\.definition_version/);
+  assert.match(listCall.sql, /definition_digest = i\.definition_digest/);
+  assert.match(listCall.sql, /current_activity\.activity->>'roleId'/);
+  assert.match(listCall.sql, /current_activity\.activity->>'permission'/);
+  assert.match(listCall.sql, /i\.created_by = \$3/);
+  assert.deepEqual(listCall.values, [context.tenantId, context.applicationId, context.actorId, 20, 40]);
+  assert.ok(calls.some(call => call.sql.includes("set_config('eper.tenant_id'")));
+  assert.ok(calls.some(call => call.sql === "COMMIT"));
+});
+
+test("customer work queue rejects invalid pagination before database access", async () => {
+  const { calls, pool } = fixture();
+  await assert.rejects(
+    new PostgresWorkflowExecutionService(pool).listVisibleInstances({ ...context, limit: 101 }),
+    /WORKFLOW_EXECUTION_LIST_PAGINATION_INVALID/,
   );
   assert.equal(calls.length, 0);
 });
