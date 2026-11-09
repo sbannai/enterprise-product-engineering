@@ -5,7 +5,7 @@ import { startCustomerAssetUpload } from "../dist/packages/assets/customer-asset
 const input = {
   tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
   environment: "sandbox", correlationId: "asset-recovery-test-001",
-  assetId: "asset-001", expectedSizeBytes: 2048,
+  assetId: "asset-001", expectedSizeBytes: 2048, expectedChecksumSha256: "a".repeat(64),
   idempotencyKey: "asset-upload-idempotency-001",
   fileName: "plan.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
@@ -275,4 +275,36 @@ test("replayed found object requires exact-reference renewal capability", async 
   });
   assert.equal(result, null);
   assert.equal(issued, 0);
+});
+
+
+test("upload initiation rejects malformed expected SHA-256 before reserving or invoking a provider", async () => {
+  let reservations = 0;
+  await assert.rejects(() => startCustomerAssetUpload({ ...input, expectedChecksumSha256: "not-a-sha256" }, {
+    repository: { reserveUpload: async () => { reservations++; return reservation(); },
+      recordUploadGrant: async () => assert.fail("must not persist"),
+      recordUploadProviderRejection: async () => assert.fail("must not reject") },
+    issueGrant: async () => assert.fail("provider must not be called"),
+  }), /EXPECTED_CHECKSUM_INVALID/);
+  assert.equal(reservations, 0);
+});
+
+test("same idempotency key with a different expected SHA-256 changes the immutable request fingerprint", async () => {
+  let originalFingerprint;
+  const deps = {
+    now: () => now,
+    repository: { reserveUpload: async value => { originalFingerprint ??= value.requestFingerprint; return reservation(); },
+      recordUploadGrant: async () => {}, recordUploadProviderRejection: async () => {} },
+    providerCapabilities: { idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true, renewByProviderReference: true },
+    issueGrant: async () => ({ kind: "succeeded", ...grant() }),
+  };
+  await startCustomerAssetUpload(input, deps);
+  const changed = { ...input, expectedChecksumSha256: "b".repeat(64) };
+  await assert.rejects(() => startCustomerAssetUpload(changed, { ...deps, repository: {
+    ...deps.repository,
+    reserveUpload: async value => {
+      assert.notEqual(value.requestFingerprint, originalFingerprint);
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT");
+    },
+  } }), /IDEMPOTENCY_CONFLICT/);
 });

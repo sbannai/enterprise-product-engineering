@@ -6,7 +6,7 @@ const request = {
   tenantId: "tenant-a", applicationId: "app-a", assetId: "asset-a",
   uploadSessionId: "session-000000000000000001",
   providerUploadReference: "opaque-provider-reference",
-  expectedSizeBytes: 4096, expectedMimeType: "application/pdf",
+  expectedSizeBytes: 4096, expectedMimeType: "application/pdf", expectedSha256: "a".repeat(64),
 };
 const valid = {
   objectExists: true, sizeBytes: 4096, detectedMimeType: "application/pdf",
@@ -35,6 +35,7 @@ test("verification adapter fails closed for missing objects, mismatches and malf
     { ...valid, sizeBytes: 4095 },
     { ...valid, detectedMimeType: "text/plain" },
     { ...valid, checksumSha256: "not-a-sha256" },
+    { ...valid, checksumSha256: "b".repeat(64) },
   ]) {
     const verify = createStorageUploadVerificationAdapter({
       async invoke() { return { success: true, value }; },
@@ -52,4 +53,10 @@ test("verification adapter fails closed on provider failure or exception", async
   });
   assert.equal(await rejected(request, "verify-correlation-003"), null);
   assert.equal(await thrown(request, "verify-correlation-004"), null);
+});
+
+
+test("verification adapter rejects malformed expected SHA-256 before accepting provider facts", async () => {
+  const verify = createStorageUploadVerificationAdapter({ async invoke() { return { success: true, value: valid }; } });
+  assert.equal(await verify({ ...request, expectedSha256: "invalid" }, "verify-correlation-003"), null);
 });

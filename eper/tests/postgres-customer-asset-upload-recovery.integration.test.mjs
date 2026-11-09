@@ -39,7 +39,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
 
       const reservationInput = {
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-        assetId, expectedSizeBytes: 4096, idempotencyKey, requestFingerprint: fingerprint,
+        assetId, expectedSizeBytes: 4096, expectedChecksumSha256: "a".repeat(64), idempotencyKey, requestFingerprint: fingerprint,
       };
       const [first, concurrentReplay] = await Promise.all([
         repository.reserveUpload(reservationInput),
@@ -59,6 +59,11 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       );
       await assert.rejects(
         repository.reserveUpload({ ...reservationInput, requestFingerprint: "a".repeat(64) }),
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
+      );
+      await assert.rejects(
+        repository.reserveUpload({ ...reservationInput, expectedChecksumSha256: "b".repeat(64),
+          requestFingerprint: createHash("sha256").update("different-expected-checksum-" + suffix).digest("hex") }),
         { message: "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" },
       );
 
@@ -123,7 +128,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       );
 
       const persisted = await pool.query(
-        `SELECT upload_session_id, actor_id, request_fingerprint,
+        `SELECT upload_session_id, actor_id, request_fingerprint, expected_checksum_sha256,
                 provider_upload_reference, provider_grant_expires_at, last_recovered_at
            FROM eper_customer_asset_upload_sessions
           WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3`,
@@ -133,6 +138,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(persisted.rows[0].upload_session_id, first.uploadSessionId);
       assert.equal(persisted.rows[0].actor_id, actorId);
       assert.equal(persisted.rows[0].request_fingerprint, fingerprint);
+      assert.equal(persisted.rows[0].expected_checksum_sha256, "a".repeat(64));
       assert.equal(persisted.rows[0].provider_upload_reference, "opaque-provider-object-" + suffix);
       assert.ok(persisted.rows[0].provider_grant_expires_at);
       assert.ok(persisted.rows[0].last_recovered_at);
@@ -179,7 +185,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       const scanReservation = await repository.reserveUpload({
         tenantId, applicationId, actorId, environment: "sandbox",
         correlationId: correlationId + "-scan", assetId: scanAssetId,
-        expectedSizeBytes: 2048, idempotencyKey: scanIdempotencyKey,
+        expectedSizeBytes: 2048, expectedChecksumSha256: createHash("sha256").update("verified-binary-content-" + suffix).digest("hex"), idempotencyKey: scanIdempotencyKey,
         requestFingerprint: scanFingerprint,
       });
       await repository.recordUploadGrant({
@@ -191,6 +197,12 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
       });
       const checksum = createHash("sha256").update("verified-binary-content-" + suffix).digest("hex");
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "sandbox",
+        correlationId: correlationId + "-scan", uploadSessionId: scanReservation.uploadSessionId,
+        receivedSizeBytes: 2048, observedMimeType: "application/pdf",
+        checksumSha256: "f".repeat(64), scanStatus: "pending",
+      }), { message: "EPER_CUSTOMER_ASSET_UPLOAD_CHECKSUM_MISMATCH" });
       const completed = await repository.completeUpload({
         tenantId, applicationId, actorId, environment: "sandbox",
         correlationId: correlationId + "-scan",
@@ -380,7 +392,7 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
       });
       const reservation = await repository.reserveUpload({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-        assetId, expectedSizeBytes: 4096, idempotencyKey, requestFingerprint,
+        assetId, expectedSizeBytes: 4096, expectedChecksumSha256: createHash("sha256").update("synthetic-download-bytes-" + assetId).digest("hex"), idempotencyKey, requestFingerprint,
       });
       await repository.recordUploadGrant({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,

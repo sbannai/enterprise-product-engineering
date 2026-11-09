@@ -432,7 +432,7 @@ export class PostgresCustomerAssetRepository {
 
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
-    correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
+    correlationId: string; assetId: string; expectedSizeBytes: number; expectedChecksumSha256: string; idempotencyKey: string;
     requestFingerprint: string; uploadSessionId?: string;
   }): Promise<{
     disposition: "created" | "replayed";
@@ -446,6 +446,9 @@ export class PostgresCustomerAssetRepository {
     this.validateId(input.assetId, "assetId");
     if (!Number.isSafeInteger(input.expectedSizeBytes) || input.expectedSizeBytes <= 0) {
       throw new Error("EPER_CUSTOMER_ASSET_EXPECTED_SIZE_INVALID");
+    }
+    if (!/^[a-f0-9]{64}$/.test(input.expectedChecksumSha256)) {
+      throw new Error("EPER_CUSTOMER_ASSET_EXPECTED_CHECKSUM_INVALID");
     }
     if (!/^[a-zA-Z0-9._:-]{16,128}$/.test(input.idempotencyKey)) {
       throw new Error("EPER_CUSTOMER_ASSET_IDEMPOTENCY_KEY_INVALID");
@@ -464,13 +467,13 @@ export class PostgresCustomerAssetRepository {
       ]);
       const prior = await client.query<{
         upload_session_id: string; application_id: string; actor_id: string; asset_id: string;
-        expected_size_bytes: number | string; provider_upload_reference: string | null;
+        expected_size_bytes: number | string; expected_checksum_sha256: string | null; provider_upload_reference: string | null;
         upload_status: "initiated" | "in_progress" | "completed" | "aborted" | "expired" | "failed";
         expires_at: string | Date; provider_grant_expires_at: string | Date | null;
         request_fingerprint: string | null;
       }>(
         `SELECT upload_session_id, application_id, actor_id, asset_id, expected_size_bytes,
-          provider_upload_reference, upload_status, expires_at, provider_grant_expires_at,
+          expected_checksum_sha256, provider_upload_reference, upload_status, expires_at, provider_grant_expires_at,
           request_fingerprint
          FROM eper_customer_asset_upload_sessions
          WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3 FOR UPDATE`,
@@ -480,6 +483,7 @@ export class PostgresCustomerAssetRepository {
         const row = prior.rows[0];
         if (row.application_id !== input.applicationId || row.actor_id !== input.actorId ||
             row.asset_id !== input.assetId || Number(row.expected_size_bytes) !== input.expectedSizeBytes ||
+            row.expected_checksum_sha256 !== input.expectedChecksumSha256 ||
             row.request_fingerprint !== input.requestFingerprint) {
           // Persist a denial after rolling back the reservation transaction. Do not
           // disclose the prior session id or fingerprint in the denial event.
@@ -548,10 +552,10 @@ export class PostgresCustomerAssetRepository {
       await client.query(
         `INSERT INTO eper_customer_asset_upload_sessions
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
-           provider_upload_reference, upload_status, idempotency_key, expires_at, request_fingerprint)
-         VALUES ($1,$2,$3,$4,$5,$6,NULL,'initiated',$7,$8,$9)`,
+           expected_checksum_sha256, provider_upload_reference, upload_status, idempotency_key, expires_at, request_fingerprint)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,'initiated',$8,$9,$10)`,
         [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId,
-          input.expectedSizeBytes, input.idempotencyKey, expiresAt, input.requestFingerprint],
+          input.expectedSizeBytes, input.expectedChecksumSha256, input.idempotencyKey, expiresAt, input.requestFingerprint],
       );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
@@ -718,7 +722,7 @@ export class PostgresCustomerAssetRepository {
 
   async getUploadSessionForVerification(tenantId: string, applicationId: string, uploadSessionId: string): Promise<{
     assetId: string; actorId: string; providerUploadReference: string;
-    expectedSizeBytes: number; expectedMimeType: string; expiresAt: string;
+    expectedSizeBytes: number; expectedChecksumSha256: string | null; expectedMimeType: string; expiresAt: string;
   } | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
@@ -729,10 +733,10 @@ export class PostgresCustomerAssetRepository {
       await this.setContext(client, tenantId, applicationId);
       const result = await client.query<{
         asset_id: string; actor_id: string; provider_upload_reference: string;
-        expected_size_bytes: number | string; expected_mime_type: string; expires_at: string | Date;
+        expected_size_bytes: number | string; expected_checksum_sha256: string | null; expected_mime_type: string; expires_at: string | Date;
       }>(
         `SELECT s.asset_id, s.actor_id, s.provider_upload_reference,
-          s.expected_size_bytes, a.mime_type AS expected_mime_type, s.expires_at
+          s.expected_size_bytes, s.expected_checksum_sha256, a.mime_type AS expected_mime_type, s.expires_at
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
@@ -749,6 +753,7 @@ export class PostgresCustomerAssetRepository {
         assetId: row.asset_id, actorId: row.actor_id,
         providerUploadReference: row.provider_upload_reference,
         expectedSizeBytes: Number(row.expected_size_bytes),
+        expectedChecksumSha256: row.expected_checksum_sha256,
         expectedMimeType: row.expected_mime_type,
         expiresAt: new Date(row.expires_at).toISOString(),
       } : null;
@@ -829,10 +834,10 @@ export class PostgresCustomerAssetRepository {
       // Avoid joined FOR UPDATE: PostgreSQL's plan may choose a different row-lock order.
       const lockedSession = await client.query<{
         upload_session_id: string; asset_id: string; actor_id: string;
-        expected_size_bytes: number | string; expires_at: string | Date;
+        expected_size_bytes: number | string; expected_checksum_sha256: string | null; expires_at: string | Date;
         upload_status: string; session_not_expired: boolean;
       }>(
-        `SELECT upload_session_id, asset_id, actor_id, expected_size_bytes,
+        `SELECT upload_session_id, asset_id, actor_id, expected_size_bytes, expected_checksum_sha256,
           expires_at, upload_status, (expires_at > clock_timestamp()) AS session_not_expired
          FROM eper_customer_asset_upload_sessions
          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
@@ -863,6 +868,10 @@ export class PostgresCustomerAssetRepository {
       }
       if (!session.session_not_expired) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
+      }
+      if (!session.expected_checksum_sha256 || !/^[a-f0-9]{64}$/.test(session.expected_checksum_sha256) ||
+          session.expected_checksum_sha256 !== input.checksumSha256) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_CHECKSUM_MISMATCH");
       }
       if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SIZE_MISMATCH");

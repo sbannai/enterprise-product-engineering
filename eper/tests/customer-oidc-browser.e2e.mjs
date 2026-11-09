@@ -230,15 +230,17 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.reload();
     await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
     await page.unroute("**/customer/assets?applicationId=*");
-    const metadataSuccessKeys=[],reservationKeys=[];
+    const metadataSuccessKeys=[],reservationKeys=[],reservationBodies=[];
+    const expectedRetrySha256=createHash("sha256").update(retryFile.buffer).digest("hex");
     await page.route("**/customer/assets?applicationId=*",async route=>{
       if(route.request().method()!=="POST"){await route.continue();return;}
       metadataSuccessKeys.push(route.request().headers()["idempotency-key"]||"");
       await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({data:{assetId:"asset-browser-e2e",applicationId,uploadStatus:"pending",scanStatus:"pending"}})});
     });
-    await page.route(/\/customer\/applications\/[^/]+\/assets\/[^/]+\/uploads$/,async route=>{
+    await page.route("**/customer/applications/*/assets/*/upload-grant",async route=>{
       if(route.request().method()!=="POST"){await route.continue();return;}
-      reservationKeys.push(route.request().postDataJSON()?.idempotencyKey||"");
+      reservationKeys.push(route.request().headers()["idempotency-key"]||"");
+      reservationBodies.push(route.request().postDataJSON()||{});
       await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"customer_asset_upload_provider_unavailable"})});
     });
     await page.getByRole("button",{name:"Client Assets"}).click();
@@ -250,6 +252,8 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(metadataSuccessKeys.length,1);
     assert.equal(reservationKeys.length,1);
     assert.match(reservationKeys[0],/^[a-f0-9]{32}$/);
+    assert.equal(reservationBodies.length,1);
+    assert.deepEqual(reservationBodies[0],{expectedSizeBytes:retryFile.buffer.length,expectedChecksumSha256:expectedRetrySha256,fileName:retryFile.name,mimeType:retryFile.mimeType});
     await page.reload();
     await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
     await page.getByRole("button",{name:"Client Assets"}).click();
@@ -262,6 +266,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(metadataSuccessKeys[1],metadataSuccessKeys[0],"metadata-create retries must retain the same operation identity");
     assert.equal(reservationKeys.length,2);
     assert.equal(reservationKeys[1],reservationKeys[0],"lost upload-reservation responses must reuse the same idempotency key");
+    assert.deepEqual(reservationBodies[1],reservationBodies[0],"upload retries must preserve the expected size and file checksum");
     const reservationSessionOverride=async route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({data:{authenticated:true,tenantId,actorId,roleKey:"customer-user",sessionBinding:"e".repeat(64),authentication:"postgres-browser-session"}})});
     await page.route("**/customer/session",reservationSessionOverride);
     await page.getByRole("button",{name:"Upload file"}).click();

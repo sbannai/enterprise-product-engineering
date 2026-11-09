@@ -100,7 +100,7 @@ test("restricted expiry worker login processes an expired reservation, appends a
       });
       const reservation = await repository.reserveUpload({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
-        assetId, expectedSizeBytes: 1024,
+        assetId, expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64),
         idempotencyKey: "expiry-process-" + randomUUID(),
         requestFingerprint: "a".repeat(64),
       });
