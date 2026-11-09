@@ -69,6 +69,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                 const renewed = await options.repository.renewScanJobLease({
                   tenantId: options.tenantId, applicationId: options.applicationId,
                   uploadSessionId: job.uploadSessionId, workerId: options.workerId, leaseMs,
+                  claimGeneration: job.claimGeneration,
                 });
                 if (!renewed) leaseLost = true;
               } catch (error) {
@@ -82,7 +83,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
           }, Math.max(1_000, Math.floor(leaseMs / 3)));
           try {
             const session = await options.repository.getUploadSessionForScanning(
-              options.tenantId, options.applicationId, job.uploadSessionId, options.workerId,
+              options.tenantId, options.applicationId, job.uploadSessionId, options.workerId, job.claimGeneration,
             );
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
@@ -127,7 +128,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               const retry = await options.repository.retryScanJob({
                 tenantId: options.tenantId, applicationId: options.applicationId,
                 uploadSessionId: job.uploadSessionId, workerId: options.workerId,
-                errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
+                claimGeneration: job.claimGeneration, errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
               });
               if (retry === "pending") {
                 options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "retry" }); return;
@@ -141,6 +142,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               scannerServiceId: options.scannerServiceId, workerId: options.workerId,
               environment: options.environment, correlationId: job.correlationId,
               uploadSessionId: job.uploadSessionId, scanStatus: outcome.scanStatus,
+              claimGeneration: job.claimGeneration,
             });
             options.onJob?.({ uploadSessionId: job.uploadSessionId,
               outcome: outcome.scanStatus === "error" ? "dead_letter" : "completed" });

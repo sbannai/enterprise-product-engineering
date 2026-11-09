@@ -758,7 +758,7 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
-  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string, workerId: string): Promise<{
+  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string, workerId: string, claimGeneration: number): Promise<{
     assetId: string; providerUploadReference: string; checksumSha256: string;
     sizeBytes: number; mimeType: string; attempt: number;
   } | null> {
@@ -766,6 +766,7 @@ export class PostgresCustomerAssetRepository {
     this.validateId(applicationId, "applicationId");
     this.validateId(uploadSessionId, "uploadSessionId");
     this.validateId(workerId, "workerId");
+    this.validateScanClaimGeneration(claimGeneration);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN READ ONLY");
@@ -785,8 +786,9 @@ export class PostgresCustomerAssetRepository {
            AND s.upload_session_id = $3 AND s.upload_status = 'completed'
            AND a.upload_status = 'scanning' AND a.scan_status = 'pending'
            AND a.lifecycle_status = 'active' AND a.checksum_sha256 IS NOT NULL
-           AND j.state = 'leased' AND j.lease_owner = $4 AND j.lease_expires_at > now()`,
-        [tenantId, applicationId, uploadSessionId, workerId],
+           AND j.state = 'leased' AND j.lease_owner = $4 AND j.lease_expires_at > now()
+           AND j.claim_generation = $5::bigint`,
+        [tenantId, applicationId, uploadSessionId, workerId, claimGeneration],
       );
       await client.query("COMMIT");
       const row = result.rows[0];
@@ -1036,7 +1038,7 @@ export class PostgresCustomerAssetRepository {
     tenantId: string; applicationId: string; workerId: string;
     scannerServiceId: string; environment: AuditEnvironment;
     limit?: number; leaseMs?: number;
-  }): Promise<Array<{ uploadSessionId: string; assetId: string; correlationId: string; attempt: number; leaseExpiresAt: string }>> {
+  }): Promise<Array<{ uploadSessionId: string; assetId: string; correlationId: string; attempt: number; leaseExpiresAt: string; claimGeneration: number }>> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.workerId, "workerId");
@@ -1057,7 +1059,7 @@ export class PostgresCustomerAssetRepository {
       });
       const claimed = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
-        attempt_count: number; lease_expires_at: string | Date;
+        attempt_count: number; lease_expires_at: string | Date; claim_generation: number | string;
       }>(
         `WITH candidates AS (
            SELECT tenant_id, upload_session_id
@@ -1072,11 +1074,12 @@ export class PostgresCustomerAssetRepository {
          UPDATE eper_customer_asset_scan_jobs j
             SET state = 'leased', lease_owner = $4,
                 lease_expires_at = now() + ($5::bigint * interval '1 millisecond'),
-                attempt_count = j.attempt_count + 1, updated_at = now()
+                attempt_count = j.attempt_count + 1,
+                claim_generation = j.claim_generation + 1, updated_at = now()
            FROM candidates c
           WHERE j.tenant_id = c.tenant_id AND j.upload_session_id = c.upload_session_id
          RETURNING j.upload_session_id, j.asset_id, j.correlation_id,
-                   j.attempt_count, j.lease_expires_at`,
+                   j.attempt_count, j.lease_expires_at, j.claim_generation`,
         [input.tenantId, input.applicationId, limit, input.workerId, leaseMs],
       );
       await client.query("COMMIT");
@@ -1084,6 +1087,7 @@ export class PostgresCustomerAssetRepository {
         uploadSessionId: row.upload_session_id, assetId: row.asset_id,
         correlationId: row.correlation_id, attempt: Number(row.attempt_count),
         leaseExpiresAt: new Date(row.lease_expires_at).toISOString(),
+        claimGeneration: Number(row.claim_generation),
       }));
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
@@ -1121,12 +1125,13 @@ export class PostgresCustomerAssetRepository {
 
   async renewScanJobLease(input: {
     tenantId: string; applicationId: string; uploadSessionId: string;
-    workerId: string; leaseMs: number;
+    workerId: string; leaseMs: number; claimGeneration: number;
   }): Promise<boolean> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     this.validateId(input.workerId, "workerId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     if (!Number.isInteger(input.leaseMs) || input.leaseMs < 5_000 || input.leaseMs > 900_000) {
       throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_INVALID");
     }
@@ -1140,8 +1145,9 @@ export class PostgresCustomerAssetRepository {
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+            AND claim_generation = $6::bigint
           RETURNING upload_session_id`,
-        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.leaseMs],
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.leaseMs, input.claimGeneration],
       );
       await client.query("COMMIT");
       return renewed.rowCount === 1;
@@ -1153,12 +1159,13 @@ export class PostgresCustomerAssetRepository {
 
   async retryScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
-    errorCode: string; retryAfterMs: number;
+    errorCode: string; retryAfterMs: number; claimGeneration: number;
   }): Promise<"pending" | "dead_letter" | "lease_lost"> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     this.validateId(input.workerId, "workerId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     if (!/^[A-Z0-9_]{1,64}$/.test(input.errorCode)) throw new Error("EPER_CUSTOMER_ASSET_SCAN_ERROR_CODE_INVALID");
     if (!Number.isInteger(input.retryAfterMs) || input.retryAfterMs < 1_000 || input.retryAfterMs > 3_600_000) {
       throw new Error("EPER_CUSTOMER_ASSET_SCAN_RETRY_DELAY_INVALID");
@@ -1178,9 +1185,10 @@ export class PostgresCustomerAssetRepository {
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+            AND claim_generation = $7::bigint
           RETURNING CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE state END AS state`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
-          input.retryAfterMs, input.errorCode],
+          input.retryAfterMs, input.errorCode, input.claimGeneration],
       );
       await client.query("COMMIT");
       return result.rows[0]?.state ?? "lease_lost";
@@ -1193,13 +1201,14 @@ export class PostgresCustomerAssetRepository {
   async recordScanResult(input: {
     tenantId: string; applicationId: string; scannerServiceId: string; workerId: string;
     environment: AuditEnvironment; correlationId: string; uploadSessionId: string;
-    scanStatus: "clean" | "infected" | "error" | "not_required";
+    scanStatus: "clean" | "infected" | "error" | "not_required"; claimGeneration: number;
   }): Promise<CustomerAsset> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.scannerServiceId, "scannerServiceId");
     this.validateId(input.workerId, "workerId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
     const client = await this.pool.connect();
     try {
@@ -1229,9 +1238,9 @@ export class PostgresCustomerAssetRepository {
       const assetRow = asset.rows[0];
       if (!assetRow) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
       const job = await client.query<{
-        state: string; lease_owner: string | null; lease_active: boolean;
+        state: string; lease_owner: string | null; lease_active: boolean; claim_generation: number | string;
       }>(
-        `SELECT state, lease_owner, (lease_expires_at > clock_timestamp()) AS lease_active
+        `SELECT state, lease_owner, (lease_expires_at > clock_timestamp()) AS lease_active, claim_generation
            FROM eper_customer_asset_scan_jobs
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
           FOR UPDATE`,
@@ -1244,7 +1253,10 @@ export class PostgresCustomerAssetRepository {
         scan_status: assetRow.scan_status, lifecycle_status: assetRow.lifecycle_status,
         session_status: sessionRow.upload_status, job_state: jobRow.state,
         lease_owner: jobRow.lease_owner, lease_active: jobRow.lease_active,
+        claim_generation: Number(jobRow.claim_generation),
       };
+      // Check the fencing token before the idempotent-result shortcut.
+      if (current.claim_generation !== input.claimGeneration) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST");
       if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
       if (current.scan_status !== "pending") {
         if (current.scan_status === input.scanStatus) {
@@ -1290,8 +1302,9 @@ export class PostgresCustomerAssetRepository {
             SET state = CASE WHEN $5 = 'error' THEN 'dead_letter' ELSE 'completed' END,
                 lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
-            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()`,
-        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.scanStatus],
+            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+            AND claim_generation = $6::bigint`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.scanStatus, input.claimGeneration],
       );
       if (finalized.rowCount !== 1) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST");
       await appendAuditEventInTransaction(client as AuditSqlClient, {
@@ -1359,4 +1372,8 @@ export class PostgresCustomerAssetRepository {
       throw new Error("EPER_CUSTOMER_ASSET_INVALID_" + name.toUpperCase());
     }
   }
+  private validateScanClaimGeneration(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error("EPER_CUSTOMER_ASSET_SCAN_CLAIM_GENERATION_INVALID");
+  }
+
 }

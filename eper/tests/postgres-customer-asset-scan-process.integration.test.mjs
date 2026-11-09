@@ -309,7 +309,7 @@ test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in 
           tenantId: fixture.tenantId, applicationId: fixture.applicationId,
           scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
           correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
-          scanStatus: "clean",
+          scanStatus: "clean", claimGeneration: job.claimGeneration,
         }),
       ]);
       const recovered = outcomes.slice(0, 2)
@@ -334,6 +334,63 @@ test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in 
       assert.deepEqual(finalState.rows[0], {
         upload_status: "failed", scan_status: "error", lifecycle_status: "quarantined", state: "dead_letter",
       });
+    } finally {
+      await pool.end();
+    }
+  });
+
+
+test("PostgreSQL scan claim generation fences stale same-worker renew, lookup, retry and completion",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 5 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-generation-fence");
+    const workerId = "ci-scan-generation-reused-worker";
+    try {
+      const [first] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 5_000,
+      });
+      assert.ok(first);
+      assert.equal(first.claimGeneration, 1);
+      await pool.query(
+        `UPDATE eper_customer_asset_scan_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+      const [second] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 5_000,
+      });
+      assert.ok(second);
+      assert.equal(second.claimGeneration, 2);
+      assert.equal(second.claimGeneration > first.claimGeneration, true);
+      assert.equal(await repository.renewScanJobLease({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, leaseMs: 5_000,
+        claimGeneration: first.claimGeneration,
+      }), false, "stale generation must not renew a takeover owned by the same worker id");
+      assert.equal(await repository.getUploadSessionForScanning(
+        fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, workerId, first.claimGeneration,
+      ), null, "stale generation must not retrieve scan input");
+      assert.equal(await repository.retryScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, claimGeneration: first.claimGeneration,
+        errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs: 15_000,
+      }), "lease_lost");
+      await assert.rejects(repository.recordScanResult({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+        correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+        scanStatus: "clean", claimGeneration: first.claimGeneration,
+      }), /EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST/);
+      const completed = await repository.recordScanResult({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+        correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+        scanStatus: "clean", claimGeneration: second.claimGeneration,
+      });
+      assert.equal(completed.scanStatus, "clean");
     } finally {
       await pool.end();
     }

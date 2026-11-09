@@ -12,7 +12,7 @@ function fixture(scanStatus) {
       if (claimed) { controller.abort(); return []; }
       claimed = true;
       return [{ uploadSessionId: "session-1234567890123456", assetId: "asset-1",
-        correlationId: "correlation-1", attempt: 1, leaseExpiresAt: new Date(Date.now()+60000).toISOString() }];
+        correlationId: "correlation-1", attempt: 1, claimGeneration: 1, leaseExpiresAt: new Date(Date.now()+60000).toISOString() }];
     },
     async getUploadSessionForScanning(...args) {
       calls.push(["lookup", ...args]);
