@@ -309,7 +309,7 @@ test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in 
           tenantId: fixture.tenantId, applicationId: fixture.applicationId,
           scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
           correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
-          scanStatus: "clean",
+          scanStatus: "clean", claimGeneration: job.claimGeneration,
         }),
       ]);
       const recovered = outcomes.slice(0, 2)
@@ -335,6 +335,143 @@ test("PostgreSQL 16 recovery sweeps and stale scanner finalization serialize in 
         upload_status: "failed", scan_status: "error", lifecycle_status: "quarantined", state: "dead_letter",
       });
     } finally {
+      await pool.end();
+    }
+  });
+
+
+test("PostgreSQL scan claim generation fences stale same-worker renew, lookup, retry and completion",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 5 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-generation-fence");
+    const workerId = "ci-scan-generation-reused-worker";
+    try {
+      const [first] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 5_000,
+      });
+      assert.ok(first);
+      assert.equal(first.claimGeneration, 1);
+      await pool.query(
+        `UPDATE eper_customer_asset_scan_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+      );
+      const [second] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 5_000,
+      });
+      assert.ok(second);
+      assert.equal(second.claimGeneration, 2);
+      assert.equal(second.claimGeneration > first.claimGeneration, true);
+      assert.equal(await repository.renewScanJobLease({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, leaseMs: 5_000,
+        claimGeneration: first.claimGeneration,
+      }), false, "stale generation must not renew a takeover owned by the same worker id");
+      assert.equal(await repository.completeScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, claimGeneration: first.claimGeneration,
+      }), false, "stale generation must not complete a takeover owned by the same worker id");
+      assert.equal(await repository.getUploadSessionForScanning(
+        fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, workerId, first.claimGeneration,
+      ), null, "stale generation must not retrieve scan input");
+      assert.equal(await repository.retryScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, claimGeneration: first.claimGeneration,
+        errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs: 15_000,
+      }), "lease_lost");
+      await assert.rejects(repository.recordScanResult({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+        correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+        scanStatus: "clean", claimGeneration: first.claimGeneration,
+      }), /EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST/);
+      const completed = await repository.recordScanResult({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+        correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+        scanStatus: "clean", claimGeneration: second.claimGeneration,
+      });
+      assert.equal(completed.scanStatus, "clean");
+    } finally {
+      await pool.end();
+    }
+  });
+
+
+test("PostgreSQL timeout expiry permits generation-2 takeover and rejects every late generation-1 mutation",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 5 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-timeout-takeover");
+    const workerId = "ci-scan-timeout-reused-worker";
+    const shutdown = new AbortController();
+    let scannerSignal;
+    let jobOutcome;
+    try {
+      await import("../dist/packages/assets/customer-asset-scan-worker.js").then(async ({ runCustomerAssetScanWorker }) => {
+        await runCustomerAssetScanWorker({
+          repository,
+          scanner: {
+            async scan(_input, _requestId, signal) {
+              scannerSignal = signal;
+              return new Promise(() => {}); // deliberately ignores cancellation forever
+            },
+          },
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+          scannerServiceId: "ci-asset-scanner", environment: "sandbox",
+          signal: shutdown.signal, leaseMs: 5_000, scanTimeoutMs: 1_000,
+          pollIntervalMs: 100, onJob(result) {
+            jobOutcome = result.outcome;
+            if (result.outcome === "lease_lost") shutdown.abort();
+          },
+        });
+      });
+      assert.equal(scannerSignal?.aborted, true, "timeout must request cancellation");
+      assert.equal(jobOutcome, "lease_lost", "timed-out generation must relinquish its claim");
+
+      // The old lease is deliberately allowed to expire; no database state is
+      // changed by the late provider promise because it never settles.
+      await new Promise(resolvePromise => setTimeout(resolvePromise, 5_100));
+      const [replacement] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId, workerId,
+        scannerServiceId: "ci-asset-scanner", environment: "sandbox", limit: 1, leaseMs: 5_000,
+      });
+      assert.ok(replacement, "expired generation must be claimable");
+      assert.equal(replacement.claimGeneration, 2, "takeover must increment the generation");
+
+      assert.equal(await repository.renewScanJobLease({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, leaseMs: 5_000,
+        claimGeneration: 1,
+      }), false, "late generation 1 must not renew generation 2");
+      assert.equal(await repository.getUploadSessionForScanning(
+        fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, workerId, 1,
+      ), null, "late generation 1 must not read scan input");
+      assert.equal(await repository.retryScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, claimGeneration: 1,
+        errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs: 15_000,
+      }), "lease_lost", "late generation 1 must not schedule retry");
+      await assert.rejects(repository.recordScanResult({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+        correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+        scanStatus: "clean", claimGeneration: 1,
+      }), /EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST/,
+      "late generation 1 must not finalize or append audit");
+
+      const completed = await repository.recordScanResult({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId: "ci-asset-scanner", workerId, environment: "sandbox",
+        correlationId: fixture.correlationId, uploadSessionId: fixture.uploadSessionId,
+        scanStatus: "clean", claimGeneration: replacement.claimGeneration,
+      });
+      assert.equal(completed.scanStatus, "clean", "generation 2 must remain able to finalize");
+    } finally {
+      if (!shutdown.signal.aborted) shutdown.abort();
       await pool.end();
     }
   });
