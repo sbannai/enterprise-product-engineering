@@ -64,6 +64,7 @@ export interface ProviderStorageDriver<TCredentials> {
     context: ProviderDriverContext<TCredentials>,
     request: StorageUploadRequest & { providerUploadReference: string },
     requestId: string,
+    signal?: AbortSignal,
   ): Promise<StorageUploadProviderOutcome>;
   verifyObject(
     context: ProviderDriverContext<TCredentials>,
