@@ -211,7 +211,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(scanJob.uploadSessionId, scanReservation.uploadSessionId);
       const workerId = "asset-scan-worker-" + suffix.slice(0, 16);
       const scanInput = await repository.getUploadSessionForScanning(
-        tenantId, applicationId, scanReservation.uploadSessionId, workerId,
+        tenantId, applicationId, scanReservation.uploadSessionId, workerId, scanJob.claimGeneration,
       );
       assert.ok(scanInput);
       assert.equal(scanInput.checksumSha256, checksum);
@@ -220,7 +220,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         repository.recordScanResult({
           tenantId, applicationId, scannerServiceId: "asset-scanner-" + suffix.slice(0, 16),
           workerId: "different-worker-" + suffix.slice(0, 16), environment: "sandbox",
-          correlationId: correlationId + "-scan", uploadSessionId: scanReservation.uploadSessionId,
+          claimGeneration: scanJob.claimGeneration, correlationId: correlationId + "-scan", uploadSessionId: scanReservation.uploadSessionId,
           scanStatus: "clean",
         }),
         { message: "EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST" },
@@ -230,6 +230,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         tenantId, applicationId, scannerServiceId: "asset-scanner-" + suffix.slice(0, 16),
         workerId, environment: "sandbox", correlationId: correlationId + "-scan",
         uploadSessionId: scanReservation.uploadSessionId, scanStatus: "clean",
+        claimGeneration: scanJob.claimGeneration,
       });
       assert.equal(scanned.uploadStatus, "available");
       assert.equal(scanned.scanStatus, "clean");
@@ -399,11 +400,12 @@ test("live PostgreSQL download lookup enforces owner and explicit shared-link vi
           tenantId, applicationId, workerId, scannerServiceId,
           environment: "sandbox", limit: 1, leaseMs: 60_000,
         });
-        assert.ok(claims.some(claim => claim.uploadSessionId === reservation.uploadSessionId),
-          "completed upload must produce a claimable scan job");
+        const claim = claims.find(item => item.uploadSessionId === reservation.uploadSessionId);
+        assert.ok(claim, "completed upload must produce a claimable scan job");
         await repository.recordScanResult({
           tenantId, applicationId, scannerServiceId, workerId, environment: "sandbox",
           correlationId, uploadSessionId: reservation.uploadSessionId, scanStatus,
+          claimGeneration: claim.claimGeneration,
         });
       }
       return { assetId, providerReference, metadataReference, uploadSessionId: reservation.uploadSessionId };
