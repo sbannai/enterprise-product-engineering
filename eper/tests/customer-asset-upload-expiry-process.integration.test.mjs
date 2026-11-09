@@ -166,6 +166,13 @@ test("restricted expiry worker login processes an expired reservation, appends a
         await sleep(100);
       }
       assert.equal(expiredAndAudited, true, "restricted login must expire one session and append exactly one audit event: " + stderr);
+      // The database commit is observable before the child process's stdout pipe
+      // necessarily delivers its onBatch metric. Wait for the bounded log event
+      // instead of asserting on a cross-process scheduling race.
+      const batchLogDeadline = Date.now() + 5_000;
+      while (!stdout.includes("customer_asset_upload_expiry_batch") && Date.now() < batchLogDeadline) {
+        await sleep(25);
+      }
       assert.match(stdout, /customer_asset_upload_expiry_batch/);
       assert.doesNotMatch(stdout + stderr, new RegExp(tenantId));
       assert.doesNotMatch(stdout + stderr, new RegExp(applicationId));
