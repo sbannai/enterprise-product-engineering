@@ -112,24 +112,31 @@ test("customer asset scan worker waits for an in-flight lease renewal before job
 });
 
 
-test("customer asset scan worker waits for a timed-out scanner promise to settle before retry", async () => {
+test("customer asset scan worker stops lease renewal and permits takeover when provider ignores timeout abort", async () => {
   const f = fixture("clean");
   let scanSettled = false;
-  f.scanner.scan = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 1_150));
-    scanSettled = true;
-    f.calls.push(["scan-settled"]);
-    return { scanStatus: "clean", scannerServiceId: "asset-scanner" };
+  let scanSignal;
+  f.scanner.scan = async (_input, _requestId, signal) => {
+    scanSignal = signal;
+    return new Promise((resolve) => {
+      // Deliberately ignore AbortSignal and remain unresolved past worker timeout.
+      setTimeout(() => {
+        scanSettled = true;
+        resolve({ scanStatus: "clean", scannerServiceId: "asset-scanner" });
+      }, 3_000).unref?.();
+    });
   };
   await runCustomerAssetScanWorker({
     ...f, tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
     scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
-    scanTimeoutMs: 1_000,
-    onJob() { f.controller.abort(); },
+    leaseMs: 5_000, scanTimeoutMs: 1_000,
   });
-  const settledIndex = f.calls.findIndex((call) => call[0] === "scan-settled");
-  const retryIndex = f.calls.findIndex((call) => call[0] === "retry");
-  assert.ok(scanSettled, "underlying provider operation must settle");
-  assert.ok(settledIndex >= 0, "settlement must be recorded");
-  assert.ok(retryIndex > settledIndex, "retry must not begin before the original scan settles");
+  assert.equal(scanSignal?.aborted, true, "timeout must request provider cancellation");
+  assert.equal(scanSettled, false, "worker must not wait indefinitely for a non-cooperative provider");
+  assert.equal(f.calls.filter((call) => call[0] === "renew").length, 0,
+    "timed-out claim must stop renewing so its lease can expire");
+  assert.equal(f.calls.filter((call) => call[0] === "retry").length, 0,
+    "timed-out stale claim must not persist retry before takeover");
+  assert.equal(f.calls.filter((call) => call[0] === "record").length, 0,
+    "timed-out stale claim must not finalize a scan result");
 });
