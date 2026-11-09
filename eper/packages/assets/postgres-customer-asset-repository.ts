@@ -1097,11 +1097,13 @@ export class PostgresCustomerAssetRepository {
 
   async completeScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
+    claimGeneration: number;
   }): Promise<boolean> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     this.validateId(input.workerId, "workerId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -1112,8 +1114,8 @@ export class PostgresCustomerAssetRepository {
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2
             AND upload_session_id = $3 AND state = 'leased' AND lease_owner = $4
-            AND lease_expires_at > now()`,
-        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId],
+            AND lease_expires_at > now() AND claim_generation = $5::bigint`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.claimGeneration],
       );
       await client.query("COMMIT");
       return result.rowCount === 1;

@@ -370,6 +370,10 @@ test("PostgreSQL scan claim generation fences stale same-worker renew, lookup, r
         uploadSessionId: fixture.uploadSessionId, workerId, leaseMs: 5_000,
         claimGeneration: first.claimGeneration,
       }), false, "stale generation must not renew a takeover owned by the same worker id");
+      assert.equal(await repository.completeScanJob({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        uploadSessionId: fixture.uploadSessionId, workerId, claimGeneration: first.claimGeneration,
+      }), false, "stale generation must not complete a takeover owned by the same worker id");
       assert.equal(await repository.getUploadSessionForScanning(
         fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, workerId, first.claimGeneration,
       ), null, "stale generation must not retrieve scan input");
