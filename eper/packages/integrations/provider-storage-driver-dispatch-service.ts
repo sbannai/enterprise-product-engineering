@@ -83,7 +83,8 @@ export class ProviderStorageDispatchError extends Error {
   constructor(readonly code:
     | "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH"
     | "PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING"
-    | "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID") {
+    | "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID"
+    | "PROVIDER_STORAGE_DISPATCH_ABORTED") {
     super(code);
     this.name = "ProviderStorageDispatchError";
   }
@@ -108,11 +109,13 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     applicationId: string;
     requestId: string;
     operation: ProviderStorageOperation;
+    signal?: AbortSignal;
   }): Promise<ProviderStorageOperationResult> {
     if (!input || !input.operation || typeof input.requestId !== "string" ||
         !input.requestId.trim() || input.requestId.length > 128) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
+    if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const capability = CAPABILITY_BY_OPERATION[input.operation.kind];
     if (!capability || !validText(input.tenantId, 128) || !validText(input.applicationId, 128) ||
         !validOperationRequest(input.operation)) {
@@ -124,6 +127,7 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       applicationId: input.applicationId,
       capability,
     });
+    if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const selection = resolved.runtime.selection;
     if (selection.tenantId !== input.tenantId || selection.applicationId !== input.applicationId ||
         selection.capabilityKey !== capability || resolved.runtime.capability !== capability) {
@@ -145,14 +149,14 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
             input.operation.request.applicationId !== input.applicationId) {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
         }
-        return driver.createUploadGrant(context, input.operation.request, input.requestId);
+        return driver.createUploadGrant(context, input.operation.request, input.requestId, input.signal);
       case "lookup_upload":
         if (input.operation.request.tenantId !== input.tenantId ||
             input.operation.request.applicationId !== input.applicationId) {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
         }
         if (!driver.capabilities.lookupByUploadSessionId) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
-        return driver.lookupUpload(context, input.operation.request.uploadSessionId, input.requestId);
+        return driver.lookupUpload(context, input.operation.request.uploadSessionId, input.requestId, input.signal);
       case "renew_upload":
         if (input.operation.request.tenantId !== input.tenantId ||
             input.operation.request.applicationId !== input.applicationId) {
@@ -161,10 +165,10 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         if (!driver.capabilities.renewByProviderReference) {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         }
-        return driver.renewUploadGrant(context, input.operation.request, input.requestId);
+        return driver.renewUploadGrant(context, input.operation.request, input.requestId, input.signal);
       case "verify_object":
         if (!driver.capabilities.verifyObject) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
-        return driver.verifyObject(context, input.operation.request, input.requestId);
+        return driver.verifyObject(context, input.operation.request, input.requestId, input.signal);
       case "create_download":
         if (input.operation.request.tenantId !== input.tenantId ||
             input.operation.request.applicationId !== input.applicationId) {
@@ -173,10 +177,10 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         if (!driver.capabilities.downloadGrant) {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
         }
-        return driver.createDownloadGrant(context, input.operation.request, input.requestId);
+        return driver.createDownloadGrant(context, input.operation.request, input.requestId, input.signal);
       case "scan_object":
         if (!driver.capabilities.malwareScan) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
-        return driver.scanObject(context, input.operation.request, input.requestId);
+        return driver.scanObject(context, input.operation.request, input.requestId, input.signal);
     }
   }
 }
