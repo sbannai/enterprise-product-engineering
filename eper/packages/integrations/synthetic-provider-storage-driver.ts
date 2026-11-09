@@ -24,6 +24,7 @@ type StoredObject = {
   tenantId: string;
   applicationId: string;
   uploadSessionId: string;
+  assetId: string;
   providerReference: string;
   sizeBytes: number;
   mimeType: string;
@@ -83,13 +84,13 @@ implements ProviderStorageDriver<SyntheticStorageCredentials> {
       const providerReference = "synthetic-object:" + encodeURIComponent(request.uploadSessionId);
       object = {
         tenantId: request.tenantId, applicationId: request.applicationId,
-        uploadSessionId: request.uploadSessionId, providerReference,
+        uploadSessionId: request.uploadSessionId, assetId: request.assetId, providerReference,
         sizeBytes: request.sizeBytes, mimeType: request.mimeType, fileName: request.fileName,
       };
       this.bySession.set(request.uploadSessionId, object);
       this.byReference.set(providerReference, object);
     } else if (object.tenantId !== request.tenantId || object.applicationId !== request.applicationId ||
-      object.sizeBytes !== request.sizeBytes || object.mimeType !== request.mimeType ||
+      object.assetId !== request.assetId || object.sizeBytes !== request.sizeBytes || object.mimeType !== request.mimeType ||
       object.fileName !== request.fileName) {
       return { kind: "unknown", reason: "malformed_response" };
     }
@@ -150,6 +151,12 @@ implements ProviderStorageDriver<SyntheticStorageCredentials> {
     if (object.mimeType !== request.expectedMimeType) return { kind: "mismatch", reason: "mime_type" };
     // The configured result is an explicit test fixture; this simulator has no
     // observed object bytes and therefore never computes or attests a SHA-256.
+    // Even fixtures must agree with the caller's expected metadata and digest.
+    if (this.verificationOutcome.kind === "verified") {
+      if (this.verificationOutcome.sizeBytes !== request.expectedSizeBytes) return { kind: "mismatch", reason: "size" };
+      if (this.verificationOutcome.mimeType !== request.expectedMimeType) return { kind: "mismatch", reason: "mime_type" };
+      if (this.verificationOutcome.sha256.toLowerCase() !== request.expectedSha256.toLowerCase()) return { kind: "mismatch", reason: "sha256" };
+    }
     return this.verificationOutcome;
   }
 
@@ -163,7 +170,7 @@ implements ProviderStorageDriver<SyntheticStorageCredentials> {
     if (signal?.aborted) return null;
     const object = this.byReference.get(request.accessReference);
     if (!object || object.tenantId !== context.tenantId || object.applicationId !== context.applicationId ||
-        object.fileName !== request.fileName) return null;
+        object.assetId !== request.assetId || object.fileName !== request.fileName) return null;
     return {
       url: "https://downloads.synthetic.invalid/" + encodeURIComponent(object.uploadSessionId),
       expiresAt: new Date(this.now() + 5 * 60_000).toISOString(),
@@ -179,7 +186,8 @@ implements ProviderStorageDriver<SyntheticStorageCredentials> {
     this.assertSynthetic(context);
     if (signal?.aborted) return { kind: "timeout" };
     const object = this.byReference.get(request.providerObjectReference);
-    if (!object || object.tenantId !== context.tenantId || object.applicationId !== context.applicationId) {
+    if (!object || object.tenantId !== context.tenantId || object.applicationId !== context.applicationId ||
+        object.assetId !== request.assetId) {
       return { kind: "malformed" };
     }
     // Default is timeout; "clean"/"infected" can only be explicitly injected by

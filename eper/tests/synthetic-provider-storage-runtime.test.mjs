@@ -56,6 +56,13 @@ test("synthetic driver rejects cross-tenant lookup, renewal and download access"
     tenantId: "tenant-b", applicationId: "app-a", actorId: "actor-b", assetId: "asset-a",
     accessReference: created.providerUploadReference, fileName: "proof.txt",
   }, "request-4"), null);
+  assert.equal(await driver.createDownloadGrant(context, {
+    tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a", assetId: "asset-other",
+    accessReference: created.providerUploadReference, fileName: "proof.txt",
+  }, "request-4b"), null);
+  assert.deepEqual(await driver.scanObject(context, { assetId: "asset-other",
+    providerObjectReference: created.providerUploadReference, expectedSha256: "a".repeat(64) }, "request-4c"),
+    { kind: "malformed" });
 });
 
 test("synthetic verification never attests bytes by default and only uses explicit simulated outcomes", async () => {
@@ -78,6 +85,10 @@ test("synthetic verification never attests bytes by default and only uses explic
     uploadSessionId: upload.uploadSessionId, providerUploadReference: reference,
     expectedSizeBytes: 12, expectedMimeType: "text/plain", expectedSha256: "a".repeat(64),
   }, "request-5"), { kind: "verified", sizeBytes: 12, mimeType: "text/plain", sha256: "a".repeat(64) });
+  assert.deepEqual(await simulated.verifyObject(context, {
+    uploadSessionId: upload.uploadSessionId, providerUploadReference: reference,
+    expectedSizeBytes: 12, expectedMimeType: "text/plain", expectedSha256: "b".repeat(64),
+  }, "request-5b"), { kind: "mismatch", reason: "sha256" });
 });
 
 test("synthetic scan defaults to timeout; clean is only an explicit fixture", async () => {
