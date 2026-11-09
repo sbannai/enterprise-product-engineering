@@ -92,21 +92,28 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
+              // Abort is a cancellation request, not proof that provider work has stopped.
+              // Retain the original promise and do not retry until it has settled.
+              const scanPromise = Promise.resolve().then(() => options.scanner.scan({
+                tenantId: options.tenantId, applicationId: options.applicationId,
+                assetId: session.assetId, uploadSessionId: job.uploadSessionId,
+                providerUploadReference: session.providerUploadReference,
+                checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+              }, job.correlationId, scanController.signal));
               const timeout = new Promise<never>((_, reject) => {
                 scanTimer = setTimeout(() => {
                   scanController.abort();
                   reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
                 }, scanTimeoutMs);
               });
-              outcome = await Promise.race([
-                options.scanner.scan({
-                  tenantId: options.tenantId, applicationId: options.applicationId,
-                  assetId: session.assetId, uploadSessionId: job.uploadSessionId,
-                  providerUploadReference: session.providerUploadReference,
-                  checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-                }, job.correlationId, scanController.signal),
-                timeout,
-              ]);
+              try {
+                outcome = await Promise.race([scanPromise, timeout]);
+              } catch (error) {
+                // A scanner adapter may ignore AbortSignal. Await the original operation
+                // before retry persistence so two scans cannot overlap for one asset.
+                await scanPromise.catch(() => undefined);
+                throw error;
+              }
             } catch (error) {
               options.onError?.(error);
               outcome = { scanStatus: "error", scannerServiceId: options.scannerServiceId };
