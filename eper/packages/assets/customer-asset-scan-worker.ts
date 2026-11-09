@@ -101,8 +101,15 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                 providerUploadReference: session.providerUploadReference,
                 checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
               }, job.correlationId, scanController.signal));
+              let scanTimedOut = false;
               const timeout = new Promise<never>((_, reject) => {
                 scanTimer = setTimeout(() => {
+                  // Cancellation is cooperative. Stop renewing this claim immediately so
+                  // a replacement worker can take over after lease expiry even when the
+                  // provider never settles. Generation fencing rejects any late callback.
+                  scanTimedOut = true;
+                  leaseLost = true;
+                  clearInterval(renewTimer);
                   scanController.abort();
                   reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
                 }, scanTimeoutMs);
@@ -110,9 +117,10 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               try {
                 outcome = await Promise.race([scanPromise, timeout]);
               } catch (error) {
-                // A scanner adapter may ignore AbortSignal. Await the original operation
-                // before retry persistence so two scans cannot overlap for one asset.
-                await scanPromise.catch(() => undefined);
+                // Promise.race has already attached a rejection handler to scanPromise.
+                // Do not await it here: a non-cooperative provider may never settle.
+                // The expired lease permits takeover; claimGeneration fences late writes.
+                if (!scanTimedOut) throw error;
                 throw error;
               }
             } catch (error) {
