@@ -13,6 +13,9 @@ on:
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/platform-application-remediation.browser.e2e.mjs"
       - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
+      - "eper/packages/integrations/synthetic-provider-storage-driver.ts"
+      - "eper/packages/integrations/synthetic-provider-storage-secret-resolver.ts"
+      - "eper/tests/synthetic-provider-storage-*.mjs"
       - ".github/workflows/eper-customer-oidc-browser-e2e.yml"
   push:
     branches: ["main"]
@@ -25,6 +28,9 @@ on:
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/platform-application-remediation.browser.e2e.mjs"
       - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
+      - "eper/packages/integrations/synthetic-provider-storage-driver.ts"
+      - "eper/packages/integrations/synthetic-provider-storage-secret-resolver.ts"
+      - "eper/tests/synthetic-provider-storage-*.mjs"
       - ".github/workflows/eper-customer-oidc-browser-e2e.yml"
 
 permissions:
