@@ -54,7 +54,7 @@ test("customer asset scan worker persists bounded retry for a scanner error", as
 });
 
 
-test("customer asset scan worker times out provider calls and routes them through retry", async () => {
+test("customer asset scan worker relinquishes a timed-out claim even when provider promptly aborts", async () => {
   const f = fixture("clean");
   f.scanner.scan = async (_input, _requestId, signal) => new Promise((_resolve, reject) => {
     signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
@@ -64,7 +64,9 @@ test("customer asset scan worker times out provider calls and routes them throug
     scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
     scanTimeoutMs: 1_000, onJob() { f.controller.abort(); },
   });
-  assert.ok(f.calls.some((call) => call[0] === "retry" && call[1] === "SCANNER_PROVIDER_ERROR"));
+  assert.equal(f.calls.filter((call) => call[0] === "retry").length, 0,
+    "timed-out claim must expire instead of being retried by the same generation");
+  assert.equal(f.calls.filter((call) => call[0] === "record").length, 0);
 });
 
 
