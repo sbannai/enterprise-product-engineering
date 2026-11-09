@@ -3,10 +3,10 @@ import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-
 import type { TrustedMalwareScanOutcome } from "./storage-malware-scan-adapter.js";
 
 /**
- * Scanner adapters must treat the AbortSignal as part of the execution contract:
- * stop provider work and settle the returned promise promptly after abort. The
- * worker fences persistence after shutdown, but cannot forcibly terminate an
- * adapter that ignores cancellation.
+ * Scanner adapters should honor AbortSignal promptly. If an adapter ignores
+ * cancellation, timeout stops lease renewal and permits a replacement claim;
+ * claim-generation fencing prevents the late result from mutating durable state.
+ * This permits temporary provider-side overlap and is not hard process isolation.
  */
 export interface CustomerAssetScanner {
   scan(input: {
@@ -69,6 +69,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
                 const renewed = await options.repository.renewScanJobLease({
                   tenantId: options.tenantId, applicationId: options.applicationId,
                   uploadSessionId: job.uploadSessionId, workerId: options.workerId, leaseMs,
+                  claimGeneration: job.claimGeneration,
                 });
                 if (!renewed) leaseLost = true;
               } catch (error) {
@@ -82,7 +83,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
           }, Math.max(1_000, Math.floor(leaseMs / 3)));
           try {
             const session = await options.repository.getUploadSessionForScanning(
-              options.tenantId, options.applicationId, job.uploadSessionId, options.workerId,
+              options.tenantId, options.applicationId, job.uploadSessionId, options.workerId, job.claimGeneration,
             );
             if (!session) { leaseLost = true; options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "lease_lost" }); return; }
             let outcome: TrustedMalwareScanOutcome;
@@ -92,8 +93,8 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
-              // Abort is a cancellation request, not proof that provider work has stopped.
-              // Retain the original promise and do not retry until it has settled.
+              // Keep the scanner promise in the race so normal completion and rejection are observed.
+              // On timeout, do not await it: cancellation is cooperative and generation fencing rejects late writes.
               const scanPromise = Promise.resolve().then(() => options.scanner.scan({
                 tenantId: options.tenantId, applicationId: options.applicationId,
                 assetId: session.assetId, uploadSessionId: job.uploadSessionId,
@@ -102,6 +103,11 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               }, job.correlationId, scanController.signal));
               const timeout = new Promise<never>((_, reject) => {
                 scanTimer = setTimeout(() => {
+                  // Cancellation is cooperative. Stop renewing this claim immediately so
+                  // a replacement worker can take over after lease expiry even when the
+                  // provider never settles. Generation fencing rejects any late callback.
+                  leaseLost = true;
+                  clearInterval(renewTimer);
                   scanController.abort();
                   reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
                 }, scanTimeoutMs);
@@ -109,9 +115,9 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               try {
                 outcome = await Promise.race([scanPromise, timeout]);
               } catch (error) {
-                // A scanner adapter may ignore AbortSignal. Await the original operation
-                // before retry persistence so two scans cannot overlap for one asset.
-                await scanPromise.catch(() => undefined);
+                // Promise.race has already attached a rejection handler to scanPromise.
+                // Do not await it here: a non-cooperative provider may never settle.
+                // The expired lease permits takeover; claimGeneration fences late writes.
                 throw error;
               }
             } catch (error) {
@@ -134,7 +140,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               const retry = await options.repository.retryScanJob({
                 tenantId: options.tenantId, applicationId: options.applicationId,
                 uploadSessionId: job.uploadSessionId, workerId: options.workerId,
-                errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
+                claimGeneration: job.claimGeneration, errorCode: "SCANNER_PROVIDER_ERROR", retryAfterMs,
               });
               if (retry === "pending") {
                 options.onJob?.({ uploadSessionId: job.uploadSessionId, outcome: "retry" }); return;
@@ -148,6 +154,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
               scannerServiceId: options.scannerServiceId, workerId: options.workerId,
               environment: options.environment, correlationId: job.correlationId,
               uploadSessionId: job.uploadSessionId, scanStatus: outcome.scanStatus,
+              claimGeneration: job.claimGeneration,
             });
             options.onJob?.({ uploadSessionId: job.uploadSessionId,
               outcome: outcome.scanStatus === "error" ? "dead_letter" : "completed" });
