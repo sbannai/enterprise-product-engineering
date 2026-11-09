@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 const uploadRecoveryMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_recovery.sql", import.meta.url), "utf8");
+const scanClaimGenerationMigration = await readFile(new URL("../packages/audit/migrations/033_customer_asset_scan_claim_generation.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -107,6 +108,15 @@ test("expiry queue-age migration retains tenant scope, optional asset filter and
   assert.ok(expiryQueueAgeMigration.includes("FOR UPDATE SKIP LOCKED"));
   assert.ok(expiryQueueAgeMigration.includes("clock_timestamp()"));
   assert.ok(expiryQueueAgeMigration.includes("TO eper_customer_asset_access, eper_customer_asset_upload_expiry_worker_access"));
+});
+
+
+test("scan claim-generation migration is additive, repeatable and nonnegative", () => {
+  assert.match(scanClaimGenerationMigration, /BEGIN;/);
+  assert.match(scanClaimGenerationMigration, /ADD COLUMN IF NOT EXISTS claim_generation bigint NOT NULL DEFAULT 0/);
+  assert.match(scanClaimGenerationMigration, /claim_generation >= 0/);
+  assert.match(scanClaimGenerationMigration, /COMMIT;/);
+  assert.match(scanClaimGenerationMigration, /stale worker/i);
 });
 
 const expectedChecksumMigration = await readFile(new URL("../packages/audit/migrations/032_customer_asset_upload_expected_checksum.sql", import.meta.url), "utf8");
