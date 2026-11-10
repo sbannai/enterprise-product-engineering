@@ -89,12 +89,21 @@ export class ApplicationPeripheralService {
       } catch (error) {
         // A failed physical connection is represented durably; it is never
         // silently reported as active. The next version is the activation result.
-        await this.repository.transition({
-          ...this.auditInput(input),
-          peripheralId: input.peripheralId,
-          expectedVersion: active.version,
-          nextStatus: "DEGRADED",
-        }).catch(() => undefined);
+        try {
+          await this.repository.transition({
+            ...this.auditInput(input),
+            peripheralId: input.peripheralId,
+            expectedVersion: active.version,
+            nextStatus: "DEGRADED",
+          });
+        } catch (stateError) {
+          // Preserve both failures: the physical connection failed and the
+          // compensating durable state update failed. Never hide stale ACTIVE.
+          throw new AggregateError(
+            [error, stateError],
+            "EPER_PERIPHERAL_ADAPTER_CONNECT_AND_DEGRADED_STATE_PERSIST_FAILED",
+          );
+        }
         throw new Error("EPER_PERIPHERAL_ADAPTER_CONNECT_FAILED", { cause: error });
       }
     });
