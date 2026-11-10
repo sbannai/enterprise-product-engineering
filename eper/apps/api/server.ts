@@ -3157,12 +3157,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             return;
           }
           result = await options.peripheralService.activate({ ...scope, peripheralId, expectedVersion: body.expectedVersion });
-        } else {
+        } else if (peripheralPath[3] === "suspend") {
           if (Object.keys(body).some(key => key !== "expectedVersion")) {
             sendJson(request, response, 400, { error: "EPER_PERIPHERAL_TRANSITION_INPUT_INVALID" });
             return;
           }
           result = await options.peripheralService.suspend({ ...scope, peripheralId, expectedVersion: body.expectedVersion });
+        } else {
+          sendJson(request, response, 404, { error: "EPER_PERIPHERAL_OPERATION_NOT_FOUND" });
+          return;
         }
         sendApiSuccess(request, response, 200, { peripheral: result });
       } catch (error) {
