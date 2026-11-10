@@ -249,7 +249,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2 FOR UPDATE",
         [tenantId, grantRaceReservation.uploadSessionId],
       );
-      const shortGrantExpiry = new Date(Date.now() + 400).toISOString();
+      const shortGrantExpiry = new Date(Date.now() + 2500).toISOString();
       const waitingGrantPersistence = repository.recordUploadGrant({
         tenantId, applicationId, actorId, environment: "sandbox", correlationId,
         assetId: grantRaceAssetId, uploadSessionId: grantRaceReservation.uploadSessionId,
@@ -257,7 +257,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         providerUploadReference: "opaque-late-grant-" + suffix,
         grantExpiresAt: shortGrantExpiry,
       });
-      await new Promise((resolve) => setTimeout(resolve, 650));
+      await new Promise((resolve) => setTimeout(resolve, 2800));
       await grantRowLocker.query("COMMIT");
       grantRowLocker.release();
       await assert.rejects(
@@ -293,7 +293,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
       });
       await pool.query(
-        "UPDATE eper_customer_asset_upload_sessions SET expires_at = clock_timestamp() + interval '400 milliseconds' WHERE tenant_id = $1 AND upload_session_id = $2",
+        "UPDATE eper_customer_asset_upload_sessions SET expires_at = clock_timestamp() + interval '2500 milliseconds' WHERE tenant_id = $1 AND upload_session_id = $2",
         [tenantId, completionRaceReservation.uploadSessionId],
       );
       const assetRowLocker = await pool.connect();
@@ -308,7 +308,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         receivedSizeBytes: 1024, observedMimeType: "application/pdf",
         checksumSha256: completionRaceChecksum, scanStatus: "pending",
       });
-      await new Promise((resolve) => setTimeout(resolve, 650));
+      await new Promise((resolve) => setTimeout(resolve, 2800));
       await assetRowLocker.query("COMMIT");
       assetRowLocker.release();
       await assert.rejects(
