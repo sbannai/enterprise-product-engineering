@@ -351,6 +351,69 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
           status + " operations must permit eligible payload tombstoning");
       }
 
+      // An audit insert failure must roll back the tombstone update atomically.
+      const rollbackPayload = { body: "retention-audit-rollback-" + suffix };
+      const rollbackDigest = createHash("sha256")
+        .update(JSON.stringify(rollbackPayload), "utf8").digest("hex");
+      const rollbackQueued = await operationRepository.enqueueWithPayload({
+        ...atomicInput,
+        idempotencyKey: "retention-audit-rollback-" + suffix,
+        correlationId: "retention-audit-rollback-correlation-" + suffix,
+        requestDigest: rollbackDigest,
+        payload: rollbackPayload,
+      });
+      const rollbackReference = {
+        tenantId, applicationId, operationId: rollbackQueued.operation.operationId,
+        capabilityKey: "email.send", reference: rollbackQueued.operation.payloadReference,
+        digest: rollbackDigest,
+      };
+      await pool.query(
+        `UPDATE eper_provider_payloads
+         SET expires_at=NOW()-INTERVAL '1 second',
+             retention_policy_id='test-retention',retention_policy_version='1'
+         WHERE payload_reference=$1`,
+        [rollbackReference.reference],
+      );
+      await pool.query(
+        `UPDATE eper_provider_operations
+         SET operation_status='SUCCEEDED',lease_owner=NULL,lease_expires_at=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+        [tenantId, applicationId, rollbackReference.operationId],
+      );
+      const invalidAuditStore = new PostgresEncryptedProviderPayloadStore(
+        pool, Buffer.alloc(32, 23), {
+          async authorize() { return true; },
+          async authorizeCreate() { return true; },
+          async authorizeDelete() {
+            return {
+              actorType: "system", actorId: "retention-test-worker", source: "job",
+              environment: "invalid-environment", reasonCode: "RETENTION_POLICY_EXPIRED",
+              policyDecisionReference: "rollback-decision-" + suffix,
+              correlationId: "rollback-correlation-" + suffix,
+            };
+          },
+        },
+      );
+      await assert.rejects(
+        () => invalidAuditStore.delete(rollbackReference),
+        error => error?.code === "23514",
+        "invalid audit evidence must fail the transaction",
+      );
+      const rolledBackEnvelope = await pool.query(
+        `SELECT nonce,auth_tag,ciphertext,deleted_at
+         FROM eper_provider_payloads WHERE payload_reference=$1`,
+        [rollbackReference.reference],
+      );
+      assert.equal(rolledBackEnvelope.rowCount, 1);
+      assert.ok(rolledBackEnvelope.rows[0].nonce,
+        "failed audit append must preserve the encrypted nonce");
+      assert.ok(rolledBackEnvelope.rows[0].auth_tag,
+        "failed audit append must preserve the authentication tag");
+      assert.ok(rolledBackEnvelope.rows[0].ciphertext,
+        "failed audit append must preserve ciphertext");
+      assert.equal(rolledBackEnvelope.rows[0].deleted_at, null,
+        "failed audit append must roll back tombstone metadata");
+
       // Exercise PostgreSQL RLS through the actual restricted NOLOGIN role.
       // The payload is created by enqueueWithPayload above, so it satisfies the
       // operation/payload deferred foreign keys introduced by migration 022.
