@@ -361,7 +361,10 @@ export class PostgresRemoteDesktopSessionStore {
       const current = selected.rows[0];
       if (!current) throw new Error("REMOTE_DESKTOP_SESSION_NOT_FOUND");
       if (Number(current.version) !== input.expectedVersion) throw new Error("REMOTE_DESKTOP_VERSION_CONFLICT");
-      if (!current.consent_grant_id || !["ACCEPTED", "ACTIVE"].includes(current.status)) {
+      if (current.status === "ACTIVE") {
+        throw new Error("REMOTE_DESKTOP_SESSION_MUST_STOP_BEFORE_REVOKE");
+      }
+      if (!current.consent_grant_id || current.status !== "ACCEPTED") {
         throw new Error("REMOTE_DESKTOP_ACTIVE_CONSENT_NOT_FOUND");
       }
       await client.query(`
