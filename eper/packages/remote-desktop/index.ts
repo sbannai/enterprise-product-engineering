@@ -99,3 +99,6 @@ export function assertRemoteDesktopModeGrant(
     throw new Error("REMOTE_DESKTOP_CONTROL_CONSENT_REQUIRED");
   }
 }
+
+export { PostgresRemoteDesktopSessionStore } from "./postgres-remote-desktop-session-store.js";
+export type { RemoteDesktopSessionRecord, RemoteDesktopStoreScope } from "./postgres-remote-desktop-session-store.js";
