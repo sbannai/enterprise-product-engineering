@@ -362,6 +362,11 @@ export class PostgresRemoteDesktopSessionStore {
 
   async revokeConsent(input: RemoteDesktopStoreScope & {
     sessionId: string; expectedVersion: number;
+    stopTransport?: (context: {
+      tenantId: string; applicationId: string; sessionId: string;
+      endpointId: string; consentGrantId: string; mode: RemoteSessionMode;
+      correlationId: string;
+    }) => Promise<void>;
   }): Promise<RemoteDesktopSessionRecord> {
     this.validateScope(input);
     this.validateSessionId(input.sessionId);
@@ -382,11 +387,19 @@ export class PostgresRemoteDesktopSessionStore {
       const current = selected.rows[0];
       if (!current) throw new Error("REMOTE_DESKTOP_SESSION_NOT_FOUND");
       if (Number(current.version) !== input.expectedVersion) throw new Error("REMOTE_DESKTOP_VERSION_CONFLICT");
-      if (current.status === "ACTIVE") {
-        throw new Error("REMOTE_DESKTOP_SESSION_MUST_STOP_BEFORE_REVOKE");
-      }
-      if (!current.consent_grant_id || !["ACCEPTED", "STOPPED"].includes(current.status)) {
+      if (!current.consent_grant_id || !["ACTIVE", "ACCEPTED", "STOPPED"].includes(current.status)) {
         throw new Error("REMOTE_DESKTOP_ACTIVE_CONSENT_NOT_FOUND");
+      }
+      // Consent withdrawal must tear down an active transport before the grant is revoked.
+      // Keep the session row locked so start/revoke cannot race one another.
+      if (current.status === "ACTIVE") {
+        if (!input.stopTransport) throw new Error("REMOTE_DESKTOP_TRANSPORT_NOT_CONFIGURED");
+        await input.stopTransport({
+          tenantId: input.tenantId, applicationId: input.applicationId,
+          sessionId: input.sessionId, endpointId: current.endpoint_id,
+          consentGrantId: current.consent_grant_id, mode: current.mode,
+          correlationId: input.correlationId,
+        });
       }
       await client.query(`
         UPDATE eper_remote_desktop_consent SET revoked_at=clock_timestamp()
@@ -404,6 +417,7 @@ export class PostgresRemoteDesktopSessionStore {
       if (!row) throw new Error("REMOTE_DESKTOP_SESSION_REVOKE_RETURNED_NO_ROW");
       await this.audit(client, input, "remote_desktop.consent.revoke", input.sessionId, {
         consentGrantId: current.consent_grant_id, endpointId: current.endpoint_id,
+        transportStopped: current.status === "ACTIVE",
       });
       await client.query("COMMIT");
       return mapSession(row);
