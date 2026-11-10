@@ -208,6 +208,64 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       assert.equal(JSON.stringify(persistedEnvelope.rows[0]).includes(providerPayload.body), false,
         "PostgreSQL must persist only the encrypted envelope, never provider payload plaintext");
 
+      const retentionStore = new PostgresEncryptedProviderPayloadStore(pool, Buffer.alloc(32, 23), {
+        async authorize() { return true; },
+        async authorizeCreate() { return true; },
+        async authorizeDelete() {
+          return {
+            actorType: "system", actorId: "retention-test-worker",
+            source: "job", environment: "sandbox",
+            reasonCode: "RETENTION_POLICY_EXPIRED",
+            policyDecisionReference: "retention-decision-" + suffix,
+            correlationId: "retention-correlation-" + suffix,
+          };
+        },
+      });
+      await pool.query(
+        `UPDATE eper_provider_payloads
+         SET expires_at=NOW()-INTERVAL '1 second',
+             retention_policy_id='test-retention',retention_policy_version='1'
+         WHERE payload_reference=$1`,
+        [exactPayloadReference.reference],
+      );
+      await assert.rejects(
+        () => retentionStore.delete(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_OPERATION_NOT_TERMINAL",
+        "queued operations must retain their payload envelope",
+      );
+      await pool.query(
+        "UPDATE eper_provider_operations SET operation_status='SUCCEEDED' WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, exactPayloadReference.operationId],
+      );
+      assert.equal(await retentionStore.delete(exactPayloadReference), true);
+      assert.equal(await retentionStore.delete(exactPayloadReference), false,
+        "tombstoning must be idempotent");
+      const tombstone = await pool.query(
+        `SELECT payload_reference,payload_digest,nonce,auth_tag,ciphertext,deleted_at,
+                deleted_by_actor_id,deletion_policy_decision_reference
+         FROM eper_provider_payloads WHERE payload_reference=$1`,
+        [exactPayloadReference.reference],
+      );
+      assert.equal(tombstone.rowCount, 1);
+      assert.equal(tombstone.rows[0].payload_reference, exactPayloadReference.reference);
+      assert.equal(tombstone.rows[0].payload_digest, exactPayloadReference.digest);
+      assert.equal(tombstone.rows[0].nonce, null);
+      assert.equal(tombstone.rows[0].auth_tag, null);
+      assert.equal(tombstone.rows[0].ciphertext, null);
+      assert.ok(tombstone.rows[0].deleted_at);
+      assert.equal(tombstone.rows[0].deleted_by_actor_id, "retention-test-worker");
+      assert.equal(tombstone.rows[0].deletion_policy_decision_reference, "retention-decision-" + suffix);
+      const operationAfterTombstone = await pool.query(
+        "SELECT payload_reference FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
+        [tenantId, applicationId, exactPayloadReference.operationId],
+      );
+      assert.equal(operationAfterTombstone.rows[0].payload_reference, exactPayloadReference.reference,
+        "operation-to-payload identity must survive ciphertext scrubbing");
+      await assert.rejects(
+        () => retentionStore.get(exactPayloadReference),
+        error => error?.code === "PROVIDER_PAYLOAD_DELETED",
+      );
+
       // Exercise PostgreSQL RLS through the actual restricted NOLOGIN role.
       // The payload is created by enqueueWithPayload above, so it satisfies the
       // operation/payload deferred foreign keys introduced by migration 022.
