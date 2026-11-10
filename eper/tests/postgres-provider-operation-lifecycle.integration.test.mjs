@@ -424,65 +424,9 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       assert.equal(danglingOperation.rows[0].count, 0,
         "the failed operation transaction must not leave a dangling queue row");
 
-      // Retention is fail-closed until an explicit policy is attached. Legal
-      // hold overrides an otherwise expired policy. Prepare this fixture in a
-      // terminal state using a test-only state transition before tombstoning.
-      scopedAccess = true;
-      await pool.query(
-        `UPDATE eper_provider_operations SET operation_status='SUCCEEDED',
-           lease_owner=NULL,lease_expires_at=NULL
-         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
-        [tenantId, applicationId, atomicFirst.operation.operationId],
-      );
-      await assert.rejects(
-        () => scopedPayloadStore.delete(exactPayloadReference),
-        error => error?.code === "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE",
-      );
-      await pool.query(
-        `UPDATE eper_provider_payloads
-         SET expires_at=NOW()-INTERVAL '1 minute',
-             retention_policy_id=$4, retention_policy_version='v1',
-             legal_hold=TRUE
-         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
-        [tenantId, applicationId, atomicFirst.operation.operationId, "retention-test-" + suffix],
-      );
-      await assert.rejects(
-        () => scopedPayloadStore.delete(exactPayloadReference),
-        error => error?.code === "PROVIDER_PAYLOAD_LEGAL_HOLD_ACTIVE",
-      );
-      await pool.query(
-        `UPDATE eper_provider_payloads SET legal_hold=FALSE
-         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
-        [tenantId, applicationId, atomicFirst.operation.operationId],
-      );
-      assert.equal(await scopedPayloadStore.delete(exactPayloadReference), true);
-      const retainedOperationReference = await pool.query(
-        `SELECT payload_reference FROM eper_provider_operations
-         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
-        [tenantId, applicationId, atomicFirst.operation.operationId],
-      );
-      assert.equal(retainedOperationReference.rows[0].payload_reference, exactPayloadReference.reference,
-        "tombstoning must preserve the reciprocal operation reference for durable traceability");
-      const tombstone = await pool.query(
-        `SELECT nonce,auth_tag,ciphertext,deleted_at,deletion_reason_code
-         FROM eper_provider_payloads WHERE payload_reference=$1`,
-        [exactPayloadReference.reference],
-      );
-      assert.equal(tombstone.rowCount, 1);
-      assert.equal(tombstone.rows[0].nonce, null);
-      assert.equal(tombstone.rows[0].auth_tag, null);
-      assert.equal(tombstone.rows[0].ciphertext, null);
-      assert.ok(tombstone.rows[0].deleted_at);
-      const deletionAudit = await pool.query(
-        `SELECT action FROM eper_audit_events
-         WHERE tenant_id=$1 AND application_id=$2
-           AND resource_type='provider_payload' AND resource_id=$3`,
-        [tenantId, applicationId, exactPayloadReference.reference],
-      );
-      assert.ok(deletionAudit.rows.some(row => row.action === "provider.payload.tombstoned"),
-        "payload tombstoning must append an actor-attributed audit event");
-      assert.equal(await scopedPayloadStore.delete(exactPayloadReference), false,
-        "repeated deletion must be idempotent");
+      // Retention tombstone behavior is covered above with a dedicated
+      // operation/payload fixture, including terminal-state and traceability checks.
+
 
       // Prove PostgreSQL-backed v2 key rotation using operation-backed enqueue.
       // The deferred payload/operation FKs prohibit payload-only store.put()
