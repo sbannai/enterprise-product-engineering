@@ -209,6 +209,8 @@ Rationale:
 - `RemoteDesktopTransport`: starts and stops a session using a provider-issued, narrowly scoped context; start must honor cancellation and stop must be idempotent.
 - `RemoteDesktopEndpointConsentVerifier`: independently authenticates the endpoint-side user/session and verifies the exact tenant, application, endpoint, session and requested mode. Application RBAC is not endpoint consent.
 - Provider adapters must validate signed provider callbacks/tokens, issuer, audience, expiry, nonce/replay protection and endpoint binding. Raw provider credentials never enter the browser, application logs or audit payloads.
+- Consent acceptance must include an opaque endpoint-signed challenge proof. The verifier must validate signature, one-time nonce/replay status, expiry, issuer/audience, tenant/application/endpoint/session binding, requested mode and expected session version. Proofs are bounded in size, are never logged or persisted by EPER, and are rejected before persistence when missing or malformed.
+
 - The provider adapter must expose explicit capability support (view-only, remote control, session termination and health) so unsupported functions are unavailable rather than emulated.
 - Adapter configuration and secret references are application-scoped, encrypted/managed outside ordinary configuration JSON, auditable and revocable.
 
