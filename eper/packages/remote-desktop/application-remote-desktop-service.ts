@@ -12,10 +12,10 @@ export interface RemoteDesktopServiceScope extends ApplicationCapabilityScope {
   readonly correlationId: string;
 }
 export interface RemoteDesktopEndpointConsentVerifier {
-  /** Must authenticate the endpoint user/session and bind it to this exact session. */
+  /** Must validate a one-time, signed endpoint challenge proof and bind it to this exact session/version. */
   verify(input: {
     tenantId: string; applicationId: string; endpointId: string; sessionId: string;
-    expectedVersion: number; actorId: string; grantedMode: RemoteSessionMode; correlationId: string;
+    expectedVersion: number; endpointProof: string; actorId: string; grantedMode: RemoteSessionMode; correlationId: string;
   }): Promise<boolean>;
 }
 
@@ -37,6 +37,8 @@ export interface AcceptRemoteDesktopConsentInput extends RemoteDesktopServiceSco
   expectedVersion: number;
   grantedMode: RemoteSessionMode;
   consentExpiresAt: string;
+  /** Opaque, short-lived endpoint-signed challenge response; never log or persist it. */
+  endpointProof: string;
   consentGrantId?: string;
 }
 
@@ -58,6 +60,9 @@ export class ApplicationRemoteDesktopService {
 
   async acceptConsent(input: AcceptRemoteDesktopConsentInput): Promise<RemoteDesktopSessionRecord> {
     await this.authorize(input, "remote_desktop.consent.accept");
+    if (typeof input.endpointProof !== "string" || input.endpointProof.length < 1 || input.endpointProof.length > 8192) {
+      throw new Error("REMOTE_DESKTOP_ENDPOINT_PROOF_INVALID");
+    }
     if (!this.endpointConsentVerifier) {
       throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_VERIFIER_NOT_CONFIGURED");
     }
@@ -66,7 +71,7 @@ export class ApplicationRemoteDesktopService {
     });
     const endpointVerified = await this.endpointConsentVerifier.verify({
       tenantId: input.tenantId, applicationId: input.applicationId, endpointId,
-      sessionId: input.sessionId, expectedVersion: input.expectedVersion, actorId: input.actorId,
+      sessionId: input.sessionId, expectedVersion: input.expectedVersion, endpointProof: input.endpointProof, actorId: input.actorId,
       grantedMode: input.grantedMode, correlationId: input.correlationId,
     });
     if (!endpointVerified) throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_NOT_VERIFIED");
