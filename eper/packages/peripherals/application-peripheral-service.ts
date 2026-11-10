@@ -64,6 +64,12 @@ export class ApplicationPeripheralService {
       this.repository.list(input));
   }
 
+  async get(input: PeripheralServiceScope & { peripheralId: string }): Promise<PeripheralRegistration | null> {
+    await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.read" });
+    return this.capabilities.withPeripheralManagement(input, () =>
+      this.repository.get(input, input.peripheralId));
+  }
+
   async register(input: RegisterApplicationPeripheralInput): Promise<PeripheralRegistration> {
     await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.register" });
     return this.capabilities.withPeripheralManagement(input, () =>
