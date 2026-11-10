@@ -11,7 +11,7 @@ const sessionToken = "A".repeat(43);
 const csrf = createCustomerCsrfToken(sessionToken, secret);
 const cookie = `${CUSTOMER_SESSION_COOKIE}=${sessionToken}; ${CUSTOMER_CSRF_COOKIE}=${csrf}`;
 const envKeys = [
-  "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_METADATA_API_ENABLED", "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE",
+  "EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED", "EPER_CUSTOMER_ASSET_METADATA_API_ENABLED", "EPER_CUSTOMER_ASSETS_API_ENABLED", "EPER_CUSTOMER_ASSET_PERSISTENCE", "EPER_CUSTOMER_ASSET_FILE_POLICY_JSON",
   "EPER_CUSTOMER_IDENTITY_PERSISTENCE", "EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE",
   "EPER_AUDIT_PERSISTENCE", "EPER_CUSTOMER_OIDC_ENABLED", "EPER_ASSET_STORAGE_ALLOWED_HOSTS_JSON",
 ];
@@ -23,6 +23,9 @@ function configure() {
     EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE: "postgres",
     EPER_AUDIT_PERSISTENCE: "postgres",
     EPER_CUSTOMER_OIDC_ENABLED: "true",
+    EPER_CUSTOMER_ASSET_FILE_POLICY_JSON: JSON.stringify({ files: [
+      { extension: ".pdf", mimeType: "application/pdf", maxSizeBytes: 10 * 1024 * 1024 },
+    ] }),
   })) process.env[key] = value;
 }
 function options(calls, withProvider = false, replay = false) {
@@ -159,6 +162,22 @@ test("upload grant endpoint authorizes durable role but fails closed when no tru
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: "customer_asset_upload_provider_unavailable" });
     assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
+  });
+});
+
+test("upload grant endpoint fails closed when customer file policy is missing", async t => {
+  await withServer(t, async (base, calls) => {
+    const response = await fetch(base + "/customer/applications/app-alpha/assets/asset-01/upload-grant", {
+      method: "POST",
+      headers: { origin, cookie, "x-csrf-token": csrf,
+        "idempotency-key": "upload-request-key-0001", "content-type": "application/json" },
+      body: JSON.stringify({ expectedSizeBytes: 1024, expectedChecksumSha256: "a".repeat(64), fileName: "brief.pdf", mimeType: "application/pdf" }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "customer_asset_file_policy_unavailable" });
+    assert.deepEqual(calls, ["session", "tenant", "actor", "roles", "permission"]);
+  }, true, false, () => {
+    delete process.env.EPER_CUSTOMER_ASSET_FILE_POLICY_JSON;
   });
 });
 
