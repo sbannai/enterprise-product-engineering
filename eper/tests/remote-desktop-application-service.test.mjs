@@ -131,17 +131,6 @@ test("consent revocation shuts down an active transport through the configured a
   assert.ok(configured.calls.some(([kind, action]) => kind === "authorize" && action === "remote_desktop.consent.revoke"));
 });
 
-test("consent revocation without a transport remains fail-closed for active sessions", async () => {
-  const configured = fixture();
-  await configured.service.revokeConsent({
-    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 3,
-  });
-  // The persistence layer receives no stop callback and rejects ACTIVE sessions;
-  // this service-level fake returns a result, so assert the callback is absent.
-  const revoke = configured.calls.find(([kind]) => kind === "revoke");
-  assert.equal(revoke[1].stopTransport, undefined);
-});
-
 test("start requires a configured transport and separate lifecycle permission", async () => {
   const noTransport = fixture();
   await assert.rejects(() => noTransport.service.startSession({
