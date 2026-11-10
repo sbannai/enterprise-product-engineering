@@ -356,8 +356,9 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       for (const fixture of [
         { name: "legal-hold", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=TRUE, retention_policy_id='test-retention', retention_policy_version='1'", code: "PROVIDER_PAYLOAD_LEGAL_HOLD_ACTIVE" },
         { name: "null-expiry", metadata: "expires_at=NULL, legal_hold=FALSE, retention_policy_id='test-retention', retention_policy_version='1'", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
-        { name: "missing-policy-id", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=FALSE, retention_policy_id=NULL, retention_policy_version='1'", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
-        { name: "missing-policy-version", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=FALSE, retention_policy_id='test-retention', retention_policy_version=NULL", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
+        // The schema enforces policy ID/version as an all-or-none pair; test
+        // the valid unresolved-policy representation (both NULL).
+        { name: "missing-policy", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=FALSE, retention_policy_id=NULL, retention_policy_version=NULL", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
       ]) {
         const payload = { body: "retention-" + fixture.name + "-" + suffix };
         const digest = createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
