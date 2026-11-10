@@ -3178,7 +3178,29 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             },
           });
         } else if (peripheralPath[3] === "activate") {
+          if (remoteDesktopPath[3] === "start") {
           if (Object.keys(body).some(key => key !== "expectedVersion")) {
+            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_START_INPUT_INVALID" });
+            return;
+          }
+          const result = await options.remoteDesktopService.startSession({
+            ...scope, sessionId, expectedVersion: body.expectedVersion,
+          });
+          sendApiSuccess(request, response, 200, { session: result });
+          return;
+        }
+        if (remoteDesktopPath[3] === "stop") {
+          if (Object.keys(body).some(key => key !== "expectedVersion")) {
+            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_STOP_INPUT_INVALID" });
+            return;
+          }
+          const result = await options.remoteDesktopService.stopSession({
+            ...scope, sessionId, expectedVersion: body.expectedVersion,
+          });
+          sendApiSuccess(request, response, 200, { session: result });
+          return;
+        }
+        if (Object.keys(body).some(key => key !== "expectedVersion")) {
             sendJson(request, response, 400, { error: "EPER_PERIPHERAL_TRANSITION_INPUT_INVALID" });
             return;
           }
@@ -3207,7 +3229,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
     // Remote Desktop Sharing is a separate, consent-gated capability. No transport is started by these routes.
-    const remoteDesktopPath = /^\/customer\/applications\/([^/]+)\/remote-desktop\/sessions(?:\/([^/]+)\/(accept|revoke))?$/.exec(requestUrl.pathname);
+    const remoteDesktopPath = /^\/customer\/applications\/([^/]+)\/remote-desktop\/sessions(?:\/([^/]+)\/(accept|revoke|start|stop))?$/.exec(requestUrl.pathname);
     if (remoteDesktopPath) {
       if (process.env.EPER_REMOTE_DESKTOP_API_ENABLED !== "true" || !options.remoteDesktopService ||
           process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
