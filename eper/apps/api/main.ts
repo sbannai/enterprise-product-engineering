@@ -199,7 +199,7 @@ if (moduleEntitlementMode !== "disabled" && moduleEntitlementMode !== "postgres"
 if (moduleEntitlementMode === "postgres" && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
   throw new Error("EPER_MODULE_ENTITLEMENT_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
-if (peripheralApiEnabled && (moduleEntitlementMode !== "postgres" || auditMode !== "postgres")) {
+if (peripheralApiEnabled && (moduleEntitlementMode !== "postgres" || process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
   throw new Error("PERIPHERAL_API_REQUIRES_POSTGRES_MODULE_ENTITLEMENTS_AND_DURABLE_AUDIT");
 }
 function readApplicationAssignments(): Record<string, string[]> {
