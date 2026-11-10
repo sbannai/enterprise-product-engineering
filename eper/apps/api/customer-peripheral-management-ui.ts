@@ -1,5 +1,5 @@
 /** Customer-facing, application-scoped Peripheral Management UI. No device I/O occurs until an authorized operator explicitly activates a configured peripheral. */
-export const customerPeripheralManagementUiHtml = String.raw\`<!doctype html>
+export const customerPeripheralManagementUiHtml = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EPER · Peripheral Management</title>
 <style>
@@ -67,7 +67,7 @@ $("refresh").addEventListener("click",async()=>{try{await load();}catch(e){statu
 $("register").addEventListener("click",async()=>{try{await register();}catch(e){status(e.message,"error");}});
 $("configure").addEventListener("click",async()=>{try{await configure();}catch(e){status(e.message,"error");}});
 })();
-</script></body></html>\`;
+</script></body></html>`;
 
 export function isCustomerPeripheralManagementUiRequest(request: { method?: string; url?: string }): boolean {
  return request.method === "GET" && new URL(request.url ?? "/", "http://localhost").pathname === "/customer/peripherals/ui";
