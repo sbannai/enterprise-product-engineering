@@ -102,3 +102,6 @@ export function assertRemoteDesktopModeGrant(
 
 export { PostgresRemoteDesktopSessionStore } from "./postgres-remote-desktop-session-store.js";
 export type { RemoteDesktopSessionRecord, RemoteDesktopStoreScope } from "./postgres-remote-desktop-session-store.js";
+
+export { ApplicationRemoteDesktopService } from "./application-remote-desktop-service.js";
+export type { RemoteDesktopServiceScope, RemoteDesktopActionAuthorizer, RequestRemoteDesktopSessionInput, AcceptRemoteDesktopConsentInput } from "./application-remote-desktop-service.js";
