@@ -219,6 +219,102 @@ export class PostgresProviderOperationRepository {
     }
   }
 
+
+  /**
+   * Atomically creates an encrypted payload and its queued operation.
+   * A transaction-scoped advisory lock serializes requests sharing the same
+   * tenant/application/connection/idempotency key. Existing requests are
+   * returned before creating a new payload, so retries cannot orphan envelopes.
+   */
+  async enqueueWithPayload<T>(input: {
+    tenantId: string; applicationId: string; connectionId: string;
+    capabilityKey: string; capabilityVersion: string; idempotencyKey: string;
+    correlationId: string; requestDigest: string; actorId: string;
+    auditEnvironment: AuditEnvironment; payload: T;
+    payloadStore: {
+      putInTransaction(
+        client: AuditSqlClient,
+        input: { tenantId: string; applicationId: string; operationId: string;
+          capabilityKey: string; payload: T },
+      ): Promise<{ reference: string; digest: string }>;
+    };
+  }): Promise<{ operation: ProviderOperation; created: boolean }> {
+    const tenantId = identity(input.tenantId, "TENANT");
+    const applicationId = identity(input.applicationId, "APPLICATION");
+    const connectionId = identity(input.connectionId, "CONNECTION_ID");
+    const capabilityKey = identity(input.capabilityKey, "CAPABILITY");
+    const capabilityVersion = identity(input.capabilityVersion, "CAPABILITY_VERSION", 64);
+    const idempotencyKey = identity(input.idempotencyKey, "IDEMPOTENCY_KEY", 200);
+    const correlationId = identity(input.correlationId, "CORRELATION_ID");
+    const actorId = identity(input.actorId, "ACTOR");
+    const requestDigest = digest(input.requestDigest);
+    if (!input.payloadStore || typeof input.payloadStore.putInTransaction !== "function") {
+      throw new Error("PROVIDER_OPERATION_TRANSACTIONAL_PAYLOAD_STORE_REQUIRED");
+    }
+
+    const operationId = randomUUID();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.scope(client, tenantId, applicationId);
+      const lockIdentity = JSON.stringify([tenantId, applicationId, connectionId, idempotencyKey]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [lockIdentity]);
+
+      const existing = await client.query<OperationRow>(
+        `SELECT operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
+          idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
+          lease_owner,lease_expires_at,fencing_token,attempt_count,available_at,last_error_code,created_at,updated_at
+         FROM eper_provider_operations
+         WHERE tenant_id=$1 AND application_id=$2 AND connection_id=$3 AND idempotency_key=$4
+         FOR SHARE`,
+        [tenantId,applicationId,connectionId,idempotencyKey],
+      );
+      if (existing.rows[0]) {
+        const row = existing.rows[0];
+        if (row.request_digest !== requestDigest || row.capability_key !== capabilityKey
+          || row.capability_version !== capabilityVersion) {
+          throw new ProviderOperationIdempotencyConflictError();
+        }
+        await client.query("COMMIT");
+        return { operation: map(row), created: false };
+      }
+
+      const payloadReference = await input.payloadStore.putInTransaction(client, {
+        tenantId, applicationId, operationId, capabilityKey, payload: input.payload,
+      });
+      if (payloadReference.digest !== requestDigest) {
+        throw new Error("PROVIDER_OPERATION_PAYLOAD_DIGEST_MISMATCH");
+      }
+      const inserted = await client.query<OperationRow>(
+        `INSERT INTO eper_provider_operations
+          (operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
+           idempotency_key,correlation_id,operation_status,request_digest,payload_reference)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'QUEUED',$9,$10)
+         RETURNING operation_id,tenant_id,application_id,connection_id,capability_key,capability_version,
+           idempotency_key,correlation_id,operation_status,request_digest,payload_reference,provider_reference,
+           lease_owner,lease_expires_at,fencing_token,attempt_count,available_at,last_error_code,created_at,updated_at`,
+        [operationId,tenantId,applicationId,connectionId,capabilityKey,capabilityVersion,
+          idempotencyKey,correlationId,requestDigest,payloadReference.reference],
+      );
+      const row = inserted.rows[0];
+      if (!row) throw new Error("PROVIDER_OPERATION_INSERT_RETURNED_EMPTY");
+      await this.audit(client, {
+        tenantId, applicationId, environment: input.auditEnvironment, actorId,
+        action: "provider.operation.queued", operationId, correlationId,
+        payload: { capabilityKey, capabilityVersion, requestDigest },
+      });
+      // PostgreSQL delivers NOTIFY only after COMMIT; payload is a fixed wake token.
+      await client.query("SELECT pg_notify($1, $2)", ["eper_provider_operation_wakeup", "wake"]);
+      await client.query("COMMIT");
+      return { operation: map(row), created: true };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async claimNext(input: {
     tenantId: string; applicationId: string; workerId: string;
     leaseDurationSeconds?: number; maxAttempts?: number;
