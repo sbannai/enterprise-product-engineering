@@ -94,3 +94,21 @@ test("draft catalogue blocks otherwise active entitlement", async () => {
   await assert.rejects(gate.assertAllowed({ tenantId: "tenant-a", applicationId: "app-a", addonKey: "peripheral_management" }),
     error => error instanceof ApplicationAddonAccessDeniedError && error.decision.reason === "CATALOGUE_NOT_PUBLISHED");
 });
+
+test("malformed persisted amounts and timestamps fail closed", async () => {
+  for (const overrides of [
+    { agreed_amount: "-1.00" },
+    { agreed_amount: "12.12345" },
+    { effective_from: "not-a-date" },
+    { accepted_price_version: "0" },
+    { version: "9007199254740993" },
+  ]) {
+    const fake = fakePool({ entitlementRows: [fixtureRow(overrides)] });
+    const reader = new PostgresApplicationAddonEntitlementReader(fake.pool);
+    await assert.rejects(
+      reader.get({ tenantId: "tenant-a", applicationId: "app-a", addonKey: "peripheral_management" }),
+    );
+    assert.ok(fake.calls.some(c => c.sql === "ROLLBACK"));
+    assert.equal(fake.released(), 1);
+  }
+});
