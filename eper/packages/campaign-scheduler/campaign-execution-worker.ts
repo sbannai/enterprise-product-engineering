@@ -118,7 +118,7 @@ export async function runCampaignExecutionWorker(
           // let stale recovery replay an execution whose dispatch outcome is ambiguous.
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
-            executionId: execution.id, workerId: options.workerId,
+            executionId: execution.id, workerId: options.workerId, claimGeneration: execution.claimGeneration,
             errorCode: "CAMPAIGN_WORKER_SHUTDOWN_AFTER_DISPATCH_FENCE",
             maxAttempts: 1,
           });
@@ -136,7 +136,7 @@ export async function runCampaignExecutionWorker(
               // consuming retry budget; claimExecutions excludes paused schedules until resume.
               await store.deferExecutionForSchedulePause({
                 tenantId: execution.tenantId, applicationId: execution.applicationId,
-                executionId: execution.id, workerId: options.workerId,
+                executionId: execution.id, workerId: options.workerId, claimGeneration: execution.claimGeneration,
               });
               return;
             }
@@ -158,7 +158,7 @@ export async function runCampaignExecutionWorker(
         const dispatched = await dispatch(execution);
         const completed = await store.completeExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
-          executionId: execution.id, workerId: options.workerId, result: dispatched.outcome,
+          executionId: execution.id, workerId: options.workerId, claimGeneration: execution.claimGeneration, result: dispatched.outcome,
         });
         if (!completed) {
           // The provider may have accepted the request, but this worker no longer owns
@@ -175,7 +175,7 @@ export async function runCampaignExecutionWorker(
           : "CAMPAIGN_DISPATCH_FAILED";
         await store.failExecution({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
-          executionId: execution.id, workerId: options.workerId, errorCode: code, maxAttempts,
+          executionId: execution.id, workerId: options.workerId, claimGeneration: execution.claimGeneration, errorCode: code, maxAttempts,
         }).catch(options.onError);
       } finally {
         clearInterval(renewalTimer);
