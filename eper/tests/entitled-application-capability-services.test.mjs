@@ -67,7 +67,8 @@ test("safety stop, revoke and peripheral disconnect remain callable after entitl
   assert.equal(await desktop.stop(scope, { sessionId: "s1" }), "stop");
   assert.equal(await desktop.revoke(scope, { sessionId: "s1" }), "revoke");
   assert.deepEqual(calls.map(call => call[0]), ["authorizeCleanup", "deactivate", "authorizeCleanup", "disconnect", "authorizeCleanup", "stop", "authorizeCleanup", "revoke"]);
-  assert.ok(calls.every(call => call[1] === scope));\n  assert.equal(calls.filter(call => call[0] === "authorizeCleanup").length, 4);
+  assert.ok(calls.every(call => call[1] === scope));
+  assert.equal(calls.filter(call => call[0] === "authorizeCleanup").length, 4);
 });
 
 test("valid add-on entitlement delegates to the matching operation only", async () => {
