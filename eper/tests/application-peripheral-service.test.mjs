@@ -16,15 +16,15 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {} } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false } = {}) {
   const calls = [];
   let current = registration();
   const config = configuration;
   const repository = {
     async register(input) { calls.push(["register", input]); return current; },
     async configure(input) { calls.push(["configure", input]); return current; },
-    async get(input, id) { calls.push(["get", id]); return current; },
-    async getConfiguration(input, id) { calls.push(["getConfiguration", id]); return config; },
+    async get(input, id) { calls.push(["get", id]); return noRegistration ? null : current; },
+    async getConfiguration(input, id) { calls.push(["getConfiguration", id]); return noConfiguration ? null : config; },
     async transition(input) {
       calls.push(["transition", input.nextStatus, input.expectedVersion]);
       current = registration({
@@ -102,10 +102,17 @@ test("suspension persists the inactive state and disconnects the configured adap
 });
 
 test("missing registration and missing configuration fail closed without adapter resolution", async () => {
-  const { service, calls } = fixture();
-  const missing = fixture();
-  // Replace only the lookup result to model a stale/deleted application resource.
-  missing.service.repository = undefined;
-  assert.equal(calls.some(call => call[0] === "connect"), false);
-  assert.ok(service);
+  const missingRegistration = fixture({ noRegistration: true });
+  await assert.rejects(
+    missingRegistration.service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
+    /EPER_PERIPHERAL_NOT_FOUND/,
+  );
+  assert.equal(missingRegistration.calls.some(call => call[0] === "resolve"), false);
+
+  const missingConfiguration = fixture({ noConfiguration: true });
+  await assert.rejects(
+    missingConfiguration.service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
+    /EPER_PERIPHERAL_CONFIGURATION_REQUIRED/,
+  );
+  assert.equal(missingConfiguration.calls.some(call => call[0] === "resolve"), false);
 });
