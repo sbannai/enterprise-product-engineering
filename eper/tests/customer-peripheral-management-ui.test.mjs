@@ -70,7 +70,7 @@ test("peripheral management UI is served behind the explicit capability flag wit
   await withPeripheralUi(async port => {
     const response = await fetch("http://127.0.0.1:" + port + "/customer/peripherals/ui");
     assert.equal(response.status, 200);
-    assert.match(response.headers.get("content-type") || "", /text\\/html/);
+    assert.ok((response.headers.get("content-type") || "").includes("text/html"));
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.match(response.headers.get("content-security-policy") || "", /default-src 'none'/);
     const html = await response.text();
