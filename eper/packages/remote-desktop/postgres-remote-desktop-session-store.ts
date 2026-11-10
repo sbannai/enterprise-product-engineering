@@ -364,7 +364,7 @@ export class PostgresRemoteDesktopSessionStore {
       if (current.status === "ACTIVE") {
         throw new Error("REMOTE_DESKTOP_SESSION_MUST_STOP_BEFORE_REVOKE");
       }
-      if (!current.consent_grant_id || current.status !== "ACCEPTED") {
+      if (!current.consent_grant_id || !["ACCEPTED", "STOPPED"].includes(current.status)) {
         throw new Error("REMOTE_DESKTOP_ACTIVE_CONSENT_NOT_FOUND");
       }
       await client.query(`
@@ -373,7 +373,8 @@ export class PostgresRemoteDesktopSessionStore {
       `, [input.tenantId, input.applicationId, current.consent_grant_id]);
       const updated = await client.query<SessionRow>(`
         UPDATE eper_remote_desktop_session
-        SET status='REVOKED', version=version+1, updated_at=clock_timestamp()
+        SET status=CASE WHEN status='STOPPED' THEN 'STOPPED' ELSE 'REVOKED' END,
+            version=version+1, updated_at=clock_timestamp()
         WHERE tenant_id=$1 AND application_id=$2 AND session_id=$3
         RETURNING tenant_id, application_id, session_id, requester_id, endpoint_id,
           status, mode, consent_grant_id, expires_at, version
