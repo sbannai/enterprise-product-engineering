@@ -11,6 +11,8 @@ const WORKFLOW_ROLE_PERMISSION_KEYS = [
   "provider.connection.create", "provider.connection.read", "provider.connection.bind",
   "provider.connection.validate", "provider.connection.rotate", "provider.connection.revoke",
   "customer.asset.upload",
+  "peripheral.register", "peripheral.configure", "peripheral.read",
+  "peripheral.activate", "peripheral.suspend",
 ] as const;
 
 export interface WorkflowActorRoleAssignment {
