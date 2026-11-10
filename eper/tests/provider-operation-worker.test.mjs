@@ -216,3 +216,26 @@ test("provider worker shutdown aborts dispatch without writing a stale outcome",
   assert.equal(result.succeeded, 0);
   assert.equal(result.retried, 0);
 });
+
+
+test("provider worker bounds shutdown when a lease renewal never settles", async () => {
+  let renewals = 0;
+  const { calls, dependencies } = harness({
+    repository: {
+      async recoverExpiredLeases() { return []; },
+      async claimNext() { return calls.claims++ === 0 ? operation : null; },
+      async renewLease() { renewals++; return await new Promise(() => {}); },
+      async recordOutcome(input) { calls.outcomes.push(input); return operation; },
+    },
+  });
+  const worker = new ProviderOperationWorker(dependencies, {
+    ...options, leaseDurationSeconds: 10, renewalDrainTimeoutMs: 10,
+  });
+  const startedAt = Date.now();
+  const result = await worker.runOnce();
+  assert.ok(renewals >= 1, "heartbeat must have started a renewal");
+  assert.ok(Date.now() - startedAt < 5000, "worker must not wait indefinitely for renewal");
+  assert.equal(result.leaseLost, 1);
+  assert.equal(result.succeeded, 0);
+  assert.equal(calls.outcomes.length, 0, "stale worker must not persist an outcome");
+});
