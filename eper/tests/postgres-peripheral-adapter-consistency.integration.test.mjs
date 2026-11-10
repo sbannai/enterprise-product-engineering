@@ -58,6 +58,8 @@ test("peripheral active configuration is bound to its exact adapter identity und
       await client.query("SET CONSTRAINTS eper_application_peripheral_active_configuration_adapter_fk IMMEDIATE");
       await client.query("RELEASE SAVEPOINT matching_adapter");
 
+      // Restore deferred mode so the negative case reaches its explicit assertion.
+      await client.query("SET CONSTRAINTS eper_application_peripheral_active_configuration_adapter_fk DEFERRED");
       // Different adapter key/version must be rejected by the exact composite FK.
       await client.query("SAVEPOINT mismatched_adapter");
       await client.query(`
