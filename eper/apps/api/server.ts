@@ -564,6 +564,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       throw new Error("TENANT_APPLICATION_ASSIGNMENT_STORE_REQUIRED_IN_POSTGRES_MODE");
     }
   }
+  if (process.env.EPER_APPLICATION_PERIPHERAL_API_ENABLED === "true" &&
+      (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
+       process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+       process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+       process.env.EPER_CUSTOMER_OIDC_ENABLED !== "true" ||
+       !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+       !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore ||
+       !options.peripheralService || !options.customerOidcPublicOrigin || !options.customerCsrfSecret)) {
+    throw new Error("PERIPHERAL_API_REQUIRES_DURABLE_OIDC_IDENTITY_ASSIGNMENTS_ROLE_ENTITLEMENT_AND_AUDIT_SERVICES");
+  }
   if (process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true" &&
       (!options.workflowRoleDefinitionStore || !options.workflowActorRoleAssignmentStore ||
        !options.workflowDefinitionPublisher || !options.workflowExecutionService ||
