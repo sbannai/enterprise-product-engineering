@@ -10,7 +10,7 @@ Define safe lifecycle controls for encrypted provider request payloads before en
 
 ## Current implementation facts
 
-- Migration `021_encrypted_provider_payload_store.sql` stores AES-256-GCM envelope version 1.
+- Migration `034_encrypted_provider_payload_store.sql` stores AES-256-GCM envelope version 1.
 - Version 1 additional authenticated data (AAD) is the ordered tuple: tenant, application, operation, capability, payload reference, envelope version.
 - `PostgresEncryptedProviderPayloadStore` retains its legacy 32-byte-key constructor for v1 compatibility and also accepts an explicit keyring configuration for v2 writes and version-aware reads.
 - The keyring-backed path stores `envelope_version=2` and the authenticated key identifier; v1 rows continue to use the legacy key and byte-compatible AAD.
