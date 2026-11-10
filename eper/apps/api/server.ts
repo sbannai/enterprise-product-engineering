@@ -3207,7 +3207,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
     // Remote Desktop Sharing is a separate, consent-gated capability. No transport is started by these routes.
-    const remoteDesktopPath = /^\\/customer\\/applications\\/([^/]+)\\/remote-desktop\\/sessions(?:\\/([^/]+)\\/(accept|revoke))?$/.exec(requestUrl.pathname);
+    const remoteDesktopPath = /^\/customer\/applications\/([^/]+)\/remote-desktop\/sessions(?:\/([^/]+)\/(accept|revoke))?$/.exec(requestUrl.pathname);
     if (remoteDesktopPath) {
       if (process.env.EPER_REMOTE_DESKTOP_API_ENABLED !== "true" || !options.remoteDesktopService ||
           process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
