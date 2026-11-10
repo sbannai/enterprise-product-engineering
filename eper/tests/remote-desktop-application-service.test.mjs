@@ -13,8 +13,8 @@ function fixture({ entitlement = true, deniedAction = null, transport = undefine
     async requestSession(value) { calls.push(["request", value]); return { status: "REQUESTED" }; },
     async acceptWithConsent(value) { calls.push(["accept", value]); return { status: "ACCEPTED", mode: value.grantedMode }; },
     async revokeConsent(value) { calls.push(["revoke", value]); return { status: "REVOKED" }; },
-    async startWithConsent(value) { calls.push(["start", value]); return { status: "ACTIVE" }; },
-    async stopSession(value) { calls.push(["stop", value]); return { status: "STOPPED" }; },
+    async startWithConsent(value) { calls.push(["start", value]); await value.startTransport({ tenantId: value.tenantId, applicationId: value.applicationId, sessionId: value.sessionId, endpointId: "endpoint-a", consentGrantId: "grant-a", mode: "VIEW_ONLY", correlationId: value.correlationId }); return { status: "ACTIVE" }; },
+    async stopSession(value) { calls.push(["stop", value]); await value.stopTransport({ tenantId: value.tenantId, applicationId: value.applicationId, sessionId: value.sessionId, endpointId: "endpoint-a", consentGrantId: "grant-a", mode: "VIEW_ONLY", correlationId: value.correlationId }); return { status: "STOPPED" }; },
   };
   const capabilities = {
     async withRemoteDesktopSharing(scope, operation) {
