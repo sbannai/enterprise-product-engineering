@@ -19,7 +19,7 @@ export interface PeripheralActionAuthorizer {
     tenantId: string;
     applicationId: string;
     actorId: string;
-    action: "peripheral.register" | "peripheral.configure" | "peripheral.activate" | "peripheral.suspend";
+    action: "peripheral.register" | "peripheral.configure" | "peripheral.read" | "peripheral.activate" | "peripheral.suspend";
   }): Promise<void>;
 }
 
@@ -57,6 +57,12 @@ export class ApplicationPeripheralService {
     private readonly adapters: PeripheralAdapterRegistry,
     private readonly authorizer: PeripheralActionAuthorizer,
   ) {}
+
+  async list(input: PeripheralServiceScope): Promise<PeripheralRegistration[]> {
+    await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.read" });
+    return this.capabilities.withPeripheralManagement(input, () =>
+      this.repository.list(input));
+  }
 
   async register(input: RegisterApplicationPeripheralInput): Promise<PeripheralRegistration> {
     await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.register" });
