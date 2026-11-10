@@ -64,11 +64,11 @@ export class PostgresPeripheralRepository {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ registrations: string | null; configurations: string | null }> `
+      const result = await client.query<{ registrations: string | null; configurations: string | null }>(`
         SELECT
           to_regclass('public.eper_application_peripheral')::text AS registrations,
           to_regclass('public.eper_application_peripheral_configuration')::text AS configurations
-      `;
+      `);
       if (!result.rows[0]?.registrations || !result.rows[0]?.configurations) {
         throw new Error("EPER_PERIPHERAL_SCHEMA_NOT_APPLIED");
       }
