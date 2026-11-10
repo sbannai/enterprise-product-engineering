@@ -32,11 +32,9 @@ type PayloadRow = {
   payload_digest: string;
   envelope_version: number;
   key_id: string | null;
-  nonce: string;
-  auth_tag: string;
-  ciphertext: string | null;
   nonce: string | null;
   auth_tag: string | null;
+  ciphertext: string | null;
   deleted_at: Date | string | null;
 };
 
