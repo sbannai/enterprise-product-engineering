@@ -153,14 +153,75 @@ test("PostgreSQL customer asset repository scopes visibility, links explicitly, 
         storageObjectReference: "opaque:test-failed-reservation",
       });
       assetIds.push(failedAsset.assetId);
+      // A deliberate retry after a terminal provider failure creates a new
+      // immutable generation; replaying the old key returns the old attempt.
+      const failedIdempotencyKey = "asset-failed-" + randomUUID();
       const failedReservationId = await repository.reserveUpload({
         ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
-        idempotencyKey: "asset-failed-" + randomUUID(),
+        idempotencyKey: failedIdempotencyKey,
       });
       await repository.failUploadReservation({
         tenantId, applicationId, actorId, environment: "uat", correlationId,
         uploadSessionId: failedReservationId, reason: "provider_unavailable",
       });
+      assert.equal(await repository.reserveUpload({
+        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+        idempotencyKey: failedIdempotencyKey,
+      }), failedReservationId, "same fingerprint and idempotency key replay the original immutable attempt");
+      await assert.rejects(() => repository.reserveUpload({
+        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+        actorId: actorId + "-different", idempotencyKey: failedIdempotencyKey,
+      }), /UPLOAD_IDEMPOTENCY_CONFLICT/);
+      await assert.rejects(() => repository.reserveUpload({
+        ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1537,
+        idempotencyKey: failedIdempotencyKey,
+      }), /UPLOAD_IDEMPOTENCY_CONFLICT/);
+
+      const concurrentRetryResults = await Promise.allSettled([
+        repository.reserveUpload({
+          ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+          idempotencyKey: "asset-retry-a-" + randomUUID(),
+        }),
+        repository.reserveUpload({
+          ...reservationInput, assetId: failedAsset.assetId, expectedSizeBytes: 1536,
+          idempotencyKey: "asset-retry-b-" + randomUUID(),
+        }),
+      ]);
+      const successfulRetries = concurrentRetryResults.filter((result) => result.status === "fulfilled");
+      assert.equal(successfulRetries.length, 1,
+        "two concurrent new idempotency keys cannot create two active attempts for one asset");
+      const retrySessionId = successfulRetries[0].value;
+      assert.notEqual(retrySessionId, failedReservationId,
+        "a deliberate retry creates a new upload session");
+      await assert.rejects(() => repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "uat", correlationId,
+        uploadSessionId: failedReservationId, receivedSizeBytes: 1536,
+        observedMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        checksumSha256: "d".repeat(64), scanStatus: "pending",
+      }), /UPLOAD_SESSION_NOT_COMPLETABLE/,
+      "late completion from a failed generation must not complete after a newer attempt exists");
+
+      const generationClient = await pool.connect();
+      try {
+        await generationClient.query("BEGIN");
+        await generationClient.query(
+          "SELECT set_config('eper.tenant_id', $1, true), set_config('eper.application_id', $2, true)",
+          [tenantId, applicationId],
+        );
+        const generations = await generationClient.query(
+          "SELECT upload_session_id, attempt_generation, request_fingerprint FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND asset_id = $2 ORDER BY attempt_generation",
+          [tenantId, failedAsset.assetId],
+        );
+        assert.equal(generations.rows.length, 2, "both immutable attempts remain in history");
+        assert.deepEqual(generations.rows.map((row) => Number(row.attempt_generation)), [1, 2]);
+        assert.equal(generations.rows[1].upload_session_id, retrySessionId);
+        assert.equal(generations.rows[1].request_fingerprint.expectedSizeBytes, 1536);
+        await generationClient.query("COMMIT");
+      } finally {
+        try { await generationClient.query("ROLLBACK"); } catch { /* no active transaction */ }
+        generationClient.release();
+      }
+
       const failedClient = await pool.connect();
       try {
         await failedClient.query("BEGIN");
