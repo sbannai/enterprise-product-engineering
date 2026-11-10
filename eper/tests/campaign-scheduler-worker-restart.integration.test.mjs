@@ -98,6 +98,11 @@ test("PostgreSQL worker restart recovers an unfenced lease and never replays a f
       workerId: "worker-before-restart", claimGeneration: firstClaim[0].claimGeneration,
     }), false, "The prior claim generation must not renew a lease after the same worker reclaims it");
     assert.equal(replacementClaim[0].idempotencyKey, safe.idempotencyKey);
+    // Keep the reclaimed lease fresh so the next claim targets only the new fenced execution.
+    await pool.query(
+      "UPDATE eper_campaign_executions SET locked_at=now() WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND claim_generation=$4",
+      [tenantId, applicationId, safe.execution.id, replacementClaim[0].claimGeneration],
+    );
 
     // Simulate process death after the dispatch fence: outcome is ambiguous and must not replay.
     const fenced = await createDueExecution("fenced-no-replay");
