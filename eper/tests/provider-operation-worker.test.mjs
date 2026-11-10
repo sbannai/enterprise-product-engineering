@@ -115,6 +115,56 @@ test("provider worker rejects mismatched resolved connection without dispatch", 
 });
 
 
+test("provider worker shutdown during authorization never persists an outcome", async () => {
+  for (const authorizationResult of [true, false]) {
+    let markStarted;
+    let release;
+    const started = new Promise(resolve => { markStarted = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const { calls, dependencies } = harness({
+      async authorizeOperation() { markStarted(); await gate; return authorizationResult; },
+      payloadStore: { async get() { assert.fail("payload read after shutdown"); } },
+    });
+    const worker = new ProviderOperationWorker(dependencies, options);
+    const shutdown = new AbortController();
+    const running = worker.runOnce(shutdown.signal);
+    await started;
+    shutdown.abort(new Error("test shutdown during authorization"));
+    release();
+    const result = await running;
+    assert.equal(calls.outcomes.length, 0);
+    assert.equal(calls.dispatches, 0);
+    assert.equal(result.needsAttention, 0);
+  }
+});
+
+test("provider worker shutdown during configuration resolution never persists a blocker outcome", async () => {
+  for (const rejectWithBlocker of [false, true]) {
+    let markStarted;
+    let release;
+    const started = new Promise(resolve => { markStarted = resolve; });
+    const gate = new Promise((resolve, reject) => { release = rejectWithBlocker ? () => reject(new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_INVALID")) : () => resolve(); });
+    const { calls, dependencies } = harness({
+      configuration: { async resolve() {
+        markStarted();
+        await gate;
+        return { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a", capabilityKey: "email.send" };
+      } },
+      payloadStore: { async get() { assert.fail("payload read after shutdown"); } },
+    });
+    const worker = new ProviderOperationWorker(dependencies, options);
+    const shutdown = new AbortController();
+    const running = worker.runOnce(shutdown.signal);
+    await started;
+    shutdown.abort(new Error("test shutdown during configuration"));
+    release();
+    const result = await running;
+    assert.equal(calls.outcomes.length, 0);
+    assert.equal(calls.dispatches, 0);
+    assert.equal(result.needsAttention, 0);
+  }
+});
+
 test("provider worker shutdown aborts dispatch without writing a stale outcome", async () => {
   let markStarted;
   const started = new Promise(resolve => { markStarted = resolve; });
