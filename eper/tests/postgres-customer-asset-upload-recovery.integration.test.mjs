@@ -50,6 +50,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.deepEqual(new Set([first.disposition, concurrentReplay.disposition]), new Set(["created", "replayed"]),
         "exactly one concurrent reservation wins creation and the other is classified as replay");
       assert.equal(first.uploadStatus, "initiated");
+      assert.equal(first.attemptGeneration, 1);
       assert.equal(first.providerUploadReference, null);
       assert.ok(Date.parse(first.expiresAt) > Date.now());
 
@@ -78,6 +79,8 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(recovered.uploadSessionId, first.uploadSessionId);
       assert.equal(recovered.providerUploadReference, "opaque-provider-object-" + suffix);
       assert.equal(recovered.uploadStatus, "initiated");
+      assert.equal(recovered.attemptGeneration, first.attemptGeneration,
+        "idempotent replay must preserve the original attempt generation");
       assert.ok(recovered.providerGrantExpiresAt);
 
       const rejectedAssetId = randomUUID();
@@ -100,6 +103,9 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         assetId: rejectedAssetId, uploadSessionId: rejectedReservation.uploadSessionId,
         rejectionCode: "policy_denied",
       });
+      // A definitive provider rejection is terminal, so a deliberate
+      // retry gets a new immutable generation while concurrent retries still
+      // converge on at most one active attempt.
       const rejectedState = await pool.query(
         `SELECT upload_status, provider_outcome, provider_upload_reference
            FROM eper_customer_asset_upload_sessions
@@ -118,6 +124,104 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(rejectionAudit.rowCount, 1);
       assert.equal(rejectionAudit.rows[0].outcome, "failure");
       assert.equal(rejectionAudit.rows[0].payload.rejectionCode, "policy_denied");
+
+      const retryInputs = [
+        {
+          ...reservationInput, assetId: rejectedAssetId, expectedSizeBytes: 512,
+          idempotencyKey: "asset-retry-a-" + suffix.slice(0, 32),
+          requestFingerprint: createHash("sha256").update("retry-a-" + suffix).digest("hex"),
+        },
+        {
+          ...reservationInput, assetId: rejectedAssetId, expectedSizeBytes: 512,
+          idempotencyKey: "asset-retry-b-" + suffix.slice(0, 32),
+          requestFingerprint: createHash("sha256").update("retry-b-" + suffix).digest("hex"),
+        },
+      ];
+      const retryResults = await Promise.allSettled(
+        retryInputs.map((retryInput) => repository.reserveUpload(retryInput)),
+      );
+      const createdRetries = retryResults.filter((result) => result.status === "fulfilled");
+      const rejectedRetries = retryResults.filter((result) => result.status === "rejected");
+      assert.equal(createdRetries.length, 1,
+        "two concurrent new idempotency keys may create only one active retry for the same asset");
+      assert.equal(rejectedRetries.length, 1);
+      assert.equal(rejectedRetries[0].reason?.message, "EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE");
+      const retryReservation = createdRetries[0].value;
+      assert.equal(retryReservation.attemptGeneration, 2,
+        "a terminal first attempt is retained and the deliberate retry receives generation two");
+      const attemptHistory = await pool.query(
+        `SELECT attempt_generation, upload_session_id, upload_status
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND asset_id = $2
+          ORDER BY attempt_generation`,
+        [tenantId, rejectedAssetId],
+      );
+      assert.deepEqual(attemptHistory.rows.map((row) => Number(row.attempt_generation)), [1, 2]);
+      assert.equal(attemptHistory.rows[0].upload_session_id, rejectedReservation.uploadSessionId);
+      assert.equal(attemptHistory.rows[0].upload_status, "failed");
+      assert.equal(attemptHistory.rows[1].upload_session_id, retryReservation.uploadSessionId);
+      await assert.rejects(
+        repository.recordUploadGrant({
+          tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+          assetId: rejectedAssetId, uploadSessionId: rejectedReservation.uploadSessionId,
+          requestFingerprint: createHash("sha256").update("rejected-" + suffix).digest("hex"),
+          providerUploadReference: "late-provider-callback-" + suffix,
+          grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_RECOVERABLE" },
+        "a late provider callback from a failed generation cannot mutate the newer attempt",
+      );
+      await assert.rejects(
+        pool.query(
+          "UPDATE eper_customer_asset_upload_sessions SET attempt_generation = 99 WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, retryReservation.uploadSessionId],
+        ),
+        /EPER_CUSTOMER_ASSET_UPLOAD_ATTEMPT_IDENTITY_IMMUTABLE/,
+        "attempt generation must be immutable after reservation",
+      );
+
+      // A shared asset may be retried from a different application. Its
+      // generation counter must remain tenant-wide even though RLS hides the
+      // prior application's upload-session rows from the new caller.
+      const sharedRetryAssetId = randomUUID();
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: sharedRetryAssetId, scope: "customer_shared",
+        displayName: "Cross-application retry fixture", originalFileName: "shared-retry.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 256, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-shared-retry-" + suffix,
+      });
+      await repository.link({
+        tenantId, applicationId: otherApplicationId, actorId, environment: "sandbox",
+        correlationId, idempotencyKey: "asset-share-link-" + suffix.slice(0, 32),
+        assetId: sharedRetryAssetId, reason: "upload-retry-integration",
+      });
+      const sharedFirstFingerprint = createHash("sha256").update("shared-first-" + suffix).digest("hex");
+      const sharedFirst = await repository.reserveUpload({
+        ...reservationInput, assetId: sharedRetryAssetId, expectedSizeBytes: 256,
+        idempotencyKey: "asset-shared-first-" + suffix.slice(0, 32),
+        requestFingerprint: sharedFirstFingerprint,
+      });
+      await repository.recordUploadProviderRejection({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: sharedRetryAssetId, uploadSessionId: sharedFirst.uploadSessionId,
+        rejectionCode: "provider_unavailable",
+      });
+      const sharedRetry = await repository.reserveUpload({
+        ...reservationInput, applicationId: otherApplicationId, assetId: sharedRetryAssetId,
+        expectedSizeBytes: 256,
+        idempotencyKey: "asset-shared-second-" + suffix.slice(0, 32),
+        requestFingerprint: createHash("sha256").update("shared-second-" + suffix).digest("hex"),
+      });
+      assert.equal(sharedFirst.attemptGeneration, 1);
+      assert.equal(sharedRetry.attemptGeneration, 2,
+        "the asset-row counter must allocate a tenant-wide generation across application RLS boundaries");
+      const sharedCounter = await pool.query(
+        "SELECT upload_attempt_generation FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2",
+        [tenantId, sharedRetryAssetId],
+      );
+      assert.equal(Number(sharedCounter.rows[0].upload_attempt_generation), 2);
 
       await assert.rejects(
         repository.reserveUpload({
@@ -167,6 +271,122 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         "cross-application active-upload denial must be audited in the requesting application without disclosing the owner");
       const serializedAudit = JSON.stringify(audit.rows);
       assert.doesNotMatch(serializedAudit, /https:\/\/|signed_url|bearer_token|access_token/i);
+
+      // Grant expiry must be checked again after waiting for the session row.
+      const grantRaceAssetId = randomUUID();
+      const grantRaceFingerprint = createHash("sha256").update("grant-race-" + suffix).digest("hex");
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: grantRaceAssetId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Grant expiry race fixture", originalFileName: "grant-race.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 1024, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-grant-race-" + suffix,
+      });
+      const grantRaceReservation = await repository.reserveUpload({
+        ...reservationInput, assetId: grantRaceAssetId, expectedSizeBytes: 1024,
+        idempotencyKey: "asset-grant-race-" + suffix.slice(0, 32),
+        expectedChecksumSha256: createHash("sha256").update("grant-race-binary-" + suffix).digest("hex"),
+        requestFingerprint: grantRaceFingerprint,
+      });
+      const grantRowLocker = await pool.connect();
+      await grantRowLocker.query("BEGIN");
+      await grantRowLocker.query(
+        "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2 FOR UPDATE",
+        [tenantId, grantRaceReservation.uploadSessionId],
+      );
+      const shortGrantExpiry = new Date(Date.now() + 2500).toISOString();
+      const waitingGrantPersistence = repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: grantRaceAssetId, uploadSessionId: grantRaceReservation.uploadSessionId,
+        requestFingerprint: grantRaceFingerprint,
+        providerUploadReference: "opaque-late-grant-" + suffix,
+        grantExpiresAt: shortGrantExpiry,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2800));
+      await grantRowLocker.query("COMMIT");
+      grantRowLocker.release();
+      await assert.rejects(
+        () => waitingGrantPersistence,
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_GRANT_EXPIRY_INVALID" },
+        "a provider grant that expires during a session-row lock wait must not be persisted",
+      );
+
+      // Completion locks the session and then the asset. Hold the asset row
+      // until expiry to prove the final transition revalidates after both locks.
+      const completionRaceAssetId = randomUUID();
+      const completionRaceFingerprint = createHash("sha256").update("completion-race-" + suffix).digest("hex");
+      const completionRaceChecksum = createHash("sha256").update("completion-race-binary-" + suffix).digest("hex");
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: completionRaceAssetId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Completion expiry race fixture", originalFileName: "completion-race.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 1024, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-completion-race-" + suffix,
+      });
+      const completionRaceReservation = await repository.reserveUpload({
+        ...reservationInput, assetId: completionRaceAssetId, expectedSizeBytes: 1024,
+        expectedChecksumSha256: completionRaceChecksum,
+        idempotencyKey: "asset-completion-race-" + suffix.slice(0, 32),
+        requestFingerprint: completionRaceFingerprint,
+      });
+      await repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: completionRaceAssetId, uploadSessionId: completionRaceReservation.uploadSessionId,
+        requestFingerprint: completionRaceFingerprint,
+        providerUploadReference: "opaque-completion-race-provider-" + suffix,
+        grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      await pool.query(
+        "UPDATE eper_customer_asset_upload_sessions SET expires_at = clock_timestamp() + interval '2500 milliseconds' WHERE tenant_id = $1 AND upload_session_id = $2",
+        [tenantId, completionRaceReservation.uploadSessionId],
+      );
+      const assetRowLocker = await pool.connect();
+      await assetRowLocker.query("BEGIN");
+      await assetRowLocker.query(
+        "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 FOR UPDATE",
+        [tenantId, completionRaceAssetId],
+      );
+      const waitingCompletion = repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        uploadSessionId: completionRaceReservation.uploadSessionId,
+        receivedSizeBytes: 1024, observedMimeType: "application/pdf",
+        checksumSha256: completionRaceChecksum, scanStatus: "pending",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2800));
+      await assetRowLocker.query("COMMIT");
+      assetRowLocker.release();
+      await assert.rejects(
+        () => waitingCompletion,
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED" },
+        "completion must fail when expiry elapses while waiting for the asset lock",
+      );
+      assert.equal(
+        await repository.getUploadSessionForVerification(tenantId, applicationId, completionRaceReservation.uploadSessionId),
+        null,
+        "verification must use wall-clock expiry and deny the expired session",
+      );
+
+      const expiryRetry = await repository.reserveUpload({
+        ...reservationInput, assetId: completionRaceAssetId, expectedSizeBytes: 1024,
+        expectedChecksumSha256: completionRaceChecksum,
+        idempotencyKey: "asset-expiry-retry-" + suffix.slice(0, 32),
+        requestFingerprint: createHash("sha256").update("expiry-retry-" + suffix).digest("hex"),
+      });
+      assert.equal(expiryRetry.attemptGeneration, 2,
+        "an expired attempt remains in history and a deliberate retry receives the next generation");
+      await assert.rejects(
+        repository.recordUploadGrant({
+          tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+          assetId: completionRaceAssetId, uploadSessionId: completionRaceReservation.uploadSessionId,
+          requestFingerprint: completionRaceFingerprint,
+          providerUploadReference: "opaque-expired-late-callback-" + suffix,
+          grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_RECOVERABLE" },
+        "a late provider callback from an expired generation cannot overwrite the newer attempt",
+      );
 
       // Exercise the real PostgreSQL upload-completion -> transactional scan
       // outbox -> leased worker -> trusted scanner result lifecycle.

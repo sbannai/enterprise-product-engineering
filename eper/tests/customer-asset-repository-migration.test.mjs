@@ -119,6 +119,20 @@ test("scan claim-generation migration is additive, repeatable and nonnegative", 
   assert.match(scanClaimGenerationMigration, /stale worker/i);
 });
 
+const uploadAttemptGenerationMigration = await readFile(new URL("../packages/audit/migrations/045_customer_asset_upload_attempt_generations.sql", import.meta.url), "utf8");
+
+test("upload attempt generations are monotonic, unique and immutable while historical attempts remain", () => {
+  assert.ok(uploadAttemptGenerationMigration.includes("ADD COLUMN IF NOT EXISTS attempt_generation bigint"));
+  assert.ok(uploadAttemptGenerationMigration.includes("row_number() OVER"));
+  assert.ok(uploadAttemptGenerationMigration.includes("PARTITION BY tenant_id, asset_id"));
+  assert.ok(uploadAttemptGenerationMigration.includes("attempt_generation > 0"));
+  assert.ok(uploadAttemptGenerationMigration.includes("upload_attempt_generation bigint NOT NULL DEFAULT 0"));
+  assert.ok(uploadAttemptGenerationMigration.includes("UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_attempt_generation_uq"));
+  assert.ok(uploadAttemptGenerationMigration.includes("EPER_CUSTOMER_ASSET_UPLOAD_ATTEMPT_IDENTITY_IMMUTABLE"));
+  assert.ok(uploadAttemptGenerationMigration.includes("BEFORE UPDATE ON eper_customer_asset_upload_sessions"));
+  assert.ok(uploadAttemptGenerationMigration.includes("COMMIT;"));
+});
+
 const expectedChecksumMigration = await readFile(new URL("../packages/audit/migrations/032_customer_asset_upload_expected_checksum.sql", import.meta.url), "utf8");
 
 test("expected upload checksum migration is additive, repeatable and fails closed for legacy NULL rows", () => {
