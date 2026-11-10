@@ -67,3 +67,48 @@ test("rejects control-flow cycles and integrations without idempotency", () => {
   assert.ok(validateCapabilityComposition(missingIdempotency, catalogue)
     .some(item => item.code === "composition.integration.idempotency_required"));
 });
+
+
+import {
+  adaptWorkflowDefinitionToComposition,
+  WORKFLOW_CAPABILITY_CATALOGUE,
+  WORKFLOW_CAPABILITY_CATALOGUE_VERSION,
+} from "../dist/packages/workflows/workflow-capability-adapter.js";
+
+test("platform catalogue is versioned and adapts a simple legacy activity graph", () => {
+  assert.equal(WORKFLOW_CAPABILITY_CATALOGUE_VERSION, "1.0.0");
+  assert.deepEqual(
+    WORKFLOW_CAPABILITY_CATALOGUE.map(item => item.kind).filter((kind, index, all) => all.indexOf(kind) === index).sort(),
+    ["activity", "integration", "reporting", "rule"],
+  );
+  const definition = {
+    id: "leave-flow", name: "Leave flow", status: "DRAFT",
+    activities: [
+      { id: "submit", title: "Submit", type: "FORM", roleId: "employee", permission: "workflow:act", nextActivityIds: ["approve"], fields: [{ id: "days", type: "number", required: true }] },
+      { id: "approve", title: "Approve", type: "APPROVAL", roleId: "manager", permission: "workflow:approve", nextActivityIds: [], fields: [] },
+    ],
+  };
+  const result = adaptWorkflowDefinitionToComposition(definition);
+  assert.ok(result.composition);
+  assert.equal(result.composition.entryNodeId, "submit");
+  assert.deepEqual(result.diagnostics, []);
+});
+
+test("adapter preserves rule condition and rejects mixed routing it cannot represent", () => {
+  const definition = {
+    id: "expense-flow", name: "Expense flow", status: "DRAFT",
+    activities: [
+      { id: "start", title: "Start", type: "FORM", roleId: "employee", permission: "workflow:act", nextActivityIds: ["approve", "reject"], fields: [],
+        routingRuleIds: ["high", "low"] },
+      { id: "approve", title: "Approve", type: "APPROVAL", roleId: "manager", permission: "workflow:approve", nextActivityIds: [], fields: [] },
+      { id: "reject", title: "Reject", type: "TASK", roleId: "finance", permission: "workflow:act", nextActivityIds: [], fields: [] },
+    ],
+    rules: [
+      { id: "high", name: "High value", priority: 20, targetActivityId: "approve", condition: { kind: "condition", field: "amount", operator: "gte", value: 1000 } },
+      { id: "low", name: "Low value", priority: 10, targetActivityId: "reject", condition: { kind: "condition", field: "amount", operator: "lt", value: 1000 } },
+    ],
+  };
+  const result = adaptWorkflowDefinitionToComposition(definition);
+  assert.equal(result.composition, null);
+  assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.mixed_routing_unsupported"));
+});
