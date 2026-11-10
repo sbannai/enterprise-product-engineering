@@ -28,7 +28,7 @@ test("PostgreSQL worker restart recovers an unfenced lease and never replays a f
              to_regclass('public.eper_audit_events') AS audit_events,
              (SELECT 1 FROM information_schema.columns
               WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                AND column_name='dispatch_started_at') AS dispatch_fence
+                AND column_name='dispatch_started_at') AS dispatch_fence,\n             (SELECT 1 FROM information_schema.columns\n              WHERE table_schema='public' AND table_name='eper_campaign_executions'\n                AND column_name='claim_generation') AS claim_generation
     `);
     assert.ok(schema.rows[0]?.schedules && schema.rows[0]?.executions && schema.rows[0]?.audit_events,
       "Apply the campaign scheduler and audit migrations to this disposable test database first");
@@ -82,10 +82,10 @@ test("PostgreSQL worker restart recovers an unfenced lease and never replays a f
       "UPDATE eper_campaign_executions SET available_at=now() WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
       [tenantId, applicationId, safe.execution.id],
     );
-    const replacementClaim = await store.claimExecutions("worker-after-restart", 1);
+    const replacementClaim = await store.claimExecutions("worker-before-restart", 1);
     assert.equal(replacementClaim.length, 1);
     assert.equal(replacementClaim[0].id, safe.execution.id);
-    assert.equal(replacementClaim[0].attemptCount, 2);
+    assert.equal(replacementClaim[0].attemptCount, 2);\n    assert.ok(replacementClaim[0].claimGeneration > firstClaim[0].claimGeneration,\n      "Every reclaimed execution must advance its ownership generation");\n    assert.equal(await store.renewExecutionLease({\n      tenantId, applicationId, executionId: safe.execution.id,\n      workerId: "worker-before-restart", claimGeneration: firstClaim[0].claimGeneration,\n    }), false, "The prior claim generation must not renew a lease after the same worker reclaims it");
     assert.equal(replacementClaim[0].idempotencyKey, safe.idempotencyKey);
 
     // Simulate process death after the dispatch fence: outcome is ambiguous and must not replay.
