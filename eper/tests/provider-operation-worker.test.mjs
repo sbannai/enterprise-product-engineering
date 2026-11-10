@@ -220,13 +220,16 @@ test("provider worker shutdown aborts dispatch without writing a stale outcome",
 
 test("provider worker bounds shutdown when a lease renewal never settles", async () => {
   let renewals = 0;
+  let markRenewalStarted;
+  const renewalStarted = new Promise(resolve => { markRenewalStarted = resolve; });
   const { calls, dependencies } = harness({
     repository: {
       async recoverExpiredLeases() { return []; },
       async claimNext() { return calls.claims++ === 0 ? operation : null; },
-      async renewLease() { renewals++; return await new Promise(() => {}); },
+      async renewLease() { renewals++; markRenewalStarted(); return await new Promise(() => {}); },
       async recordOutcome(input) { calls.outcomes.push(input); return operation; },
     },
+    async dispatch() { await renewalStarted; return { providerReference: "must-not-persist" }; },
   });
   const worker = new ProviderOperationWorker(dependencies, {
     ...options, leaseDurationSeconds: 10, renewalDrainTimeoutMs: 10,
