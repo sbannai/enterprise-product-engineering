@@ -44,7 +44,7 @@ test("view-only consent requires acceptance permission but not remote-control gr
   const { service, calls } = fixture();
   const result = await service.acceptConsent({
     ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
-    expectedVersion: 1, grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+    expectedVersion: 1, endpointProof: "signed-endpoint-proof", grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
   });
   assert.equal(result.mode, "VIEW_ONLY");
   assert.deepEqual(calls.filter(([kind]) => kind === "authorize").map(([, action]) => action),
@@ -55,7 +55,7 @@ test("consent fails closed when endpoint identity verifier is not configured", a
   const { service, calls } = fixture({ endpointConsentVerifier: null });
   await assert.rejects(() => service.acceptConsent({
     ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
-    expectedVersion: 1, grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+    expectedVersion: 1, endpointProof: "signed-endpoint-proof", grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
   }), /ENDPOINT_IDENTITY_VERIFIER_NOT_CONFIGURED/);
   assert.equal(calls.some(([kind]) => kind === "accept"), false);
 });
@@ -65,11 +65,12 @@ test("consent rejects an endpoint identity that does not match the session", asy
     assert.equal(value.endpointId, "endpoint-a");
     assert.equal(value.sessionId, "123e4567-e89b-42d3-a456-426614174000");
     assert.equal(value.expectedVersion, 1);
+    assert.equal(value.endpointProof, "signed-endpoint-proof");
     return false;
   } } });
   await assert.rejects(() => service.acceptConsent({
     ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
-    expectedVersion: 1, grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+    expectedVersion: 1, endpointProof: "signed-endpoint-proof", grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
   }), /ENDPOINT_IDENTITY_NOT_VERIFIED/);
   assert.equal(calls.some(([kind]) => kind === "accept"), false);
 });
@@ -78,7 +79,7 @@ test("remote control requires a separate explicit grant permission", async () =>
   const { service, calls } = fixture({ deniedAction: "remote_desktop.control.grant" });
   await assert.rejects(() => service.acceptConsent({
     ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
-    expectedVersion: 1, grantedMode: "REMOTE_CONTROL", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+    expectedVersion: 1, endpointProof: "signed-endpoint-proof", grantedMode: "REMOTE_CONTROL", consentExpiresAt: "2029-12-01T00:00:00.000Z",
   }), /ACTION_NOT_AUTHORIZED/);
   assert.equal(calls.some(([kind]) => kind === "accept"), false);
 });
