@@ -387,13 +387,32 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
+      const locked = await client.query<{ upload_status: string; expires_at: string | Date }>(
+        `SELECT upload_status, expires_at
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND actor_id = $4
+          FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId],
+      );
+      if (!locked.rows[0] || locked.rows[0].upload_status !== "reserved") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RESERVATION_NOT_FINALIZABLE");
+      }
+      const liveExpiry = await client.query<{ future: boolean }>(
+        "SELECT $1::timestamptz > clock_timestamp() AND $2::timestamptz > clock_timestamp() AS future",
+        [input.expiresAt, locked.rows[0].expires_at],
+      );
+      if (!liveExpiry.rows[0]?.future) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
+      }
       const updated = await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET provider_upload_reference = $5, upload_status = 'initiated',
-                expires_at = $6, updated_at = now()
+                expires_at = $6, updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND actor_id = $4 AND upload_status = 'reserved' AND provider_upload_reference IS NULL
-            AND $6::timestamptz > now()`,
+            AND $6::timestamptz > clock_timestamp()
+            AND expires_at > clock_timestamp()`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId,
           input.providerUploadReference, new Date(expiry).toISOString()],
       );
@@ -473,7 +492,7 @@ export class PostgresCustomerAssetRepository {
          WHERE s.tenant_id = $1 AND s.application_id = $2
            AND s.upload_session_id = $3
            AND s.upload_status IN ('initiated', 'in_progress')
-           AND s.expires_at > now()
+           AND s.expires_at > clock_timestamp()
            AND a.upload_status = 'pending' AND a.lifecycle_status = 'active'`,
         [tenantId, applicationId, uploadSessionId],
       );
@@ -566,7 +585,7 @@ export class PostgresCustomerAssetRepository {
         session_not_expired: boolean;
       }>(
         `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
-          s.expires_at, s.upload_status, (s.expires_at > now()) AS session_not_expired,
+          s.expires_at, s.upload_status, (s.expires_at > clock_timestamp()) AS session_not_expired,
           a.mime_type AS asset_mime_type, a.upload_status AS asset_upload_status
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
@@ -585,7 +604,15 @@ export class PostgresCustomerAssetRepository {
       if (session.asset_upload_status !== "pending") {
         throw new Error("EPER_CUSTOMER_ASSET_NOT_PENDING_UPLOAD");
       }
-      if (!session.session_not_expired) {
+      // Recheck after the FOR UPDATE lock is acquired. clock_timestamp() moves
+      // during lock waits; transaction-start now() does not.
+      const liveExpiry = await client.query<{ future: boolean }>(
+        `SELECT expires_at > clock_timestamp() AS future
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND upload_session_id = $2`,
+        [input.tenantId, input.uploadSessionId],
+      );
+      if (!liveExpiry.rows[0]?.future) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
       }
       if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
