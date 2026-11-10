@@ -170,6 +170,14 @@ jobs:
         run: node --test tests/postgres-application-assignment-live.integration.test.mjs
       - name: Live PostgreSQL commercial tariff access guard integration
         run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
+      - name: Provision restricted application add-on RLS role and prove tenant/application isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_application_addon_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO eper_application_addon_access"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE ON eper_application_addon_entitlement TO eper_application_addon_access"
+          node --test tests/postgres-application-addon-rls.integration.test.mjs
       - name: Apply campaign scheduler migrations to ephemeral CI database
         run: npm run migrate:campaign-scheduler
       - name: Apply capability persistence migrations to ephemeral CI database
