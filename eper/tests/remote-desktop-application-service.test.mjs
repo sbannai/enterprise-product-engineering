@@ -13,7 +13,7 @@ function fixture({ entitlement = true, deniedAction = null, transport = undefine
     async getEndpointId(value) { calls.push(["getEndpointId", value]); return "endpoint-a"; },
     async requestSession(value) { calls.push(["request", value]); return { status: "REQUESTED" }; },
     async acceptWithConsent(value) { calls.push(["accept", value]); return { status: "ACCEPTED", mode: value.grantedMode }; },
-    async revokeConsent(value) { calls.push(["revoke", value]); return { status: "REVOKED" }; },
+    async revokeConsent(value) { calls.push(["revoke", value]); if (value.stopTransport) await value.stopTransport({ tenantId: value.tenantId, applicationId: value.applicationId, sessionId: value.sessionId, endpointId: "endpoint-a", consentGrantId: "grant-a", mode: "VIEW_ONLY", correlationId: value.correlationId }); return { status: "REVOKED" }; },
     async startWithConsent(value) { calls.push(["start", value]); await value.startTransport({ tenantId: value.tenantId, applicationId: value.applicationId, sessionId: value.sessionId, endpointId: "endpoint-a", consentGrantId: "grant-a", mode: "VIEW_ONLY", correlationId: value.correlationId }); return { status: "ACTIVE" }; },
     async stopSession(value) { calls.push(["stop", value]); await value.stopTransport({ tenantId: value.tenantId, applicationId: value.applicationId, sessionId: value.sessionId, endpointId: "endpoint-a", consentGrantId: "grant-a", mode: "VIEW_ONLY", correlationId: value.correlationId }); return { status: "STOPPED" }; },
   };
@@ -115,6 +115,31 @@ test("revocation is authorized before entitlement or persistence", async () => {
     ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 2,
   }), /ACTION_NOT_AUTHORIZED/);
   assert.equal(calls.some(([kind]) => kind === "revoke"), false);
+});
+
+test("consent revocation shuts down an active transport through the configured adapter", async () => {
+  const transportCalls = [];
+  const configured = fixture({ transport: {
+    async start() {},
+    async stop(context) { transportCalls.push(context.sessionId); },
+  } });
+  const result = await configured.service.revokeConsent({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 3,
+  });
+  assert.equal(result.status, "REVOKED");
+  assert.deepEqual(transportCalls, ["123e4567-e89b-42d3-a456-426614174000"]);
+  assert.ok(configured.calls.some(([kind, action]) => kind === "authorize" && action === "remote_desktop.consent.revoke"));
+});
+
+test("consent revocation without a transport remains fail-closed for active sessions", async () => {
+  const configured = fixture();
+  await configured.service.revokeConsent({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 3,
+  });
+  // The persistence layer receives no stop callback and rejects ACTIVE sessions;
+  // this service-level fake returns a result, so assert the callback is absent.
+  const revoke = configured.calls.find(([kind]) => kind === "revoke");
+  assert.equal(revoke[1].stopTransport, undefined);
 });
 
 test("start requires a configured transport and separate lifecycle permission", async () => {
