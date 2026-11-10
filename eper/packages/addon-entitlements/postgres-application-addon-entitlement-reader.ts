@@ -16,21 +16,44 @@ type EntitlementRow = {
   usage_limit: Record<string, unknown> | string; version: number | string;
 };
 function iso(value: Date | string | null): string | null {
-  return value === null ? null : value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  if (value === null) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(parsed.getTime())) throw new Error("APPLICATION_ADDON_TIMESTAMP_INVALID");
+  return parsed.toISOString();
+}
+function safePositiveInteger(value: number | string | null, code: string): number | null {
+  if (value === null) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(code);
+  return parsed;
 }
 function mapEntitlement(row: EntitlementRow): ApplicationAddonEntitlement {
   const usageLimit = typeof row.usage_limit === "string" ? JSON.parse(row.usage_limit) : row.usage_limit;
   if (!usageLimit || typeof usageLimit !== "object" || Array.isArray(usageLimit)) {
     throw new Error("APPLICATION_ADDON_USAGE_LIMIT_INVALID");
   }
+  const amount = row.agreed_amount === null ? null : String(row.agreed_amount);
+  if (amount !== null && (!/^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$/.test(amount) || !Number.isFinite(Number(amount)))) {
+    throw new Error("APPLICATION_ADDON_AMOUNT_INVALID");
+  }
+  const currency = row.agreed_currency?.trim() ?? null;
+  if (currency !== null && !/^[A-Z]{3}$/.test(currency)) throw new Error("APPLICATION_ADDON_CURRENCY_INVALID");
+  if (!["not_selected", "requested", "pending_approval", "pending_payment", "active", "suspended", "cancelled", "expired"].includes(row.entitlement_status)) {
+    throw new Error("APPLICATION_ADDON_STATUS_INVALID");
+  }
+  if (row.billing_interval !== null && !["monthly", "annual", "one_time", "usage"].includes(row.billing_interval)) {
+    throw new Error("APPLICATION_ADDON_BILLING_INTERVAL_INVALID");
+  }
+  if (![row.tenant_id, row.application_id, row.addon_key].every(v => typeof v === "string" && v.trim())) {
+    throw new Error("APPLICATION_ADDON_SCOPE_INVALID");
+  }
   return {
     tenantId: row.tenant_id, applicationId: row.application_id, addonKey: row.addon_key,
     status: row.entitlement_status, priceId: row.price_id,
-    acceptedPriceVersion: row.accepted_price_version === null ? null : Number(row.accepted_price_version),
-    agreedAmount: row.agreed_amount === null ? null : String(row.agreed_amount),
-    agreedCurrency: row.agreed_currency?.trim() ?? null, billingInterval: row.billing_interval,
+    acceptedPriceVersion: safePositiveInteger(row.accepted_price_version, "APPLICATION_ADDON_PRICE_VERSION_INVALID"),
+    agreedAmount: amount, agreedCurrency: currency, billingInterval: row.billing_interval,
     effectiveFrom: iso(row.effective_from), effectiveTo: iso(row.effective_to),
-    usageLimit, version: Number(row.version),
+    usageLimit, version: safePositiveInteger(row.version, "APPLICATION_ADDON_VERSION_INVALID")!,
   };
 }
 
