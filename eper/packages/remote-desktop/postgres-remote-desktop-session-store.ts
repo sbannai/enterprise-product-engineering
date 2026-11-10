@@ -129,9 +129,7 @@ export class PostgresRemoteDesktopSessionStore {
   }
 
   /** Reads the endpoint binding under tenant/application RLS before external identity verification. */
-  async getEndpointId(input: {
-    tenantId: string; applicationId: string; sessionId: string;
-  }): Promise<string> {
+  async getEndpointId(input: RemoteDesktopStoreScope & { sessionId: string }): Promise<string> {
     this.validateScope(input);
     this.validateSessionId(input.sessionId);
     const client = await this.pool.connect();
