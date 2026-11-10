@@ -1,3 +1,4 @@
+// Scheduler worker changes must execute the required PostgreSQL provider lifecycle CI gate.
 import type { CampaignExecutionRecord, PostgresCampaignSchedulerStore } from "./postgres-campaign-scheduler-store.js";
 
 export interface CampaignDispatchResult { outcome: Record<string, unknown>; }
