@@ -11,6 +11,8 @@ export const WORKFLOW_ROLE_PERMISSIONS = [
   "provider.connection.create", "provider.connection.read", "provider.connection.bind",
   "provider.connection.validate", "provider.connection.rotate", "provider.connection.revoke",
   "customer.asset.upload",
+  "peripheral.register", "peripheral.configure", "peripheral.read",
+  "peripheral.activate", "peripheral.suspend",
 ] as const;
 export type WorkflowRolePermission = typeof WORKFLOW_ROLE_PERMISSIONS[number];
 
