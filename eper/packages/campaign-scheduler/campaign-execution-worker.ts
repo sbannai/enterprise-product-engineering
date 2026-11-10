@@ -144,7 +144,7 @@ export async function runCampaignExecutionWorker(
           const authorizationErrorMessage = authorizationError instanceof Error ? authorizationError.message : "";
           await store.failExecution({
             tenantId: execution.tenantId, applicationId: execution.applicationId,
-            executionId: execution.id, workerId: options.workerId,
+            executionId: execution.id, workerId: options.workerId, claimGeneration: execution.claimGeneration,
             errorCode: authorizationErrorMessage === "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               ? "CAMPAIGN_WORKER_SHUTDOWN_BEFORE_DISPATCH_FENCE"
               : authorizationError ? "CAMPAIGN_DISPATCH_AUTHORIZATION_UNAVAILABLE" : "CAMPAIGN_DISPATCH_POLICY_DENIED",
