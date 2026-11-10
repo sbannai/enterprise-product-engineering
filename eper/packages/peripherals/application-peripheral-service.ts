@@ -125,6 +125,9 @@ export class ApplicationPeripheralService {
         });
       }
 
+      if (current.status === "DISCONNECTING" && current.version !== input.expectedVersion) {
+        throw new Error("EPER_PERIPHERAL_VERSION_CONFLICT");
+      }
       const configuration = await this.repository.getConfiguration(input, input.peripheralId);
       if (!configuration) throw new Error("EPER_PERIPHERAL_CONFIGURATION_REQUIRED");
       const adapter = this.adapters.resolve({
