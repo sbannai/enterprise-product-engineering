@@ -33,6 +33,14 @@ import { PostgresProviderCatalogueRepository } from "../../packages/integrations
 import { readProviderStorageRuntimeConfiguration } from "../../packages/integrations/provider-storage-runtime-configuration.js";
 import { createConfiguredHttpInvoiceAmountSource } from "../../packages/payments/http-invoice-amount-source.js";
 import { createConfiguredHttpTransactionSnapshotSource } from "../../packages/payments/http-transaction-snapshot-source.js";
+import { PostgresApplicationAddonEntitlementReader } from "../../packages/addon-entitlements/postgres-application-addon-entitlement-reader.js";
+import { ApplicationAddonAccessGate } from "../../packages/addon-entitlements/application-addon-access-gate.js";
+import { ApplicationCapabilityBoundary } from "../../packages/addon-entitlements/application-capability-boundary.js";
+import { PostgresPeripheralRepository } from "../../packages/peripherals/postgres-peripheral-repository.js";
+import { ApplicationPeripheralService } from "../../packages/peripherals/application-peripheral-service.js";
+import { PostgresPeripheralRoleAuthorizer } from "../../packages/peripherals/peripheral-authorization.js";
+import { PeripheralAdapterRegistry } from "../../packages/peripherals/index.js";
+import { SyntheticPeripheralAdapter } from "../../packages/peripherals/synthetic-peripheral-adapter.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -57,6 +65,12 @@ const customerLifecycleApiEnabled = process.env.EPER_CUSTOMER_LIFECYCLE_API_ENAB
 const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE ?? "disabled";
 const customerAssetUploadApiEnabled = process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED === "true";
 const customerAssetMetadataApiEnabled = process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true";
+const peripheralApiEnabled = process.env.EPER_APPLICATION_PERIPHERAL_API_ENABLED === "true";
+if (peripheralApiEnabled && (customerIdentityPersistenceMode !== "postgres" ||
+    process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+    process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
+  throw new Error("PERIPHERAL_API_REQUIRES_POSTGRES_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
+}
 const customerAssetPersistenceApiEnabled = customerAssetUploadApiEnabled || customerAssetMetadataApiEnabled;
 const providerStorageRuntimeConfiguration = readProviderStorageRuntimeConfiguration(process.env);
 if (providerStorageRuntimeConfiguration.enabled) {
@@ -66,7 +80,7 @@ if (providerStorageRuntimeConfiguration.enabled) {
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled;
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 
 // Privileged control-plane stores use independent PostgreSQL credentials and pools.
@@ -388,7 +402,7 @@ const providerValidationService = providerValidationEnabled && paymentPool
     )
   : undefined;
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled || peripheralApiEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
@@ -517,6 +531,31 @@ const platformAdminCredentialStore = platformAdminCredentialsEnabled && platform
   : undefined;
 if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady();
 
+const peripheralRepository = peripheralApiEnabled && paymentPool
+  ? new PostgresPeripheralRepository(paymentPool)
+  : undefined;
+const peripheralRoleAuthorizer = peripheralApiEnabled && workflowActorRoleAssignmentStore
+  ? new PostgresPeripheralRoleAuthorizer(workflowActorRoleAssignmentStore)
+  : undefined;
+const peripheralService = peripheralApiEnabled && paymentPool && peripheralRepository &&
+    peripheralRoleAuthorizer && workflowActorRoleAssignmentStore
+  ? new ApplicationPeripheralService(
+      new ApplicationCapabilityBoundary(new ApplicationAddonAccessGate(
+        new PostgresApplicationAddonEntitlementReader(paymentPool),
+        new PostgresApplicationAddonEntitlementReader(paymentPool),
+      )),
+      peripheralRepository,
+      new PeripheralAdapterRegistry([{
+        adapterKey: "synthetic.simulator",
+        adapterVersion: "1.0.0",
+        kinds: ["barcode_scanner", "qr_reader", "sensor", "rfid_nfc", "printer", "weighing_scale", "custom"],
+        adapter: new SyntheticPeripheralAdapter(),
+      }]),
+      peripheralRoleAuthorizer,
+    )
+  : undefined;
+if (peripheralRepository) await peripheralRepository.assertReady();
+
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, assetAuditWriter, customerLifecycleStore,
@@ -526,7 +565,7 @@ const server = createAppServer({
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, customerAssetRepository, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore, platformAdminCredentialStore,
   providerConnectionRepository, providerValidationService, providerCatalogueRepository,
-  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService,
+  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService, peripheralService,
 });
 
 server.listen(port, host, () => {
