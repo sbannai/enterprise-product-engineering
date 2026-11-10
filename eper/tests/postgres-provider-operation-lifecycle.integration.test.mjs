@@ -351,6 +351,51 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
           status + " operations must permit eligible payload tombstoning");
       }
 
+      // Legal hold always overrides an elapsed expiry; missing expiry or
+      // incomplete policy provenance is never treated as implicit eligibility.
+      for (const fixture of [
+        { name: "legal-hold", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=TRUE, retention_policy_id='test-retention', retention_policy_version='1'", code: "PROVIDER_PAYLOAD_LEGAL_HOLD_ACTIVE" },
+        { name: "null-expiry", metadata: "expires_at=NULL, legal_hold=FALSE, retention_policy_id='test-retention', retention_policy_version='1'", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
+        { name: "missing-policy-id", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=FALSE, retention_policy_id=NULL, retention_policy_version='1'", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
+        { name: "missing-policy-version", metadata: "expires_at=NOW()-INTERVAL '1 second', legal_hold=FALSE, retention_policy_id='test-retention', retention_policy_version=NULL", code: "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE" },
+      ]) {
+        const payload = { body: "retention-" + fixture.name + "-" + suffix };
+        const digest = createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
+        const queued = await operationRepository.enqueueWithPayload({
+          ...atomicInput,
+          idempotencyKey: "retention-" + fixture.name + "-" + suffix,
+          correlationId: "retention-" + fixture.name + "-correlation-" + suffix,
+          requestDigest: digest,
+          payload,
+        });
+        const reference = {
+          tenantId, applicationId, operationId: queued.operation.operationId,
+          capabilityKey: "email.send", reference: queued.operation.payloadReference, digest,
+        };
+        await pool.query(
+          `UPDATE eper_provider_payloads SET ${fixture.metadata} WHERE payload_reference=$1`,
+          [reference.reference],
+        );
+        await pool.query(
+          `UPDATE eper_provider_operations SET operation_status='SUCCEEDED'
+           WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+          [tenantId, applicationId, reference.operationId],
+        );
+        await assert.rejects(
+          () => retentionStore.delete(reference),
+          error => error?.code === fixture.code,
+          fixture.name + " must not be purged",
+        );
+        const retained = await pool.query(
+          "SELECT nonce,auth_tag,ciphertext,deleted_at FROM eper_provider_payloads WHERE payload_reference=$1",
+          [reference.reference],
+        );
+        assert.ok(retained.rows[0].nonce, fixture.name + " retains nonce");
+        assert.ok(retained.rows[0].auth_tag, fixture.name + " retains auth tag");
+        assert.ok(retained.rows[0].ciphertext, fixture.name + " retains ciphertext");
+        assert.equal(retained.rows[0].deleted_at, null, fixture.name + " is not tombstoned");
+      }
+
       // Serialize a terminal outcome transition against retention deletion.
       // The outcome transaction holds the operation row lock while delete waits.
       const racePayload = { body: "retention-concurrent-transition-" + suffix };
