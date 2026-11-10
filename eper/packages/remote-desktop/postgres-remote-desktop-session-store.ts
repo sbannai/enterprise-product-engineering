@@ -128,6 +128,29 @@ export class PostgresRemoteDesktopSessionStore {
     finally { client.release(); }
   }
 
+  /** Reads the endpoint binding under tenant/application RLS before external identity verification. */
+  async getEndpointId(input: {
+    tenantId: string; applicationId: string; sessionId: string;
+  }): Promise<string> {
+    this.validateScope(input);
+    this.validateSessionId(input.sessionId);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setScope(client, input);
+      const result = await client.query<{ endpoint_id: string }>(
+        `SELECT endpoint_id FROM eper_remote_desktop_session
+          WHERE tenant_id=$1 AND application_id=$2 AND session_id=$3`,
+        [input.tenantId, input.applicationId, input.sessionId],
+      );
+      const endpointId = result.rows[0]?.endpoint_id;
+      if (!endpointId) throw new Error("REMOTE_DESKTOP_SESSION_NOT_FOUND");
+      await client.query("COMMIT");
+      return endpointId;
+    } catch (error) { await this.rollback(client); throw error; }
+    finally { client.release(); }
+  }
+
   /** Endpoint consent acceptance and session transition are atomic and audited. */
   async acceptWithConsent(input: RemoteDesktopStoreScope & {
     sessionId: string; expectedVersion: number; grantedMode: RemoteSessionMode;
