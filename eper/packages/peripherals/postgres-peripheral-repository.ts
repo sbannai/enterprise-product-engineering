@@ -369,6 +369,7 @@ export class PostgresPeripheralRepository {
       displayName: row.display_name, adapterKey: row.adapter_key,
       adapterVersion: row.adapter_version, status: row.lifecycle_status,
       configurationVersion: Number(row.active_configuration_version ?? 0),
+      version: Number(row.version),
     };
   }
 
