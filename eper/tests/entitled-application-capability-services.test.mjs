@@ -66,7 +66,7 @@ test("safety stop, revoke and peripheral disconnect remain callable after entitl
   assert.equal(await peripherals.disconnect(scope, { peripheralId: "p1" }), "disconnect");
   assert.equal(await desktop.stop(scope, { sessionId: "s1" }), "stop");
   assert.equal(await desktop.revoke(scope, { sessionId: "s1" }), "revoke");
-  assert.deepEqual(calls.map(call => call[0]), ["deactivate", "disconnect", "stop", "revoke"]);
+  assert.deepEqual(calls.map(call => call[0]), ["authorizeCleanup", "deactivate", "authorizeCleanup", "disconnect", "authorizeCleanup", "stop", "authorizeCleanup", "revoke"]);
   assert.ok(calls.every(call => call[1] === scope));\n  assert.equal(calls.filter(call => call[0] === "authorizeCleanup").length, 4);
 });
 
