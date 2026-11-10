@@ -39,6 +39,33 @@ BEGIN
 END
 $constraints$;
 
+-- A tenant-wide counter lives on the asset row so generation allocation is
+-- correct even when a customer-shared asset is retried from another application
+-- whose RLS context cannot read the prior application's upload-session rows.
+ALTER TABLE eper_customer_assets
+  ADD COLUMN IF NOT EXISTS upload_attempt_generation bigint NOT NULL DEFAULT 0;
+
+UPDATE eper_customer_assets AS a
+   SET upload_attempt_generation = COALESCE((
+     SELECT MAX(s.attempt_generation)
+       FROM eper_customer_asset_upload_sessions AS s
+      WHERE s.tenant_id = a.tenant_id AND s.asset_id = a.asset_id
+   ), 0);
+
+DO $constraints$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'eper_customer_asset_upload_asset_generation_nonnegative'
+       AND conrelid = 'public.eper_customer_assets'::regclass
+  ) THEN
+    ALTER TABLE eper_customer_assets
+      ADD CONSTRAINT eper_customer_asset_upload_asset_generation_nonnegative
+      CHECK (upload_attempt_generation >= 0);
+  END IF;
+END
+$constraints$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_attempt_generation_uq
   ON eper_customer_asset_upload_sessions (tenant_id, asset_id, attempt_generation);
 
