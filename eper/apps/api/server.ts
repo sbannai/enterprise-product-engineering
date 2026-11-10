@@ -3117,7 +3117,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         }
         if (peripheralPath[3] === "configure") {
           const allowed = ["expectedVersion", "configuration"];
-          const config = body.configuration;
+          const config = body.configuration as Record<string, unknown> | undefined;
           if (Object.keys(body).some(key => !allowed.includes(key)) || !config ||
               typeof config !== "object" || Array.isArray(config) ||
               Object.keys(config).some(key => !["adapterKey", "adapterVersion", "settings", "secretReference"].includes(key)) ||
