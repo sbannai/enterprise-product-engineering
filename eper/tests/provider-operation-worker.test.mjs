@@ -138,25 +138,33 @@ test("provider worker shutdown during authorization never persists an outcome", 
   }
 });
 
-test("provider worker lease loss during an awaited authorization fences all later work", async () => {
+test("provider worker lease loss during an awaited authorization fences all later work without wall-clock sleeps", async () => {
   let markStarted;
   let release;
+  let heartbeat;
+  let markRenewalStarted;
   const started = new Promise(resolve => { markStarted = resolve; });
+  const renewalStarted = new Promise(resolve => { markRenewalStarted = resolve; });
   const gate = new Promise(resolve => { release = resolve; });
   const { calls, dependencies } = harness({
     repository: {
       async recoverExpiredLeases() { return []; },
       async claimNext() { return calls.claims++ === 0 ? operation : null; },
-      async renewLease() { throw new Error("simulated lease lost"); },
+      async renewLease() { markRenewalStarted(); throw new Error("simulated lease lost"); },
       async recordOutcome(input) { calls.outcomes.push(input); return operation; },
     },
+    scheduleHeartbeat(callback) { heartbeat = callback; return () => {}; },
     async authorizeOperation() { markStarted(); await gate; return true; },
     payloadStore: { async get() { assert.fail("payload read after lease loss"); } },
   });
-  const worker = new ProviderOperationWorker(dependencies, { ...options, leaseDurationSeconds: 10 });
+  const worker = new ProviderOperationWorker(dependencies, options);
   const running = worker.runOnce();
   await started;
-  await new Promise(resolve => setTimeout(resolve, 3600));
+  assert.equal(typeof heartbeat, "function");
+  heartbeat();
+  await renewalStarted;
+  await Promise.resolve();
+  await Promise.resolve();
   release();
   const result = await running;
   assert.equal(result.leaseLost, 1);
@@ -220,6 +228,7 @@ test("provider worker shutdown aborts dispatch without writing a stale outcome",
 
 test("provider worker bounds shutdown when a lease renewal never settles", async () => {
   let renewals = 0;
+  let heartbeat;
   let markRenewalStarted;
   const renewalStarted = new Promise(resolve => { markRenewalStarted = resolve; });
   const { calls, dependencies } = harness({
@@ -229,15 +238,18 @@ test("provider worker bounds shutdown when a lease renewal never settles", async
       async renewLease() { renewals++; markRenewalStarted(); return await new Promise(() => {}); },
       async recordOutcome(input) { calls.outcomes.push(input); return operation; },
     },
-    async dispatch() { await renewalStarted; return { providerReference: "must-not-persist" }; },
+    scheduleHeartbeat(callback) { heartbeat = callback; return () => {}; },
+    async dispatch() {
+      heartbeat();
+      await renewalStarted;
+      return { providerReference: "must-not-persist" };
+    },
   });
   const worker = new ProviderOperationWorker(dependencies, {
-    ...options, leaseDurationSeconds: 10, renewalDrainTimeoutMs: 10,
+    ...options, renewalDrainTimeoutMs: 10,
   });
-  const startedAt = Date.now();
   const result = await worker.runOnce();
-  assert.ok(renewals >= 1, "heartbeat must have started a renewal");
-  assert.ok(Date.now() - startedAt < 5000, "worker must not wait indefinitely for renewal");
+  assert.equal(renewals, 1, "exactly one heartbeat renewal must be active");
   assert.equal(result.leaseLost, 1);
   assert.equal(result.succeeded, 0);
   assert.equal(calls.outcomes.length, 0, "stale worker must not persist an outcome");
