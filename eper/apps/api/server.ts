@@ -3228,7 +3228,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
       return;
     }
 
-    // Remote Desktop Sharing is a separate, consent-gated capability. No transport is started by these routes.
+    // Remote Desktop Sharing is a separate, consent-gated capability; start/stop require an injected transport.
     const remoteDesktopPath = /^\/customer\/applications\/([^/]+)\/remote-desktop\/sessions(?:\/([^/]+)\/(accept|revoke|start|stop))?$/.exec(requestUrl.pathname);
     if (remoteDesktopPath) {
       if (process.env.EPER_REMOTE_DESKTOP_API_ENABLED !== "true" || !options.remoteDesktopService ||
