@@ -50,6 +50,7 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.deepEqual(new Set([first.disposition, concurrentReplay.disposition]), new Set(["created", "replayed"]),
         "exactly one concurrent reservation wins creation and the other is classified as replay");
       assert.equal(first.uploadStatus, "initiated");
+      assert.equal(first.attemptGeneration, 1);
       assert.equal(first.providerUploadReference, null);
       assert.ok(Date.parse(first.expiresAt) > Date.now());
 
@@ -78,6 +79,8 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(recovered.uploadSessionId, first.uploadSessionId);
       assert.equal(recovered.providerUploadReference, "opaque-provider-object-" + suffix);
       assert.equal(recovered.uploadStatus, "initiated");
+      assert.equal(recovered.attemptGeneration, first.attemptGeneration,
+        "idempotent replay must preserve the original attempt generation");
       assert.ok(recovered.providerGrantExpiresAt);
 
       const rejectedAssetId = randomUUID();
@@ -315,6 +318,11 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         () => waitingCompletion,
         { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED" },
         "completion must fail when expiry elapses while waiting for the asset lock",
+      );
+      assert.equal(
+        await repository.getUploadSessionForVerification(tenantId, applicationId, completionRaceReservation.uploadSessionId),
+        null,
+        "verification must use wall-clock expiry and deny the expired session",
       );
 
       // Exercise the real PostgreSQL upload-completion -> transactional scan
