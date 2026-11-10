@@ -94,7 +94,7 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null; claim_generation_column: string | null;
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null; claim_generation_column: string | null; claim_generation_column: string | null;
       }>(
         `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
                 to_regclass('public.eper_campaign_executions')::text AS executions_table,
