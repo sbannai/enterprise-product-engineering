@@ -1,6 +1,6 @@
 import type { ApplicationCapabilityBoundary, ApplicationCapabilityScope } from "../addon-entitlements/application-capability-boundary.js";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
-import type { RemoteSessionMode } from "./index.js";
+import type { RemoteDesktopTransport, RemoteSessionMode } from "./index.js";
 import {
   PostgresRemoteDesktopSessionStore,
   type RemoteDesktopSessionRecord,
@@ -15,7 +15,8 @@ export interface RemoteDesktopActionAuthorizer {
   authorize(input: {
     tenantId: string; applicationId: string; actorId: string;
     action: "remote_desktop.session.request" | "remote_desktop.consent.accept" |
-      "remote_desktop.control.grant" | "remote_desktop.consent.revoke";
+      "remote_desktop.control.grant" | "remote_desktop.consent.revoke" |
+      "remote_desktop.session.start" | "remote_desktop.session.stop";
   }): Promise<void>;
 }
 export interface RequestRemoteDesktopSessionInput extends RemoteDesktopServiceScope {
@@ -37,6 +38,7 @@ export class ApplicationRemoteDesktopService {
     private readonly capabilities: ApplicationCapabilityBoundary,
     private readonly store: PostgresRemoteDesktopSessionStore,
     private readonly authorizer: RemoteDesktopActionAuthorizer,
+    private readonly transport?: RemoteDesktopTransport,
   ) {}
 
   async requestSession(input: RequestRemoteDesktopSessionInput): Promise<RemoteDesktopSessionRecord> {
@@ -54,6 +56,34 @@ export class ApplicationRemoteDesktopService {
     }
     return this.capabilities.withRemoteDesktopSharing(input, () =>
       this.store.acceptWithConsent(input));
+  }
+
+  async startSession(input: RemoteDesktopServiceScope & {
+    sessionId: string; expectedVersion: number;
+  }): Promise<RemoteDesktopSessionRecord> {
+    await this.authorize(input, "remote_desktop.session.start");
+    if (!this.transport) throw new Error("REMOTE_DESKTOP_TRANSPORT_NOT_CONFIGURED");
+    return this.capabilities.withRemoteDesktopSharing(input, () =>
+      this.store.startWithConsent({
+        ...input,
+        startTransport: async context => {
+          const controller = new AbortController();
+          await this.transport!.start(context, controller.signal);
+          return () => this.transport!.stop(context);
+        },
+      }));
+  }
+
+  async stopSession(input: RemoteDesktopServiceScope & {
+    sessionId: string; expectedVersion: number;
+  }): Promise<RemoteDesktopSessionRecord> {
+    await this.authorize(input, "remote_desktop.session.stop");
+    if (!this.transport) throw new Error("REMOTE_DESKTOP_TRANSPORT_NOT_CONFIGURED");
+    return this.capabilities.withRemoteDesktopSharing(input, () =>
+      this.store.stopSession({
+        ...input,
+        stopTransport: context => this.transport!.stop(context),
+      }));
   }
 
   async revokeConsent(input: RemoteDesktopServiceScope & {
