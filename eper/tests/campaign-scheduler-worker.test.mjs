@@ -14,6 +14,7 @@ function execution(overrides = {}) {
     idempotencyKey: "campaign:schedule-1:2030-01-01T00:00:00.000Z",
     payload: { campaignId: "campaign-a" },
     availableAt: "2030-01-01T00:00:00.000Z",
+    claimGeneration: 1,
     ...overrides,
   };
 }
