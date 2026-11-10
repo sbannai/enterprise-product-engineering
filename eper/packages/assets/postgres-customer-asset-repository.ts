@@ -558,7 +558,7 @@ export class PostgresCustomerAssetRepository {
                 updated_by = $3, updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND asset_id = $2
             AND lifecycle_status = 'active' AND upload_status = 'pending'
-          RETURNING upload_attempt_generation`,
+          RETURNING upload_attempt_generation AS attempt_generation`,
         [input.tenantId, input.assetId, input.actorId],
       );
       if (!generation.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_RETRYABLE");
