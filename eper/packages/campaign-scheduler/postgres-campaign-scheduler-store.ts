@@ -670,11 +670,12 @@ export class PostgresCampaignSchedulerStore {
 
   /** Release a claimed execution when its schedule was paused before dispatch; pausing is not a failed attempt. */
   async deferExecutionForSchedulePause(input: {
-    tenantId: string; applicationId: string; executionId: string; workerId: string;
+    tenantId: string; applicationId: string; executionId: string; workerId: string; claimGeneration: number;
   }): Promise<boolean> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.claimGeneration) || input.claimGeneration < 1) throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
