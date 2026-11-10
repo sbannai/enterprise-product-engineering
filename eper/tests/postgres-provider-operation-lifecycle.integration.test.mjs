@@ -208,6 +208,21 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       assert.equal(JSON.stringify(persistedEnvelope.rows[0]).includes(providerPayload.body), false,
         "PostgreSQL must persist only the encrypted envelope, never provider payload plaintext");
 
+      const retentionPayload = { body: "retention-tombstone-" + suffix };
+      const retentionDigest = createHash("sha256")
+        .update(JSON.stringify(retentionPayload), "utf8").digest("hex");
+      const retentionQueued = await operationRepository.enqueueWithPayload({
+        tenantId, applicationId, connectionId, capabilityKey: "email.send",
+        capabilityVersion: "1", idempotencyKey: "retention-" + suffix,
+        correlationId: "retention-operation-" + suffix,
+        requestDigest: retentionDigest, actorId, auditEnvironment,
+        payload: retentionPayload, payloadStore,
+      });
+      const retentionReference = {
+        tenantId, applicationId, operationId: retentionQueued.operation.operationId,
+        capabilityKey: "email.send", reference: retentionQueued.operation.payloadReference,
+        digest: retentionDigest,
+      };
       const retentionStore = new PostgresEncryptedProviderPayloadStore(pool, Buffer.alloc(32, 23), {
         async authorize() { return true; },
         async authorizeCreate() { return true; },
@@ -226,29 +241,29 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
          SET expires_at=NOW()-INTERVAL '1 second',
              retention_policy_id='test-retention',retention_policy_version='1'
          WHERE payload_reference=$1`,
-        [exactPayloadReference.reference],
+        [retentionReference.reference],
       );
       await assert.rejects(
-        () => retentionStore.delete(exactPayloadReference),
+        () => retentionStore.delete(retentionReference),
         error => error?.code === "PROVIDER_PAYLOAD_OPERATION_NOT_TERMINAL",
         "queued operations must retain their payload envelope",
       );
       await pool.query(
         "UPDATE eper_provider_operations SET operation_status='SUCCEEDED' WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
-        [tenantId, applicationId, exactPayloadReference.operationId],
+        [tenantId, applicationId, retentionReference.operationId],
       );
-      assert.equal(await retentionStore.delete(exactPayloadReference), true);
-      assert.equal(await retentionStore.delete(exactPayloadReference), false,
+      assert.equal(await retentionStore.delete(retentionReference), true);
+      assert.equal(await retentionStore.delete(retentionReference), false,
         "tombstoning must be idempotent");
       const tombstone = await pool.query(
         `SELECT payload_reference,payload_digest,nonce,auth_tag,ciphertext,deleted_at,
                 deleted_by_actor_id,deletion_policy_decision_reference
          FROM eper_provider_payloads WHERE payload_reference=$1`,
-        [exactPayloadReference.reference],
+        [retentionReference.reference],
       );
       assert.equal(tombstone.rowCount, 1);
-      assert.equal(tombstone.rows[0].payload_reference, exactPayloadReference.reference);
-      assert.equal(tombstone.rows[0].payload_digest, exactPayloadReference.digest);
+      assert.equal(tombstone.rows[0].payload_reference, retentionReference.reference);
+      assert.equal(tombstone.rows[0].payload_digest, retentionReference.digest);
       assert.equal(tombstone.rows[0].nonce, null);
       assert.equal(tombstone.rows[0].auth_tag, null);
       assert.equal(tombstone.rows[0].ciphertext, null);
@@ -257,12 +272,12 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
       assert.equal(tombstone.rows[0].deletion_policy_decision_reference, "retention-decision-" + suffix);
       const operationAfterTombstone = await pool.query(
         "SELECT payload_reference FROM eper_provider_operations WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3",
-        [tenantId, applicationId, exactPayloadReference.operationId],
+        [tenantId, applicationId, retentionReference.operationId],
       );
-      assert.equal(operationAfterTombstone.rows[0].payload_reference, exactPayloadReference.reference,
+      assert.equal(operationAfterTombstone.rows[0].payload_reference, retentionReference.reference,
         "operation-to-payload identity must survive ciphertext scrubbing");
       await assert.rejects(
-        () => retentionStore.get(exactPayloadReference),
+        () => retentionStore.get(retentionReference),
         error => error?.code === "PROVIDER_PAYLOAD_DELETED",
       );
 
