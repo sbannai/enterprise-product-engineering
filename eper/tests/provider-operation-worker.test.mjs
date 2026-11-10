@@ -138,6 +138,33 @@ test("provider worker shutdown during authorization never persists an outcome", 
   }
 });
 
+test("provider worker lease loss during an awaited authorization fences all later work", async () => {
+  let markStarted;
+  let release;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const { calls, dependencies } = harness({
+    repository: {
+      async recoverExpiredLeases() { return []; },
+      async claimNext() { return calls.claims++ === 0 ? operation : null; },
+      async renewLease() { throw new Error("simulated lease lost"); },
+      async recordOutcome(input) { calls.outcomes.push(input); return operation; },
+    },
+    async authorizeOperation() { markStarted(); await gate; return true; },
+    payloadStore: { async get() { assert.fail("payload read after lease loss"); } },
+  });
+  const worker = new ProviderOperationWorker(dependencies, { ...options, leaseDurationSeconds: 10 });
+  const running = worker.runOnce();
+  await started;
+  await new Promise(resolve => setTimeout(resolve, 3600));
+  release();
+  const result = await running;
+  assert.equal(result.leaseLost, 1);
+  assert.equal(result.needsAttention, 0);
+  assert.equal(calls.outcomes.length, 0);
+  assert.equal(calls.dispatches, 0);
+});
+
 test("provider worker shutdown during configuration resolution never persists a blocker outcome", async () => {
   for (const rejectWithBlocker of [false, true]) {
     let markStarted;
