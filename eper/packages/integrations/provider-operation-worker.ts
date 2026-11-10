@@ -20,6 +20,7 @@ export type ProviderOperationWorkerOptions = {
   maxAttempts?: number;
   retryAfterSeconds?: number;
   batchSize?: number;
+  renewalDrainTimeoutMs?: number;
 };
 export type ProviderDispatchResult = { providerReference?: string };
 export type ProviderOperationWorkerDependencies = {
@@ -55,6 +56,7 @@ export class ProviderOperationWorker {
   private readonly maxAttempts: number;
   private readonly retryAfterSeconds: number;
   private readonly batchSize: number;
+  private readonly renewalDrainTimeoutMs: number;
 
   constructor(
     private readonly dependencies: ProviderOperationWorkerDependencies,
@@ -68,10 +70,12 @@ export class ProviderOperationWorker {
     this.maxAttempts = options.maxAttempts ?? 5;
     this.retryAfterSeconds = options.retryAfterSeconds ?? 30;
     this.batchSize = options.batchSize ?? 10;
+    this.renewalDrainTimeoutMs = options.renewalDrainTimeoutMs ?? 1000;
     if (!Number.isInteger(this.leaseDurationSeconds) || this.leaseDurationSeconds < 10 || this.leaseDurationSeconds > 3600
       || !Number.isInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20
       || !Number.isInteger(this.retryAfterSeconds) || this.retryAfterSeconds < 1 || this.retryAfterSeconds > 86400
-      || !Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 100) {
+      || !Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 100
+      || !Number.isInteger(this.renewalDrainTimeoutMs) || this.renewalDrainTimeoutMs < 1 || this.renewalDrainTimeoutMs > 30000) {
       throw new Error("PROVIDER_WORKER_OPTIONS_INVALID");
     }
     if (!dependencies.repository || !dependencies.payloadStore || !dependencies.configuration
@@ -121,6 +125,22 @@ export class ProviderOperationWorker {
       return true;
     };
     let renewal: Promise<void> | undefined;
+    const drainRenewal = async (): Promise<boolean> => {
+      if (!renewal) return true;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const completed = await Promise.race([
+        renewal.then(() => true),
+        new Promise<boolean>(resolve => {
+          timeout = setTimeout(() => resolve(false), this.renewalDrainTimeoutMs);
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+      if (!completed) {
+        leaseLost = true;
+        controller.abort(new Error("PROVIDER_WORKER_LEASE_RENEWAL_TIMEOUT"));
+      }
+      return completed;
+    };
     const heartbeat = setInterval(() => {
       if (renewal || leaseLost || controller.signal.aborted) return;
       renewal = this.dependencies.repository.renewLease({
@@ -181,7 +201,7 @@ export class ProviderOperationWorker {
       });
       if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
       if (heartbeat) clearInterval(heartbeat);
-      if (renewal) await renewal;
+      await drainRenewal();
       if (leaseLost) { result.leaseLost += 1; return; }
       if (await persistOutcome("SUCCEEDED", undefined, dispatched.providerReference)) {
         result.succeeded += 1;
@@ -189,7 +209,7 @@ export class ProviderOperationWorker {
     } catch {
       if (controller.signal.aborted && leaseLost) { result.leaseLost += 1; return; }
       if (controller.signal.aborted) return;
-      if (renewal) await renewal;
+      await drainRenewal();
       if (leaseLost) { result.leaseLost += 1; return; }
       // Never persist provider exception text, request bodies, or credentials.
       if (await persistOutcome("RETRY", "PROVIDER_OPERATION_DISPATCH_FAILED")) {
@@ -197,7 +217,9 @@ export class ProviderOperationWorker {
       }
     } finally {
       clearInterval(heartbeat);
-      if (renewal) await renewal;
+      // A renewal can be stuck in the database driver during shutdown. Bound
+      // this wait; fencing prevents a late renewal from authorizing stale work.
+      await drainRenewal();
       shutdown?.removeEventListener("abort", abort);
     }
   }
