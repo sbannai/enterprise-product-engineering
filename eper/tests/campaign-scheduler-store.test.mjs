@@ -381,6 +381,26 @@ test("dispatch-start fence locks live schedule and execution before marking disp
   assert.equal(calls.at(-1).sql, "COMMIT");
 });
 
+test("dispatch-start fence rejects a stale claim generation for the same worker", async () => {
+  const { pool, calls } = fakePool(async (sql) => {
+    if (sql.includes("SELECT s.id") && sql.includes("FOR UPDATE OF s, e")) return { rows: [], rowCount: 0 };
+    return { rows: [], rowCount: 0 };
+  });
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const result = await store.beginExecutionDispatch({
+    tenantId: "tenant-a", applicationId: "app-a",
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31",
+    workerId: "worker-a", claimGeneration: 1,
+  });
+  assert.equal(result, false);
+  const lock = calls.find((call) => call.sql.includes("FOR UPDATE OF s, e"));
+  assert.ok(lock);
+  assert.match(lock.sql, /e\.claim_generation=\$5/);
+  assert.deepEqual(lock.values, ["tenant-a", "app-a", "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", "worker-a", 1]);
+  assert.ok(!calls.some((call) => call.sql.includes("SET dispatch_started_at=now()")));
+  assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
+});
+
 test("dispatch-start fence is single-use and rejects a second acquisition", async () => {
   let alreadyStarted = false;
   const { pool, calls } = fakePool(async (sql) => {
