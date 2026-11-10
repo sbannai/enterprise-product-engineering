@@ -5,6 +5,35 @@
 **Scope:** Customer-application-scoped peripheral registration, assignment, configuration, operation and health monitoring.  
 **Baseline protection:** Additive candidate scope only. This does not alter the approved 228 requirements or 38 chapters. No cloud resources, device credentials, real hardware connections or external provider calls are authorized.
 
+## 1C. Adjacent application capability: Remote Desktop Sharing
+
+Remote Desktop Sharing is a separate, optional capability under **Customer → Application**. It is not part of Peripheral Management and is not the same as Zoom/Google Meet/video-conferencing integration.
+
+**Purpose:** allow an authorized support person, application administrator or approved operator to request a remote view of a user's/application endpoint screen for troubleshooting or guided assistance. If remote control is later enabled, it must be a separately authorized permission from screen viewing.
+
+**Capability boundaries**
+- Remote Desktop Sharing owns remote-assistance sessions, endpoint pairing, consent, session authorization, signalling/relay abstraction, session lifecycle, audit and evidence.
+- Video conferencing owns meetings, participant audio/video, meeting links and collaboration-provider integration (for example Zoom or Google Meet).
+- Peripheral Management owns physical/logical device registrations and their device I/O. It must not own desktop sessions.
+- These capabilities may expose separate UI entry points in the same application workspace and may optionally link to one another, but neither requires the other to be installed or configured.
+- A video meeting must not silently grant desktop viewing or control. Starting a remote desktop session must not create or join a Zoom/Meet call.
+
+**Consent and security baseline**
+- A remote session is off by default and begins only after an authenticated user explicitly requests it and the endpoint user explicitly accepts the session.
+- Screen viewing and remote input/control are separate scopes. Default to view-only; control requires a separate explicit grant and visible in-session indication.
+- No unattended access, persistent hidden agent, silent capture, stealth mode or bypass of operating-system permission prompts in the initial scope.
+- Use short-lived, single-session, audience-bound credentials; bind each session to tenant, application, requester, endpoint and consent grant. Revalidate authorization on session start and on privilege escalation.
+- Encrypt signalling and media/data transport in transit; use an approved WebRTC or equivalent transport abstraction with a relay interface. Do not expose arbitrary inbound ports on customer networks.
+- Provide visible session indicators and immediate user-controlled stop/revoke. Session termination, consent withdrawal, token expiry, endpoint disconnect or authorization revocation must close the session and invalidate credentials.
+- Audit request, approval/denial, start, view/control scope changes, stop, disconnect, revoke and outcome. Do not record screen contents by default; any recording requires a distinct explicit policy and consent flow.
+- Enforce tenant/application/endpoint isolation, rate limits, bounded session duration and safe reconnect behaviour. Never allow session identifiers or endpoint tokens to be reused across applications.
+
+**Initial delivery boundary**
+- Define a provider-neutral Remote Assistance port and session state machine, with a local/synthetic test adapter.
+- Implement request/accept/deny/start/stop/revoke flows, view-only mode, authorization, consent and audit first.
+- Treat remote input/control, recording, file transfer, clipboard sharing, unattended access and production relay infrastructure as separate gated capabilities requiring explicit product/security approval.
+- Keep this capability independently deployable and optional. Core application startup, workflows, Peripheral Management and video conferencing must continue to work when it is absent or unconfigured.
+
 ## 1B. Optional, configuration-gated modular integration
 
 Peripheral Management is an optional capability. The core Customer Application and workflow runtime must remain fully functional when the capability is absent, disabled, or has no configured peripherals.
