@@ -24,7 +24,7 @@ Remote Desktop Sharing is a separate, optional capability under **Customer → A
 - No unattended access, persistent hidden agent, silent capture, stealth mode or bypass of operating-system permission prompts in the initial scope.
 - Use short-lived, single-session, audience-bound credentials; bind each session to tenant, application, requester, endpoint and consent grant. Revalidate authorization on session start and on privilege escalation.
 - Encrypt signalling and media/data transport in transit; use an approved WebRTC or equivalent transport abstraction with a relay interface. Do not expose arbitrary inbound ports on customer networks.
-- Provide visible session indicators and immediate user-controlled stop/revoke. Session termination, consent withdrawal, token expiry, endpoint disconnect or authorization revocation must close the session and invalidate credentials.
+- Provide visible session indicators and immediate user-controlled stop/revoke. Consent withdrawal on an active session must stop the configured transport before the grant is revoked and the session is marked REVOKED; if no transport is configured, active-session revocation fails closed. Session termination, token expiry, endpoint disconnect or authorization revocation must close the session and invalidate credentials.
 - Audit request, approval/denial, start, view/control scope changes, stop, disconnect, revoke and outcome. Do not record screen contents by default; any recording requires a distinct explicit policy and consent flow.
 - Enforce tenant/application/endpoint isolation, rate limits, bounded session duration and safe reconnect behaviour. Never allow session identifiers or endpoint tokens to be reused across applications.
 
