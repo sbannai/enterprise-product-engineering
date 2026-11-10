@@ -59,6 +59,7 @@ import type { PostgresTicketStore } from "../../packages/ticketing/postgres-tick
 import type { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import type { ApplicationPeripheralService } from "../../packages/peripherals/application-peripheral-service.js";
+import type { ApplicationRemoteDesktopService } from "../../packages/remote-desktop/application-remote-desktop-service.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
@@ -536,7 +537,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadProviderCapabilities?: StorageUploadProviderCapabilities; assetUploadLookup?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>; assetUploadLookupPort?: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>; assetUploadVerification?: (request: StorageUploadVerificationRequest, requestId: string) => Promise<VerifiedStorageObject | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer; peripheralService?: ApplicationPeripheralService } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadProviderCapabilities?: StorageUploadProviderCapabilities; assetUploadLookup?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>; assetUploadLookupPort?: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>; assetUploadVerification?: (request: StorageUploadVerificationRequest, requestId: string) => Promise<VerifiedStorageObject | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer; peripheralService?: ApplicationPeripheralService; remoteDesktopService?: ApplicationRemoteDesktopService } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -574,6 +575,16 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
        !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore ||
        !options.peripheralService || !options.customerOidcPublicOrigin || !options.customerCsrfSecret)) {
     throw new Error("PERIPHERAL_API_REQUIRES_DURABLE_OIDC_IDENTITY_ASSIGNMENTS_ROLE_ENTITLEMENT_AND_AUDIT_SERVICES");
+  }
+  if (process.env.EPER_REMOTE_DESKTOP_API_ENABLED === "true" &&
+      (process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
+       process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+       process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+       process.env.EPER_CUSTOMER_OIDC_ENABLED !== "true" ||
+       !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+       !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore ||
+       !options.remoteDesktopService || !options.customerOidcPublicOrigin || !options.customerCsrfSecret)) {
+    throw new Error("REMOTE_DESKTOP_API_REQUIRES_DURABLE_OIDC_IDENTITY_ASSIGNMENTS_ROLE_ENTITLEMENT_AND_AUDIT_SERVICES");
   }
   if (process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED === "true" &&
       (!options.workflowRoleDefinitionStore || !options.workflowActorRoleAssignmentStore ||
@@ -3191,6 +3202,123 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           : code.includes("INVALID") || code.includes("REQUIRED") ? 400
           : code.includes("UNAVAILABLE") ? 503 : 409;
         sendApiError(request, response, status, code, "Peripheral operation was not completed.");
+      }
+      return;
+    }
+
+    // Remote Desktop Sharing is a separate, consent-gated capability. No transport is started by these routes.
+    const remoteDesktopPath = /^\\/customer\\/applications\\/([^/]+)\\/remote-desktop\\/sessions(?:\\/([^/]+)\\/(accept|revoke))?$/.exec(requestUrl.pathname);
+    if (remoteDesktopPath) {
+      if (process.env.EPER_REMOTE_DESKTOP_API_ENABLED !== "true" || !options.remoteDesktopService ||
+          process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+          !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+          !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore) {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      if (request.method !== "POST") { sendMethodNotAllowed(request, response, "POST"); return; }
+      let applicationId: string;
+      let sessionId: string | undefined;
+      try {
+        applicationId = decodeURIComponent(remoteDesktopPath[1]);
+        sessionId = remoteDesktopPath[2] ? decodeURIComponent(remoteDesktopPath[2]) : undefined;
+      } catch {
+        sendJson(request, response, 400, { error: "invalid_path_encoding" });
+        return;
+      }
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/.test(applicationId) ||
+          (sessionId !== undefined && !/^[0-9a-f-]{36}$/i.test(sessionId))) {
+        sendJson(request, response, 400, { error: "invalid_remote_desktop_scope" });
+        return;
+      }
+      const identity = await resolveCustomerBrowserIdentity({
+        cookieHeader: request.headers.cookie, applicationId,
+        sessionStore: options.customerIdentitySessionStore,
+        tenantAssignments: options.tenantApplicationAssignmentStore,
+        actorAssignments: options.actorApplicationAssignmentStore,
+      });
+      if (!identity) {
+        sendApiError(request, response, 401, "UNAUTHENTICATED",
+          "A valid browser session with active tenant and actor application assignments is required.");
+        return;
+      }
+      const cookies = parseCookieHeader(request.headers.cookie);
+      const sessionToken = cookies.get("__Host-eper_session") ?? "";
+      const csrfHeader = request.headers["x-csrf-token"];
+      const csrfValid = verifyCustomerBrowserCsrf({
+        method: request.method, origin: request.headers.origin,
+        expectedOrigin: options.customerOidcPublicOrigin ?? process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+        cookieHeader: request.headers.cookie,
+        csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
+        sessionToken, secret: options.customerCsrfSecret ?? process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+      });
+      if (!csrfValid) {
+        sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",
+          "A valid same-origin CSRF token is required for this browser request.");
+        return;
+      }
+      const scope = {
+        tenantId: identity.tenantId, applicationId: identity.applicationId, actorId: identity.actorId,
+        environment: options.adminConfigEnvironment ?? "sandbox",
+        correlationId: resolveApiRequestId(request),
+      };
+      try {
+        const body = await readJson(request);
+        if (!sessionId && !remoteDesktopPath[3]) {
+          if (Object.keys(body).some(key => !["endpointId", "expiresAt", "sessionId"].includes(key)) ||
+              typeof body.endpointId !== "string" || typeof body.expiresAt !== "string" ||
+              (body.sessionId !== undefined && typeof body.sessionId !== "string")) {
+            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_SESSION_REQUEST_INVALID" });
+            return;
+          }
+          const result = await options.remoteDesktopService.requestSession({
+            ...scope, endpointId: body.endpointId, expiresAt: body.expiresAt,
+            sessionId: body.sessionId as string | undefined,
+          });
+          sendApiSuccess(request, response, 201, { session: result });
+          return;
+        }
+        if (!sessionId || !remoteDesktopPath[3] ||
+            typeof body.expectedVersion !== "number" || !Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 1) {
+          sendJson(request, response, 400, { error: "REMOTE_DESKTOP_SESSION_ACTION_INVALID" });
+          return;
+        }
+        if (remoteDesktopPath[3] === "accept") {
+          if (Object.keys(body).some(key => !["expectedVersion", "grantedMode", "consentExpiresAt", "consentGrantId"].includes(key)) ||
+              !["VIEW_ONLY", "REMOTE_CONTROL"].includes(String(body.grantedMode)) ||
+              typeof body.consentExpiresAt !== "string" ||
+              (body.consentGrantId !== undefined && typeof body.consentGrantId !== "string")) {
+            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_CONSENT_INPUT_INVALID" });
+            return;
+          }
+          const result = await options.remoteDesktopService.acceptConsent({
+            ...scope, sessionId, expectedVersion: body.expectedVersion,
+            grantedMode: body.grantedMode as "VIEW_ONLY" | "REMOTE_CONTROL",
+            consentExpiresAt: body.consentExpiresAt,
+            consentGrantId: body.consentGrantId as string | undefined,
+          });
+          sendApiSuccess(request, response, 200, { session: result });
+          return;
+        }
+        if (Object.keys(body).some(key => key !== "expectedVersion")) {
+          sendJson(request, response, 400, { error: "REMOTE_DESKTOP_REVOKE_INPUT_INVALID" });
+          return;
+        }
+        const result = await options.remoteDesktopService.revokeConsent({
+          ...scope, sessionId, expectedVersion: body.expectedVersion,
+        });
+        sendApiSuccess(request, response, 200, { session: result });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "REMOTE_DESKTOP_OPERATION_FAILED";
+        const status = code.includes("FORBIDDEN") || code.includes("NOT_AUTHORIZED") || code.includes("ACCESS_DENIED") ? 403
+          : code.includes("NOT_FOUND") ? 404
+          : code.includes("VERSION_CONFLICT") ? 409
+          : code.includes("INVALID") || code.includes("REQUIRED") || code.includes("EXPIRY") ? 400
+          : code.includes("NOT_ENTITLED") ? 402
+          : code.includes("UNAVAILABLE") ? 503 : 409;
+        sendApiError(request, response, status, code, "Remote Desktop Sharing operation was not completed.");
       }
       return;
     }
