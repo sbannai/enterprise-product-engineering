@@ -7,12 +7,14 @@ const input = {
   environment: "uat", correlationId: "remote-service-test",
   endpointId: "endpoint-a", expiresAt: "2030-01-01T00:00:00.000Z",
 };
-function fixture({ entitlement = true, deniedAction = null } = {}) {
+function fixture({ entitlement = true, deniedAction = null, transport = undefined } = {}) {
   const calls = [];
   const store = {
     async requestSession(value) { calls.push(["request", value]); return { status: "REQUESTED" }; },
     async acceptWithConsent(value) { calls.push(["accept", value]); return { status: "ACCEPTED", mode: value.grantedMode }; },
     async revokeConsent(value) { calls.push(["revoke", value]); return { status: "REVOKED" }; },
+    async startWithConsent(value) { calls.push(["start", value]); return { status: "ACTIVE" }; },
+    async stopSession(value) { calls.push(["stop", value]); return { status: "STOPPED" }; },
   };
   const capabilities = {
     async withRemoteDesktopSharing(scope, operation) {
@@ -27,7 +29,7 @@ function fixture({ entitlement = true, deniedAction = null } = {}) {
       if (value.action === deniedAction) throw new Error("ACTION_NOT_AUTHORIZED");
     },
   };
-  return { service: new ApplicationRemoteDesktopService(capabilities, store, authorizer), calls };
+  return { service: new ApplicationRemoteDesktopService(capabilities, store, authorizer, transport), calls };
 }
 
 test("request requires actor authorization and paid application entitlement", async () => {
@@ -63,4 +65,37 @@ test("revocation is authorized before entitlement or persistence", async () => {
     ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 2,
   }), /ACTION_NOT_AUTHORIZED/);
   assert.equal(calls.some(([kind]) => kind === "revoke"), false);
+});
+
+test("start requires a configured transport and separate lifecycle permission", async () => {
+  const noTransport = fixture();
+  await assert.rejects(() => noTransport.service.startSession({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 2,
+  }), /TRANSPORT_NOT_CONFIGURED/);
+  assert.equal(noTransport.calls.some(([kind]) => kind === "start"), false);
+
+  const transportCalls = [];
+  const configured = fixture({ transport: {
+    async start(context, signal) { transportCalls.push(["start", context, signal.aborted]); },
+    async stop(context) { transportCalls.push(["stop", context]); },
+  } });
+  const result = await configured.service.startSession({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 2,
+  });
+  assert.equal(result.status, "ACTIVE");
+  assert.deepEqual(transportCalls.map(([kind]) => kind), ["start"]);
+  assert.ok(configured.calls.some(([kind, action]) => kind === "authorize" && action === "remote_desktop.session.start"));
+});
+
+test("stop requires lifecycle permission and delegates disconnect to the configured transport", async () => {
+  const transportCalls = [];
+  const configured = fixture({ transport: {
+    async start() {},
+    async stop(context) { transportCalls.push(context.sessionId); },
+  } });
+  const result = await configured.service.stopSession({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000", expectedVersion: 3,
+  });
+  assert.equal(result.status, "STOPPED");
+  assert.deepEqual(transportCalls, ["123e4567-e89b-42d3-a456-426614174000"]);
 });
