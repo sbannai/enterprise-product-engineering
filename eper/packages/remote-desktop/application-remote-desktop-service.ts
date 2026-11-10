@@ -66,22 +66,24 @@ export class ApplicationRemoteDesktopService {
     if (!this.endpointConsentVerifier) {
       throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_VERIFIER_NOT_CONFIGURED");
     }
-    const endpointId = await this.store.getEndpointId({
-      ...input, sessionId: input.sessionId,
-    });
-    const endpointVerified = await this.endpointConsentVerifier.verify({
-      tenantId: input.tenantId, applicationId: input.applicationId, endpointId,
-      sessionId: input.sessionId, expectedVersion: input.expectedVersion, endpointProof: input.endpointProof, actorId: input.actorId,
-      grantedMode: input.grantedMode, correlationId: input.correlationId,
-    });
-    if (!endpointVerified) throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_NOT_VERIFIED");
     if (input.grantedMode === "REMOTE_CONTROL") {
       await this.authorize(input, "remote_desktop.control.grant");
     } else if (input.grantedMode !== "VIEW_ONLY") {
       throw new Error("REMOTE_DESKTOP_CONSENT_MODE_INVALID");
     }
-    return this.capabilities.withRemoteDesktopSharing(input, () =>
-      this.store.acceptWithConsent(input));
+    // Check paid entitlement before querying endpoint identity or invoking an external verifier.
+    return this.capabilities.withRemoteDesktopSharing(input, async () => {
+      const endpointId = await this.store.getEndpointId({
+        ...input, sessionId: input.sessionId,
+      });
+      const endpointVerified = await this.endpointConsentVerifier!.verify({
+        tenantId: input.tenantId, applicationId: input.applicationId, endpointId,
+        sessionId: input.sessionId, expectedVersion: input.expectedVersion, endpointProof: input.endpointProof, actorId: input.actorId,
+        grantedMode: input.grantedMode, correlationId: input.correlationId,
+      });
+      if (!endpointVerified) throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_NOT_VERIFIED");
+      return this.store.acceptWithConsent(input);
+    });
   }
 
   async startSession(input: RemoteDesktopServiceScope & {
