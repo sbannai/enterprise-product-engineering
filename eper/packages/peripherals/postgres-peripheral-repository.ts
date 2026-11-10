@@ -238,6 +238,42 @@ export class PostgresPeripheralRepository {
     }
   }
 
+  async getConfiguration(scope: PeripheralScope, peripheralId: string): Promise<PeripheralConfiguration | null> {
+    this.validateScope(scope);
+    this.validateId(peripheralId, "peripheralId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setScope(client, scope);
+      const result = await client.query<{
+        adapter_key: string; adapter_version: string;
+        settings: Record<string, unknown>; secret_reference: string | null;
+      }>(
+        `SELECT c.adapter_key, c.adapter_version, c.settings, c.secret_reference
+           FROM eper_application_peripheral p
+           JOIN eper_application_peripheral_configuration c
+             ON c.tenant_id = p.tenant_id AND c.application_id = p.application_id
+            AND c.peripheral_id = p.peripheral_id
+            AND c.configuration_version = p.active_configuration_version
+          WHERE p.tenant_id = $1 AND p.application_id = $2 AND p.peripheral_id = $3`,
+        [scope.tenantId, scope.applicationId, peripheralId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      return row ? {
+        adapterKey: row.adapter_key,
+        adapterVersion: row.adapter_version,
+        settings: row.settings,
+        ...(row.secret_reference ? { secretReference: row.secret_reference } : {}),
+      } : null;
+    } catch (error) {
+      await this.rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async transition(input: TransitionPeripheralInput): Promise<PeripheralRegistration> {
     this.validateMutation(input);
     this.validateId(input.peripheralId, "peripheralId");
