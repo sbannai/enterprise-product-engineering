@@ -8,11 +8,13 @@ on:
   pull_request:
     branches: ["main", "integration/eper-348-350-355-candidate"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
       - ".github/workflows/eper-integrated-validation.yml"
   push:
     branches: ["main", "integration/eper-348-350-355-candidate"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
       - ".github/workflows/eper-integrated-validation.yml"
   workflow_dispatch:
