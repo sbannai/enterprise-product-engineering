@@ -119,7 +119,12 @@ export class ApplicationRemoteDesktopService {
   }): Promise<RemoteDesktopSessionRecord> {
     await this.authorize(input, "remote_desktop.consent.revoke");
     return this.capabilities.withRemoteDesktopSharing(input, () =>
-      this.store.revokeConsent(input));
+      this.store.revokeConsent({
+        ...input,
+        stopTransport: this.transport
+          ? context => this.transport!.stop(context)
+          : undefined,
+      }));
   }
 
   private authorize(
