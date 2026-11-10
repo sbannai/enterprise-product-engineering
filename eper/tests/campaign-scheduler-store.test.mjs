@@ -526,7 +526,7 @@ test("claim query excludes executions that crossed the dispatch fence and audits
     rows: sql.includes("WITH due AS") ? [{
       id: "job-1", schedule_id: "schedule-1", tenant_id: "tenant-a", application_id: "app-a",
       scheduled_for: "2030-01-01T00:00:00.000Z", status: "running", attempt_count: 1,
-      idempotency_key: "idem-1", payload: {}, available_at: "2030-01-01T00:00:00.000Z",
+      idempotency_key: "idem-1", payload: {}, claim_generation: 1, available_at: "2030-01-01T00:00:00.000Z",
     }] : [],
     rowCount: sql.includes("WITH due AS") ? 1 : 0,
   }));
