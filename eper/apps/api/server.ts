@@ -57,6 +57,7 @@ import { validateCreateTicketInput, TICKET_STATUSES, TICKET_SEVERITIES, TICKET_T
 import type { PostgresTicketStore } from "../../packages/ticketing/postgres-ticket-store.js";
 import type { PostgresActorApplicationAssignmentStore } from "../../packages/identity/postgres-actor-application-assignment-store.js";
 import type { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import type { ApplicationPeripheralService } from "../../packages/peripherals/application-peripheral-service.js";
 import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
@@ -534,7 +535,7 @@ function createConfiguredCapabilityServices(postgresPool?: Pool) {
   return createCapabilityServices({ persistence: "json-file", dataDirectory });
 }
 
-export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadProviderCapabilities?: StorageUploadProviderCapabilities; assetUploadLookup?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>; assetUploadLookupPort?: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>; assetUploadVerification?: (request: StorageUploadVerificationRequest, requestId: string) => Promise<VerifiedStorageObject | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer } = {}): Server {
+export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountSource?: TrustedInvoiceAmountSource; paymentStore?: PostgresPaymentStore; receiptNumberSource?: TrustedReceiptNumberSource; transactionSnapshotSource?: TrustedTransactionSnapshotSource; allowLegacyPaymentLedgerForTests?: boolean; auditWriter?: AgentAuditWriter; agentDraftStore?: AgentDraftStore; assetDownloadResolver?: CustomerAssetDownloadResolver; assetStoragePort?: IntegrationPort<CustomerAssetDownloadRequest, { url: string; expiresAt: string }>; assetAuditWriter?: CustomerAssetAuditWriter; customerAssetRepository?: PostgresCustomerAssetRepository; assetUploadPort?: IntegrationPort<StorageUploadRequest, StorageUploadGrant>; assetUploadProviderCapabilities?: StorageUploadProviderCapabilities; assetUploadLookup?: (uploadSessionId: string, requestId: string, scope: { tenantId: string; applicationId: string }) => Promise<StorageUploadLookupOutcome>; assetUploadLookupPort?: IntegrationPort<StorageUploadLookupRequest, StorageUploadLookupResponse>; assetUploadVerification?: (request: StorageUploadVerificationRequest, requestId: string) => Promise<VerifiedStorageObject | null>; ticketStore?: PostgresTicketStore; actorApplicationAssignmentStore?: PostgresActorApplicationAssignmentStore; tenantApplicationAssignmentStore?: PostgresTenantApplicationAssignmentStore; customerIdentitySessionStore?: PostgresCustomerIdentitySessionStore; customerOidcClient?: ProviderNeutralOidcClient; customerOidcPublicOrigin?: string; customerCsrfSecret?: string; adminConfigurationStore?: PostgresAdminConfigurationStore; commercialTariffAdminStore?: PostgresCommercialTariffAdminStore; customerLifecycleStore?: PostgresCustomerLifecycleStore; moduleEntitlementService?: PostgresModuleEntitlementService; adminConfigEnvironment?: "production" | "uat" | "sandbox"; serviceVersion?: string; campaignSchedulerStore?: PostgresCampaignSchedulerStore; workflowRoleDefinitionStore?: PostgresWorkflowRoleDefinitionStore; workflowActorRoleAssignmentStore?: PostgresWorkflowActorRoleAssignmentStore; workflowRoleDelegationStore?: PostgresWorkflowRoleDelegationStore; platformCustomerAdminProvisioningStore?: PostgresPlatformCustomerAdminProvisioningStore; platformApplicationRemediationStore?: PostgresPlatformApplicationRemediationStore; platformAdminCredentialStore?: PostgresPlatformAdminCredentialStore; workflowDefinitionPublisher?: WorkflowDefinitionPublisher; workflowDefinitionDraftStore?: PostgresWorkflowDefinitionDraftStore; workflowExecutionService?: PostgresWorkflowExecutionService; workflowOutboxStore?: Pick<PostgresWorkflowOutboxStore, "listDeadLetters">; workflowOutboxReplay?: typeof replayWorkflowOutboxDeadLetter; providerConnectionRepository?: PostgresProviderConnectionRepository; providerValidationService?: ProviderConnectionValidationService; providerCatalogueRepository?: PostgresProviderCatalogueRepository; actionApprovalStore?: PostgresActionApprovalStore; actionApprovalAuthorizer?: ActionApprovalAuthorizer; peripheralService?: ApplicationPeripheralService } = {}): Server {
   // Durable mode must never fall back to credential-embedded applicationIds.
   // main.ts wires and readiness-checks this store; keep the API factory fail-closed
   // as well for tests, alternate entry points, and future embedding scenarios.
@@ -3013,6 +3014,152 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
     }
 
 
+
+    // Application-scoped peripherals. Disabled by default; requires durable browser identity,
+    // current tenant/actor assignments, role grants, add-on entitlement and PostgreSQL persistence.
+    const peripheralPath = /^\/customer\/applications\/([^/]+)\/peripherals(?:\/([^/]+)(?:\/(configure|activate|suspend))?)?$/.exec(requestUrl.pathname);
+    if (peripheralPath) {
+      if (process.env.EPER_APPLICATION_PERIPHERAL_API_ENABLED !== "true" || !options.peripheralService ||
+          process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE !== "postgres" ||
+          process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+          process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+          !options.customerIdentitySessionStore || !options.tenantApplicationAssignmentStore ||
+          !options.actorApplicationAssignmentStore || !options.workflowActorRoleAssignmentStore) {
+        sendJson(request, response, 404, { error: "not_found" });
+        return;
+      }
+      const method = request.method ?? "GET";
+      if (!["GET", "POST"].includes(method)) { sendMethodNotAllowed(request, response, "GET, POST"); return; }
+      let applicationId: string;
+      let peripheralId: string | undefined;
+      try {
+        applicationId = decodeURIComponent(peripheralPath[1]);
+        peripheralId = peripheralPath[2] ? decodeURIComponent(peripheralPath[2]) : undefined;
+      } catch {
+        sendJson(request, response, 400, { error: "invalid_path_encoding" });
+        return;
+      }
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/.test(applicationId) ||
+          (peripheralId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/.test(peripheralId))) {
+        sendJson(request, response, 400, { error: "invalid_peripheral_scope" });
+        return;
+      }
+      const identity = await resolveCustomerBrowserIdentity({
+        cookieHeader: request.headers.cookie, applicationId,
+        sessionStore: options.customerIdentitySessionStore,
+        tenantAssignments: options.tenantApplicationAssignmentStore,
+        actorAssignments: options.actorApplicationAssignmentStore,
+      });
+      if (!identity) {
+        sendApiError(request, response, 401, "UNAUTHENTICATED",
+          "A valid browser session with active tenant and actor application assignments is required.");
+        return;
+      }
+      if (method === "POST") {
+        const cookies = parseCookieHeader(request.headers.cookie);
+        const sessionToken = cookies.get("__Host-eper_session") ?? "";
+        const csrfHeader = request.headers["x-csrf-token"];
+        const csrfValid = verifyCustomerBrowserCsrf({
+          method: request.method,
+          origin: request.headers.origin,
+          expectedOrigin: options.customerOidcPublicOrigin ?? process.env.EPER_CUSTOMER_BROWSER_ORIGIN ?? "",
+          cookieHeader: request.headers.cookie,
+          csrfHeader: typeof csrfHeader === "string" ? csrfHeader : undefined,
+          sessionToken,
+          secret: options.customerCsrfSecret ?? process.env.EPER_CUSTOMER_CSRF_SECRET ?? "",
+        });
+        if (!csrfValid) {
+          sendApiError(request, response, 403, "CSRF_VALIDATION_FAILED",
+            "A valid same-origin CSRF token is required for this browser request.");
+          return;
+        }
+      }
+      const scope = {
+        tenantId: identity.tenantId,
+        applicationId: identity.applicationId,
+        actorId: identity.actorId,
+        environment: options.adminConfigEnvironment ?? "sandbox",
+        correlationId: resolveApiRequestId(request),
+      };
+      try {
+        if (method === "GET" && !peripheralId) {
+          const peripherals = await options.peripheralService.list(scope);
+          sendApiSuccess(request, response, 200, { applicationId, peripherals });
+          return;
+        }
+        if (method !== "POST") { sendMethodNotAllowed(request, response, "GET, POST"); return; }
+        const body = await readJson(request);
+        let result;
+        if (!peripheralId && !peripheralPath[3]) {
+          const allowed = ["peripheralId", "kind", "displayName"];
+          const kinds = ["barcode_scanner", "qr_reader", "sensor", "rfid_nfc", "printer", "weighing_scale", "custom"];
+          if (Object.keys(body).some(key => !allowed.includes(key)) ||
+              typeof body.kind !== "string" || !kinds.includes(body.kind) ||
+              typeof body.displayName !== "string" || !body.displayName.trim() || body.displayName.length > 160 ||
+              (body.peripheralId !== undefined && typeof body.peripheralId !== "string")) {
+            sendJson(request, response, 400, { error: "EPER_PERIPHERAL_REGISTER_INPUT_INVALID" });
+            return;
+          }
+          result = await options.peripheralService.register({
+            ...scope, peripheralId: body.peripheralId as string | undefined,
+            kind: body.kind as "barcode_scanner", displayName: body.displayName,
+          });
+          sendApiSuccess(request, response, 201, { peripheral: result });
+          return;
+        }
+        if (!peripheralId || !peripheralPath[3]) {
+          sendJson(request, response, 404, { error: "not_found" });
+          return;
+        }
+        if (typeof body.expectedVersion !== "number" || !Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 1) {
+          sendJson(request, response, 400, { error: "EPER_PERIPHERAL_EXPECTED_VERSION_INVALID" });
+          return;
+        }
+        if (peripheralPath[3] === "configure") {
+          const allowed = ["expectedVersion", "configuration"];
+          const config = body.configuration;
+          if (Object.keys(body).some(key => !allowed.includes(key)) || !config ||
+              typeof config !== "object" || Array.isArray(config) ||
+              Object.keys(config).some(key => !["adapterKey", "adapterVersion", "settings", "secretReference"].includes(key)) ||
+              typeof config.adapterKey !== "string" || typeof config.adapterVersion !== "string" ||
+              !config.settings || typeof config.settings !== "object" || Array.isArray(config.settings) ||
+              (config.secretReference !== undefined && typeof config.secretReference !== "string")) {
+            sendJson(request, response, 400, { error: "EPER_PERIPHERAL_CONFIGURATION_INVALID" });
+            return;
+          }
+          result = await options.peripheralService.configure({
+            ...scope, peripheralId, expectedVersion: body.expectedVersion,
+            configuration: {
+              adapterKey: config.adapterKey, adapterVersion: config.adapterVersion,
+              settings: config.settings as Record<string, unknown>,
+              secretReference: config.secretReference as string | undefined,
+            },
+          });
+        } else if (peripheralPath[3] === "activate") {
+          if (Object.keys(body).some(key => key !== "expectedVersion")) {
+            sendJson(request, response, 400, { error: "EPER_PERIPHERAL_TRANSITION_INPUT_INVALID" });
+            return;
+          }
+          result = await options.peripheralService.activate({ ...scope, peripheralId, expectedVersion: body.expectedVersion });
+        } else {
+          if (Object.keys(body).some(key => key !== "expectedVersion")) {
+            sendJson(request, response, 400, { error: "EPER_PERIPHERAL_TRANSITION_INPUT_INVALID" });
+            return;
+          }
+          result = await options.peripheralService.suspend({ ...scope, peripheralId, expectedVersion: body.expectedVersion });
+        }
+        sendApiSuccess(request, response, 200, { peripheral: result });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "EPER_PERIPHERAL_OPERATION_FAILED";
+        const status = code.includes("FORBIDDEN") || code.includes("ACCESS_DENIED") ? 403
+          : code.includes("NOT_FOUND") ? 404
+          : code.includes("VERSION_CONFLICT") ? 409
+          : code.includes("INVALID") || code.includes("REQUIRED") ? 400
+          : code.includes("UNAVAILABLE") ? 503 : 409;
+        sendApiError(request, response, status, code, "Peripheral operation was not completed.");
+      }
+      return;
+    }
 
     // Customer-safe provider catalogue projection. Product Admin-only fields and schemas are omitted.
     const customerProviderCataloguePath = /^\/customer\/applications\/([^/]+)\/provider-catalogue$/.exec(requestUrl.pathname);
