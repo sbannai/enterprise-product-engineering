@@ -112,6 +112,40 @@ test("start revalidates endpoint consent under row lock", async () => {
   assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF s, c")));
 });
 
+test("consent revocation disconnects an active transport before revoking the grant", async () => {
+  const { store, calls } = fixture();
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  await store.requestSession({ ...scope, endpointId: "endpoint-a", expiresAt: "2030-01-01T00:00:00.000Z", sessionId });
+  await store.acceptWithConsent({ ...scope, sessionId, expectedVersion: 1, grantedMode: "VIEW_ONLY",
+    consentExpiresAt: "2029-12-01T00:00:00.000Z", consentGrantId: "123e4567-e89b-42d3-a456-426614174001" });
+  await store.startWithConsent({ ...scope, sessionId, expectedVersion: 2,
+    async startTransport() { return async () => {}; } });
+  let disconnected = 0;
+  const revoked = await store.revokeConsent({ ...scope, sessionId, expectedVersion: 3,
+    async stopTransport(context) {
+      disconnected++;
+      assert.equal(context.sessionId, sessionId);
+      assert.equal(context.endpointId, "endpoint-a");
+      assert.equal(context.mode, "VIEW_ONLY");
+    } });
+  assert.equal(disconnected, 1);
+  assert.equal(revoked.status, "REVOKED");
+  assert.ok(calls.some(call => call.sql.includes("UPDATE eper_remote_desktop_consent SET revoked_at")));
+  assert.ok(calls.some(call => call.sql.includes("INSERT INTO eper_audit_events")));
+});
+
+test("active consent revocation fails closed without a configured transport", async () => {
+  const { store } = fixture();
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  await store.requestSession({ ...scope, endpointId: "endpoint-a", expiresAt: "2030-01-01T00:00:00.000Z", sessionId });
+  await store.acceptWithConsent({ ...scope, sessionId, expectedVersion: 1, grantedMode: "VIEW_ONLY",
+    consentExpiresAt: "2029-12-01T00:00:00.000Z" });
+  await store.startWithConsent({ ...scope, sessionId, expectedVersion: 2,
+    async startTransport() { return async () => {}; } });
+  await assert.rejects(() => store.revokeConsent({ ...scope, sessionId, expectedVersion: 3 }),
+    /TRANSPORT_NOT_CONFIGURED/);
+});
+
 test("stop disconnects before persisting STOPPED and supports a safe retry", async () => {
   const { store } = fixture();
   const sessionId = "123e4567-e89b-42d3-a456-426614174000";
