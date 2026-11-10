@@ -499,13 +499,21 @@ export class PostgresCampaignSchedulerStore {
             resourceType: "campaign-execution", resourceId: String(row.id),
             source: "job", operationName: "campaign.execution.claim",
             serviceVersion: this.serviceVersion,
-            payload: { resultingStatus: "running", attemptCount: Number(row.attempt_count) },
+            payload: {
+              resultingStatus: "running",
+              attemptCount: Number(row.attempt_count),
+              claimGeneration,
+            },
           });
         } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
       }
       await client.query("COMMIT");
       return result.rows.map((row) => {
         const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+        const claimGeneration = Number(row.claim_generation);
+        if (!Number.isSafeInteger(claimGeneration) || claimGeneration < 1) {
+          throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
+        }
         return {
           id: String(row.id), scheduleId: String(row.schedule_id), tenantId: String(row.tenant_id),
           applicationId: String(row.application_id), scheduledFor: new Date(row.scheduled_for as string | Date).toISOString(),
