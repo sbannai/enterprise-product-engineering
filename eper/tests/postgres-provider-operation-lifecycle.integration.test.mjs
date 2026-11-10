@@ -281,6 +281,76 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         error => error?.code === "PROVIDER_PAYLOAD_DELETED",
       );
 
+      // Verify every non-terminal state blocks tombstoning and every other
+      // terminal state permits it. Each fixture is a real reciprocal queue/payload pair.
+      for (const status of ["DISPATCHING", "RETRYING"]) {
+        const payload = { body: "retention-blocked-" + status + "-" + suffix };
+        const digest = createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
+        const queued = await operationRepository.enqueueWithPayload({
+          ...atomicInput,
+          idempotencyKey: "retention-blocked-" + status + "-" + suffix,
+          correlationId: "retention-blocked-" + status + "-correlation-" + suffix,
+          requestDigest: digest,
+          payload,
+        });
+        const reference = {
+          tenantId, applicationId, operationId: queued.operation.operationId,
+          capabilityKey: "email.send", reference: queued.operation.payloadReference, digest,
+        };
+        await pool.query(
+          `UPDATE eper_provider_payloads
+           SET expires_at=NOW()-INTERVAL '1 second',
+               retention_policy_id='test-retention',retention_policy_version='1'
+           WHERE payload_reference=$1`,
+          [reference.reference],
+        );
+        await pool.query(
+          `UPDATE eper_provider_operations
+           SET operation_status=$4,
+               lease_owner=CASE WHEN $4='DISPATCHING' THEN 'retention-test-worker' ELSE NULL END,
+               lease_expires_at=CASE WHEN $4='DISPATCHING' THEN NOW()+INTERVAL '1 minute' ELSE NULL END,
+               fencing_token=CASE WHEN $4='DISPATCHING' THEN 1 ELSE fencing_token END
+           WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+          [tenantId, applicationId, reference.operationId, status],
+        );
+        await assert.rejects(
+          () => retentionStore.delete(reference),
+          error => error?.code === "PROVIDER_PAYLOAD_OPERATION_NOT_TERMINAL",
+          status + " operations must retain their payload envelope",
+        );
+      }
+
+      for (const status of ["FAILED", "NEEDS_ATTENTION", "CANCELLED"]) {
+        const payload = { body: "retention-terminal-" + status + "-" + suffix };
+        const digest = createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex");
+        const queued = await operationRepository.enqueueWithPayload({
+          ...atomicInput,
+          idempotencyKey: "retention-terminal-" + status + "-" + suffix,
+          correlationId: "retention-terminal-" + status + "-correlation-" + suffix,
+          requestDigest: digest,
+          payload,
+        });
+        const reference = {
+          tenantId, applicationId, operationId: queued.operation.operationId,
+          capabilityKey: "email.send", reference: queued.operation.payloadReference, digest,
+        };
+        await pool.query(
+          `UPDATE eper_provider_payloads
+           SET expires_at=NOW()-INTERVAL '1 second',
+               retention_policy_id='test-retention',retention_policy_version='1'
+           WHERE payload_reference=$1`,
+          [reference.reference],
+        );
+        await pool.query(
+          `UPDATE eper_provider_operations
+           SET operation_status=$4,lease_owner=NULL,lease_expires_at=NULL
+           WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+          [tenantId, applicationId, reference.operationId, status],
+        );
+        assert.equal(await retentionStore.delete(reference), true,
+          status + " operations must permit eligible payload tombstoning");
+      }
+
       // Exercise PostgreSQL RLS through the actual restricted NOLOGIN role.
       // The payload is created by enqueueWithPayload above, so it satisfies the
       // operation/payload deferred foreign keys introduced by migration 022.
