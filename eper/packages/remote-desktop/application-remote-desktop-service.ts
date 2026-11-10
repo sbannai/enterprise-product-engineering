@@ -15,7 +15,7 @@ export interface RemoteDesktopEndpointConsentVerifier {
   /** Must authenticate the endpoint user/session and bind it to this exact session. */
   verify(input: {
     tenantId: string; applicationId: string; endpointId: string; sessionId: string;
-    actorId: string; grantedMode: RemoteSessionMode; correlationId: string;
+    expectedVersion: number; actorId: string; grantedMode: RemoteSessionMode; correlationId: string;
   }): Promise<boolean>;
 }
 
@@ -66,7 +66,7 @@ export class ApplicationRemoteDesktopService {
     });
     const endpointVerified = await this.endpointConsentVerifier.verify({
       tenantId: input.tenantId, applicationId: input.applicationId, endpointId,
-      sessionId: input.sessionId, actorId: input.actorId,
+      sessionId: input.sessionId, expectedVersion: input.expectedVersion, actorId: input.actorId,
       grantedMode: input.grantedMode, correlationId: input.correlationId,
     });
     if (!endpointVerified) throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_NOT_VERIFIED");
