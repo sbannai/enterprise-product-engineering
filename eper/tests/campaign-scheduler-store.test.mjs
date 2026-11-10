@@ -533,6 +533,10 @@ test("claim query excludes executions that crossed the dispatch fence and audits
   const store = new PostgresCampaignSchedulerStore(pool);
   const claimed = await store.claimExecutions("worker-a", 10);
   assert.equal(claimed.length, 1);
+  assert.equal(claimed[0].claimGeneration, 1);
+  const auditInsert = calls.find((call) => call.sql.includes("INSERT INTO eper_audit_events"));
+  assert.ok(auditInsert);
+  assert.ok(auditInsert.values.some((value) => typeof value === "string" && value.includes('"claimGeneration":1')));
   const claimQuery = calls.find((call) => call.sql.includes("WITH due AS"));
   assert.match(claimQuery.sql, /e\.dispatch_started_at IS NULL/);
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")));
