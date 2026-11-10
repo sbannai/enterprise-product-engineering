@@ -51,6 +51,15 @@ test("view-only consent requires acceptance permission but not remote-control gr
     ["remote_desktop.consent.accept"]);
 });
 
+test("consent requires a bounded endpoint-signed proof before identity verification", async () => {
+  const { service, calls } = fixture();
+  await assert.rejects(() => service.acceptConsent({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
+    expectedVersion: 1, grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+  }), /ENDPOINT_PROOF_INVALID/);
+  assert.equal(calls.some(([kind]) => kind === "getEndpointId"), false);
+});
+
 test("consent fails closed when endpoint identity verifier is not configured", async () => {
   const { service, calls } = fixture({ endpointConsentVerifier: null });
   await assert.rejects(() => service.acceptConsent({
