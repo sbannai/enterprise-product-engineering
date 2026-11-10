@@ -98,10 +98,11 @@ test("adapter preserves rule condition and rejects mixed routing it cannot repre
   const definition = {
     id: "expense-flow", name: "Expense flow", status: "DRAFT",
     activities: [
-      { id: "start", title: "Start", type: "FORM", roleId: "employee", permission: "workflow:act", nextActivityIds: ["approve", "reject"], fields: [],
+      { id: "start", title: "Start", type: "FORM", roleId: "employee", permission: "workflow:act", nextActivityIds: ["approve", "reject", "archive"], fields: [],
         routingRuleIds: ["high", "low"] },
       { id: "approve", title: "Approve", type: "APPROVAL", roleId: "manager", permission: "workflow:approve", nextActivityIds: [], fields: [] },
       { id: "reject", title: "Reject", type: "TASK", roleId: "finance", permission: "workflow:act", nextActivityIds: [], fields: [] },
+      { id: "archive", title: "Archive", type: "TASK", roleId: "finance", permission: "workflow:act", nextActivityIds: [], fields: [] },
     ],
     rules: [
       { id: "high", name: "High value", priority: 20, targetActivityId: "approve", condition: { kind: "condition", field: "amount", operator: "gte", value: 1000 } },
