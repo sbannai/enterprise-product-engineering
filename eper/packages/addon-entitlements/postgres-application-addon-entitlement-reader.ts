@@ -33,7 +33,7 @@ function mapEntitlement(row: EntitlementRow): ApplicationAddonEntitlement {
     throw new Error("APPLICATION_ADDON_USAGE_LIMIT_INVALID");
   }
   const amount = row.agreed_amount === null ? null : String(row.agreed_amount);
-  if (amount !== null && (!/^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$/.test(amount) || !Number.isFinite(Number(amount)))) {
+  if (amount !== null && (!/^(?:0|[1-9]\d*)(?:\\.\d{1,4})?$/.test(amount) || !Number.isFinite(Number(amount)))) {
     throw new Error("APPLICATION_ADDON_AMOUNT_INVALID");
   }
   const currency = row.agreed_currency?.trim() ?? null;
