@@ -32,9 +32,10 @@ type PayloadRow = {
   payload_digest: string;
   envelope_version: number;
   key_id: string | null;
-  nonce: string;
-  auth_tag: string;
-  ciphertext: string;
+  nonce: string | null;
+  auth_tag: string | null;
+  ciphertext: string | null;
+  deleted_at: Date | string | null;
 };
 
 function normalizedScope(input: ProviderPayloadScope): ProviderPayloadScope {
@@ -207,7 +208,7 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
       await client.query("SELECT set_config('eper.application_id',$1,true)", [scope.applicationId]);
       const result = await client.query<PayloadRow>(
         `SELECT tenant_id,application_id,operation_id,capability_key,payload_digest,
-                envelope_version,key_id,nonce,auth_tag,ciphertext
+                envelope_version,key_id,nonce,auth_tag,ciphertext,deleted_at
          FROM eper_provider_payloads
          WHERE payload_reference=$1 AND tenant_id=$2 AND application_id=$3
            AND operation_id=$4 AND capability_key=$5`,
@@ -224,6 +225,9 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
     if (!row) throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_NOT_FOUND");
     if (row.payload_digest !== input.digest) {
       throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_SCOPE_MISMATCH");
+    }
+    if (row.deleted_at !== null || row.ciphertext === null || row.nonce === null || row.auth_tag === null) {
+      throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_DELETED");
     }
     try {
       let plaintext: Buffer;
@@ -281,13 +285,34 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
       await client.query("BEGIN");
       await client.query("SELECT set_config('eper.tenant_id',$1,true)", [scope.tenantId]);
       await client.query("SELECT set_config('eper.application_id',$1,true)", [scope.applicationId]);
+      // Lock the operation first: status transitions and deletion serialize on this row.
+      const operation = await client.query<{
+        operation_status: string;
+        correlation_id: string;
+        payload_reference: string | null;
+      }>(
+        `SELECT operation_status,correlation_id,payload_reference
+         FROM eper_provider_operations
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
+         FOR UPDATE`,
+        [scope.tenantId, scope.applicationId, scope.operationId],
+      );
+      const operationRow = operation.rows[0];
+      if (!operationRow || operationRow.payload_reference !== input.reference) {
+        await client.query("COMMIT");
+        return false;
+      }
+      if (!["SUCCEEDED","FAILED","NEEDS_ATTENTION","CANCELLED"].includes(operationRow.operation_status)) {
+        throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_OPERATION_NOT_TERMINAL");
+      }
       const selected = await client.query<{
         expires_at: Date | string | null;
         legal_hold: boolean;
         retention_policy_id: string | null;
         retention_policy_version: string | null;
+        deleted_at: Date | string | null;
       }>(
-        `SELECT expires_at,legal_hold,retention_policy_id,retention_policy_version
+        `SELECT expires_at,legal_hold,retention_policy_id,retention_policy_version,deleted_at
          FROM eper_provider_payloads
          WHERE payload_reference=$1 AND tenant_id=$2 AND application_id=$3
            AND operation_id=$4 AND capability_key=$5 AND payload_digest=$6
@@ -300,32 +325,32 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
         await client.query("COMMIT");
         return false;
       }
+      if (row.deleted_at !== null) {
+        await client.query("COMMIT");
+        return false;
+      }
       if (row.legal_hold) throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_LEGAL_HOLD_ACTIVE");
       if (!row.expires_at || new Date(row.expires_at).getTime() > Date.now()
         || !row.retention_policy_id || !row.retention_policy_version) {
         throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE");
       }
-      // Detach the optional operation reference in this transaction before
-      // retention removes the envelope; the deferred reverse FK must still hold.
-      const detached = await client.query(
-        `UPDATE eper_provider_operations SET payload_reference=NULL
-         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3
-           AND payload_reference=$4`,
-        [scope.tenantId, scope.applicationId, scope.operationId, input.reference],
-      );
-      if ((detached.rowCount ?? 0) !== 1) {
-        throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_SCOPE_MISMATCH");
-      }
-      const removed = await client.query(
-        `DELETE FROM eper_provider_payloads
+      const correlationId = decision.correlationId ?? operationRow.correlation_id;
+      const tombstoned = await client.query(
+        `UPDATE eper_provider_payloads SET
+           nonce=NULL,auth_tag=NULL,ciphertext=NULL,deleted_at=NOW(),
+           deleted_by_actor_type=$7,deleted_by_actor_id=$8,deletion_source=$9,
+           deletion_reason_code=$10,deletion_policy_decision_reference=$11,
+           deletion_correlation_id=$12
          WHERE payload_reference=$1 AND tenant_id=$2 AND application_id=$3
            AND operation_id=$4 AND capability_key=$5 AND payload_digest=$6
-           AND legal_hold=FALSE AND expires_at IS NOT NULL AND expires_at <= NOW()
+           AND deleted_at IS NULL AND legal_hold=FALSE
+           AND expires_at IS NOT NULL AND expires_at <= NOW()
            AND retention_policy_id IS NOT NULL AND retention_policy_version IS NOT NULL`,
         [input.reference, scope.tenantId, scope.applicationId, scope.operationId,
-          scope.capabilityKey, input.digest],
+          scope.capabilityKey, input.digest, decision.actorType, decision.actorId,
+          decision.source, decision.reasonCode, decision.policyDecisionReference, correlationId],
       );
-      if ((removed.rowCount ?? 0) !== 1) {
+      if ((tombstoned.rowCount ?? 0) !== 1) {
         throw new ProviderPayloadStoreError("PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE");
       }
       await appendAuditEventInTransaction(client, {
@@ -334,15 +359,15 @@ export class PostgresEncryptedProviderPayloadStore implements EncryptedProviderP
         environment: decision.environment,
         actorType: decision.actorType,
         actorId: decision.actorId,
-        action: "provider.payload.deleted",
+        action: "provider.payload.tombstoned",
         outcome: "success",
         reasonCode: decision.reasonCode,
         resourceType: "provider_payload",
         resourceId: input.reference,
         operationId: scope.operationId,
-        correlationId: decision.correlationId,
+        correlationId: decision.correlationId ?? operationRow.correlation_id,
         source: decision.source,
-        operationName: "provider_payload_retention_delete",
+        operationName: "provider_payload_retention_tombstone",
         payload: {
           payloadReference: input.reference,
           payloadDigest: input.digest,
