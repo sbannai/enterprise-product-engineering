@@ -41,6 +41,9 @@ import { ApplicationPeripheralService } from "../../packages/peripherals/applica
 import { PostgresPeripheralRoleAuthorizer } from "../../packages/peripherals/peripheral-authorization.js";
 import { PeripheralAdapterRegistry } from "../../packages/peripherals/index.js";
 import { SyntheticPeripheralAdapter } from "../../packages/peripherals/synthetic-peripheral-adapter.js";
+import { PostgresRemoteDesktopSessionStore } from "../../packages/remote-desktop/postgres-remote-desktop-session-store.js";
+import { ApplicationRemoteDesktopService } from "../../packages/remote-desktop/application-remote-desktop-service.js";
+import { PostgresRemoteDesktopRoleAuthorizer } from "../../packages/remote-desktop/remote-desktop-authorization.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -66,6 +69,13 @@ const customerIdentityPersistenceMode = process.env.EPER_CUSTOMER_IDENTITY_PERSI
 const customerAssetUploadApiEnabled = process.env.EPER_CUSTOMER_ASSET_UPLOAD_API_ENABLED === "true";
 const customerAssetMetadataApiEnabled = process.env.EPER_CUSTOMER_ASSET_METADATA_API_ENABLED === "true";
 const peripheralApiEnabled = process.env.EPER_APPLICATION_PERIPHERAL_API_ENABLED === "true";
+const remoteDesktopApiEnabled = process.env.EPER_REMOTE_DESKTOP_API_ENABLED === "true";
+if (remoteDesktopApiEnabled && (customerIdentityPersistenceMode !== "postgres" ||
+    process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
+    process.env.EPER_AUDIT_PERSISTENCE !== "postgres" ||
+    process.env.EPER_CUSTOMER_OIDC_ENABLED !== "true")) {
+  throw new Error("REMOTE_DESKTOP_API_REQUIRES_POSTGRES_OIDC_IDENTITY_ASSIGNMENTS_AND_DURABLE_AUDIT");
+}
 if (peripheralApiEnabled && (customerIdentityPersistenceMode !== "postgres" ||
     process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE !== "postgres" ||
     process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
@@ -80,7 +90,7 @@ if (providerStorageRuntimeConfiguration.enabled) {
 if (customerIdentityPersistenceMode !== "disabled" && customerIdentityPersistenceMode !== "postgres") {
   throw new Error("EPER_CUSTOMER_IDENTITY_PERSISTENCE_UNSUPPORTED");
 }
-const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled;
+const postgresDatabaseMode = postgresPaymentMode || postgresCapabilityMode || workflowExecutionEnabled || workflowRoleDelegationEnabled || workflowOutboxAdminEnabled || commercialTariffAdminEnabled || customerLifecycleApiEnabled || platformCustomerAdminEnabled || platformApplicationRemediationEnabled || platformAdminCredentialsEnabled || providerCatalogueAdminEnabled || providerConnectionsEnabled || customerIdentityPersistenceMode === "postgres" || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
 const paymentPool = postgresDatabaseMode ? createPostgresPaymentPool() : null;
 
 // Privileged control-plane stores use independent PostgreSQL credentials and pools.
@@ -405,7 +415,7 @@ const providerValidationService = providerValidationEnabled && paymentPool
     )
   : undefined;
 
-const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled || peripheralApiEnabled;
+const workflowAuthorizationStoresEnabled = workflowExecutionEnabled || workflowOutboxAdminEnabled || workflowRoleDelegationEnabled || platformCustomerAdminEnabled || providerConnectionsEnabled || providerValidationEnabled || customerAssetPersistenceApiEnabled || peripheralApiEnabled || remoteDesktopApiEnabled;
 const workflowRoleDefinitionStore = workflowAuthorizationStoresEnabled && paymentPool
   ? new PostgresWorkflowRoleDefinitionStore(paymentPool)
   : undefined;
@@ -559,6 +569,25 @@ const peripheralService = peripheralApiEnabled && paymentPool && peripheralRepos
   : undefined;
 if (peripheralRepository) await peripheralRepository.assertReady();
 
+const remoteDesktopSessionStore = remoteDesktopApiEnabled && paymentPool
+  ? new PostgresRemoteDesktopSessionStore(paymentPool)
+  : undefined;
+if (remoteDesktopSessionStore) await remoteDesktopSessionStore.assertReady();
+const remoteDesktopRoleAuthorizer = remoteDesktopApiEnabled && workflowActorRoleAssignmentStore
+  ? new PostgresRemoteDesktopRoleAuthorizer(workflowActorRoleAssignmentStore)
+  : undefined;
+const remoteDesktopService = remoteDesktopApiEnabled && paymentPool &&
+    remoteDesktopSessionStore && remoteDesktopRoleAuthorizer
+  ? new ApplicationRemoteDesktopService(
+      new ApplicationCapabilityBoundary(new ApplicationAddonAccessGate(
+        new PostgresApplicationAddonEntitlementReader(paymentPool),
+        new PostgresApplicationAddonEntitlementReader(paymentPool),
+      )),
+      remoteDesktopSessionStore,
+      remoteDesktopRoleAuthorizer,
+    )
+  : undefined;
+
 const server = createAppServer({
   capabilityPool: (postgresCapabilityMode || workflowOutboxAdminEnabled) ? paymentPool as unknown as Pool : undefined,
   paymentStore, invoiceAmountSource, receiptNumberSource, transactionSnapshotSource, auditWriter, assetAuditWriter, customerLifecycleStore,
@@ -568,7 +597,7 @@ const server = createAppServer({
   serviceVersion: process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
   workflowRoleDefinitionStore, workflowActorRoleAssignmentStore, workflowRoleDelegationStore, customerAssetRepository, platformCustomerAdminProvisioningStore, platformApplicationRemediationStore, platformAdminCredentialStore,
   providerConnectionRepository, providerValidationService, providerCatalogueRepository,
-  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService, peripheralService,
+  workflowDefinitionPublisher, workflowDefinitionDraftStore, workflowExecutionService, peripheralService, remoteDesktopService,
 });
 
 server.listen(port, host, () => {
