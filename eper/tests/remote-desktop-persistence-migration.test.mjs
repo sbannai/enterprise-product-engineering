@@ -15,6 +15,7 @@ test("remote desktop sessions are application-owned, view-only by default and ex
   assert.match(sql, /expires_at TIMESTAMPTZ NOT NULL/);
   assert.match(sql, /REFERENCES eper_tenant_application_assignment/);
   assert.match(sql, /CHECK \(expires_at > created_at\)/);
+  assert.match(sql, /AS \\$eper\\$[\\s\\S]*REMOTE_DESKTOP_SESSION_BINDING_IMMUTABLE[\\s\\S]*\\$eper\\$;/);
   assert.match(sql, /REMOTE_DESKTOP_SESSION_BINDING_IMMUTABLE/);
   assert.match(sql, /BEFORE UPDATE OF tenant_id, application_id, session_id, endpoint_id/);
   assert.match(sql, /'REQUESTED','ACCEPTED','ACTIVE','STOPPED','DENIED','EXPIRED','REVOKED','DISCONNECTED'/);
