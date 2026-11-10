@@ -114,7 +114,8 @@ export class ApplicationPeripheralService {
       const current = await this.repository.get(input, input.peripheralId);
       if (!current) throw new Error("EPER_PERIPHERAL_NOT_FOUND");
       const needsDisconnect = current.status === "ACTIVE" ||
-        current.status === "DEGRADED" || current.status === "OFFLINE";
+        current.status === "DEGRADED" || current.status === "OFFLINE" ||
+        current.status === "DISCONNECTING";
       if (!needsDisconnect) {
         return this.repository.transition({
           ...this.auditInput(input),
@@ -131,15 +132,17 @@ export class ApplicationPeripheralService {
         adapterVersion: configuration.adapterVersion,
         kind: current.kind,
       });
-      // Persist an in-progress state before physical I/O. If disconnect fails,
-      // DISCONNECTING remains visible for an explicit retry/reconciliation;
-      // the database never claims SUSPENDED while the adapter may still run.
-      const disconnecting = await this.repository.transition({
-        ...this.auditInput(input),
-        peripheralId: input.peripheralId,
-        expectedVersion: input.expectedVersion,
-        nextStatus: "DISCONNECTING",
-      });
+      // A failed earlier disconnect leaves DISCONNECTING durable. Retry the
+      // adapter shutdown directly instead of attempting an illegal self-transition.
+      // First-time shutdown persists DISCONNECTING before physical I/O.
+      const disconnecting = current.status === "DISCONNECTING"
+        ? current
+        : await this.repository.transition({
+            ...this.auditInput(input),
+            peripheralId: input.peripheralId,
+            expectedVersion: input.expectedVersion,
+            nextStatus: "DISCONNECTING",
+          });
       try {
         await adapter.disconnect({
           tenantId: input.tenantId,
