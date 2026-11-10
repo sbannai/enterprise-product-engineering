@@ -83,10 +83,10 @@ export class PostgresPeripheralRepository {
           COALESCE(configuration.relforcerowsecurity, false) AS configurations_force_rls,
           EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = 'public'
                    AND p.tablename = 'eper_application_peripheral'
-                   AND p.policyname = 'tenant_application_isolation') AS registration_policy,
+                   AND p.policyname = 'eper_application_peripheral_scope') AS registration_policy,
           EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = 'public'
                    AND p.tablename = 'eper_application_peripheral_configuration'
-                   AND p.policyname = 'tenant_application_isolation') AS configuration_policy
+                   AND p.policyname = 'eper_application_peripheral_configuration_scope') AS configuration_policy
         FROM (SELECT 1) seed
         LEFT JOIN pg_class registration
           ON registration.oid = to_regclass('public.eper_application_peripheral')
