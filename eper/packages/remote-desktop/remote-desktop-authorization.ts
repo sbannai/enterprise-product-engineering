@@ -2,7 +2,9 @@ export type RemoteDesktopAction =
   | "remote_desktop.session.request"
   | "remote_desktop.consent.accept"
   | "remote_desktop.control.grant"
-  | "remote_desktop.consent.revoke";
+  | "remote_desktop.consent.revoke"
+  | "remote_desktop.session.start"
+  | "remote_desktop.session.stop";
 
 export interface RemoteDesktopRolePermissionReader {
   listActiveRoleIds(tenantId: string, applicationId: string, actorId: string): Promise<string[]>;
@@ -13,6 +15,8 @@ const permissionByAction: Readonly<Record<RemoteDesktopAction, string>> = Object
   "remote_desktop.consent.accept": "remote_desktop.consent.accept",
   "remote_desktop.control.grant": "remote_desktop.control.grant",
   "remote_desktop.consent.revoke": "remote_desktop.consent.revoke",
+  "remote_desktop.session.start": "remote_desktop.session.start",
+  "remote_desktop.session.stop": "remote_desktop.session.stop",
 });
 
 /** Fail-closed, application-scoped authorization for remote desktop actions. */
