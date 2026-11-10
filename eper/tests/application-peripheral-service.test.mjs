@@ -16,7 +16,7 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, initialStatus = "CONFIGURED" } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED" } = {}) {
   const calls = [];
   let current = registration({ status: initialStatus });
   const config = configuration;
@@ -27,6 +27,7 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
     async getConfiguration(input, id) { calls.push(["getConfiguration", id]); return noConfiguration ? null : config; },
     async transition(input) {
       calls.push(["transition", input.nextStatus, input.expectedVersion]);
+      if (failDegradedPersist && input.nextStatus === "DEGRADED") throw new Error("database unavailable");
       current = registration({
         status: input.nextStatus,
         version: current.version + 1,
@@ -90,6 +91,19 @@ test("failed adapter connection attempts to persist DEGRADED using the new row v
   );
   const transitions = calls.filter(call => call[0] === "transition");
   assert.deepEqual(transitions.map(call => [call[1], call[2]]), [["ACTIVE", 7], ["DEGRADED", 8]]);
+});
+
+test("failed DEGRADED persistence is surfaced instead of hiding a stale ACTIVE state", async () => {
+  const { service } = fixture({
+    connect: async () => { throw new Error("adapter offline"); },
+    failDegradedPersist: true,
+  });
+  await assert.rejects(
+    service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
+    error => error instanceof AggregateError &&
+      error.message === "EPER_PERIPHERAL_ADAPTER_CONNECT_AND_DEGRADED_STATE_PERSIST_FAILED" &&
+      error.errors.length === 2,
+  );
 });
 
 test("suspension persists the inactive state and disconnects the configured adapter", async () => {
