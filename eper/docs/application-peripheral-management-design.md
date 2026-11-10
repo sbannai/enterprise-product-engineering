@@ -193,3 +193,42 @@ Exact route conventions and response envelopes must follow the existing API resp
 ## 12. Definition of done
 
 The capability is not complete at documentation or API-contract level alone. Completion requires the domain model, migration/RLS, service and API, synthetic adapter, admin/user UI, workflow integration, audit evidence, exact-head CI, PostgreSQL integration tests, tenant-isolation tests and a verified merge to main. Production readiness and Business UAT remain separate gates.
+
+## 13. Remote Desktop Sharing — provider-neutral architecture decision
+
+**Decision:** EPER will use a provider-neutral transport and endpoint-identity adapter boundary. The first production integration will be an existing, independently security-reviewed remote-access provider selected during customer/provider onboarding. EPER will not build or ship a bespoke endpoint agent in this implementation slice.
+
+Rationale:
+- Remote screen capture, input injection, device enrollment, endpoint update/signing and secure relay are security-sensitive capabilities; implementing these from scratch would expand the attack surface and delay delivery.
+- A provider-neutral contract keeps customer choice open and prevents vendor SDKs from entering the EPER domain or workflow engine.
+- The capability remains optional and application-scoped. No provider is contacted, no endpoint is discovered and no background agent is installed unless the customer explicitly configures and enables an approved integration.
+- Provider licensing and usage are metered as a separately priced customer add-on. EPER must not provision chargeable cloud resources as part of development or CI.
+
+### 13.1 Adapter boundaries
+
+- `RemoteDesktopTransport`: starts and stops a session using a provider-issued, narrowly scoped context; start must honor cancellation and stop must be idempotent.
+- `RemoteDesktopEndpointConsentVerifier`: independently authenticates the endpoint-side user/session and verifies the exact tenant, application, endpoint, session and requested mode. Application RBAC is not endpoint consent.
+- Provider adapters must validate signed provider callbacks/tokens, issuer, audience, expiry, nonce/replay protection and endpoint binding. Raw provider credentials never enter the browser, application logs or audit payloads.
+- The provider adapter must expose explicit capability support (view-only, remote control, session termination and health) so unsupported functions are unavailable rather than emulated.
+- Adapter configuration and secret references are application-scoped, encrypted/managed outside ordinary configuration JSON, auditable and revocable.
+
+### 13.2 Session safety rules
+
+- View-only is the default. Remote control requires a separate, explicit endpoint-side grant and a separate EPER permission.
+- No unattended access, stealth installation, hidden persistence, silent elevation or default recording.
+- The endpoint user must see the requesting actor, customer application, purpose and requested access mode before accepting.
+- Consent is bound to one endpoint and one session, expires automatically, cannot be escalated and can be revoked by the endpoint user.
+- Stop/revoke operations are auditable; transport disconnect is idempotent and a failed disconnect is surfaced as an operational exception, never represented as a successful stop.
+- No screen content, keystrokes or clipboard content is retained by EPER by default.
+
+### 13.3 Enablement gates
+
+A production provider cannot be enabled until the following are evidenced:
+1. Provider security and privacy review, data-processing terms and customer approval.
+2. Signed endpoint identity/enrollment protocol and endpoint-side consent UX.
+3. Contract tests for issuer/audience, signature, endpoint/session binding, expiry, replay, revocation and tenant isolation.
+4. View-only and remote-control capability tests, including denial and disconnect failure.
+5. Secret storage/rotation, audit evidence, rate limits, timeouts and incident response.
+6. Customer plan entitlement and explicit per-application provider configuration.
+
+Until these gates are met, the production verifier and transport remain unconfigured and fail closed. CI may use deterministic fakes only; tests must not contact external providers or provision cloud resources.
