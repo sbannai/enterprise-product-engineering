@@ -3286,9 +3286,10 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           return;
         }
         if (remoteDesktopPath[3] === "accept") {
-          if (Object.keys(body).some(key => !["expectedVersion", "grantedMode", "consentExpiresAt", "consentGrantId"].includes(key)) ||
+          if (Object.keys(body).some(key => !["expectedVersion", "grantedMode", "consentExpiresAt", "endpointProof", "consentGrantId"].includes(key)) ||
               !["VIEW_ONLY", "REMOTE_CONTROL"].includes(String(body.grantedMode)) ||
               typeof body.consentExpiresAt !== "string" ||
+              typeof body.endpointProof !== "string" || body.endpointProof.length < 1 || body.endpointProof.length > 8192 ||
               (body.consentGrantId !== undefined && typeof body.consentGrantId !== "string")) {
             sendJson(request, response, 400, { error: "REMOTE_DESKTOP_CONSENT_INPUT_INVALID" });
             return;
@@ -3297,6 +3298,7 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             ...scope, sessionId, expectedVersion: body.expectedVersion,
             grantedMode: body.grantedMode as "VIEW_ONLY" | "REMOTE_CONTROL",
             consentExpiresAt: body.consentExpiresAt,
+            endpointProof: body.endpointProof,
             consentGrantId: body.consentGrantId as string | undefined,
           });
           sendApiSuccess(request, response, 200, { session: result });
