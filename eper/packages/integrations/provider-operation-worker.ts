@@ -28,6 +28,8 @@ export type ProviderOperationWorkerDependencies = {
   payloadStore: PayloadStore;
   configuration: Pick<ProviderDispatchConfigurationService, "resolve">;
   authorizeOperation(operation: ProviderOperation): Promise<boolean>;
+  /** Test seam for deterministic lease-heartbeat races; production defaults to setInterval. */
+  scheduleHeartbeat?(callback: () => void, intervalMs: number): () => void;
   dispatch(input: {
     selection: ProviderDispatchSelection;
     payload: unknown;
@@ -141,7 +143,7 @@ export class ProviderOperationWorker {
       }
       return completed;
     };
-    const heartbeat = setInterval(() => {
+    const heartbeatTick = () => {
       if (renewal || leaseLost || controller.signal.aborted) return;
       renewal = this.dependencies.repository.renewLease({
         tenantId: operation.tenantId, applicationId: operation.applicationId,
@@ -152,7 +154,14 @@ export class ProviderOperationWorker {
         leaseLost = true;
         controller.abort(new Error("PROVIDER_WORKER_LEASE_LOST"));
       }).finally(() => { renewal = undefined; });
-    }, Math.max(1000, Math.floor(this.leaseDurationSeconds * 1000 / 3)));
+    };
+    const heartbeatIntervalMs = Math.max(1000, Math.floor(this.leaseDurationSeconds * 1000 / 3));
+    const stopHeartbeat = this.dependencies.scheduleHeartbeat
+      ? this.dependencies.scheduleHeartbeat(heartbeatTick, heartbeatIntervalMs)
+      : (() => {
+        const timer = setInterval(heartbeatTick, heartbeatIntervalMs);
+        return () => clearInterval(timer);
+      })();
     try {
       if (controller.signal.aborted) return;
       const authorized = await this.dependencies.authorizeOperation(operation);
@@ -200,7 +209,7 @@ export class ProviderOperationWorker {
         correlationId: operation.correlationId, signal: controller.signal,
       });
       if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
-      if (heartbeat) clearInterval(heartbeat);
+      stopHeartbeat();
       await drainRenewal();
       if (leaseLost) { result.leaseLost += 1; return; }
       if (await persistOutcome("SUCCEEDED", undefined, dispatched.providerReference)) {
@@ -216,7 +225,7 @@ export class ProviderOperationWorker {
         result.retried += 1;
       }
     } finally {
-      clearInterval(heartbeat);
+      stopHeartbeat();
       // A renewal can be stuck in the database driver during shutdown. Bound
       // this wait; fencing prevents a late renewal from authorizing stale work.
       await drainRenewal();
