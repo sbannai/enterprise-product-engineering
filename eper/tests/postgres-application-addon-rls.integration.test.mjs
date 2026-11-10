@@ -18,7 +18,15 @@ test("application add-on entitlements enforce tenant and application RLS for a r
     const role = "eper_application_addon_access";
     const addon = "peripheral_management";
     try {
-      // CI provisions this restricted role once; this test must never own or drop shared roles.
+      await pool.query(`
+        DO $role$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_application_addon_access') THEN
+            CREATE ROLE eper_application_addon_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+          END IF;
+        END
+        $role$
+      `);
       await pool.query("GRANT USAGE ON SCHEMA public TO eper_application_addon_access");
       await pool.query("GRANT SELECT, INSERT, UPDATE ON eper_application_addon_entitlement TO eper_application_addon_access");
       const roleState = await pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=$1", [role]);
