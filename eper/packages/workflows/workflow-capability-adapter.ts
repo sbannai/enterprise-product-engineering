@@ -121,11 +121,6 @@ export function adaptWorkflowDefinitionToComposition(
       label: rule.name,
       configuration: { priority: rule.priority, targetActivityId: rule.targetActivityId, condition: structuredClone(rule.condition) },
     });
-    edges.push({
-      id: "edge.rule.trigger." + rule.id, kind: "control",
-      fromNodeId: "", fromPortId: "", toNodeId: "rule." + rule.id, toPortId: "trigger",
-    });
-    edges.pop(); // The source activity is attached below from its declared routingRuleIds.
   }
 
   for (const activity of definition.activities) {
@@ -168,10 +163,17 @@ export function adaptWorkflowDefinitionToComposition(
     }
   }
 
-  const entry = definition.activities.find(activity =>
+  const entries = definition.activities.filter(activity =>
     !definition.activities.some(candidate => candidate.nextActivityIds.includes(activity.id)));
+  const entry = entries.length === 1 ? entries[0] : undefined;
   if (!entry || !activities.has(entry.id)) {
-    diagnostics.push(invalid("workflow.adapter.entry_ambiguous", "The legacy workflow does not have one unambiguous starting activity."));
+    diagnostics.push(invalid("workflow.adapter.entry_ambiguous", "The legacy workflow must have exactly one unambiguous starting activity."));
+  }
+  const referencedRules = new Set(definition.activities.flatMap(activity => activity.routingRuleIds ?? []));
+  for (const rule of definition.rules ?? []) {
+    if (!referencedRules.has(rule.id)) {
+      diagnostics.push(invalid("workflow.adapter.orphan_rule", "An unused rule cannot be represented as an executable workflow capability.", rule.id));
+    }
   }
   if (diagnostics.length > 0 || !entry) {
     return { catalogueVersion: WORKFLOW_CAPABILITY_CATALOGUE_VERSION, composition: null, diagnostics };
