@@ -5,6 +5,24 @@
 **Scope:** Customer-application-scoped peripheral registration, assignment, configuration, operation and health monitoring.  
 **Baseline protection:** Additive candidate scope only. This does not alter the approved 228 requirements or 38 chapters. No cloud resources, device credentials, real hardware connections or external provider calls are authorized.
 
+## 1B. Optional, configuration-gated modular integration
+
+Peripheral Management is an optional capability. The core Customer Application and workflow runtime must remain fully functional when the capability is absent, disabled, or has no configured peripherals.
+
+**Connection rule: no explicit configuration, no peripheral connection.**
+
+- Merely creating an application, enabling its navigation entry, deploying EPER, or loading the peripheral package must not discover, connect to, poll, authenticate with, or send commands to any physical device.
+- A peripheral becomes eligible for connection only after an authorized Client Admin explicitly registers it under the selected application, supplies validated connection/adapter configuration, and activates it.
+- Registration/configuration and activation are distinct states. A draft or incomplete configuration must not open a connection. Activation is the explicit transition that allows the selected adapter to establish its connection.
+- Only the configured adapter for that registered peripheral may connect. It receives a narrowly scoped tenant/application/peripheral context and only the secret references and capabilities it needs.
+- Connection attempts are lifecycle-managed, bounded, observable and cancellable. Disable, suspend, retire, revoke or remove must stop new commands and close the associated connection/session; failures must not affect unrelated peripherals or the parent application.
+- The application/workflow layer consumes a stable, typed peripheral capability port. It must not import vendor SDKs, transport implementations, gateway internals or optional package implementation details.
+- The peripheral capability is resolved only for an authorized application operation that requires a configured and active assignment. Missing, inactive or unavailable peripherals return a typed unavailable/needs-attention result; they must not silently fall back to another application's device or claim success.
+- Synthetic adapters follow the same configuration and activation lifecycle in development/CI. Tests must prove no connection side effects before activation and prove disable/revoke tears down the adapter session.
+- Package boundaries must permit the peripheral capability and its adapters to be omitted from a deployment without breaking core application startup, application navigation, workflow execution or unrelated modules.
+
+This is lazy, explicit, application-scoped integration—not an always-on device discovery service and not a mandatory dependency of every customer application.
+
 ## 1A. Product hierarchy and placement
 
 This capability is a **child submodule of Customer → Application**. It is not a standalone top-level customer module and must not appear as a peer to Customer or Application in the primary navigation.
