@@ -18,6 +18,17 @@ test("application add-on entitlements enforce tenant and application RLS for a r
     const role = "eper_application_addon_access";
     const addon = "peripheral_management";
     try {
+      await pool.query(`
+        DO $role$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'eper_application_addon_access') THEN
+            CREATE ROLE eper_application_addon_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+          END IF;
+        END
+        $role$
+      `);
+      await pool.query("GRANT USAGE ON SCHEMA public TO eper_application_addon_access");
+      await pool.query("GRANT SELECT, INSERT, UPDATE ON eper_application_addon_entitlement TO eper_application_addon_access");
       const roleState = await pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=$1", [role]);
       assert.equal(roleState.rowCount, 1, "restricted entitlement role must be provisioned by CI");
       assert.deepEqual(roleState.rows[0], { rolsuper: false, rolbypassrls: false });
@@ -91,6 +102,8 @@ test("application add-on entitlements enforce tenant and application RLS for a r
     } finally {
       await pool.query("DELETE FROM eper_application_addon_entitlement WHERE (tenant_id,application_id) IN (($1,$3),($1,$4),($2,$5))", [tenantA, tenantB, appA, appB, appC]).catch(() => {});
       await pool.query("DELETE FROM eper_tenant_application_assignment WHERE (tenant_id,application_id) IN (($1,$3),($1,$4),($2,$5))", [tenantA, tenantB, appA, appB, appC]).catch(() => {});
+      await pool.query("DROP OWNED BY eper_application_addon_access").catch(() => {});
+      await pool.query("DROP ROLE IF EXISTS eper_application_addon_access").catch(() => {});
       await pool.end();
     }
   });
