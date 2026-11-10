@@ -5,6 +5,18 @@
 **Scope:** Customer-application-scoped peripheral registration, assignment, configuration, operation and health monitoring.  
 **Baseline protection:** Additive candidate scope only. This does not alter the approved 228 requirements or 38 chapters. No cloud resources, device credentials, real hardware connections or external provider calls are authorized.
 
+## 1A. Product hierarchy and placement
+
+This capability is a **child submodule of Customer → Application**. It is not a standalone top-level customer module and must not appear as a peer to Customer or Application in the primary navigation.
+
+Canonical hierarchy:
+
+`Customer -> Application -> Peripheral Management`
+
+The Client Admin first selects a customer and then a specific application. Peripheral Management is available within that application's workspace alongside other application capabilities (for example workflow, actors/assignments, customer assets, payments/receipts and application KPIs). The selected application context is carried through the UI and API request lifecycle and is re-authorized server-side on every operation.
+
+The submodule's navigation, list, create/edit screens, configuration, assignments, health view and event history are all scoped to the selected application. The UI must clearly display the active customer/application context and must not provide an unscoped cross-application device editor. Platform-level peripheral type catalogue and adapter allowlisting remain platform-admin configuration concerns; actual peripheral registrations and operational configuration live under the customer application.
+
 ## 1. Product objective
 
 Allow a Client Admin to configure peripherals required by a specific customer application, then let authorized users and workflow steps use those peripherals through a provider-neutral interface. EPER must not assume that a browser can directly access USB, serial, Bluetooth or LAN hardware.
