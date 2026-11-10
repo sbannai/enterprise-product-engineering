@@ -16,9 +16,9 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED" } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7 } = {}) {
   const calls = [];
-  let current = registration({ status: initialStatus });
+  let current = registration({ status: initialStatus, version: initialVersion });
   const config = configuration;
   const repository = {
     async register(input) { calls.push(["register", input]); return current; },
@@ -136,6 +136,15 @@ test("a DISCONNECTING peripheral retries adapter shutdown without repeating the 
   const transitions = calls.filter(call => call[0] === "transition");
   assert.deepEqual(transitions.map(call => [call[1], call[2]]), [["SUSPENDED", 7]]);
   assert.equal(calls.filter(call => call[0] === "disconnect").length, 1);
+});
+
+test("stale DISCONNECTING retry is rejected before adapter I/O", async () => {
+  const { service, calls } = fixture({ initialStatus: "DISCONNECTING" });
+  await assert.rejects(
+    service.suspend({ ...scope, peripheralId: "peripheral-1", expectedVersion: 6 }),
+    /EPER_PERIPHERAL_VERSION_CONFLICT/,
+  );
+  assert.equal(calls.some(call => call[0] === "disconnect"), false);
 });
 
 test("missing registration and missing configuration fail closed without adapter resolution", async () => {
