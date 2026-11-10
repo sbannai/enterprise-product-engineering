@@ -90,7 +90,7 @@ CREATE POLICY eper_remote_desktop_consent_scope ON eper_remote_desktop_consent
 CREATE OR REPLACE FUNCTION eper_reject_remote_desktop_session_binding_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-AS $
+AS $eper$
 BEGIN
   IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
      OR NEW.application_id IS DISTINCT FROM OLD.application_id
@@ -100,7 +100,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$eper$;
 
 DROP TRIGGER IF EXISTS eper_remote_desktop_session_binding_immutable
   ON eper_remote_desktop_session;
