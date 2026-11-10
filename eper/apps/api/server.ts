@@ -3087,6 +3087,12 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
           sendApiSuccess(request, response, 200, { applicationId, peripherals });
           return;
         }
+        if (method === "GET" && peripheralId) {
+          const peripheral = await options.peripheralService.get({ ...scope, peripheralId });
+          if (!peripheral) { sendJson(request, response, 404, { error: "EPER_PERIPHERAL_NOT_FOUND" }); return; }
+          sendApiSuccess(request, response, 200, { peripheral });
+          return;
+        }
         if (method !== "POST") { sendMethodNotAllowed(request, response, "GET, POST"); return; }
         const body = await readJson(request);
         let result;
