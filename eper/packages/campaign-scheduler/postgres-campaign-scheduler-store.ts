@@ -339,6 +339,7 @@ export class PostgresCampaignSchedulerStore {
         status: row.status as CampaignExecutionStatus, attemptCount: Number(row.attempt_count),
         idempotencyKey: String(row.idempotency_key), payload: storedPayload as Record<string, unknown>,
         availableAt: new Date(row.available_at as string | Date).toISOString(),
+        claimGeneration: Number(row.claim_generation ?? 0),
       };
     } finally { client.release(); }
   }
