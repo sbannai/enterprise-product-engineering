@@ -14,6 +14,15 @@ import {
 
 export interface PeripheralServiceScope extends ApplicationCapabilityScope, PeripheralAuditContext {}
 
+export interface PeripheralActionAuthorizer {
+  authorize(input: {
+    tenantId: string;
+    applicationId: string;
+    actorId: string;
+    action: "peripheral.register" | "peripheral.configure" | "peripheral.activate" | "peripheral.suspend";
+  }): Promise<void>;
+}
+
 export interface RegisterApplicationPeripheralInput extends PeripheralServiceScope {
   peripheralId?: string;
   kind: PeripheralKind;
@@ -46,19 +55,23 @@ export class ApplicationPeripheralService {
     private readonly capabilities: ApplicationCapabilityBoundary,
     private readonly repository: PostgresPeripheralRepository,
     private readonly adapters: PeripheralAdapterRegistry,
+    private readonly authorizer: PeripheralActionAuthorizer,
   ) {}
 
   async register(input: RegisterApplicationPeripheralInput): Promise<PeripheralRegistration> {
+    await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.register" });
     return this.capabilities.withPeripheralManagement(input, () =>
       this.repository.register({ ...this.auditInput(input), peripheralId: input.peripheralId, kind: input.kind, displayName: input.displayName }));
   }
 
   async configure(input: ConfigureApplicationPeripheralInput): Promise<PeripheralRegistration> {
+    await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.configure" });
     return this.capabilities.withPeripheralManagement(input, () =>
       this.repository.configure(this.configureInput(input)));
   }
 
   async activate(input: PeripheralActivationInput): Promise<PeripheralRegistration> {
+    await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.activate" });
     return this.capabilities.withPeripheralManagement(input, async () => {
       const current = await this.repository.get(input, input.peripheralId);
       if (!current) throw new Error("EPER_PERIPHERAL_NOT_FOUND");
@@ -110,6 +123,7 @@ export class ApplicationPeripheralService {
   }
 
   async suspend(input: PeripheralActivationInput): Promise<PeripheralRegistration> {
+    await this.authorizer.authorize({ ...this.actorScope(input), action: "peripheral.suspend" });
     return this.capabilities.withPeripheralManagement(input, async () => {
       const current = await this.repository.get(input, input.peripheralId);
       if (!current) throw new Error("EPER_PERIPHERAL_NOT_FOUND");
@@ -164,6 +178,14 @@ export class ApplicationPeripheralService {
         nextStatus: "SUSPENDED",
       });
     });
+  }
+
+  private actorScope(input: PeripheralServiceScope) {
+    return {
+      tenantId: input.tenantId,
+      applicationId: input.applicationId,
+      actorId: input.actorId,
+    };
   }
 
   private auditInput(input: PeripheralServiceScope) {
