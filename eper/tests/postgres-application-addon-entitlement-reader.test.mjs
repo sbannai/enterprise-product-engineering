@@ -112,3 +112,11 @@ test("malformed persisted amounts and timestamps fail closed", async () => {
     assert.equal(fake.released(), 1);
   }
 });
+
+
+test("unknown persisted catalogue status fails closed", async () => {
+  const fake = fakePool({ catalogueStatus: "published-ish" });
+  const reader = new PostgresApplicationAddonEntitlementReader(fake.pool);
+  await assert.rejects(reader.getStatus("peripheral_management"), /APPLICATION_ADDON_CATALOGUE_STATUS_INVALID/);
+  assert.equal(fake.released(), 1);
+});
