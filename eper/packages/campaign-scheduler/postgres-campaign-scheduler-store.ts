@@ -503,7 +503,7 @@ export class PostgresCampaignSchedulerStore {
             payload: {
               resultingStatus: "running",
               attemptCount: Number(row.attempt_count),
-              claimGeneration,
+              claimGeneration: Number(row.claim_generation),
             },
           });
         } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
