@@ -76,7 +76,7 @@ export async function runCampaignExecutionWorker(
         renewalInFlight = true;
         void store.renewExecutionLease({
           tenantId: execution.tenantId, applicationId: execution.applicationId,
-          executionId: execution.id, workerId: options.workerId,
+          executionId: execution.id, workerId: options.workerId, claimGeneration: execution.claimGeneration,
         }).then((renewed) => {
           if (!renewed) options.onError?.(new Error("CAMPAIGN_EXECUTION_LEASE_LOST"));
         }).catch((error) => options.onError?.(error)).finally(() => { renewalInFlight = false; });
@@ -103,6 +103,7 @@ export async function runCampaignExecutionWorker(
               applicationId: execution.applicationId,
               executionId: execution.id,
               workerId: options.workerId,
+              claimGeneration: execution.claimGeneration,
             });
             dispatchFenceDenied = !authorized;
           }
