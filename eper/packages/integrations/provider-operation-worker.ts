@@ -20,6 +20,7 @@ export type ProviderOperationWorkerOptions = {
   maxAttempts?: number;
   retryAfterSeconds?: number;
   batchSize?: number;
+  renewalDrainTimeoutMs?: number;
 };
 export type ProviderDispatchResult = { providerReference?: string };
 export type ProviderOperationWorkerDependencies = {
@@ -27,6 +28,8 @@ export type ProviderOperationWorkerDependencies = {
   payloadStore: PayloadStore;
   configuration: Pick<ProviderDispatchConfigurationService, "resolve">;
   authorizeOperation(operation: ProviderOperation): Promise<boolean>;
+  /** Test seam for deterministic lease-heartbeat races; production defaults to setInterval. */
+  scheduleHeartbeat?(callback: () => void, intervalMs: number): () => void;
   dispatch(input: {
     selection: ProviderDispatchSelection;
     payload: unknown;
@@ -55,6 +58,7 @@ export class ProviderOperationWorker {
   private readonly maxAttempts: number;
   private readonly retryAfterSeconds: number;
   private readonly batchSize: number;
+  private readonly renewalDrainTimeoutMs: number;
 
   constructor(
     private readonly dependencies: ProviderOperationWorkerDependencies,
@@ -68,10 +72,12 @@ export class ProviderOperationWorker {
     this.maxAttempts = options.maxAttempts ?? 5;
     this.retryAfterSeconds = options.retryAfterSeconds ?? 30;
     this.batchSize = options.batchSize ?? 10;
+    this.renewalDrainTimeoutMs = options.renewalDrainTimeoutMs ?? 1000;
     if (!Number.isInteger(this.leaseDurationSeconds) || this.leaseDurationSeconds < 10 || this.leaseDurationSeconds > 3600
       || !Number.isInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20
       || !Number.isInteger(this.retryAfterSeconds) || this.retryAfterSeconds < 1 || this.retryAfterSeconds > 86400
-      || !Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 100) {
+      || !Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 100
+      || !Number.isInteger(this.renewalDrainTimeoutMs) || this.renewalDrainTimeoutMs < 1 || this.renewalDrainTimeoutMs > 30000) {
       throw new Error("PROVIDER_WORKER_OPTIONS_INVALID");
     }
     if (!dependencies.repository || !dependencies.payloadStore || !dependencies.configuration
@@ -81,6 +87,11 @@ export class ProviderOperationWorker {
   }
 
   async runOnce(signal?: AbortSignal): Promise<ProviderOperationWorkerResult> {
+    const result: ProviderOperationWorkerResult = {
+      recovered: 0, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
+    };
+    // Shutdown must be side-effect-free when already requested.
+    if (signal?.aborted) return result;
     const context = {
       tenantId: this.options.tenantId,
       applicationId: this.options.applicationId,
@@ -89,9 +100,10 @@ export class ProviderOperationWorker {
     const recovered = await this.dependencies.repository.recoverExpiredLeases({
       ...context, maxAttempts: this.maxAttempts, batchSize: this.batchSize,
     });
-    const result: ProviderOperationWorkerResult = {
-      recovered: recovered.length, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
-    };
+    result.recovered = recovered.length;
+    // Recovery can mutate queue state; do not continue into claims if shutdown
+    // arrived while that database operation was in flight.
+    if (signal?.aborted) return result;
     for (let index = 0; index < this.batchSize && !signal?.aborted; index += 1) {
       const operation = await this.dependencies.repository.claimNext({
         ...context, workerId: this.options.workerId,
@@ -99,6 +111,9 @@ export class ProviderOperationWorker {
       });
       if (!operation) break;
       result.claimed += 1;
+      // If shutdown races an in-flight claim, process() will not dispatch or
+      // write an outcome. The fenced lease is intentionally left to expire
+      // and be recovered; no unfenced release is attempted during shutdown.
       await this.process(operation, result, signal);
     }
     return result;
@@ -121,7 +136,23 @@ export class ProviderOperationWorker {
       return true;
     };
     let renewal: Promise<void> | undefined;
-    const heartbeat = setInterval(() => {
+    const drainRenewal = async (): Promise<boolean> => {
+      if (!renewal) return true;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const completed = await Promise.race([
+        renewal.then(() => true),
+        new Promise<boolean>(resolve => {
+          timeout = setTimeout(() => resolve(false), this.renewalDrainTimeoutMs);
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+      if (!completed) {
+        leaseLost = true;
+        controller.abort(new Error("PROVIDER_WORKER_LEASE_RENEWAL_TIMEOUT"));
+      }
+      return completed;
+    };
+    const heartbeatTick = () => {
       if (renewal || leaseLost || controller.signal.aborted) return;
       renewal = this.dependencies.repository.renewLease({
         tenantId: operation.tenantId, applicationId: operation.applicationId,
@@ -132,7 +163,14 @@ export class ProviderOperationWorker {
         leaseLost = true;
         controller.abort(new Error("PROVIDER_WORKER_LEASE_LOST"));
       }).finally(() => { renewal = undefined; });
-    }, Math.max(1000, Math.floor(this.leaseDurationSeconds * 1000 / 3)));
+    };
+    const heartbeatIntervalMs = Math.max(1000, Math.floor(this.leaseDurationSeconds * 1000 / 3));
+    const stopHeartbeat = this.dependencies.scheduleHeartbeat
+      ? this.dependencies.scheduleHeartbeat(heartbeatTick, heartbeatIntervalMs)
+      : (() => {
+        const timer = setInterval(heartbeatTick, heartbeatIntervalMs);
+        return () => clearInterval(timer);
+      })();
     try {
       if (controller.signal.aborted) return;
       const authorized = await this.dependencies.authorizeOperation(operation);
@@ -180,8 +218,8 @@ export class ProviderOperationWorker {
         correlationId: operation.correlationId, signal: controller.signal,
       });
       if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
-      if (heartbeat) clearInterval(heartbeat);
-      if (renewal) await renewal;
+      stopHeartbeat();
+      await drainRenewal();
       if (leaseLost) { result.leaseLost += 1; return; }
       if (await persistOutcome("SUCCEEDED", undefined, dispatched.providerReference)) {
         result.succeeded += 1;
@@ -189,15 +227,17 @@ export class ProviderOperationWorker {
     } catch {
       if (controller.signal.aborted && leaseLost) { result.leaseLost += 1; return; }
       if (controller.signal.aborted) return;
-      if (renewal) await renewal;
+      await drainRenewal();
       if (leaseLost) { result.leaseLost += 1; return; }
       // Never persist provider exception text, request bodies, or credentials.
       if (await persistOutcome("RETRY", "PROVIDER_OPERATION_DISPATCH_FAILED")) {
         result.retried += 1;
       }
     } finally {
-      clearInterval(heartbeat);
-      if (renewal) await renewal;
+      stopHeartbeat();
+      // A renewal can be stuck in the database driver during shutdown. Bound
+      // this wait; fencing prevents a late renewal from authorizing stale work.
+      await drainRenewal();
       shutdown?.removeEventListener("abort", abort);
     }
   }
