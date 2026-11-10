@@ -138,25 +138,33 @@ test("provider worker shutdown during authorization never persists an outcome", 
   }
 });
 
-test("provider worker lease loss during an awaited authorization fences all later work", async () => {
+test("provider worker lease loss during an awaited authorization fences all later work without wall-clock sleeps", async () => {
   let markStarted;
   let release;
+  let heartbeat;
+  let markRenewalStarted;
   const started = new Promise(resolve => { markStarted = resolve; });
+  const renewalStarted = new Promise(resolve => { markRenewalStarted = resolve; });
   const gate = new Promise(resolve => { release = resolve; });
   const { calls, dependencies } = harness({
     repository: {
       async recoverExpiredLeases() { return []; },
       async claimNext() { return calls.claims++ === 0 ? operation : null; },
-      async renewLease() { throw new Error("simulated lease lost"); },
+      async renewLease() { markRenewalStarted(); throw new Error("simulated lease lost"); },
       async recordOutcome(input) { calls.outcomes.push(input); return operation; },
     },
+    scheduleHeartbeat(callback) { heartbeat = callback; return () => {}; },
     async authorizeOperation() { markStarted(); await gate; return true; },
     payloadStore: { async get() { assert.fail("payload read after lease loss"); } },
   });
-  const worker = new ProviderOperationWorker(dependencies, { ...options, leaseDurationSeconds: 10 });
+  const worker = new ProviderOperationWorker(dependencies, options);
   const running = worker.runOnce();
   await started;
-  await new Promise(resolve => setTimeout(resolve, 3600));
+  assert.equal(typeof heartbeat, "function");
+  heartbeat();
+  await renewalStarted;
+  await Promise.resolve();
+  await Promise.resolve();
   release();
   const result = await running;
   assert.equal(result.leaseLost, 1);
@@ -213,6 +221,106 @@ test("provider worker shutdown aborts dispatch without writing a stale outcome",
   const result = await running;
   assert.equal(calls.dispatches, 1);
   assert.equal(calls.outcomes.length, 0);
+  assert.equal(result.succeeded, 0);
+  assert.equal(result.retried, 0);
+});
+
+
+test("provider worker bounds shutdown when a lease renewal never settles", async () => {
+  let renewals = 0;
+  let heartbeat;
+  let markRenewalStarted;
+  const renewalStarted = new Promise(resolve => { markRenewalStarted = resolve; });
+  const { calls, dependencies } = harness({
+    repository: {
+      async recoverExpiredLeases() { return []; },
+      async claimNext() { return calls.claims++ === 0 ? operation : null; },
+      async renewLease() { renewals++; markRenewalStarted(); return await new Promise(() => {}); },
+      async recordOutcome(input) { calls.outcomes.push(input); return operation; },
+    },
+    scheduleHeartbeat(callback) { heartbeat = callback; return () => {}; },
+    async dispatch() {
+      heartbeat();
+      await renewalStarted;
+      return { providerReference: "must-not-persist" };
+    },
+  });
+  const worker = new ProviderOperationWorker(dependencies, {
+    ...options, renewalDrainTimeoutMs: 10,
+  });
+  const result = await worker.runOnce();
+  assert.equal(renewals, 1, "exactly one heartbeat renewal must be active");
+  assert.equal(result.leaseLost, 1);
+  assert.equal(result.succeeded, 0);
+  assert.equal(calls.outcomes.length, 0, "stale worker must not persist an outcome");
+});
+
+
+test("provider worker does no recovery or claims when shutdown is already aborted", async () => {
+  const { calls, dependencies } = harness();
+  const worker = new ProviderOperationWorker(dependencies, options);
+  const shutdown = new AbortController();
+  shutdown.abort(new Error("shutdown before pass"));
+  const result = await worker.runOnce(shutdown.signal);
+  assert.deepEqual(result, {
+    recovered: 0, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
+  });
+  assert.equal(calls.recovery, 0);
+  assert.equal(calls.claims, 0);
+  assert.equal(calls.dispatches, 0);
+});
+
+test("provider worker does not claim after shutdown arrives during lease recovery", async () => {
+  let markRecoveryStarted;
+  let finishRecovery;
+  const started = new Promise(resolve => { markRecoveryStarted = resolve; });
+  const gate = new Promise(resolve => { finishRecovery = resolve; });
+  const { calls, dependencies } = harness({
+    repository: {
+      async recoverExpiredLeases() { calls.recovery++; markRecoveryStarted(); await gate; return [operation]; },
+      async claimNext() { calls.claims++; return operation; },
+      async renewLease() { calls.renewals++; return operation; },
+      async recordOutcome(input) { calls.outcomes.push(input); return operation; },
+    },
+  });
+  const worker = new ProviderOperationWorker(dependencies, options);
+  const shutdown = new AbortController();
+  const running = worker.runOnce(shutdown.signal);
+  await started;
+  shutdown.abort(new Error("shutdown during recovery"));
+  finishRecovery();
+  const result = await running;
+  assert.equal(result.recovered, 1);
+  assert.equal(result.claimed, 0);
+  assert.equal(calls.claims, 0);
+  assert.equal(calls.dispatches, 0);
+  assert.equal(calls.outcomes.length, 0);
+});
+
+test("provider worker leaves an in-flight claim fenced for expiry when shutdown wins the race", async () => {
+  let markClaimStarted;
+  let finishClaim;
+  const started = new Promise(resolve => { markClaimStarted = resolve; });
+  const gate = new Promise(resolve => { finishClaim = resolve; });
+  const { calls, dependencies } = harness({
+    repository: {
+      async recoverExpiredLeases() { calls.recovery++; return []; },
+      async claimNext() { calls.claims++; markClaimStarted(); await gate; return operation; },
+      async renewLease() { calls.renewals++; return operation; },
+      async recordOutcome(input) { calls.outcomes.push(input); return operation; },
+    },
+  });
+  const worker = new ProviderOperationWorker(dependencies, options);
+  const shutdown = new AbortController();
+  const running = worker.runOnce(shutdown.signal);
+  await started;
+  shutdown.abort(new Error("shutdown during claim"));
+  finishClaim();
+  const result = await running;
+  assert.equal(result.claimed, 1);
+  assert.equal(calls.dispatches, 0);
+  assert.equal(calls.outcomes.length, 0);
+  assert.equal(calls.renewals, 0);
   assert.equal(result.succeeded, 0);
   assert.equal(result.retried, 0);
 });
