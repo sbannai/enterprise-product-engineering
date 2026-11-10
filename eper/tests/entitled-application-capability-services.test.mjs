@@ -24,11 +24,11 @@ function setup(allowed) {
   );
   const boundary = new ApplicationCapabilityBoundary(gate);
   const peripheralOps = Object.fromEntries(
-    ["register", "configure", "activate", "assign", "invoke", "deactivate", "disconnect"]
+    ["register", "configure", "activate", "assign", "invoke", "authorizeCleanup", "deactivate", "disconnect"]
       .map(name => [name, async (trustedScope, input) => { calls.push([name, trustedScope, input]); return name; }]),
   );
   const desktopOps = Object.fromEntries(
-    ["request", "accept", "start", "stop", "revoke"]
+    ["request", "accept", "start", "authorizeCleanup", "stop", "revoke"]
       .map(name => [name, async (trustedScope, input) => { calls.push([name, trustedScope, input]); return name; }]),
   );
   return {
@@ -67,7 +67,7 @@ test("safety stop, revoke and peripheral disconnect remain callable after entitl
   assert.equal(await desktop.stop(scope, { sessionId: "s1" }), "stop");
   assert.equal(await desktop.revoke(scope, { sessionId: "s1" }), "revoke");
   assert.deepEqual(calls.map(call => call[0]), ["deactivate", "disconnect", "stop", "revoke"]);
-  assert.ok(calls.every(call => call[1] === scope));
+  assert.ok(calls.every(call => call[1] === scope));\n  assert.equal(calls.filter(call => call[0] === "authorizeCleanup").length, 4);
 });
 
 test("valid add-on entitlement delegates to the matching operation only", async () => {
@@ -75,4 +75,13 @@ test("valid add-on entitlement delegates to the matching operation only", async 
   assert.equal(await peripherals.activate(scope, { peripheralId: "p1" }), "activate");
   assert.equal(await desktop.start(scope, { sessionId: "s1" }), "start");
   assert.deepEqual(calls.map(call => call[0]), ["activate", "start"]);
+});
+
+test("cleanup rejects missing trusted tenant/application scope before authorization or operation", async () => {
+  const { calls, peripherals, desktop } = setup(new Set());
+  await assert.rejects(peripherals.disconnect({ tenantId: "", applicationId: "application-a" }, {}),
+    /APPLICATION_CAPABILITY_TRUSTED_SCOPE_REQUIRED/);
+  await assert.rejects(desktop.stop({ tenantId: "tenant-a", applicationId: "" }, {}),
+    /APPLICATION_CAPABILITY_TRUSTED_SCOPE_REQUIRED/);
+  assert.equal(calls.length, 0);
 });
