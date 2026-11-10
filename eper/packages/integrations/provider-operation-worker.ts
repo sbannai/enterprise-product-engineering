@@ -110,6 +110,16 @@ export class ProviderOperationWorker {
     shutdown?.addEventListener("abort", abort, { once: true });
     if (shutdown?.aborted) abort();
     let leaseLost = false;
+    const canContinue = () => !controller.signal.aborted && !leaseLost;
+    const persistOutcome = async (
+      outcome: "SUCCEEDED" | "RETRY" | "NEEDS_ATTENTION",
+      errorCode?: string,
+      providerReference?: string,
+    ): Promise<boolean> => {
+      if (!canContinue()) return false;
+      await this.saveOutcome(operation, outcome, errorCode, providerReference);
+      return true;
+    };
     let renewal: Promise<void> | undefined;
     const heartbeat = setInterval(() => {
       if (renewal || leaseLost || controller.signal.aborted) return;
@@ -125,9 +135,12 @@ export class ProviderOperationWorker {
     }, Math.max(1000, Math.floor(this.leaseDurationSeconds * 1000 / 3)));
     try {
       if (controller.signal.aborted) return;
-      if (!await this.dependencies.authorizeOperation(operation)) {
-        await this.saveOutcome(operation, "NEEDS_ATTENTION", "PROVIDER_OPERATION_AUTHORIZATION_DENIED");
-        result.needsAttention += 1;
+      const authorized = await this.dependencies.authorizeOperation(operation);
+      if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+      if (!authorized) {
+        if (await persistOutcome("NEEDS_ATTENTION", "PROVIDER_OPERATION_AUTHORIZATION_DENIED")) {
+          result.needsAttention += 1;
+        }
         return;
       }
       let selection: ProviderDispatchSelection;
@@ -136,12 +149,13 @@ export class ProviderOperationWorker {
           tenantId: operation.tenantId, applicationId: operation.applicationId,
           capabilityKey: operation.capabilityKey,
         });
+        if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
       } catch (error) {
         // A missing/ambiguous binding or invalid effective policy is a durable
         // configuration blocker, not a transient provider/network failure.
         if (error instanceof ProviderDispatchConfigurationError) {
-          await this.saveOutcome(operation, "NEEDS_ATTENTION", error.code);
-          result.needsAttention += 1;
+          if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+          if (await persistOutcome("NEEDS_ATTENTION", error.code)) result.needsAttention += 1;
           return;
         }
         throw error;
@@ -150,8 +164,9 @@ export class ProviderOperationWorker {
         || selection.applicationId !== operation.applicationId
         || selection.connectionId !== operation.connectionId
         || selection.capabilityKey !== operation.capabilityKey) {
-        await this.saveOutcome(operation, "NEEDS_ATTENTION", "PROVIDER_OPERATION_ROUTE_MISMATCH");
-        result.needsAttention += 1;
+        if (await persistOutcome("NEEDS_ATTENTION", "PROVIDER_OPERATION_ROUTE_MISMATCH")) {
+          result.needsAttention += 1;
+        }
         return;
       }
       const payload = await this.dependencies.payloadStore.get({
@@ -159,25 +174,27 @@ export class ProviderOperationWorker {
         operationId: operation.operationId, capabilityKey: operation.capabilityKey,
         reference: operation.payloadReference, digest: operation.requestDigest,
       });
-      if (controller.signal.aborted) return;
+      if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
       const dispatched = await this.dependencies.dispatch({
         selection, payload, idempotencyKey: operation.idempotencyKey,
         correlationId: operation.correlationId, signal: controller.signal,
       });
-      if (controller.signal.aborted) return;
+      if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
       if (heartbeat) clearInterval(heartbeat);
       if (renewal) await renewal;
       if (leaseLost) { result.leaseLost += 1; return; }
-      await this.saveOutcome(operation, "SUCCEEDED", undefined, dispatched.providerReference);
-      result.succeeded += 1;
+      if (await persistOutcome("SUCCEEDED", undefined, dispatched.providerReference)) {
+        result.succeeded += 1;
+      }
     } catch {
       if (controller.signal.aborted && leaseLost) { result.leaseLost += 1; return; }
       if (controller.signal.aborted) return;
       if (renewal) await renewal;
       if (leaseLost) { result.leaseLost += 1; return; }
       // Never persist provider exception text, request bodies, or credentials.
-      await this.saveOutcome(operation, "RETRY", "PROVIDER_OPERATION_DISPATCH_FAILED");
-      result.retried += 1;
+      if (await persistOutcome("RETRY", "PROVIDER_OPERATION_DISPATCH_FAILED")) {
+        result.retried += 1;
+      }
     } finally {
       clearInterval(heartbeat);
       if (renewal) await renewal;
