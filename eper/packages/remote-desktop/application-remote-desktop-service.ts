@@ -62,7 +62,7 @@ export class ApplicationRemoteDesktopService {
       throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_VERIFIER_NOT_CONFIGURED");
     }
     const endpointId = await this.store.getEndpointId({
-      tenantId: input.tenantId, applicationId: input.applicationId, sessionId: input.sessionId,
+      ...input, sessionId: input.sessionId,
     });
     const endpointVerified = await this.endpointConsentVerifier.verify({
       tenantId: input.tenantId, applicationId: input.applicationId, endpointId,
