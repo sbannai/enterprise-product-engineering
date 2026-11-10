@@ -425,9 +425,15 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         "the failed operation transaction must not leave a dangling queue row");
 
       // Retention is fail-closed until an explicit policy is attached. Legal
-      // hold overrides an otherwise expired policy; successful deletion must
-      // detach the operation reference and append an audit event atomically.
+      // hold overrides an otherwise expired policy. Prepare this fixture in a
+      // terminal state using a test-only state transition before tombstoning.
       scopedAccess = true;
+      await pool.query(
+        `UPDATE eper_provider_operations SET operation_status='SUCCEEDED',
+           lease_owner=NULL,lease_expires_at=NULL
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+        [tenantId, applicationId, atomicFirst.operation.operationId],
+      );
       await assert.rejects(
         () => scopedPayloadStore.delete(exactPayloadReference),
         error => error?.code === "PROVIDER_PAYLOAD_RETENTION_NOT_ELIGIBLE",
@@ -450,21 +456,31 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
         [tenantId, applicationId, atomicFirst.operation.operationId],
       );
       assert.equal(await scopedPayloadStore.delete(exactPayloadReference), true);
-      const detachedOperation = await pool.query(
+      const retainedOperationReference = await pool.query(
         `SELECT payload_reference FROM eper_provider_operations
          WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
         [tenantId, applicationId, atomicFirst.operation.operationId],
       );
-      assert.equal(detachedOperation.rows[0].payload_reference, null,
-        "retention deletion must detach the operation's reciprocal payload reference");
+      assert.equal(retainedOperationReference.rows[0].payload_reference, exactPayloadReference.reference,
+        "tombstoning must preserve the reciprocal operation reference for durable traceability");
+      const tombstone = await pool.query(
+        `SELECT nonce,auth_tag,ciphertext,deleted_at,deletion_reason_code
+         FROM eper_provider_payloads WHERE payload_reference=$1`,
+        [exactPayloadReference.reference],
+      );
+      assert.equal(tombstone.rowCount, 1);
+      assert.equal(tombstone.rows[0].nonce, null);
+      assert.equal(tombstone.rows[0].auth_tag, null);
+      assert.equal(tombstone.rows[0].ciphertext, null);
+      assert.ok(tombstone.rows[0].deleted_at);
       const deletionAudit = await pool.query(
         `SELECT action FROM eper_audit_events
          WHERE tenant_id=$1 AND application_id=$2
            AND resource_type='provider_payload' AND resource_id=$3`,
         [tenantId, applicationId, exactPayloadReference.reference],
       );
-      assert.ok(deletionAudit.rows.some(row => row.action === "provider.payload.deleted"),
-        "payload deletion must append an actor-attributed audit event");
+      assert.ok(deletionAudit.rows.some(row => row.action === "provider.payload.tombstoned"),
+        "payload tombstoning must append an actor-attributed audit event");
       assert.equal(await scopedPayloadStore.delete(exactPayloadReference), false,
         "repeated deletion must be idempotent");
 
