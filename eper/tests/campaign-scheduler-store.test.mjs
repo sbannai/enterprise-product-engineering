@@ -577,6 +577,7 @@ test("scheduler readiness rejects a database missing the durable error-detail mi
       executions_table: "eper_campaign_executions",
       dispatch_started_column: "dispatch_started_at",
       error_detail_column: null,
+      claim_generation_column: "claim_generation",
     }],
     rowCount: 1,
   }));
