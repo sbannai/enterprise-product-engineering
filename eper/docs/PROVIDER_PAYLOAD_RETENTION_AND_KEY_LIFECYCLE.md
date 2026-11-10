@@ -1,6 +1,6 @@
 # Provider Payload Retention and Key Lifecycle
 
-**Status:** Engineering contract — keyring and audited single-row deletion partially implemented  
+**Status:** Engineering contract — keyring and audited terminal-operation tombstones implemented; policy resolver and bounded purge remain open  
 **Date:** 2026-11-03  
 **Applies to:** PostgreSQL encrypted provider-operation payloads
 
@@ -14,7 +14,8 @@ Define safe lifecycle controls for encrypted provider request payloads before en
 - Version 1 additional authenticated data (AAD) is the ordered tuple: tenant, application, operation, capability, payload reference, envelope version.
 - `PostgresEncryptedProviderPayloadStore` retains its legacy 32-byte-key constructor for v1 compatibility and also accepts an explicit keyring configuration for v2 writes and version-aware reads.
 - The keyring-backed path stores `envelope_version=2` and the authenticated key identifier; v1 rows continue to use the legacy key and byte-compatible AAD.
-- `delete()` now requires an actor-attributed `authorizeDelete` decision, locks the target row, rejects active legal holds and unresolved/unexpired retention, and commits the deletion plus audit event in one transaction.
+- PostgreSQL `delete()` requires an actor-attributed `authorizeDelete` decision, locks the operation row before the payload row, rejects non-terminal operations, active legal holds and unresolved/unexpired retention, then scrubs ciphertext into a tombstone while preserving the operation reference, payload reference, digest, scope and policy provenance. Tombstone plus audit event commit in one transaction.
+- Tombstoned payload reads fail closed with `PROVIDER_PAYLOAD_DELETED`; repeated deletion is idempotent. The in-memory test store retains its separate test-only delete behavior.
 - The legacy boolean-only authorization object can no longer delete payloads; it must provide `authorizeDelete` with actor, source, environment, reason, and policy-decision reference.
 - `putInTransaction()` is the atomic primitive used by operation enqueue; the public `put()` helper can create a payload independently and must not be used by production enqueue paths.
 
@@ -61,9 +62,9 @@ Define safe lifecycle controls for encrypted provider request payloads before en
 1. Add nullable lifecycle metadata and key identifier metadata without rewriting version-1 ciphertext or changing its AAD.
 2. [x] Implement a backward-compatible keyring codec with explicit version-1 legacy reads and version-2 writes, and wire it into the PostgreSQL store.
 3. [ ] Add retention-policy resolution and lifecycle metadata persistence; unresolved policy remains non-expiring.
-4. [x] Replace boolean-only delete authorization with an actor-bearing audited command and transactional audit append for single-row deletion.
-5. Add bounded legal-hold-aware purge with concurrent-claim protection.
-6. Add tests for v1 compatibility, v2 key selection, unknown key failure, rotation, missing expiry, policy changes, legal hold, actor attribution, audit rollback, RLS boundaries, duplicate purge, and orphan reconciliation.
+4. [x] Replace boolean-only delete authorization with an actor-bearing audited command and transactional audit append; PostgreSQL retention deletion now tombstones only terminal operations and preserves the reciprocal operation/payload reference.
+5. [ ] Add a bounded legal-hold-aware purge runner with concurrent-claim protection; current store exposes only a single-reference audited tombstone operation.
+6. [ ] Extend tests for every terminal and active operation status, transition-vs-delete concurrency, v1 compatibility, v2 key selection, unknown key failure, rotation, missing expiry, policy changes, legal hold, actor attribution, audit rollback, RLS boundaries, duplicate purge, and orphan reconciliation. Current PostgreSQL lifecycle test covers queued-operation rejection, terminal-operation tombstoning, idempotence, digest/reference retention and deleted-read denial.
 7. Run fresh-clone, PostgreSQL lifecycle, controlled QA, UAT technical simulation, and 228-requirement matrix checks on the exact resulting commit.
 
 ## Explicitly not authorized
