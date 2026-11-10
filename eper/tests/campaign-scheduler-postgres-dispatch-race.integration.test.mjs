@@ -35,7 +35,7 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
              to_regclass('public.eper_audit_events') AS audit_events,
              (SELECT 1 FROM information_schema.columns
               WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                AND column_name='dispatch_started_at') AS dispatch_fence
+                AND column_name='dispatch_started_at') AS dispatch_fence,\n             (SELECT 1 FROM information_schema.columns\n              WHERE table_schema='public' AND table_name='eper_campaign_executions'\n                AND column_name='claim_generation') AS claim_generation
     `);
     assert.ok(schema.rows[0]?.schedules && schema.rows[0]?.executions && schema.rows[0]?.audit_events,
       "Apply the campaign scheduler and audit migrations to this disposable test database first");
