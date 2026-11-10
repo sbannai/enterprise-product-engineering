@@ -41,7 +41,7 @@ test("peripheral management UI is served behind the explicit capability flag wit
     const html = await response.text();
     assert.match(html, /Peripheral Management/);
     assert.match(html, /Save configuration/);
-    assert.match(html, /explicitly activate/);
+    assert.match(html, /explicit Activate action/);
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (previous === undefined) delete process.env.EPER_APPLICATION_PERIPHERAL_API_ENABLED;
