@@ -64,16 +64,44 @@ export class PostgresPeripheralRepository {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ registrations: string | null; configurations: string | null }>(`
+      const result = await client.query<{
+        registrations: string | null;
+        configurations: string | null;
+        registrations_rls: boolean;
+        registrations_force_rls: boolean;
+        configurations_rls: boolean;
+        configurations_force_rls: boolean;
+        registration_policy: boolean;
+        configuration_policy: boolean;
+      }>(`
         SELECT
           to_regclass('public.eper_application_peripheral')::text AS registrations,
-          to_regclass('public.eper_application_peripheral_configuration')::text AS configurations
+          to_regclass('public.eper_application_peripheral_configuration')::text AS configurations,
+          COALESCE(registration.relrowsecurity, false) AS registrations_rls,
+          COALESCE(registration.relforcerowsecurity, false) AS registrations_force_rls,
+          COALESCE(configuration.relrowsecurity, false) AS configurations_rls,
+          COALESCE(configuration.relforcerowsecurity, false) AS configurations_force_rls,
+          EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = 'public'
+                   AND p.tablename = 'eper_application_peripheral'
+                   AND p.policyname = 'tenant_application_isolation') AS registration_policy,
+          EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = 'public'
+                   AND p.tablename = 'eper_application_peripheral_configuration'
+                   AND p.policyname = 'tenant_application_isolation') AS configuration_policy
+        FROM (SELECT 1) seed
+        LEFT JOIN pg_class registration
+          ON registration.oid = to_regclass('public.eper_application_peripheral')
+        LEFT JOIN pg_class configuration
+          ON configuration.oid = to_regclass('public.eper_application_peripheral_configuration')
       `);
-      if (!result.rows[0]?.registrations || !result.rows[0]?.configurations) {
-        throw new Error("EPER_PERIPHERAL_SCHEMA_NOT_APPLIED");
+      const schema = result.rows[0];
+      if (!schema?.registrations || !schema.configurations ||
+          !schema.registrations_rls || !schema.registrations_force_rls ||
+          !schema.configurations_rls || !schema.configurations_force_rls ||
+          !schema.registration_policy || !schema.configuration_policy) {
+        throw new Error("EPER_PERIPHERAL_SCHEMA_NOT_READY_WITH_TENANT_RLS");
       }
     } catch (error) {
-      if (error instanceof Error && error.message === "EPER_PERIPHERAL_SCHEMA_NOT_APPLIED") throw error;
+      if (error instanceof Error && error.message === "EPER_PERIPHERAL_SCHEMA_NOT_READY_WITH_TENANT_RLS") throw error;
       throw new Error("EPER_PERIPHERAL_SCHEMA_READINESS_FAILED", { cause: error });
     } finally {
       client.release();
