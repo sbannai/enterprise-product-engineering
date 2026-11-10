@@ -59,6 +59,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Peripheral management UI feature-flag and security-header regressions
+        run: node --test tests/customer-peripheral-management-ui.test.mjs
       - name: Workflow rules, capability composition and tariff entitlement unit regressions
         run: node --test tests/workflow-rule-engine.test.mjs tests/capability-composition.test.mjs tests/postgres-module-entitlement-service.test.mjs
       - name: Customer asset upload recovery and provider binding regressions
