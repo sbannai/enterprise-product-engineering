@@ -351,6 +351,90 @@ test("provider operation queue persists claims, renewal, fencing, retry exhausti
           status + " operations must permit eligible payload tombstoning");
       }
 
+      // Serialize a terminal outcome transition against retention deletion.
+      // The outcome transaction holds the operation row lock while delete waits.
+      const racePayload = { body: "retention-concurrent-transition-" + suffix };
+      const raceDigest = createHash("sha256")
+        .update(JSON.stringify(racePayload), "utf8").digest("hex");
+      const raceQueued = await operationRepository.enqueueWithPayload({
+        ...atomicInput,
+        idempotencyKey: "retention-concurrent-transition-" + suffix,
+        correlationId: "retention-concurrent-transition-correlation-" + suffix,
+        requestDigest: raceDigest,
+        payload: racePayload,
+      });
+      const raceReference = {
+        tenantId, applicationId, operationId: raceQueued.operation.operationId,
+        capabilityKey: "email.send", reference: raceQueued.operation.payloadReference,
+        digest: raceDigest,
+      };
+      await pool.query(
+        `UPDATE eper_provider_payloads
+         SET expires_at=NOW()-INTERVAL '1 second',
+             retention_policy_id='test-retention',retention_policy_version='1'
+         WHERE payload_reference=$1`,
+        [raceReference.reference],
+      );
+      await pool.query(
+        `UPDATE eper_provider_operations
+         SET operation_status='DISPATCHING',lease_owner='retention-race-worker',
+             lease_expires_at=NOW()+INTERVAL '1 minute',fencing_token=1
+         WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+        [tenantId, applicationId, raceReference.operationId],
+      );
+      const transitionClient = await pool.connect();
+      let deletion;
+      try {
+        await transitionClient.query("BEGIN");
+        await transitionClient.query(
+          `UPDATE eper_provider_operations
+           SET operation_status='SUCCEEDED',lease_owner=NULL,lease_expires_at=NULL
+           WHERE tenant_id=$1 AND application_id=$2 AND operation_id=$3`,
+          [tenantId, applicationId, raceReference.operationId],
+        );
+        deletion = retentionStore.delete(raceReference);
+        let deleteIsWaitingForOperationLock = false;
+        for (let attempt = 0; attempt < 500; attempt += 1) {
+          const waiting = await pool.query(
+            `SELECT EXISTS (
+               SELECT 1 FROM pg_stat_activity
+               WHERE datname=current_database()
+                 AND wait_event_type='Lock'
+                 AND query LIKE '%SELECT operation_status,correlation_id,payload_reference%'
+             ) AS waiting`,
+          );
+          if (waiting.rows[0]?.waiting) {
+            deleteIsWaitingForOperationLock = true;
+            break;
+          }
+          await new Promise(resolve => setImmediate(resolve));
+        }
+        assert.equal(deleteIsWaitingForOperationLock, true,
+          "retention deletion must wait for the in-flight operation state transition lock");
+        await transitionClient.query("COMMIT");
+      } catch (error) {
+        await transitionClient.query("ROLLBACK").catch(() => undefined);
+        if (deletion) await deletion.catch(() => undefined);
+        throw error;
+      } finally {
+        transitionClient.release();
+      }
+      assert.equal(await deletion, true,
+        "after the terminal transition commits, retention may tombstone the now-terminal payload");
+      const raceState = await pool.query(
+        `SELECT o.operation_status,p.deleted_at,p.payload_reference
+         FROM eper_provider_operations o
+         JOIN eper_provider_payloads p
+           ON p.tenant_id=o.tenant_id AND p.application_id=o.application_id
+          AND p.payload_reference=o.payload_reference
+         WHERE o.tenant_id=$1 AND o.application_id=$2 AND o.operation_id=$3`,
+        [tenantId, applicationId, raceReference.operationId],
+      );
+      assert.equal(raceState.rows[0].operation_status, "SUCCEEDED");
+      assert.ok(raceState.rows[0].deleted_at);
+      assert.equal(raceState.rows[0].payload_reference, raceReference.reference,
+        "the reciprocal reference must survive concurrent tombstoning");
+
       // An audit insert failure must roll back the tombstone update atomically.
       const rollbackPayload = { body: "retention-audit-rollback-" + suffix };
       const rollbackDigest = createHash("sha256")
