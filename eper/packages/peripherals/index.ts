@@ -3,7 +3,7 @@
  * Importing this package performs no discovery, connection or I/O.
  */
 export type PeripheralKind = "barcode_scanner" | "qr_reader" | "sensor" | "rfid_nfc" | "printer" | "weighing_scale" | "custom";
-export type PeripheralStatus = "DRAFT" | "REGISTERED" | "CONFIGURED" | "ACTIVE" | "DEGRADED" | "OFFLINE" | "SUSPENDED" | "RETIRED";
+export type PeripheralStatus = "DRAFT" | "REGISTERED" | "CONFIGURED" | "ACTIVE" | "DEGRADED" | "OFFLINE" | "DISCONNECTING" | "SUSPENDED" | "RETIRED";
 export type PeripheralConnectionState = "NOT_CONFIGURED" | "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "DEGRADED" | "CLOSED";
 
 export interface PeripheralScope {
@@ -84,9 +84,10 @@ const transitions: Readonly<Record<PeripheralStatus, readonly PeripheralStatus[]
   DRAFT: ["REGISTERED", "RETIRED"],
   REGISTERED: ["CONFIGURED", "SUSPENDED", "RETIRED"],
   CONFIGURED: ["ACTIVE", "SUSPENDED", "RETIRED"],
-  ACTIVE: ["DEGRADED", "OFFLINE", "SUSPENDED", "RETIRED"],
-  DEGRADED: ["ACTIVE", "OFFLINE", "SUSPENDED", "RETIRED"],
-  OFFLINE: ["ACTIVE", "DEGRADED", "SUSPENDED", "RETIRED"],
+  ACTIVE: ["DEGRADED", "OFFLINE", "DISCONNECTING", "RETIRED"],
+  DEGRADED: ["ACTIVE", "OFFLINE", "DISCONNECTING", "RETIRED"],
+  OFFLINE: ["ACTIVE", "DEGRADED", "DISCONNECTING", "RETIRED"],
+  DISCONNECTING: ["SUSPENDED"],
   SUSPENDED: ["CONFIGURED", "RETIRED"],
   RETIRED: [],
 };
