@@ -60,13 +60,18 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
       return operation({ addonKey: "peripheral_management" });
     },
   };
-  return { service: new ApplicationPeripheralService(capabilities, repository, adapters), calls };
+  const authorizer = {
+    async authorize(input) { calls.push(["authorize", input.action]); },
+  };
+  return { service: new ApplicationPeripheralService(capabilities, repository, adapters, authorizer), calls };
 }
 
 test("registration is entitlement-gated and never connects an adapter", async () => {
   const { service, calls } = fixture();
   await service.register({ ...scope, kind: "barcode_scanner", displayName: "Front desk scanner" });
-  assert.equal(calls[0][0], "entitlement");
+  assert.equal(calls[0][0], "authorize");
+  assert.equal(calls[0][1], "peripheral.register");
+  assert.equal(calls[1][0], "entitlement");
   assert.equal(calls.some(call => call[0] === "connect"), false);
 });
 
