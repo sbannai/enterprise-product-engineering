@@ -16,9 +16,9 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, initialStatus = "CONFIGURED" } = {}) {
   const calls = [];
-  let current = registration();
+  let current = registration({ status: initialStatus });
   const config = configuration;
   const repository = {
     async register(input) { calls.push(["register", input]); return current; },
@@ -93,7 +93,7 @@ test("failed adapter connection attempts to persist DEGRADED using the new row v
 });
 
 test("suspension persists the inactive state and disconnects the configured adapter", async () => {
-  const { service, calls } = fixture();
+  const { service, calls } = fixture({ initialStatus: "ACTIVE" });
   const result = await service.suspend({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 });
   assert.equal(result.status, "SUSPENDED");
   const transition = calls.findIndex(call => call[0] === "transition");
