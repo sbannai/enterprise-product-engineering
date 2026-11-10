@@ -64,6 +64,7 @@ test("consent rejects an endpoint identity that does not match the session", asy
   const { service, calls } = fixture({ endpointConsentVerifier: { async verify(value) {
     assert.equal(value.endpointId, "endpoint-a");
     assert.equal(value.sessionId, "123e4567-e89b-42d3-a456-426614174000");
+    assert.equal(value.expectedVersion, 1);
     return false;
   } } });
   await assert.rejects(() => service.acceptConsent({
