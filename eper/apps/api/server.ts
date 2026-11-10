@@ -64,6 +64,7 @@ import type { IntegrationPort } from "../../packages/integration/index.js";
 import { createStorageDownloadAdapter } from "../../packages/assets/storage-download-adapter.js";
 import type { PostgresCustomerAssetRepository } from "../../packages/assets/postgres-customer-asset-repository.js";
 import { startCustomerAssetUpload } from "../../packages/assets/customer-asset-upload-service.js";
+import { validateCustomerAssetUploadPolicy } from "../../packages/assets/customer-asset-file-policy.js";
 import { createStorageUploadAdapter, createStorageUploadLookupAdapter, type StorageUploadGrant, type StorageUploadRequest } from "../../packages/assets/storage-upload-adapter.js";
 import type { StorageUploadLookupOutcome, StorageUploadLookupRequest, StorageUploadLookupResponse, StorageUploadProviderCapabilities } from "../../packages/assets/storage-upload-provider-contract.js";
 import type { StorageUploadVerificationRequest, VerifiedStorageObject } from "../../packages/assets/storage-upload-verification-adapter.js";
@@ -1866,6 +1867,11 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         sendJson(request, response, 400, { error: "invalid_upload_request" }); return;
       }
       try {
+        validateCustomerAssetUploadPolicy({
+          fileName,
+          mimeType: mimeType.trim().toLowerCase(),
+          sizeBytes: expectedSizeBytes,
+        }, process.env.EPER_CUSTOMER_ASSET_FILE_POLICY_JSON);
         const grant = await startCustomerAssetUpload({
           tenantId: authorization.identity.tenantId,
           applicationId,
@@ -1896,11 +1902,15 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         const conflicts = message === "EPER_CUSTOMER_ASSET_UPLOAD_IDEMPOTENCY_CONFLICT" ||
           message === "EPER_CUSTOMER_ASSET_PROVIDER_REFERENCE_CONFLICT";
         const missingAsset = message === "EPER_CUSTOMER_ASSET_NOT_FOUND";
+        const policyUnavailable = message === "EPER_CUSTOMER_ASSET_FILE_POLICY_UNAVAILABLE" ||
+          message === "EPER_CUSTOMER_ASSET_FILE_POLICY_INVALID" ||
+          message === "EPER_CUSTOMER_ASSET_FILE_POLICY_AMBIGUOUS";
         const invalid = message.startsWith("EPER_CUSTOMER_ASSET_") &&
-          !message.includes("SESSION_") && !message.includes("PROVIDER_");
+          !message.includes("SESSION_") && !message.includes("PROVIDER_") && !policyUnavailable;
         sendJson(request, response, conflicts ? 409 : missingAsset ? 404 : invalid ? 400 : 503, {
           error: conflicts ? "upload_idempotency_conflict" : missingAsset ? "asset_not_found" :
-            invalid ? "invalid_upload_request" : "customer_asset_upload_unavailable",
+            policyUnavailable ? "customer_asset_file_policy_unavailable" :
+              invalid ? "invalid_upload_request" : "customer_asset_upload_unavailable",
         });
       }
       return;
