@@ -18,6 +18,7 @@ export interface PeripheralRegistration extends PeripheralScope {
   readonly adapterVersion: string | null;
   readonly status: PeripheralStatus;
   readonly configurationVersion: number;
+  readonly version: number;
 }
 export interface PeripheralConfiguration {
   readonly adapterKey: string;
