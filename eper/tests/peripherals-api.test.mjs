@@ -25,7 +25,7 @@ test("application peripheral API is disabled by default", async () => {
   }
 });
 
-test("enabled peripheral API still fails closed without durable stores", async () => {
+test("enabled peripheral API refuses startup without durable identity and audit stores", () => {
   const keys = [
     "EPER_APPLICATION_PERIPHERAL_API_ENABLED",
     "EPER_CUSTOMER_IDENTITY_PERSISTENCE",
@@ -37,20 +37,12 @@ test("enabled peripheral API still fails closed without durable stores", async (
   process.env.EPER_CUSTOMER_IDENTITY_PERSISTENCE = "postgres";
   process.env.EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE = "postgres";
   process.env.EPER_AUDIT_PERSISTENCE = "postgres";
-  const server = createAppServer();
   try {
-    await new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
-    const response = await fetch(
-      "http://127.0.0.1:" + address.port + "/customer/applications/application-a/peripherals",
+    assert.throws(
+      () => createAppServer(),
+      /CUSTOMER_IDENTITY_SESSION_STORE_REQUIRED_IN_POSTGRES_MODE/,
     );
-    assert.equal(response.status, 404);
   } finally {
-    await new Promise(resolve => server.close(resolve));
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
