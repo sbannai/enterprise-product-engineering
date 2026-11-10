@@ -87,6 +87,11 @@ export class ProviderOperationWorker {
   }
 
   async runOnce(signal?: AbortSignal): Promise<ProviderOperationWorkerResult> {
+    const result: ProviderOperationWorkerResult = {
+      recovered: 0, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
+    };
+    // Shutdown must be side-effect-free when already requested.
+    if (signal?.aborted) return result;
     const context = {
       tenantId: this.options.tenantId,
       applicationId: this.options.applicationId,
@@ -95,9 +100,10 @@ export class ProviderOperationWorker {
     const recovered = await this.dependencies.repository.recoverExpiredLeases({
       ...context, maxAttempts: this.maxAttempts, batchSize: this.batchSize,
     });
-    const result: ProviderOperationWorkerResult = {
-      recovered: recovered.length, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
-    };
+    result.recovered = recovered.length;
+    // Recovery can mutate queue state; do not continue into claims if shutdown
+    // arrived while that database operation was in flight.
+    if (signal?.aborted) return result;
     for (let index = 0; index < this.batchSize && !signal?.aborted; index += 1) {
       const operation = await this.dependencies.repository.claimNext({
         ...context, workerId: this.options.workerId,
@@ -105,6 +111,9 @@ export class ProviderOperationWorker {
       });
       if (!operation) break;
       result.claimed += 1;
+      // If shutdown races an in-flight claim, process() will not dispatch or
+      // write an outcome. The fenced lease is intentionally left to expire
+      // and be recovered; no unfenced release is attempted during shutdown.
       await this.process(operation, result, signal);
     }
     return result;
