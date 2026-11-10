@@ -720,7 +720,7 @@ test("pausing before dispatch releases the claim without consuming retry budget"
   assert.match(update.sql, /attempt_count=GREATEST\(attempt_count - 1, 0\)/);
   assert.match(update.sql, /dispatch_started_at IS NULL/);
   assert.match(update.sql, /locked_by=\$4/);
-  assert.deepEqual(update.values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+  assert.deepEqual(update.values, ["tenant-a", "app-a", "job-1", "worker-a", 1]);
   assert.ok(calls.some((call) => call.sql.includes("INSERT INTO eper_audit_events")), "pause deferral must be audited");
   assert.ok(calls.some((call) => call.sql === "COMMIT"), "execution update and audit must commit together");
 });
