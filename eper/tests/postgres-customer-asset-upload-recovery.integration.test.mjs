@@ -325,6 +325,26 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         "verification must use wall-clock expiry and deny the expired session",
       );
 
+      const expiryRetry = await repository.reserveUpload({
+        ...reservationInput, assetId: completionRaceAssetId, expectedSizeBytes: 1024,
+        expectedChecksumSha256: completionRaceChecksum,
+        idempotencyKey: "asset-expiry-retry-" + suffix.slice(0, 32),
+        requestFingerprint: createHash("sha256").update("expiry-retry-" + suffix).digest("hex"),
+      });
+      assert.equal(expiryRetry.attemptGeneration, 2,
+        "an expired attempt remains in history and a deliberate retry receives the next generation");
+      await assert.rejects(
+        repository.recordUploadGrant({
+          tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+          assetId: completionRaceAssetId, uploadSessionId: completionRaceReservation.uploadSessionId,
+          requestFingerprint: completionRaceFingerprint,
+          providerUploadReference: "opaque-expired-late-callback-" + suffix,
+          grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_RECOVERABLE" },
+        "a late provider callback from an expired generation cannot overwrite the newer attempt",
+      );
+
       // Exercise the real PostgreSQL upload-completion -> transactional scan
       // outbox -> leased worker -> trusted scanner result lifecycle.
       const scanAssetId = randomUUID();
