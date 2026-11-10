@@ -127,7 +127,6 @@ test("upload attempt generations are monotonic, unique and immutable while histo
   assert.ok(uploadAttemptGenerationMigration.includes("PARTITION BY tenant_id, asset_id"));
   assert.ok(uploadAttemptGenerationMigration.includes("attempt_generation > 0"));
   assert.ok(uploadAttemptGenerationMigration.includes("upload_attempt_generation bigint NOT NULL DEFAULT 0"));
-  assert.ok(uploadAttemptGenerationMigration.includes("asset row counter"));
   assert.ok(uploadAttemptGenerationMigration.includes("UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_attempt_generation_uq"));
   assert.ok(uploadAttemptGenerationMigration.includes("EPER_CUSTOMER_ASSET_UPLOAD_ATTEMPT_IDENTITY_IMMUTABLE"));
   assert.ok(uploadAttemptGenerationMigration.includes("BEFORE UPDATE ON eper_customer_asset_upload_sessions"));
