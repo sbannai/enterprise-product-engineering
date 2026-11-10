@@ -129,6 +129,15 @@ test("failed adapter disconnect remains visibly DISCONNECTING and is not reporte
   assert.deepEqual(transitions.map(call => call[1]), ["DISCONNECTING"]);
 });
 
+test("a DISCONNECTING peripheral retries adapter shutdown without repeating the state transition", async () => {
+  const { service, calls } = fixture({ initialStatus: "DISCONNECTING" });
+  const result = await service.suspend({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 });
+  assert.equal(result.status, "SUSPENDED");
+  const transitions = calls.filter(call => call[0] === "transition");
+  assert.deepEqual(transitions.map(call => [call[1], call[2]]), [["SUSPENDED", 7]]);
+  assert.equal(calls.filter(call => call[0] === "disconnect").length, 1);
+});
+
 test("missing registration and missing configuration fail closed without adapter resolution", async () => {
   const missingRegistration = fixture({ noRegistration: true });
   await assert.rejects(
