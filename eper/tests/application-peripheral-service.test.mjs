@@ -16,7 +16,7 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7 } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {} } = {}) {
   const calls = [];
   let current = registration({ status: initialStatus, version: initialVersion });
   const config = configuration;
@@ -61,10 +61,21 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
     },
   };
   const authorizer = {
-    async authorize(input) { calls.push(["authorize", input.action]); },
+    async authorize(input) { calls.push(["authorize", input.action]); await authorize(input); },
   };
   return { service: new ApplicationPeripheralService(capabilities, repository, adapters, authorizer), calls };
 }
+
+test("role authorization denial blocks entitlement lookup and registration", async () => {
+  const { service, calls } = fixture({
+    authorize: async () => { throw new Error("EPER_PERIPHERAL_ACTION_FORBIDDEN"); },
+  });
+  await assert.rejects(
+    service.register({ ...scope, kind: "barcode_scanner", displayName: "Front desk scanner" }),
+    /EPER_PERIPHERAL_ACTION_FORBIDDEN/,
+  );
+  assert.deepEqual(calls.map(call => call[0]), ["authorize"]);
+});
 
 test("registration is entitlement-gated and never connects an adapter", async () => {
   const { service, calls } = fixture();
