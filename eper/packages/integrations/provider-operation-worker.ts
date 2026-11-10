@@ -1,0 +1,254 @@
+import type { AuditEnvironment } from "../audit/audit-event-store.js";
+import { ProviderDispatchConfigurationError, type ProviderDispatchSelection, type ProviderDispatchConfigurationService } from "./provider-dispatch-configuration-service.js";
+import type { ProviderOperation } from "./postgres-provider-operation-repository.js";
+
+type Repository = {
+  claimNext(input: { tenantId: string; applicationId: string; workerId: string; leaseDurationSeconds: number; maxAttempts: number; auditEnvironment: AuditEnvironment }): Promise<ProviderOperation | null>;
+  recoverExpiredLeases(input: { tenantId: string; applicationId: string; maxAttempts: number; batchSize: number; auditEnvironment: AuditEnvironment }): Promise<ProviderOperation[]>;
+  renewLease(input: { tenantId: string; applicationId: string; operationId: string; workerId: string; fencingToken: number; leaseDurationSeconds: number; auditEnvironment: AuditEnvironment }): Promise<ProviderOperation>;
+  recordOutcome(input: { tenantId: string; applicationId: string; operationId: string; workerId: string; outcome: "SUCCEEDED" | "RETRY" | "FAILED" | "NEEDS_ATTENTION"; providerReference?: string; errorCode?: string; retryAfterSeconds?: number; maxAttempts: number; fencingToken: number; auditEnvironment: AuditEnvironment }): Promise<ProviderOperation>;
+};
+type PayloadStore = {
+  get<T>(input: { tenantId: string; applicationId: string; operationId: string; capabilityKey: string; reference: string; digest: string }): Promise<T>;
+};
+export type ProviderOperationWorkerOptions = {
+  tenantId: string;
+  applicationId: string;
+  workerId: string;
+  auditEnvironment: AuditEnvironment;
+  leaseDurationSeconds?: number;
+  maxAttempts?: number;
+  retryAfterSeconds?: number;
+  batchSize?: number;
+  renewalDrainTimeoutMs?: number;
+};
+export type ProviderDispatchResult = { providerReference?: string };
+export type ProviderOperationWorkerDependencies = {
+  repository: Repository;
+  payloadStore: PayloadStore;
+  configuration: Pick<ProviderDispatchConfigurationService, "resolve">;
+  authorizeOperation(operation: ProviderOperation): Promise<boolean>;
+  /** Test seam for deterministic lease-heartbeat races; production defaults to setInterval. */
+  scheduleHeartbeat?(callback: () => void, intervalMs: number): () => void;
+  dispatch(input: {
+    selection: ProviderDispatchSelection;
+    payload: unknown;
+    idempotencyKey: string;
+    correlationId: string;
+    signal: AbortSignal;
+  }): Promise<ProviderDispatchResult>;
+};
+export type ProviderOperationWorkerResult = {
+  recovered: number;
+  claimed: number;
+  succeeded: number;
+  retried: number;
+  needsAttention: number;
+  leaseLost: number;
+};
+
+/**
+ * One bounded provider-operation worker pass. Process lifecycle and cadence are
+ * owned by the host; every operation remains fenced by its database lease.
+ * This worker deliberately accepts an injected dispatcher so the runtime can
+ * be wired to synthetic adapters only until real dispatch is explicitly approved.
+ */
+export class ProviderOperationWorker {
+  private readonly leaseDurationSeconds: number;
+  private readonly maxAttempts: number;
+  private readonly retryAfterSeconds: number;
+  private readonly batchSize: number;
+  private readonly renewalDrainTimeoutMs: number;
+
+  constructor(
+    private readonly dependencies: ProviderOperationWorkerDependencies,
+    private readonly options: ProviderOperationWorkerOptions,
+  ) {
+    for (const [label, value] of [["TENANT", options.tenantId], ["APPLICATION", options.applicationId], ["WORKER_ID", options.workerId]] as const) {
+      if (typeof value !== "string" || !value.trim() || value.length > 128) throw new Error("PROVIDER_WORKER_" + label + "_INVALID");
+    }
+    if (!["production", "uat", "sandbox"].includes(options.auditEnvironment)) throw new Error("PROVIDER_WORKER_AUDIT_ENVIRONMENT_INVALID");
+    this.leaseDurationSeconds = options.leaseDurationSeconds ?? 60;
+    this.maxAttempts = options.maxAttempts ?? 5;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? 30;
+    this.batchSize = options.batchSize ?? 10;
+    this.renewalDrainTimeoutMs = options.renewalDrainTimeoutMs ?? 1000;
+    if (!Number.isInteger(this.leaseDurationSeconds) || this.leaseDurationSeconds < 10 || this.leaseDurationSeconds > 3600
+      || !Number.isInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20
+      || !Number.isInteger(this.retryAfterSeconds) || this.retryAfterSeconds < 1 || this.retryAfterSeconds > 86400
+      || !Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 100
+      || !Number.isInteger(this.renewalDrainTimeoutMs) || this.renewalDrainTimeoutMs < 1 || this.renewalDrainTimeoutMs > 30000) {
+      throw new Error("PROVIDER_WORKER_OPTIONS_INVALID");
+    }
+    if (!dependencies.repository || !dependencies.payloadStore || !dependencies.configuration
+      || typeof dependencies.authorizeOperation !== "function" || typeof dependencies.dispatch !== "function") {
+      throw new Error("PROVIDER_WORKER_DEPENDENCIES_INVALID");
+    }
+  }
+
+  async runOnce(signal?: AbortSignal): Promise<ProviderOperationWorkerResult> {
+    const result: ProviderOperationWorkerResult = {
+      recovered: 0, claimed: 0, succeeded: 0, retried: 0, needsAttention: 0, leaseLost: 0,
+    };
+    // Shutdown must be side-effect-free when already requested.
+    if (signal?.aborted) return result;
+    const context = {
+      tenantId: this.options.tenantId,
+      applicationId: this.options.applicationId,
+      auditEnvironment: this.options.auditEnvironment,
+    };
+    const recovered = await this.dependencies.repository.recoverExpiredLeases({
+      ...context, maxAttempts: this.maxAttempts, batchSize: this.batchSize,
+    });
+    result.recovered = recovered.length;
+    // Recovery can mutate queue state; do not continue into claims if shutdown
+    // arrived while that database operation was in flight.
+    if (signal?.aborted) return result;
+    for (let index = 0; index < this.batchSize && !signal?.aborted; index += 1) {
+      const operation = await this.dependencies.repository.claimNext({
+        ...context, workerId: this.options.workerId,
+        leaseDurationSeconds: this.leaseDurationSeconds, maxAttempts: this.maxAttempts,
+      });
+      if (!operation) break;
+      result.claimed += 1;
+      // If shutdown races an in-flight claim, process() will not dispatch or
+      // write an outcome. The fenced lease is intentionally left to expire
+      // and be recovered; no unfenced release is attempted during shutdown.
+      await this.process(operation, result, signal);
+    }
+    return result;
+  }
+
+  private async process(operation: ProviderOperation, result: ProviderOperationWorkerResult, shutdown?: AbortSignal): Promise<void> {
+    const controller = new AbortController();
+    const abort = () => controller.abort(shutdown?.reason ?? new Error("PROVIDER_WORKER_SHUTDOWN"));
+    shutdown?.addEventListener("abort", abort, { once: true });
+    if (shutdown?.aborted) abort();
+    let leaseLost = false;
+    const canContinue = () => !controller.signal.aborted && !leaseLost;
+    const persistOutcome = async (
+      outcome: "SUCCEEDED" | "RETRY" | "NEEDS_ATTENTION",
+      errorCode?: string,
+      providerReference?: string,
+    ): Promise<boolean> => {
+      if (!canContinue()) return false;
+      await this.saveOutcome(operation, outcome, errorCode, providerReference);
+      return true;
+    };
+    let renewal: Promise<void> | undefined;
+    const drainRenewal = async (): Promise<boolean> => {
+      if (!renewal) return true;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const completed = await Promise.race([
+        renewal.then(() => true),
+        new Promise<boolean>(resolve => {
+          timeout = setTimeout(() => resolve(false), this.renewalDrainTimeoutMs);
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+      if (!completed) {
+        leaseLost = true;
+        controller.abort(new Error("PROVIDER_WORKER_LEASE_RENEWAL_TIMEOUT"));
+      }
+      return completed;
+    };
+    const heartbeatTick = () => {
+      if (renewal || leaseLost || controller.signal.aborted) return;
+      renewal = this.dependencies.repository.renewLease({
+        tenantId: operation.tenantId, applicationId: operation.applicationId,
+        operationId: operation.operationId, workerId: this.options.workerId,
+        fencingToken: operation.fencingToken, leaseDurationSeconds: this.leaseDurationSeconds,
+        auditEnvironment: this.options.auditEnvironment,
+      }).then(() => undefined).catch(() => {
+        leaseLost = true;
+        controller.abort(new Error("PROVIDER_WORKER_LEASE_LOST"));
+      }).finally(() => { renewal = undefined; });
+    };
+    const heartbeatIntervalMs = Math.max(1000, Math.floor(this.leaseDurationSeconds * 1000 / 3));
+    const stopHeartbeat = this.dependencies.scheduleHeartbeat
+      ? this.dependencies.scheduleHeartbeat(heartbeatTick, heartbeatIntervalMs)
+      : (() => {
+        const timer = setInterval(heartbeatTick, heartbeatIntervalMs);
+        return () => clearInterval(timer);
+      })();
+    try {
+      if (controller.signal.aborted) return;
+      const authorized = await this.dependencies.authorizeOperation(operation);
+      if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+      if (!authorized) {
+        if (await persistOutcome("NEEDS_ATTENTION", "PROVIDER_OPERATION_AUTHORIZATION_DENIED")) {
+          result.needsAttention += 1;
+        }
+        return;
+      }
+      let selection: ProviderDispatchSelection;
+      try {
+        selection = await this.dependencies.configuration.resolve({
+          tenantId: operation.tenantId, applicationId: operation.applicationId,
+          capabilityKey: operation.capabilityKey,
+        });
+        if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+      } catch (error) {
+        // A missing/ambiguous binding or invalid effective policy is a durable
+        // configuration blocker, not a transient provider/network failure.
+        if (error instanceof ProviderDispatchConfigurationError) {
+          if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+          if (await persistOutcome("NEEDS_ATTENTION", error.code)) result.needsAttention += 1;
+          return;
+        }
+        throw error;
+      }
+      if (selection.tenantId !== operation.tenantId
+        || selection.applicationId !== operation.applicationId
+        || selection.connectionId !== operation.connectionId
+        || selection.capabilityKey !== operation.capabilityKey) {
+        if (await persistOutcome("NEEDS_ATTENTION", "PROVIDER_OPERATION_ROUTE_MISMATCH")) {
+          result.needsAttention += 1;
+        }
+        return;
+      }
+      const payload = await this.dependencies.payloadStore.get({
+        tenantId: operation.tenantId, applicationId: operation.applicationId,
+        operationId: operation.operationId, capabilityKey: operation.capabilityKey,
+        reference: operation.payloadReference, digest: operation.requestDigest,
+      });
+      if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+      const dispatched = await this.dependencies.dispatch({
+        selection, payload, idempotencyKey: operation.idempotencyKey,
+        correlationId: operation.correlationId, signal: controller.signal,
+      });
+      if (!canContinue()) { if (leaseLost) result.leaseLost += 1; return; }
+      stopHeartbeat();
+      await drainRenewal();
+      if (leaseLost) { result.leaseLost += 1; return; }
+      if (await persistOutcome("SUCCEEDED", undefined, dispatched.providerReference)) {
+        result.succeeded += 1;
+      }
+    } catch {
+      if (controller.signal.aborted && leaseLost) { result.leaseLost += 1; return; }
+      if (controller.signal.aborted) return;
+      await drainRenewal();
+      if (leaseLost) { result.leaseLost += 1; return; }
+      // Never persist provider exception text, request bodies, or credentials.
+      if (await persistOutcome("RETRY", "PROVIDER_OPERATION_DISPATCH_FAILED")) {
+        result.retried += 1;
+      }
+    } finally {
+      stopHeartbeat();
+      // A renewal can be stuck in the database driver during shutdown. Bound
+      // this wait; fencing prevents a late renewal from authorizing stale work.
+      await drainRenewal();
+      shutdown?.removeEventListener("abort", abort);
+    }
+  }
+
+  private async saveOutcome(operation: ProviderOperation, outcome: "SUCCEEDED" | "RETRY" | "NEEDS_ATTENTION", errorCode?: string, providerReference?: string): Promise<void> {
+    await this.dependencies.repository.recordOutcome({
+      tenantId: operation.tenantId, applicationId: operation.applicationId,
+      operationId: operation.operationId, workerId: this.options.workerId,
+      outcome, errorCode, providerReference, retryAfterSeconds: this.retryAfterSeconds,
+      maxAttempts: this.maxAttempts, fencingToken: operation.fencingToken,
+      auditEnvironment: this.options.auditEnvironment,
+    });
+  }
+}
