@@ -180,6 +180,49 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         "attempt generation must be immutable after reservation",
       );
 
+      // A shared asset may be retried from a different application. Its
+      // generation counter must remain tenant-wide even though RLS hides the
+      // prior application's upload-session rows from the new caller.
+      const sharedRetryAssetId = randomUUID();
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: sharedRetryAssetId, scope: "customer_shared",
+        displayName: "Cross-application retry fixture", originalFileName: "shared-retry.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 256, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-shared-retry-" + suffix,
+      });
+      await repository.link({
+        tenantId, applicationId: otherApplicationId, actorId, environment: "sandbox",
+        correlationId, idempotencyKey: "asset-share-link-" + suffix.slice(0, 32),
+        assetId: sharedRetryAssetId, reason: "upload-retry-integration",
+      });
+      const sharedFirstFingerprint = createHash("sha256").update("shared-first-" + suffix).digest("hex");
+      const sharedFirst = await repository.reserveUpload({
+        ...reservationInput, assetId: sharedRetryAssetId, expectedSizeBytes: 256,
+        idempotencyKey: "asset-shared-first-" + suffix.slice(0, 32),
+        requestFingerprint: sharedFirstFingerprint,
+      });
+      await repository.recordUploadProviderRejection({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: sharedRetryAssetId, uploadSessionId: sharedFirst.uploadSessionId,
+        rejectionCode: "provider_unavailable",
+      });
+      const sharedRetry = await repository.reserveUpload({
+        ...reservationInput, applicationId: otherApplicationId, assetId: sharedRetryAssetId,
+        expectedSizeBytes: 256,
+        idempotencyKey: "asset-shared-second-" + suffix.slice(0, 32),
+        requestFingerprint: createHash("sha256").update("shared-second-" + suffix).digest("hex"),
+      });
+      assert.equal(sharedFirst.attemptGeneration, 1);
+      assert.equal(sharedRetry.attemptGeneration, 2,
+        "the asset-row counter must allocate a tenant-wide generation across application RLS boundaries");
+      const sharedCounter = await pool.query(
+        "SELECT upload_attempt_generation FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2",
+        [tenantId, sharedRetryAssetId],
+      );
+      assert.equal(Number(sharedCounter.rows[0].upload_attempt_generation), 2);
+
       await assert.rejects(
         repository.reserveUpload({
           ...reservationInput, applicationId: otherApplicationId,
