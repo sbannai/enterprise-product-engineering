@@ -33,7 +33,7 @@ test("unconfigured extension and excessive size are rejected", () => {
 });
 
 test("path-like, hidden, traversal and non-normalized filenames are rejected", () => {
-  for (const fileName of ["../a.png", "folder/a.png", "a\\\\b.png", ".a.png", "a..png", "a\\u0000.png", "e\\u0301.png"]) {
+  for (const fileName of ["../a.png", "folder/a.png", "a\\b.png", ".a.png", "a..png", "a\u0000.png", "e\u0301.png"]) {
     assert.throws(() => validateCustomerAssetUploadPolicy({ fileName, mimeType: "image/png", sizeBytes: 1 }, policy), /FILE_NAME_INVALID/);
   }
 });
