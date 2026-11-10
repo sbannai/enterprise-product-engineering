@@ -94,7 +94,7 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null;
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null; claim_generation_column: string | null;
       }>(
         `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
                 to_regclass('public.eper_campaign_executions')::text AS executions_table,
@@ -103,7 +103,10 @@ export class PostgresCampaignSchedulerStore {
                    AND column_name='dispatch_started_at') AS dispatch_started_column,
                 (SELECT column_name FROM information_schema.columns
                  WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                   AND column_name='last_error_detail_code') AS error_detail_column`,
+                   AND column_name='last_error_detail_code') AS error_detail_column,
+                (SELECT column_name FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                   AND column_name='claim_generation') AS claim_generation_column`,
       );
       if (!result.rows[0]?.schedules_table || !result.rows[0]?.executions_table) {
         throw new Error("EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED");
@@ -114,11 +117,15 @@ export class PostgresCampaignSchedulerStore {
       if (!result.rows[0]?.error_detail_column) {
         throw new Error("EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED");
       }
+      if (!result.rows[0]?.claim_generation_column) {
+        throw new Error("EPER_CAMPAIGN_CLAIM_GENERATION_MIGRATION_NOT_APPLIED");
+      }
     } catch (error) {
       if (error instanceof Error && (
         error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED" ||
         error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED" ||
-        error.message === "EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED"
+        error.message === "EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED" ||
+        error.message === "EPER_CAMPAIGN_CLAIM_GENERATION_MIGRATION_NOT_APPLIED"
       )) throw error;
       throw new Error("EPER_CAMPAIGN_SCHEDULER_READINESS_CHECK_FAILED", { cause: error });
     } finally { client.release(); }
