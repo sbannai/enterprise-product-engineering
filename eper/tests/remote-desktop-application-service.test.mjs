@@ -7,9 +7,10 @@ const input = {
   environment: "uat", correlationId: "remote-service-test",
   endpointId: "endpoint-a", expiresAt: "2030-01-01T00:00:00.000Z",
 };
-function fixture({ entitlement = true, deniedAction = null, transport = undefined } = {}) {
+function fixture({ entitlement = true, deniedAction = null, transport = undefined, endpointConsentVerifier = { async verify() { return true; } } } = {}) {
   const calls = [];
   const store = {
+    async getEndpointId(value) { calls.push(["getEndpointId", value]); return "endpoint-a"; },
     async requestSession(value) { calls.push(["request", value]); return { status: "REQUESTED" }; },
     async acceptWithConsent(value) { calls.push(["accept", value]); return { status: "ACCEPTED", mode: value.grantedMode }; },
     async revokeConsent(value) { calls.push(["revoke", value]); return { status: "REVOKED" }; },
@@ -29,7 +30,7 @@ function fixture({ entitlement = true, deniedAction = null, transport = undefine
       if (value.action === deniedAction) throw new Error("ACTION_NOT_AUTHORIZED");
     },
   };
-  return { service: new ApplicationRemoteDesktopService(capabilities, store, authorizer, transport), calls };
+  return { service: new ApplicationRemoteDesktopService(capabilities, store, authorizer, transport, endpointConsentVerifier), calls };
 }
 
 test("request requires actor authorization and paid application entitlement", async () => {
@@ -48,6 +49,28 @@ test("view-only consent requires acceptance permission but not remote-control gr
   assert.equal(result.mode, "VIEW_ONLY");
   assert.deepEqual(calls.filter(([kind]) => kind === "authorize").map(([, action]) => action),
     ["remote_desktop.consent.accept"]);
+});
+
+test("consent fails closed when endpoint identity verifier is not configured", async () => {
+  const { service, calls } = fixture({ endpointConsentVerifier: undefined });
+  await assert.rejects(() => service.acceptConsent({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
+    expectedVersion: 1, grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+  }), /ENDPOINT_IDENTITY_VERIFIER_NOT_CONFIGURED/);
+  assert.equal(calls.some(([kind]) => kind === "accept"), false);
+});
+
+test("consent rejects an endpoint identity that does not match the session", async () => {
+  const { service, calls } = fixture({ endpointConsentVerifier: { async verify(value) {
+    assert.equal(value.endpointId, "endpoint-a");
+    assert.equal(value.sessionId, "123e4567-e89b-42d3-a456-426614174000");
+    return false;
+  } } });
+  await assert.rejects(() => service.acceptConsent({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
+    expectedVersion: 1, grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+  }), /ENDPOINT_IDENTITY_NOT_VERIFIED/);
+  assert.equal(calls.some(([kind]) => kind === "accept"), false);
 });
 
 test("remote control requires a separate explicit grant permission", async () => {
