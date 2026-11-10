@@ -13,6 +13,8 @@ export const WORKFLOW_ROLE_PERMISSIONS = [
   "customer.asset.upload",
   "peripheral.register", "peripheral.configure", "peripheral.read",
   "peripheral.activate", "peripheral.suspend",
+  "remote_desktop.session.request", "remote_desktop.consent.accept",
+  "remote_desktop.control.grant", "remote_desktop.consent.revoke",
 ] as const;
 export type WorkflowRolePermission = typeof WORKFLOW_ROLE_PERMISSIONS[number];
 
