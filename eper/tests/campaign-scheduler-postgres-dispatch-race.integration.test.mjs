@@ -88,7 +88,7 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       let dispatchOutcome = "pending";
       let dispatchError = null;
       const dispatchPromise = store.beginExecutionDispatch({
-        tenantId, applicationId, executionId, workerId: "race-worker",
+        tenantId, applicationId, executionId, workerId: "race-worker", claimGeneration: claimed[0]?.claimGeneration ?? 1,
       }).then((result) => {
         dispatchOutcome = String(result);
         return result;
