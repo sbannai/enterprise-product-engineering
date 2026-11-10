@@ -113,25 +113,34 @@ export class ApplicationPeripheralService {
     return this.capabilities.withPeripheralManagement(input, async () => {
       const current = await this.repository.get(input, input.peripheralId);
       if (!current) throw new Error("EPER_PERIPHERAL_NOT_FOUND");
-      let adapter;
-      let configuration;
-      if (current.status === "ACTIVE" || current.status === "DEGRADED" || current.status === "OFFLINE") {
-        configuration = await this.repository.getConfiguration(input, input.peripheralId);
-        if (configuration) {
-          adapter = this.adapters.resolve({
-            adapterKey: configuration.adapterKey,
-            adapterVersion: configuration.adapterVersion,
-            kind: current.kind,
-          });
-        }
+      const needsDisconnect = current.status === "ACTIVE" ||
+        current.status === "DEGRADED" || current.status === "OFFLINE";
+      if (!needsDisconnect) {
+        return this.repository.transition({
+          ...this.auditInput(input),
+          peripheralId: input.peripheralId,
+          expectedVersion: input.expectedVersion,
+          nextStatus: "SUSPENDED",
+        });
       }
-      const suspended = await this.repository.transition({
+
+      const configuration = await this.repository.getConfiguration(input, input.peripheralId);
+      if (!configuration) throw new Error("EPER_PERIPHERAL_CONFIGURATION_REQUIRED");
+      const adapter = this.adapters.resolve({
+        adapterKey: configuration.adapterKey,
+        adapterVersion: configuration.adapterVersion,
+        kind: current.kind,
+      });
+      // Persist an in-progress state before physical I/O. If disconnect fails,
+      // DISCONNECTING remains visible for an explicit retry/reconciliation;
+      // the database never claims SUSPENDED while the adapter may still run.
+      const disconnecting = await this.repository.transition({
         ...this.auditInput(input),
         peripheralId: input.peripheralId,
         expectedVersion: input.expectedVersion,
-        nextStatus: "SUSPENDED",
+        nextStatus: "DISCONNECTING",
       });
-      if (adapter && configuration) {
+      try {
         await adapter.disconnect({
           tenantId: input.tenantId,
           applicationId: input.applicationId,
@@ -139,8 +148,15 @@ export class ApplicationPeripheralService {
           correlationId: input.correlationId,
           configurationVersion: current.configurationVersion,
         });
+      } catch (error) {
+        throw new Error("EPER_PERIPHERAL_ADAPTER_DISCONNECT_FAILED_RECONCILIATION_REQUIRED", { cause: error });
       }
-      return suspended;
+      return this.repository.transition({
+        ...this.auditInput(input),
+        peripheralId: input.peripheralId,
+        expectedVersion: disconnecting.version,
+        nextStatus: "SUSPENDED",
+      });
     });
   }
 
