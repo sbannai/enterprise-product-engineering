@@ -8,6 +8,7 @@ on:
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
       - "eper/scripts/dev-verify.mjs"
@@ -20,6 +21,7 @@ on:
       - ".github/workflows/eper-payment-postgres-integration.yml"
   pull_request:
     paths:
+      - ".github/workflows/**"
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
       - "eper/scripts/dev-verify.mjs"
