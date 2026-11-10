@@ -100,6 +100,9 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
         assetId: rejectedAssetId, uploadSessionId: rejectedReservation.uploadSessionId,
         rejectionCode: "policy_denied",
       });
+      // A definitive provider rejection is terminal, so a deliberate
+      // retry gets a new immutable generation while concurrent retries still
+      // converge on at most one active attempt.
       const rejectedState = await pool.query(
         `SELECT upload_status, provider_outcome, provider_upload_reference
            FROM eper_customer_asset_upload_sessions
@@ -118,6 +121,61 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       assert.equal(rejectionAudit.rowCount, 1);
       assert.equal(rejectionAudit.rows[0].outcome, "failure");
       assert.equal(rejectionAudit.rows[0].payload.rejectionCode, "policy_denied");
+
+      const retryInputs = [
+        {
+          ...reservationInput, assetId: rejectedAssetId, expectedSizeBytes: 512,
+          idempotencyKey: "asset-retry-a-" + suffix.slice(0, 32),
+          requestFingerprint: createHash("sha256").update("retry-a-" + suffix).digest("hex"),
+        },
+        {
+          ...reservationInput, assetId: rejectedAssetId, expectedSizeBytes: 512,
+          idempotencyKey: "asset-retry-b-" + suffix.slice(0, 32),
+          requestFingerprint: createHash("sha256").update("retry-b-" + suffix).digest("hex"),
+        },
+      ];
+      const retryResults = await Promise.allSettled(
+        retryInputs.map((retryInput) => repository.reserveUpload(retryInput)),
+      );
+      const createdRetries = retryResults.filter((result) => result.status === "fulfilled");
+      const rejectedRetries = retryResults.filter((result) => result.status === "rejected");
+      assert.equal(createdRetries.length, 1,
+        "two concurrent new idempotency keys may create only one active retry for the same asset");
+      assert.equal(rejectedRetries.length, 1);
+      assert.equal(rejectedRetries[0].reason?.message, "EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE");
+      const retryReservation = createdRetries[0].value;
+      assert.equal(retryReservation.attemptGeneration, 2,
+        "a terminal first attempt is retained and the deliberate retry receives generation two");
+      const attemptHistory = await pool.query(
+        `SELECT attempt_generation, upload_session_id, upload_status
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND asset_id = $2
+          ORDER BY attempt_generation`,
+        [tenantId, rejectedAssetId],
+      );
+      assert.deepEqual(attemptHistory.rows.map((row) => Number(row.attempt_generation)), [1, 2]);
+      assert.equal(attemptHistory.rows[0].upload_session_id, rejectedReservation.uploadSessionId);
+      assert.equal(attemptHistory.rows[0].upload_status, "failed");
+      assert.equal(attemptHistory.rows[1].upload_session_id, retryReservation.uploadSessionId);
+      await assert.rejects(
+        repository.recordUploadGrant({
+          tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+          assetId: rejectedAssetId, uploadSessionId: rejectedReservation.uploadSessionId,
+          requestFingerprint: createHash("sha256").update("rejected-" + suffix).digest("hex"),
+          providerUploadReference: "late-provider-callback-" + suffix,
+          grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_RECOVERABLE" },
+        "a late provider callback from a failed generation cannot mutate the newer attempt",
+      );
+      await assert.rejects(
+        pool.query(
+          "UPDATE eper_customer_asset_upload_sessions SET attempt_generation = 99 WHERE tenant_id = $1 AND upload_session_id = $2",
+          [tenantId, retryReservation.uploadSessionId],
+        ),
+        /EPER_CUSTOMER_ASSET_UPLOAD_ATTEMPT_IDENTITY_IMMUTABLE/,
+        "attempt generation must be immutable after reservation",
+      );
 
       await assert.rejects(
         repository.reserveUpload({
