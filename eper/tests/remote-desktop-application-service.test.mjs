@@ -60,6 +60,22 @@ test("consent requires a bounded endpoint-signed proof before identity verificat
   assert.equal(calls.some(([kind]) => kind === "getEndpointId"), false);
 });
 
+test("paid entitlement is checked before endpoint identity lookup or verification", async () => {
+  let verifierCalls = 0;
+  const { service, calls } = fixture({
+    entitlement: false,
+    endpointConsentVerifier: { async verify() { verifierCalls++; return true; } },
+  });
+  await assert.rejects(() => service.acceptConsent({
+    ...input, sessionId: "123e4567-e89b-42d3-a456-426614174000",
+    expectedVersion: 1, endpointProof: "signed-endpoint-proof",
+    grantedMode: "VIEW_ONLY", consentExpiresAt: "2029-12-01T00:00:00.000Z",
+  }), /ADDON_NOT_ENTITLED/);
+  assert.equal(calls.some(([kind]) => kind === "getEndpointId"), false);
+  assert.equal(verifierCalls, 0);
+  assert.equal(calls.some(([kind]) => kind === "accept"), false);
+});
+
 test("consent fails closed when endpoint identity verifier is not configured", async () => {
   const { service, calls } = fixture({ endpointConsentVerifier: null });
   await assert.rejects(() => service.acceptConsent({
