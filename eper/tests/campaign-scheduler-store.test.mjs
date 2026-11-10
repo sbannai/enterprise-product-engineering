@@ -115,13 +115,13 @@ test("failure uses bounded exponential retry policy and returns dead-letter at m
   const { pool, calls } = fakePool(async (sql) => ({ rows: sql.includes("UPDATE eper_campaign_executions") ? [outcomes.shift()] : [], rowCount: 1 }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const first = await store.failExecution({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1, errorCode: "provider_timeout",
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, errorCode: "provider_timeout",
   });
   assert.equal(first, "retry_wait");
   assert.match(calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions")).sql, /power\(2, GREATEST\(attempt_count - 1, 0\)\)/);
   assert.equal(calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions")).values[5], "PROVIDER_TIMEOUT");
   const second = await store.failExecution({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1, errorCode: "provider_timeout",
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, errorCode: "provider_timeout",
   });
   assert.equal(second, "dead_letter");
   assert.equal(calls.filter((call) => call.sql.includes("INSERT INTO eper_audit_events")).length, 2);
@@ -132,7 +132,7 @@ test("execution completion requires the current worker lease", async () => {
   const { pool, calls } = fakePool(async () => ({ rows: [], rowCount: 0 }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const completed = await store.completeExecution({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1, result: { delivered: true },
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, result: { delivered: true },
   });
   assert.equal(completed, false);
   const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
@@ -164,7 +164,7 @@ test("successful completion rolls back if its audit event cannot be persisted", 
   });
   const store = new PostgresCampaignSchedulerStore(pool);
   await assert.rejects(store.completeExecution({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1,
   }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
   assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
@@ -262,7 +262,7 @@ test("dispatch authorization re-reads current schedule approval and worker lease
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const authorized = await store.isExecutionAuthorizedForDispatch({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(authorized, true);
   assert.match(calls[0].sql, /\(s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)\)/);
@@ -279,7 +279,7 @@ test("dispatch authorization denies when current schedule is paused or approval 
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const authorized = await store.isExecutionAuthorizedForDispatch({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(authorized, false);
 });
@@ -369,7 +369,7 @@ test("dispatch-start fence locks live schedule and execution before marking disp
   const store = new PostgresCampaignSchedulerStore(pool);
   const result = await store.beginExecutionDispatch({
     tenantId: "tenant-a", applicationId: "app-a",
-    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(result, true);
   const lockIndex = calls.findIndex((call) => call.sql.includes("FOR UPDATE OF s, e"));
@@ -397,7 +397,7 @@ test("dispatch-start fence is single-use and rejects a second acquisition", asyn
   const store = new PostgresCampaignSchedulerStore(pool);
   const input = {
     tenantId: "tenant-a", applicationId: "app-a",
-    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1,
   };
   assert.equal(await store.beginExecutionDispatch(input), true);
   assert.equal(await store.beginExecutionDispatch(input), false);
@@ -413,7 +413,7 @@ test("dispatch-start fence denies jobs whose live schedule is cancelled", async 
   const store = new PostgresCampaignSchedulerStore(pool);
   const result = await store.beginExecutionDispatch({
     tenantId: "tenant-a", applicationId: "app-a",
-    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(result, false);
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
@@ -435,7 +435,7 @@ for (const [label, row, expected] of [
     const store = new PostgresCampaignSchedulerStore(pool);
     const reason = await store.getDispatchFenceDenialReason({
       tenantId: "tenant-a", applicationId: "app-a",
-      executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+      executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1,
     });
     assert.equal(reason, expected);
     const query = calls.find((call) => call.sql.includes("SELECT s.status AS schedule_status"));
@@ -614,7 +614,7 @@ test("cancelling a claimed execution before the dispatch fence prevents fence ac
   assert.equal(executionStatus, "cancelled");
   const fenceResult = await store.beginExecutionDispatch({
     tenantId: "tenant-a", applicationId: "app-a",
-    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(fenceResult, false);
   assert.equal(dispatchStarted, false);
@@ -653,7 +653,7 @@ test("pausing a schedule after execution claim prevents dispatch-fence acquisiti
   assert.equal(scheduleStatus, "paused");
   const result = await store.beginExecutionDispatch({
     tenantId: "tenant-a", applicationId: "app-a",
-    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    executionId: "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(result, false);
   assert.equal(dispatchStarted, false);
@@ -669,7 +669,7 @@ test("pausing before dispatch releases the claim without consuming retry budget"
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
   const released = await store.deferExecutionForSchedulePause({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1,
   });
   assert.equal(released, true);
   const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
@@ -694,7 +694,7 @@ test("pause deferral rolls back when durable audit append fails", async () => {
   });
   const store = new PostgresCampaignSchedulerStore(pool);
   await assert.rejects(store.deferExecutionForSchedulePause({
-    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1, claimGeneration: 1,
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1", workerId: "worker-a", claimGeneration: 1,
   }), /CAMPAIGN_AUDIT_PERSISTENCE_FAILED/);
   assert.ok(calls.some((call) => call.sql === "BEGIN"));
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
