@@ -1,7 +1,5 @@
-import {
-  ApplicationAddonAccessGate,
-  type ApplicationAddonEntitlement,
-} from "./application-addon-access-gate.js";
+import { ApplicationAddonAccessGate } from "./application-addon-access-gate.js";
+import type { ApplicationAddonEntitlement } from "./index.js";
 
 export const APPLICATION_CAPABILITY_ADDONS = Object.freeze({
   peripherals: "peripheral_management",
