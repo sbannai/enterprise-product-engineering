@@ -110,9 +110,23 @@ test("suspension persists the inactive state and disconnects the configured adap
   const { service, calls } = fixture({ initialStatus: "ACTIVE" });
   const result = await service.suspend({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 });
   assert.equal(result.status, "SUSPENDED");
-  const transition = calls.findIndex(call => call[0] === "transition");
+  const transitions = calls.map((call, index) => ({ call, index })).filter(x => x.call[0] === "transition");
   const disconnect = calls.findIndex(call => call[0] === "disconnect");
-  assert.ok(transition >= 0 && disconnect > transition);
+  assert.deepEqual(transitions.map(x => [x.call[1], x.call[2]]), [["DISCONNECTING", 7], ["SUSPENDED", 8]]);
+  assert.ok(disconnect > transitions[0].index && disconnect < transitions[1].index);
+});
+
+test("failed adapter disconnect remains visibly DISCONNECTING and is not reported as suspended", async () => {
+  const { service, calls } = fixture({
+    initialStatus: "ACTIVE",
+    disconnect: async () => { throw new Error("device still connected"); },
+  });
+  await assert.rejects(
+    service.suspend({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
+    /EPER_PERIPHERAL_ADAPTER_DISCONNECT_FAILED_RECONCILIATION_REQUIRED/,
+  );
+  const transitions = calls.filter(call => call[0] === "transition");
+  assert.deepEqual(transitions.map(call => call[1]), ["DISCONNECTING"]);
 });
 
 test("missing registration and missing configuration fail closed without adapter resolution", async () => {
