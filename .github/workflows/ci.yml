@@ -73,6 +73,8 @@ jobs:
         run: node --test tests/remote-desktop-persistence-migration.test.mjs
       - name: Remote Desktop Sharing audited PostgreSQL session-store regressions
         run: node --test tests/remote-desktop-session-store.test.mjs
+      - name: Remote Desktop Sharing authorization and paid add-on regressions
+        run: node --test tests/remote-desktop-application-service.test.mjs
       - name: Live PostgreSQL peripheral adapter consistency and application RLS
         run: node --test tests/postgres-peripheral-adapter-consistency.integration.test.mjs
       - name: Verify customer asset migrations replay on PostgreSQL 16 with RLS and data intact
