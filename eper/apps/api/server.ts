@@ -3178,28 +3178,6 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             },
           });
         } else if (peripheralPath[3] === "activate") {
-          if (remoteDesktopPath[3] === "start") {
-          if (Object.keys(body).some(key => key !== "expectedVersion")) {
-            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_START_INPUT_INVALID" });
-            return;
-          }
-          const result = await options.remoteDesktopService.startSession({
-            ...scope, sessionId, expectedVersion: body.expectedVersion,
-          });
-          sendApiSuccess(request, response, 200, { session: result });
-          return;
-        }
-        if (remoteDesktopPath[3] === "stop") {
-          if (Object.keys(body).some(key => key !== "expectedVersion")) {
-            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_STOP_INPUT_INVALID" });
-            return;
-          }
-          const result = await options.remoteDesktopService.stopSession({
-            ...scope, sessionId, expectedVersion: body.expectedVersion,
-          });
-          sendApiSuccess(request, response, 200, { session: result });
-          return;
-        }
         if (Object.keys(body).some(key => key !== "expectedVersion")) {
             sendJson(request, response, 400, { error: "EPER_PERIPHERAL_TRANSITION_INPUT_INVALID" });
             return;
@@ -3320,6 +3298,28 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
             grantedMode: body.grantedMode as "VIEW_ONLY" | "REMOTE_CONTROL",
             consentExpiresAt: body.consentExpiresAt,
             consentGrantId: body.consentGrantId as string | undefined,
+          });
+          sendApiSuccess(request, response, 200, { session: result });
+          return;
+        }
+        if (remoteDesktopPath[3] === "start") {
+          if (Object.keys(body).some(key => key !== "expectedVersion")) {
+            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_START_INPUT_INVALID" });
+            return;
+          }
+          const result = await options.remoteDesktopService.startSession({
+            ...scope, sessionId, expectedVersion: body.expectedVersion,
+          });
+          sendApiSuccess(request, response, 200, { session: result });
+          return;
+        }
+        if (remoteDesktopPath[3] === "stop") {
+          if (Object.keys(body).some(key => key !== "expectedVersion")) {
+            sendJson(request, response, 400, { error: "REMOTE_DESKTOP_STOP_INPUT_INVALID" });
+            return;
+          }
+          const result = await options.remoteDesktopService.stopSession({
+            ...scope, sessionId, expectedVersion: body.expectedVersion,
           });
           sendApiSuccess(request, response, 200, { session: result });
           return;
