@@ -540,19 +540,29 @@ export class PostgresCustomerAssetRepository {
         });
       }
       await this.setContext(client, input.tenantId, input.applicationId);
-      const asset = await client.query<{ asset_id: string; upload_status: string }>(
-        "SELECT asset_id, upload_status FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
+      const asset = await client.query<{ asset_id: string; upload_status: string; upload_attempt_generation: number | string }>(
+        "SELECT asset_id, upload_status, upload_attempt_generation FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
         [input.tenantId, input.assetId],
       );
       if (!asset.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
       if (asset.rows[0].upload_status !== "pending") {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_RETRYABLE");
       }
-      const generation = await client.query<{ next_generation: number | string }>(
-        "SELECT COALESCE(MAX(attempt_generation), 0) + 1 AS next_generation FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND asset_id = $2",
-        [input.tenantId, input.assetId],
+      // The asset-row counter is visible under the caller's application RLS
+      // context and remains tenant-wide for explicitly shared assets. Increment
+      // it under the already-held row lock; transaction rollback also rolls back
+      // the generation reservation if the session insert/audit fails.
+      const generation = await client.query<{ attempt_generation: number | string }>(
+        `UPDATE eper_customer_assets
+            SET upload_attempt_generation = upload_attempt_generation + 1,
+                updated_by = $3, updated_at = clock_timestamp()
+          WHERE tenant_id = $1 AND asset_id = $2
+            AND lifecycle_status = 'active' AND upload_status = 'pending'
+          RETURNING upload_attempt_generation`,
+        [input.tenantId, input.assetId, input.actorId],
       );
-      const attemptGeneration = Number(generation.rows[0]?.next_generation ?? 1);
+      if (!generation.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_RETRYABLE");
+      const attemptGeneration = Number(generation.rows[0].attempt_generation);
       const sessionId = input.uploadSessionId ?? randomUUID();
       this.validateId(sessionId, "uploadSessionId");
       const expiry = await client.query<{ expires_at: string | Date }>(
