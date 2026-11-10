@@ -193,6 +193,152 @@ export class PostgresRemoteDesktopSessionStore {
     finally { client.release(); }
   }
 
+  /**
+   * Start is deliberately executed while the session and consent rows are locked.
+   * Revocation therefore cannot race the transport handshake. The adapter returns
+   * a compensating stop operation in case the database commit fails.
+   */
+  async startWithConsent(input: RemoteDesktopStoreScope & {
+    sessionId: string; expectedVersion: number;
+    startTransport: (context: {
+      tenantId: string; applicationId: string; sessionId: string;
+      endpointId: string; consentGrantId: string; mode: RemoteSessionMode;
+      correlationId: string;
+    }) => Promise<() => Promise<void>>;
+  }): Promise<RemoteDesktopSessionRecord> {
+    this.validateScope(input);
+    this.validateSessionId(input.sessionId);
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw new Error("REMOTE_DESKTOP_EXPECTED_VERSION_INVALID");
+    }
+    const client = await this.pool.connect();
+    let compensate: (() => Promise<void>) | undefined;
+    try {
+      await client.query("BEGIN");
+      await this.setScope(client, input);
+      const selected = await client.query<SessionRow & {
+        consent_endpoint_id: string; consent_mode: RemoteSessionMode;
+        consent_expires_at: string | Date; consent_revoked_at: string | Date | null;
+      }>(`
+        SELECT s.tenant_id, s.application_id, s.session_id, s.requester_id, s.endpoint_id,
+          s.status, s.mode, s.consent_grant_id, s.expires_at, s.version,
+          c.endpoint_id AS consent_endpoint_id, c.granted_mode AS consent_mode,
+          c.expires_at AS consent_expires_at, c.revoked_at AS consent_revoked_at
+        FROM eper_remote_desktop_session s
+        JOIN eper_remote_desktop_consent c
+          ON c.tenant_id=s.tenant_id AND c.application_id=s.application_id
+         AND c.session_id=s.session_id AND c.consent_grant_id=s.consent_grant_id
+        WHERE s.tenant_id=$1 AND s.application_id=$2 AND s.session_id=$3
+        FOR UPDATE OF s, c
+      `, [input.tenantId, input.applicationId, input.sessionId]);
+      const current = selected.rows[0];
+      if (!current) throw new Error("REMOTE_DESKTOP_SESSION_OR_CONSENT_NOT_FOUND");
+      if (Number(current.version) !== input.expectedVersion) throw new Error("REMOTE_DESKTOP_VERSION_CONFLICT");
+      const now = Date.now();
+      if (current.status !== "ACCEPTED" ||
+          Date.parse(String(current.expires_at)) <= now ||
+          Date.parse(String(current.consent_expires_at)) <= now ||
+          current.consent_revoked_at !== null ||
+          current.endpoint_id !== current.consent_endpoint_id ||
+          (current.mode === "REMOTE_CONTROL" && current.consent_mode !== "REMOTE_CONTROL") ||
+          (current.mode !== "VIEW_ONLY" && current.mode !== "REMOTE_CONTROL")) {
+        throw new Error("REMOTE_DESKTOP_EXPLICIT_CONSENT_REQUIRED");
+      }
+      const consentGrantId = current.consent_grant_id;
+      if (!consentGrantId) throw new Error("REMOTE_DESKTOP_EXPLICIT_CONSENT_REQUIRED");
+      compensate = await input.startTransport({
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        sessionId: input.sessionId, endpointId: current.endpoint_id,
+        consentGrantId, mode: current.mode, correlationId: input.correlationId,
+      });
+      const updated = await client.query<SessionRow>(`
+        UPDATE eper_remote_desktop_session
+        SET status='ACTIVE', version=version+1, updated_at=clock_timestamp()
+        WHERE tenant_id=$1 AND application_id=$2 AND session_id=$3
+        RETURNING tenant_id, application_id, session_id, requester_id, endpoint_id,
+          status, mode, consent_grant_id, expires_at, version
+      `, [input.tenantId, input.applicationId, input.sessionId]);
+      const row = updated.rows[0];
+      if (!row) throw new Error("REMOTE_DESKTOP_SESSION_START_RETURNED_NO_ROW");
+      await this.audit(client, input, "remote_desktop.session.start", input.sessionId, {
+        endpointId: current.endpoint_id, consentGrantId, mode: current.mode,
+      });
+      await client.query("COMMIT");
+      compensate = undefined;
+      return mapSession(row);
+    } catch (error) {
+      await this.rollback(client);
+      if (compensate) {
+        try { await compensate(); }
+        catch (compensationError) {
+          throw new Error("REMOTE_DESKTOP_START_FAILED_AND_COMPENSATION_FAILED", { cause: compensationError });
+        }
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Stop the transport before recording STOPPED; retries on an already stopped
+   * session are harmless when the caller presents its current or previous version. */
+  async stopSession(input: RemoteDesktopStoreScope & {
+    sessionId: string; expectedVersion: number;
+    stopTransport: (context: {
+      tenantId: string; applicationId: string; sessionId: string;
+      endpointId: string; consentGrantId: string; mode: RemoteSessionMode;
+      correlationId: string;
+    }) => Promise<void>;
+  }): Promise<RemoteDesktopSessionRecord> {
+    this.validateScope(input);
+    this.validateSessionId(input.sessionId);
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw new Error("REMOTE_DESKTOP_EXPECTED_VERSION_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setScope(client, input);
+      const selected = await client.query<SessionRow>(`
+        SELECT tenant_id, application_id, session_id, requester_id, endpoint_id,
+          status, mode, consent_grant_id, expires_at, version
+        FROM eper_remote_desktop_session
+        WHERE tenant_id=$1 AND application_id=$2 AND session_id=$3
+        FOR UPDATE
+      `, [input.tenantId, input.applicationId, input.sessionId]);
+      const current = selected.rows[0];
+      if (!current) throw new Error("REMOTE_DESKTOP_SESSION_NOT_FOUND");
+      if (current.status === "STOPPED") {
+        if (Number(current.version) < input.expectedVersion) throw new Error("REMOTE_DESKTOP_VERSION_CONFLICT");
+        await client.query("COMMIT");
+        return mapSession(current);
+      }
+      if (Number(current.version) !== input.expectedVersion) throw new Error("REMOTE_DESKTOP_VERSION_CONFLICT");
+      if (current.status !== "ACTIVE" || !current.consent_grant_id) {
+        throw new Error("REMOTE_DESKTOP_SESSION_NOT_ACTIVE");
+      }
+      await input.stopTransport({
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        sessionId: input.sessionId, endpointId: current.endpoint_id,
+        consentGrantId: current.consent_grant_id, mode: current.mode,
+        correlationId: input.correlationId,
+      });
+      const updated = await client.query<SessionRow>(`
+        UPDATE eper_remote_desktop_session
+        SET status='STOPPED', version=version+1, updated_at=clock_timestamp()
+        WHERE tenant_id=$1 AND application_id=$2 AND session_id=$3
+        RETURNING tenant_id, application_id, session_id, requester_id, endpoint_id,
+          status, mode, consent_grant_id, expires_at, version
+      `, [input.tenantId, input.applicationId, input.sessionId]);
+      const row = updated.rows[0];
+      if (!row) throw new Error("REMOTE_DESKTOP_SESSION_STOP_RETURNED_NO_ROW");
+      await this.audit(client, input, "remote_desktop.session.stop", input.sessionId, {
+        endpointId: current.endpoint_id, consentGrantId: current.consent_grant_id,
+      });
+      await client.query("COMMIT");
+      return mapSession(row);
+    } catch (error) { await this.rollback(client); throw error; }
+    finally { client.release(); }
+  }
+
   async revokeConsent(input: RemoteDesktopStoreScope & {
     sessionId: string; expectedVersion: number;
   }): Promise<RemoteDesktopSessionRecord> {
