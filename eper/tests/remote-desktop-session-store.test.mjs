@@ -5,6 +5,7 @@ import { PostgresRemoteDesktopSessionStore } from "../dist/packages/remote-deskt
 function fixture() {
   const calls = [];
   let session = null;
+  let consent = null;
   const client = {
     async query(sql, values = []) {
       calls.push({ sql, values });
@@ -16,12 +17,24 @@ function fixture() {
         };
         return { rows: [session], rowCount: 1 };
       }
+      if (sql.includes("INSERT INTO eper_remote_desktop_consent")) {
+        consent = { endpoint_id: values[4], granted_mode: values[6], expires_at: values[7], revoked_at: null };
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes("JOIN eper_remote_desktop_consent")) {
+        return { rows: session && consent ? [{ ...session, consent_endpoint_id: consent.endpoint_id,
+          consent_mode: consent.granted_mode, consent_expires_at: consent.expires_at,
+          consent_revoked_at: consent.revoked_at }] : [], rowCount: session && consent ? 1 : 0 };
+      }
       if (sql.includes("SELECT tenant_id, application_id, session_id, requester_id")) {
         return { rows: session ? [{ ...session }] : [], rowCount: session ? 1 : 0 };
       }
       if (sql.includes("UPDATE eper_remote_desktop_session")) {
-        session = { ...session, status: values[3] === "REMOTE_CONTROL" || values[3] === "VIEW_ONLY" ? "ACCEPTED" : "REVOKED",
-          ...(values[3] === "REMOTE_CONTROL" || values[3] === "VIEW_ONLY" ? { mode: values[3], consent_grant_id: values[4] } : {}),
+        const status = sql.includes("status='ACTIVE'") ? "ACTIVE"
+          : sql.includes("status='STOPPED'") ? "STOPPED"
+          : sql.includes("status='ACCEPTED'") ? "ACCEPTED" : "REVOKED";
+        session = { ...session, status,
+          ...(status === "ACCEPTED" ? { mode: values[3], consent_grant_id: values[4] } : {}),
           version: session.version + 1 };
         return { rows: [session], rowCount: 1 };
       }
@@ -82,4 +95,35 @@ test("consent cannot outlive its session and invalid scope is rejected", async (
     ...scope, sessionId: "123e4567-e89b-42d3-a456-426614174000",
     expectedVersion: 1, grantedMode: "REMOTE_CONTROL", consentExpiresAt: "2029-12-01T00:00:00.000Z",
   }), /CONSENT_EXCEEDS_SESSION_EXPIRY/);
+});
+
+test("start revalidates endpoint consent under row lock", async () => {
+  const { store, calls } = fixture();
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  await store.requestSession({ ...scope, endpointId: "endpoint-a", expiresAt: "2030-01-01T00:00:00.000Z", sessionId });
+  await store.acceptWithConsent({ ...scope, sessionId, expectedVersion: 1, grantedMode: "VIEW_ONLY",
+    consentExpiresAt: "2029-12-01T00:00:00.000Z", consentGrantId: "123e4567-e89b-42d3-a456-426614174001" });
+  let started = 0;
+  const active = await store.startWithConsent({ ...scope, sessionId, expectedVersion: 2,
+    async startTransport(context) { started++; assert.equal(context.mode, "VIEW_ONLY");
+      assert.equal(context.endpointId, "endpoint-a"); return async () => {}; } });
+  assert.equal(started, 1);
+  assert.equal(active.status, "ACTIVE");
+  assert.ok(calls.some(call => call.sql.includes("FOR UPDATE OF s, c")));
+});
+
+test("stop disconnects before persisting STOPPED and supports a safe retry", async () => {
+  const { store } = fixture();
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  await store.requestSession({ ...scope, endpointId: "endpoint-a", expiresAt: "2030-01-01T00:00:00.000Z", sessionId });
+  await store.acceptWithConsent({ ...scope, sessionId, expectedVersion: 1, grantedMode: "VIEW_ONLY",
+    consentExpiresAt: "2029-12-01T00:00:00.000Z" });
+  await store.startWithConsent({ ...scope, sessionId, expectedVersion: 2, async startTransport() { return async () => {}; } });
+  let stopped = 0;
+  const result = await store.stopSession({ ...scope, sessionId, expectedVersion: 3,
+    async stopTransport(context) { stopped++; assert.equal(context.mode, "VIEW_ONLY"); } });
+  assert.equal(result.status, "STOPPED");
+  const retry = await store.stopSession({ ...scope, sessionId, expectedVersion: 3, async stopTransport() { stopped++; } });
+  assert.equal(retry.status, "STOPPED");
+  assert.equal(stopped, 1);
 });
