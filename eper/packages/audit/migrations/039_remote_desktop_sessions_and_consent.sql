@@ -84,4 +84,30 @@ CREATE POLICY eper_remote_desktop_consent_scope ON eper_remote_desktop_consent
     AND application_id = current_setting('eper.application_id', true)
   );
 
+
+-- Session ownership and endpoint identity are immutable after creation. Rebinding a
+-- consent/session to another endpoint would invalidate the endpoint-side trust decision.
+CREATE OR REPLACE FUNCTION eper_reject_remote_desktop_session_binding_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $
+BEGIN
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+     OR NEW.application_id IS DISTINCT FROM OLD.application_id
+     OR NEW.session_id IS DISTINCT FROM OLD.session_id
+     OR NEW.endpoint_id IS DISTINCT FROM OLD.endpoint_id THEN
+    RAISE EXCEPTION 'REMOTE_DESKTOP_SESSION_BINDING_IMMUTABLE';
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS eper_remote_desktop_session_binding_immutable
+  ON eper_remote_desktop_session;
+CREATE TRIGGER eper_remote_desktop_session_binding_immutable
+  BEFORE UPDATE OF tenant_id, application_id, session_id, endpoint_id
+  ON eper_remote_desktop_session
+  FOR EACH ROW
+  EXECUTE FUNCTION eper_reject_remote_desktop_session_binding_change();
+
 COMMIT;
