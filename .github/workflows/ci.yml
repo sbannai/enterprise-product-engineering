@@ -59,6 +59,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Peripheral management UI feature-flag and security-header regressions
+        run: node --test tests/customer-peripheral-management-ui.test.mjs
       - name: Workflow rules, capability composition and tariff entitlement unit regressions
         run: node --test tests/workflow-rule-engine.test.mjs tests/capability-composition.test.mjs tests/postgres-module-entitlement-service.test.mjs
       - name: Customer asset upload recovery and provider binding regressions
@@ -67,6 +69,16 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
         run: npm run migrate:audit
+      - name: Remote Desktop Sharing session and consent schema regressions
+        run: node --test tests/remote-desktop-persistence-migration.test.mjs
+      - name: Remote Desktop Sharing audited PostgreSQL session-store regressions
+        run: node --test tests/remote-desktop-session-store.test.mjs
+      - name: Remote Desktop Sharing authorization and paid add-on regressions
+        run: node --test tests/remote-desktop-application-service.test.mjs
+      - name: Remote Desktop Sharing API identity and feature-flag regressions
+        run: node --test tests/remote-desktop-api.test.mjs
+      - name: Live PostgreSQL peripheral adapter consistency and application RLS
+        run: node --test tests/postgres-peripheral-adapter-consistency.integration.test.mjs
       - name: Verify customer asset migrations replay on PostgreSQL 16 with RLS and data intact
         run: |
           set -euo pipefail
@@ -170,6 +182,14 @@ jobs:
         run: node --test tests/postgres-application-assignment-live.integration.test.mjs
       - name: Live PostgreSQL commercial tariff access guard integration
         run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
+      - name: Provision restricted application add-on RLS role and prove tenant/application isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_application_addon_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO eper_application_addon_access"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE ON eper_application_addon_entitlement TO eper_application_addon_access"
+          node --test tests/postgres-application-addon-rls.integration.test.mjs
       - name: Apply campaign scheduler migrations to ephemeral CI database
         run: npm run migrate:campaign-scheduler
       - name: Apply capability persistence migrations to ephemeral CI database
