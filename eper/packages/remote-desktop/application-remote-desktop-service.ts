@@ -11,6 +11,14 @@ export interface RemoteDesktopServiceScope extends ApplicationCapabilityScope {
   readonly environment: AuditEnvironment;
   readonly correlationId: string;
 }
+export interface RemoteDesktopEndpointConsentVerifier {
+  /** Must authenticate the endpoint user/session and bind it to this exact session. */
+  verify(input: {
+    tenantId: string; applicationId: string; endpointId: string; sessionId: string;
+    actorId: string; grantedMode: RemoteSessionMode; correlationId: string;
+  }): Promise<boolean>;
+}
+
 export interface RemoteDesktopActionAuthorizer {
   authorize(input: {
     tenantId: string; applicationId: string; actorId: string;
@@ -39,6 +47,7 @@ export class ApplicationRemoteDesktopService {
     private readonly store: PostgresRemoteDesktopSessionStore,
     private readonly authorizer: RemoteDesktopActionAuthorizer,
     private readonly transport?: RemoteDesktopTransport,
+    private readonly endpointConsentVerifier?: RemoteDesktopEndpointConsentVerifier,
   ) {}
 
   async requestSession(input: RequestRemoteDesktopSessionInput): Promise<RemoteDesktopSessionRecord> {
@@ -49,6 +58,18 @@ export class ApplicationRemoteDesktopService {
 
   async acceptConsent(input: AcceptRemoteDesktopConsentInput): Promise<RemoteDesktopSessionRecord> {
     await this.authorize(input, "remote_desktop.consent.accept");
+    if (!this.endpointConsentVerifier) {
+      throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_VERIFIER_NOT_CONFIGURED");
+    }
+    const endpointId = await this.store.getEndpointId({
+      tenantId: input.tenantId, applicationId: input.applicationId, sessionId: input.sessionId,
+    });
+    const endpointVerified = await this.endpointConsentVerifier.verify({
+      tenantId: input.tenantId, applicationId: input.applicationId, endpointId,
+      sessionId: input.sessionId, actorId: input.actorId,
+      grantedMode: input.grantedMode, correlationId: input.correlationId,
+    });
+    if (!endpointVerified) throw new Error("REMOTE_DESKTOP_ENDPOINT_IDENTITY_NOT_VERIFIED");
     if (input.grantedMode === "REMOTE_CONTROL") {
       await this.authorize(input, "remote_desktop.control.grant");
     } else if (input.grantedMode !== "VIEW_ONLY") {
