@@ -199,6 +199,9 @@ if (moduleEntitlementMode !== "disabled" && moduleEntitlementMode !== "postgres"
 if (moduleEntitlementMode === "postgres" && (!paymentPool || process.env.EPER_AUDIT_PERSISTENCE !== "postgres")) {
   throw new Error("EPER_MODULE_ENTITLEMENT_REQUIRES_POSTGRES_AND_DURABLE_AUDIT");
 }
+if (peripheralApiEnabled && (moduleEntitlementMode !== "postgres" || auditMode !== "postgres")) {
+  throw new Error("PERIPHERAL_API_REQUIRES_POSTGRES_MODULE_ENTITLEMENTS_AND_DURABLE_AUDIT");
+}
 function readApplicationAssignments(): Record<string, string[]> {
   let value: unknown;
   try { value = JSON.parse(process.env.EPER_CUSTOMER_APPLICATION_ASSIGNMENTS_JSON ?? ""); }
