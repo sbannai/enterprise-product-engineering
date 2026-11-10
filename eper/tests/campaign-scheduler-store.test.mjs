@@ -561,7 +561,7 @@ test("claim rolls back when a worker-lease audit event cannot be persisted", asy
 
 test("scheduler readiness rejects a database missing the dispatch-fence migration", async () => {
   const { pool, calls } = fakePool(async () => ({
-    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: null, error_detail_column: null }],
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: null, error_detail_column: null, claim_generation_column: null }],
     rowCount: 1,
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
@@ -585,9 +585,25 @@ test("scheduler readiness rejects a database missing the durable error-detail mi
   assert.match(calls[0].sql, /last_error_detail_code/);
 });
 
+test("scheduler readiness rejects a database missing the claim-generation migration", async () => {
+  const { pool, calls } = fakePool(async () => ({
+    rows: [{
+      schedules_table: "eper_campaign_schedules",
+      executions_table: "eper_campaign_executions",
+      dispatch_started_column: "dispatch_started_at",
+      error_detail_column: "last_error_detail_code",
+      claim_generation_column: null,
+    }],
+    rowCount: 1,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  await assert.rejects(store.assertReady(), /EPER_CAMPAIGN_CLAIM_GENERATION_MIGRATION_NOT_APPLIED/);
+  assert.match(calls[0].sql, /claim_generation/);
+});
+
 test("scheduler readiness accepts schema with dispatch-fence migration applied", async () => {
   const { pool } = fakePool(async () => ({
-    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at", error_detail_column: "last_error_detail_code" }],
+    rows: [{ schedules_table: "eper_campaign_schedules", executions_table: "eper_campaign_executions", dispatch_started_column: "dispatch_started_at", error_detail_column: "last_error_detail_code", claim_generation_column: "claim_generation" }],
     rowCount: 1,
   }));
   const store = new PostgresCampaignSchedulerStore(pool);
