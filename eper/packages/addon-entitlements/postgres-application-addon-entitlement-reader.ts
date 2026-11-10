@@ -110,10 +110,15 @@ implements ApplicationAddonEntitlementReader, ModuleCatalogueReader {
     if (!addonKey?.trim() || addonKey.length > 128) throw new Error("APPLICATION_ADDON_KEY_INVALID");
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ status: "draft" | "active" | "deprecated" | "disabled" }>(
+      const result = await client.query<{ status: unknown }>(
         "SELECT status FROM eper_module_catalog WHERE module_key = $1", [addonKey],
       );
-      return result.rows[0]?.status ?? null;
+      const status = result.rows[0]?.status;
+      if (status === undefined) return null;
+      if (status !== "draft" && status !== "active" && status !== "deprecated" && status !== "disabled") {
+        throw new Error("APPLICATION_ADDON_CATALOGUE_STATUS_INVALID");
+      }
+      return status;
     } finally { client.release(); }
   }
 }
