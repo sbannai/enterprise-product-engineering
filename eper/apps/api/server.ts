@@ -24,6 +24,7 @@ import { PostgresCustomerLifecycleStore, CustomerLifecycleStoreError, CustomerLi
 import { adminPricingUiHtml, isAdminPricingUiRequest } from "./admin-pricing-ui.js";
 import { isProviderCatalogueUiRequest, providerCatalogueUiHtml } from "./provider-catalogue-ui.js";
 import { isCustomerProviderConnectionsUiRequest, customerProviderConnectionsUiHtml } from "./customer-provider-connections-ui.js";
+import { isCustomerPeripheralManagementUiRequest, customerPeripheralManagementUiHtml } from "./customer-peripheral-management-ui.js";
 import { wireframesUiHtml, isWireframesUiRequest } from "./wireframes-ui.js";
 import { customerPortalPreviewHtml, isCustomerPortalPreviewRequest } from "./customer-portal-preview.js";
 import { adminWorkflowUiHtml, isAdminWorkflowUiRequest } from "./admin-workflow-ui.js";
@@ -2343,6 +2344,20 @@ export function createAppServer(options: { capabilityPool?: Pool; invoiceAmountS
         "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
       });
       response.end(customerProviderConnectionsUiHtml);
+      return;
+    }
+
+    if (isCustomerPeripheralManagementUiRequest(request)) {
+      if (process.env.EPER_APPLICATION_PERIPHERAL_API_ENABLED !== "true") {
+        response.writeHead(404, { "cache-control": "no-store" }); response.end(); return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+        "x-content-type-options": "nosniff", "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      });
+      response.end(customerPeripheralManagementUiHtml);
       return;
     }
 
