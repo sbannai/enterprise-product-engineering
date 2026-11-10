@@ -32,6 +32,20 @@ Every operation is authorized server-side against tenant, application, periphera
 | PeripheralEvent | Idempotent device observations and command outcomes | Tenant/application/device scoped; schema/version and correlation IDs |
 | PeripheralHealth | Last-seen, connectivity and diagnostic summary | No sensitive payloads; freshness window is policy-configured |
 
+## 3A. Application-specific peripheral sets
+
+Peripheral configuration is an independent collection owned by each customer application. There is no mandatory global bundle and no assumption that two applications belonging to the same tenant need the same devices.
+
+- Each application may have zero, one or many registered peripherals.
+- Each application's set is independently selected and managed according to that application's operational requirements.
+- A peripheral registration, configuration, assignment, health record and event is always bound to one tenant and one application.
+- Sharing a physical device across applications is not implicit. If a customer later requires shared hardware, it must be represented by an explicit, authorized sharing/assignment model with separate access checks and audit evidence.
+- Adding, removing, replacing, suspending or reconfiguring a peripheral in one application must not change another application's peripheral set.
+- The admin UI must show the selected application context clearly and must never apply a configuration change to all applications by default.
+- Templates may recommend device types, but applying a template is an explicit customer action that creates application-owned registrations; templates do not create hidden shared device instances.
+
+Acceptance examples: a warehouse application can register barcode scanners and weighing scales while the same tenant's HR application registers ID scanners only; changing the warehouse set must leave the HR set and its permissions untouched.
+
 ## 4. Supported connection patterns
 
 1. **Browser-supported device APIs:** only where the browser and device explicitly support the required API and the user grants permission.
