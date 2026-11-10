@@ -50,7 +50,7 @@ export class ApplicationPeripheralService {
 
   async register(input: RegisterApplicationPeripheralInput): Promise<PeripheralRegistration> {
     return this.capabilities.withPeripheralManagement(input, () =>
-      this.repository.register(this.auditInput(input)));
+      this.repository.register({ ...this.auditInput(input), peripheralId: input.peripheralId, kind: input.kind, displayName: input.displayName }));
   }
 
   async configure(input: ConfigureApplicationPeripheralInput): Promise<PeripheralRegistration> {
@@ -92,7 +92,7 @@ export class ApplicationPeripheralService {
         await this.repository.transition({
           ...this.auditInput(input),
           peripheralId: input.peripheralId,
-          expectedVersion: activeVersion(active),
+          expectedVersion: active.version,
           nextStatus: "DEGRADED",
         }).catch(() => undefined);
         throw new Error("EPER_PERIPHERAL_ADAPTER_CONNECT_FAILED", { cause: error });
@@ -153,11 +153,4 @@ export class ApplicationPeripheralService {
       configuration: input.configuration,
     };
   }
-}
-
-function activeVersion(registration: PeripheralRegistration): number {
-  // The public domain model carries configuration version, not row version.
-  // Repository lifecycle transitions currently increment row version internally;
-  // this function is deliberately not used as a concurrency token.
-  return registration.configurationVersion;
 }
