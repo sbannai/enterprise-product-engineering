@@ -31,6 +31,7 @@ function fixture() {
       }
       if (sql.includes("UPDATE eper_remote_desktop_session")) {
         const status = sql.includes("status='ACTIVE'") ? "ACTIVE"
+          : sql.includes("'REVOKED'") ? "REVOKED"
           : sql.includes("status='STOPPED'") ? "STOPPED"
           : sql.includes("status='ACCEPTED'") ? "ACCEPTED" : "REVOKED";
         session = { ...session, status,
