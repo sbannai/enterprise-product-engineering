@@ -226,6 +226,97 @@ test("live PostgreSQL customer asset upload reservation replay, fingerprint conf
       const serializedAudit = JSON.stringify(audit.rows);
       assert.doesNotMatch(serializedAudit, /https:\/\/|signed_url|bearer_token|access_token/i);
 
+      // Grant expiry must be checked again after waiting for the session row.
+      const grantRaceAssetId = randomUUID();
+      const grantRaceFingerprint = createHash("sha256").update("grant-race-" + suffix).digest("hex");
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: grantRaceAssetId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Grant expiry race fixture", originalFileName: "grant-race.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 1024, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-grant-race-" + suffix,
+      });
+      const grantRaceReservation = await repository.reserveUpload({
+        ...reservationInput, assetId: grantRaceAssetId, expectedSizeBytes: 1024,
+        idempotencyKey: "asset-grant-race-" + suffix.slice(0, 32),
+        expectedChecksumSha256: createHash("sha256").update("grant-race-binary-" + suffix).digest("hex"),
+        requestFingerprint: grantRaceFingerprint,
+      });
+      const grantRowLocker = await pool.connect();
+      await grantRowLocker.query("BEGIN");
+      await grantRowLocker.query(
+        "SELECT upload_session_id FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2 FOR UPDATE",
+        [tenantId, grantRaceReservation.uploadSessionId],
+      );
+      const shortGrantExpiry = new Date(Date.now() + 400).toISOString();
+      const waitingGrantPersistence = repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: grantRaceAssetId, uploadSessionId: grantRaceReservation.uploadSessionId,
+        requestFingerprint: grantRaceFingerprint,
+        providerUploadReference: "opaque-late-grant-" + suffix,
+        grantExpiresAt: shortGrantExpiry,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      await grantRowLocker.query("COMMIT");
+      grantRowLocker.release();
+      await assert.rejects(
+        () => waitingGrantPersistence,
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_GRANT_EXPIRY_INVALID" },
+        "a provider grant that expires during a session-row lock wait must not be persisted",
+      );
+
+      // Completion locks the session and then the asset. Hold the asset row
+      // until expiry to prove the final transition revalidates after both locks.
+      const completionRaceAssetId = randomUUID();
+      const completionRaceFingerprint = createHash("sha256").update("completion-race-" + suffix).digest("hex");
+      const completionRaceChecksum = createHash("sha256").update("completion-race-binary-" + suffix).digest("hex");
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: completionRaceAssetId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "Completion expiry race fixture", originalFileName: "completion-race.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: 1024, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-completion-race-" + suffix,
+      });
+      const completionRaceReservation = await repository.reserveUpload({
+        ...reservationInput, assetId: completionRaceAssetId, expectedSizeBytes: 1024,
+        expectedChecksumSha256: completionRaceChecksum,
+        idempotencyKey: "asset-completion-race-" + suffix.slice(0, 32),
+        requestFingerprint: completionRaceFingerprint,
+      });
+      await repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId: completionRaceAssetId, uploadSessionId: completionRaceReservation.uploadSessionId,
+        requestFingerprint: completionRaceFingerprint,
+        providerUploadReference: "opaque-completion-race-provider-" + suffix,
+        grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      await pool.query(
+        "UPDATE eper_customer_asset_upload_sessions SET expires_at = clock_timestamp() + interval '400 milliseconds' WHERE tenant_id = $1 AND upload_session_id = $2",
+        [tenantId, completionRaceReservation.uploadSessionId],
+      );
+      const assetRowLocker = await pool.connect();
+      await assetRowLocker.query("BEGIN");
+      await assetRowLocker.query(
+        "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 FOR UPDATE",
+        [tenantId, completionRaceAssetId],
+      );
+      const waitingCompletion = repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        uploadSessionId: completionRaceReservation.uploadSessionId,
+        receivedSizeBytes: 1024, observedMimeType: "application/pdf",
+        checksumSha256: completionRaceChecksum, scanStatus: "pending",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      await assetRowLocker.query("COMMIT");
+      assetRowLocker.release();
+      await assert.rejects(
+        () => waitingCompletion,
+        { message: "EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED" },
+        "completion must fail when expiry elapses while waiting for the asset lock",
+      );
+
       // Exercise the real PostgreSQL upload-completion -> transactional scan
       // outbox -> leased worker -> trusted scanner result lifecycle.
       const scanAssetId = randomUUID();
