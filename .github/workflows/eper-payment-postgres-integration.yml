@@ -26,6 +26,7 @@ on:
       - "eper/tests/postgres-platform-customer-admin-provisioning.integration.test.mjs"
       - "eper/tests/postgres-platform-application-remediation.integration.test.mjs"
       - "eper/tests/postgres-workflow-role-delegation.integration.test.mjs"
+      - "eper/tests/postgres-workflow-definition-draft-store.integration.test.mjs"
       - "eper/tests/privileged-postgres-role-contract.integration.test.mjs"
       - "eper/tests/privileged-postgres-role-operations.integration.test.mjs"
       - "eper/docs/PRIVILEGED_POSTGRES_ROLE_CONTRACT.md"
