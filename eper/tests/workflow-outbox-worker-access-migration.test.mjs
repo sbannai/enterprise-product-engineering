@@ -17,10 +17,18 @@ test("workflow outbox worker role is created atomically with least-privilege gra
   assert.match(sql, /COMMIT;\s*$/);
 });
 
-test("worker role migration is ordered immediately after workflow migration 014", async () => {
+test("workflow migrations preserve the ordered worker-access, claim-generation and permission-catalogue sequence", async () => {
   const names = (await readdir(new URL("../packages/workflows/migrations/", import.meta.url)))
     .filter((name) => /^[0-9]{3}_[a-z0-9_]+\.sql$/.test(name))
     .sort();
-  assert.equal(names.at(-2), "015_workflow_outbox_worker_access.sql");
-  assert.equal(names.at(-1), "016_workflow_outbox_claim_generation.sql");
+  const workerAccess = names.indexOf("015_workflow_outbox_worker_access.sql");
+  const claimGeneration = names.indexOf("016_workflow_outbox_claim_generation.sql");
+  const permissionCatalogue = names.indexOf("017_workflow_role_permission_catalogue.sql");
+  assert.notEqual(workerAccess, -1, "worker-access migration must exist");
+  assert.notEqual(claimGeneration, -1, "claim-generation migration must exist");
+  assert.notEqual(permissionCatalogue, -1, "permission-catalogue migration must exist");
+  assert.equal(names[workerAccess - 1], "014_workflow_definition_drafts.sql");
+  assert.equal(names[workerAccess + 1], "016_workflow_outbox_claim_generation.sql");
+  assert.equal(names[claimGeneration + 1], "017_workflow_role_permission_catalogue.sql");
+  assert.equal(names.at(-1), "017_workflow_role_permission_catalogue.sql");
 });
