@@ -92,7 +92,7 @@ function parseClaims(value: unknown): CustomerAssetScanChildIdentityClaims {
       value.audience !== CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE ||
       !boundedIdentity(value.tenantId) || !boundedIdentity(value.applicationId) ||
       !boundedIdentity(value.connectionId) || !boundedIdentity(value.scannerServiceId) ||
-      value.capability !== CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY ||
+      !boundedIdentity(value.capability) ||
       !boundedIdentity(value.tokenId) ||
       !Number.isSafeInteger(value.issuedAt) || !Number.isSafeInteger(value.expiresAt) ||
       (value.issuedAt as number) <= 0 || (value.expiresAt as number) <= 0) {
@@ -106,7 +106,7 @@ function parseClaims(value: unknown): CustomerAssetScanChildIdentityClaims {
     applicationId: value.applicationId,
     connectionId: value.connectionId,
     scannerServiceId: value.scannerServiceId,
-    capability: CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY,
+    capability: value.capability as typeof CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY,
     issuedAt: value.issuedAt as number,
     expiresAt: value.expiresAt as number,
     tokenId: value.tokenId,
