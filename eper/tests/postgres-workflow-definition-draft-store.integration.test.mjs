@@ -349,26 +349,28 @@ test("PostgreSQL workflow drafts isolate same-named definitions across applicati
     } finally {
       const cleanup = await pool.connect();
       try {
-        await cleanup.query("BEGIN");
-        await cleanup.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
-        await cleanup.query("SELECT set_config('eper.application_id', $1, true)", [applicationA]);
-        await cleanup.query(
-          "DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1 AND application_id IN ($2,$3)",
-          [tenantId, applicationA, applicationB],
-        );
-        await cleanup.query(
-          "DELETE FROM eper_audit_events WHERE tenant_id=$1 AND application_id IN ($2,$3)",
-          [tenantId, applicationA, applicationB],
-        );
-        await cleanup.query(
-          "DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1 AND actor_id=$2 AND application_id IN ($3,$4)",
-          [tenantId, actorId, applicationA, applicationB],
-        );
-        await cleanup.query(
-          "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id IN ($2,$3)",
-          [tenantId, applicationA, applicationB],
-        );
-        await cleanup.query("COMMIT");
+        for (const applicationId of [applicationA, applicationB]) {
+          await cleanup.query("BEGIN");
+          await cleanup.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+          await cleanup.query("SELECT set_config('eper.application_id', $1, true)", [applicationId]);
+          await cleanup.query(
+            "DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_audit_events WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1 AND actor_id=$2 AND application_id=$3",
+            [tenantId, actorId, applicationId],
+          );
+          await cleanup.query(
+            "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id=$2",
+            [tenantId, applicationId],
+          );
+          await cleanup.query("COMMIT");
+        }
       } catch (error) {
         await cleanup.query("ROLLBACK").catch(() => undefined);
         throw error;
