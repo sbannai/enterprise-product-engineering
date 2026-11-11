@@ -13,6 +13,7 @@ export interface SpiffeSdkJwtClient {
     filter?: { spiffeId?: string },
   ): Promise<{
     spiffeId: string;
+    token: string;
     expiresAtMs: number;
   } | null>;
 }
