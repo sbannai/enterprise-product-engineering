@@ -7,6 +7,7 @@ import { PostgresCampaignSchedulerStore } from "../dist/packages/campaign-schedu
 import { createCampaignSchedulerWakeListener } from "../dist/packages/campaign-scheduler/campaign-scheduler-postgres-wake-listener.js";
 
 const databaseUrl = process.env.EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL;
+const workerDatabaseUrl = process.env.EPER_CAMPAIGN_SCHEDULER_WORKER_TEST_DATABASE_URL;
 const enabled = Boolean(databaseUrl);
 
 test("PostgreSQL serializes pause against dispatch fence and prevents dispatch after pause", {
@@ -404,5 +405,102 @@ test("PostgreSQL duplicate scheduled enqueue returns the original execution with
       );
     }
     await pool.end();
+  }
+});
+
+
+test("dedicated scheduler LOGIN role can enqueue idempotently without UPDATE privilege", {
+  skip: !enabled || !workerDatabaseUrl
+    ? "Set isolated admin and EPER_CAMPAIGN_SCHEDULER_WORKER_TEST_DATABASE_URL connections"
+    : false,
+}, async () => {
+  const adminParsed = new URL(databaseUrl);
+  const workerParsed = new URL(workerDatabaseUrl);
+  const databaseName = decodeURIComponent(adminParsed.pathname.slice(1));
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
+    "Refusing to exercise the worker LOGIN role outside a disposable test/CI/sandbox database");
+  assert.equal(workerParsed.pathname, adminParsed.pathname, "Admin and worker URLs must target the same disposable database");
+
+  const adminPool = new pg.Pool({ connectionString: databaseUrl, max: 2, connectionTimeoutMillis: 3000 });
+  const workerPool = new pg.Pool({ connectionString: workerDatabaseUrl, max: 2, connectionTimeoutMillis: 3000 });
+  const tenantId = "scheduler-worker-login-" + randomUUID();
+  const applicationId = "app-worker-login-" + randomUUID();
+  const store = new PostgresCampaignSchedulerStore(workerPool, "sandbox", "postgres-worker-login-idempotency-test");
+  let scheduleId;
+  try {
+    const identity = await workerPool.query(`
+      SELECT current_user AS role_name,
+             r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolbypassrls,
+             has_column_privilege(current_user, 'public.eper_campaign_executions', 'idempotency_key', 'UPDATE') AS can_rewrite_idempotency_key,
+             has_column_privilege(current_user, 'public.eper_campaign_executions', 'payload', 'UPDATE') AS can_rewrite_payload
+      FROM pg_catalog.pg_roles r
+      WHERE r.rolname = current_user
+    `);
+    assert.equal(identity.rowCount, 1);
+    assert.equal(identity.rows[0].role_name, "eper_campaign_scheduler_worker_runtime");
+    assert.deepEqual({
+      rolcanlogin: identity.rows[0].rolcanlogin,
+      rolsuper: identity.rows[0].rolsuper,
+      rolcreatedb: identity.rows[0].rolcreatedb,
+      rolcreaterole: identity.rows[0].rolcreaterole,
+      rolbypassrls: identity.rows[0].rolbypassrls,
+      can_rewrite_idempotency_key: identity.rows[0].can_rewrite_idempotency_key,
+      can_rewrite_payload: identity.rows[0].can_rewrite_payload,
+    }, {
+      rolcanlogin: true, rolsuper: false, rolcreatedb: false, rolcreaterole: false,
+      rolbypassrls: false, can_rewrite_idempotency_key: false, can_rewrite_payload: false,
+    });
+
+    const adminStore = new PostgresCampaignSchedulerStore(adminPool, "sandbox", "postgres-worker-login-test-setup");
+    const schedule = await adminStore.createSchedule({
+      tenantId, applicationId, campaignId: "campaign-worker-login-idempotency",
+      triggerType: "once", timezone: "UTC",
+      scheduleDefinition: { at: "2035-01-01T00:00:00Z" }, createdBy: "integration-test",
+    });
+    scheduleId = schedule.id;
+    await adminStore.approveAndSchedule({
+      tenantId, applicationId, scheduleId, actorId: "integration-test",
+      nextRunAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const idempotencyKey = "worker-login:duplicate:" + randomUUID();
+    const input = {
+      tenantId, applicationId, scheduleId,
+      scheduledFor: new Date(Date.now() + 60_000).toISOString(),
+      idempotencyKey,
+      payload: { integrationTest: true, immutableIdentity: "original" },
+    };
+    const first = await store.enqueueExecution(input);
+    const duplicate = await store.enqueueExecution({
+      ...input,
+      payload: { integrationTest: true, immutableIdentity: "must-not-replace-original" },
+    });
+    assert.ok(first, "The dedicated worker LOGIN role must be able to enqueue");
+    assert.ok(duplicate, "The dedicated worker LOGIN role must be able to read an idempotency conflict");
+    assert.equal(duplicate.id, first.id);
+    assert.deepEqual(duplicate.payload, input.payload);
+
+    const persisted = await adminPool.query(
+      `SELECT id, payload, idempotency_key FROM eper_campaign_executions
+       WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3`,
+      [tenantId, applicationId, idempotencyKey],
+    );
+    assert.equal(persisted.rowCount, 1);
+    assert.equal(String(persisted.rows[0].id), first.id);
+    assert.equal(persisted.rows[0].idempotency_key, idempotencyKey);
+    assert.deepEqual(persisted.rows[0].payload, input.payload);
+  } finally {
+    if (scheduleId) {
+      await adminPool.query(
+        "DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+      await adminPool.query(
+        "DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+    }
+    await workerPool.end();
+    await adminPool.end();
   }
 });
