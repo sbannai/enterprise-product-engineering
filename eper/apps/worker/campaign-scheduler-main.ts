@@ -2,6 +2,7 @@ import { resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
 import { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import { createCampaignSchedulerWakeListener } from "../../packages/campaign-scheduler/campaign-scheduler-postgres-wake-listener.js";
 import { runCampaignExecutionWorker } from "../../packages/campaign-scheduler/campaign-execution-worker.js";
 import type { CampaignWorkerAdapterFactory } from "../../packages/campaign-scheduler/campaign-worker-adapter.js";
 import { assertAuditStoreReady } from "../../packages/audit/audit-event-store.js";
@@ -43,6 +44,16 @@ const store = new PostgresCampaignSchedulerStore(
   process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
 );
 
+const wakeDatabaseUrl = process.env.EPER_CAMPAIGN_SCHEDULER_WAKE_DATABASE_URL
+  ?? process.env.EPER_CAMPAIGN_SCHEDULER_DATABASE_URL
+  ?? process.env.EPER_PAYMENT_DATABASE_URL
+  ?? process.env.DATABASE_URL
+  ?? "";
+const wakeListener = createCampaignSchedulerWakeListener({
+  connectionString: wakeDatabaseUrl,
+  onError(error) { console.error("EPER campaign worker wake listener error", error); },
+});
+
 const controller = new AbortController();
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
@@ -70,12 +81,15 @@ try {
     throw new Error("CAMPAIGN_WORKER_ADAPTER_CONTRACT_INVALID");
   }
   console.log("EPER campaign worker started", { workerId });
+  await wakeListener.start();
   await runCampaignExecutionWorker(store, adapter.dispatch, {
     workerId,
     signal: controller.signal,
+    waitForWake: wakeListener.waitForWake.bind(wakeListener),
     authorizeDispatch: adapter.authorizeDispatch,
     onError(error) { console.error("EPER campaign worker error", error); },
   });
 } finally {
+  await wakeListener.close();
   await pool.end();
 }
