@@ -326,11 +326,31 @@ export class PostgresCampaignSchedulerStore {
          FROM eper_campaign_schedules s
          WHERE s.tenant_id=$2 AND s.application_id=$3 AND s.id=$4
            AND s.status='scheduled' AND s.approval_status='approved'
-         ON CONFLICT (tenant_id, application_id, idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
+         ON CONFLICT (tenant_id, application_id, idempotency_key) DO NOTHING
          RETURNING *`,
         [randomUUID(), tenantId, applicationId, input.scheduleId, scheduledFor.toISOString(), idempotencyKey, JSON.stringify(payload)],
       );
-      if (!result.rows[0]) return null;
+      // Avoid a no-op UPDATE on the idempotency key: the worker role must not
+      // be able to rewrite execution identity merely to read a conflict row.
+      if (!result.rows[0]) {
+        const existing = await client.query<Record<string, unknown>>(
+          `SELECT * FROM eper_campaign_executions
+           WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3
+           LIMIT 1`,
+          [tenantId, applicationId, idempotencyKey],
+        );
+        if (!existing.rows[0]) return null;
+        const row = existing.rows[0];
+        const storedPayload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+        return {
+          id: String(row.id), scheduleId: String(row.schedule_id), tenantId: String(row.tenant_id),
+          applicationId: String(row.application_id), scheduledFor: new Date(row.scheduled_for as string | Date).toISOString(),
+          status: row.status as CampaignExecutionStatus, attemptCount: Number(row.attempt_count),
+          idempotencyKey: String(row.idempotency_key), payload: storedPayload as Record<string, unknown>,
+          availableAt: new Date(row.available_at as string | Date).toISOString(),
+          claimGeneration: Number(row.claim_generation ?? 0),
+        };
+      }
       const row = result.rows[0];
       const storedPayload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
       return {
