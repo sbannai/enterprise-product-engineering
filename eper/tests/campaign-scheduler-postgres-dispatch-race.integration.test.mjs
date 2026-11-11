@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { PostgresCampaignSchedulerStore } from "../dist/packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
+import { createCampaignSchedulerWakeListener } from "../dist/packages/campaign-scheduler/campaign-scheduler-postgres-wake-listener.js";
 
 const databaseUrl = process.env.EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL;
 const enabled = Boolean(databaseUrl);
@@ -228,6 +229,68 @@ test("PostgreSQL accepts a 256-character event ID with a bounded idempotency key
   } finally {
     await pool.query("DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2", [tenantId, applicationId]);
     await pool.query("DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3", [tenantId, applicationId, scheduleId]);
+    await pool.end();
+  }
+});
+
+
+test("PostgreSQL committed campaign execution insert wakes the dedicated LISTEN connection", {
+  skip: !enabled ? "Set EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL to an isolated, migrated test database" : false,
+}, async () => {
+  const parsed = new URL(databaseUrl);
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
+    "Refusing to run against a database whose name does not clearly identify it as test/CI/sandbox");
+
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 3000 });
+  const listener = createCampaignSchedulerWakeListener({
+    connectionString: databaseUrl,
+    reconnectDelayMs: 50,
+    maxReconnectDelayMs: 250,
+  });
+  const tenantId = "scheduler-wake-test-" + randomUUID();
+  const applicationId = "app-wake-" + randomUUID();
+  const actorId = "integration-test";
+  const store = new PostgresCampaignSchedulerStore(pool, "sandbox", "postgres-wake-test");
+  let scheduleId;
+  try {
+    await listener.start();
+    const schedule = await store.createSchedule({
+      tenantId, applicationId, campaignId: "campaign-wake",
+      triggerType: "once", timezone: "UTC",
+      scheduleDefinition: { at: "2035-01-01T00:00:00Z" }, createdBy: actorId,
+    });
+    scheduleId = schedule.id;
+    await store.approveAndSchedule({
+      tenantId, applicationId, scheduleId, actorId,
+      nextRunAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const wakePromise = listener.waitForWake(5_000).then(() => true);
+    const execution = await store.enqueueExecution({
+      tenantId, applicationId, scheduleId,
+      scheduledFor: new Date(Date.now() + 60_000).toISOString(),
+      idempotencyKey: "wake:" + randomUUID(),
+      payload: { integrationTest: true },
+    });
+    assert.ok(execution, "Expected a durable execution row to be inserted");
+    const woke = await Promise.race([
+      wakePromise,
+      delay(1_500).then(() => false),
+    ]);
+    assert.equal(woke, true, "A committed execution insert must wake the dedicated PostgreSQL listener promptly");
+  } finally {
+    await listener.close();
+    if (scheduleId) {
+      await pool.query(
+        "DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+      await pool.query(
+        "DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+    }
     await pool.end();
   }
 });
