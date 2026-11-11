@@ -40,7 +40,7 @@ if (!["production", "uat", "sandbox"].includes(auditEnvironment)) {
 }
 const workerDatabaseUrl = required("EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL");
 const workerPool = createPostgresCampaignSchedulerWorkerPool();
-const adapterPool = createPostgresPaymentPool();
+let adapterPool: ReturnType<typeof createPostgresPaymentPool> | undefined;
 const store = new PostgresCampaignSchedulerStore(
   workerPool,
   auditEnvironment as "production" | "uat" | "sandbox",
@@ -65,6 +65,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 try {
+  adapterPool = createPostgresPaymentPool();
   await store.assertReady();
   await assertAuditStoreReady(workerPool);
   const adapterModule = await import(pathToFileURL(adapterPath).href) as {
@@ -90,5 +91,5 @@ try {
 } finally {
   await wakeListener.close();
   await workerPool.end();
-  await adapterPool.end();
+  if (adapterPool) await adapterPool.end();
 }
