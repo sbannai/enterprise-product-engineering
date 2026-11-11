@@ -68,7 +68,7 @@ Apply campaign-scheduler migration `006_campaign_scheduler_worker_access_role.sq
 The database operator must provision a separate LOGIN role and secret outside source control, then grant membership in the group role. For example (replace the login name and use the database secret manager for its credential):
 
 ```sql
-CREATE ROLE eper_campaign_scheduler_worker_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+CREATE ROLE eper_campaign_scheduler_worker_login LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 GRANT eper_campaign_scheduler_worker_access TO eper_campaign_scheduler_worker_login;
 ```
 
