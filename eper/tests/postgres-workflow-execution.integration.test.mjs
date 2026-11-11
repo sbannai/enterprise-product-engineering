@@ -209,8 +209,12 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       const outboxStore = new PostgresWorkflowOutboxStore(pool);
       const outboxContext = { tenantId, applicationId };
       const claimed = await outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 });
-      assert.equal(claimed.length, 3);
-      const byType = Object.fromEntries(claimed.map(event => [event.eventType, event]));
+      // The v2 execution contributes its own started/submitted events to this
+      // application-scoped claim. Assert delivery behavior only for v1's instance.
+      assert.equal(claimed.length, 5);
+      const originalInstanceEvents = claimed.filter(event => event.instanceId === started.instanceId);
+      assert.equal(originalInstanceEvents.length, 3);
+      const byType = Object.fromEntries(originalInstanceEvents.map(event => [event.eventType, event]));
       assert.ok(byType["workflow.instance.started"]);
       assert.ok(byType["workflow.instance.submitted"]);
       assert.ok(byType["workflow.instance.completed"]);
