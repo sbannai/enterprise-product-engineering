@@ -61,6 +61,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Scanner child IPC and bounded process supervision regressions
+        run: node --test tests/customer-asset-scan-child-protocol.test.mjs tests/customer-asset-scan-child-supervisor.test.mjs
       - name: Peripheral management UI feature-flag and security-header regressions
         run: node --test tests/customer-peripheral-management-ui.test.mjs
       - name: Workflow rules, capability composition and tariff entitlement unit regressions
