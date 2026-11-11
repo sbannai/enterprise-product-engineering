@@ -29,6 +29,7 @@ export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApi
   async fetchJwtSvid(input: {
     audience: readonly [typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE];
     spiffeId: string;
+    signal?: AbortSignal;
   }): Promise<readonly { spiffeId: string; expiresAtMs: number }[]> {
     const svid = await this.sdk.getJwtSvid(input.audience[0], {
       spiffeId: input.spiffeId,
