@@ -35,7 +35,7 @@ test("scanner child start rejects unknown fields that could smuggle capabilities
 
 test("scanner child start rejects malformed identity, generation and scan input", () => {
   for (const mutate of [
-    (m) => { m.version = 2; },
+    (m) => { m.version = 1; },
     (m) => { m.jobToken = "short"; },
     (m) => { m.claimGeneration = 0; },
     (m) => { m.input.checksumSha256 = "not-a-digest"; },
