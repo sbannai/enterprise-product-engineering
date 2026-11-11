@@ -336,3 +336,73 @@ test("campaign scheduler worker database role is non-login and limited to execut
     await pool.end();
   }
 });
+
+test("PostgreSQL duplicate scheduled enqueue returns the original execution without UPDATE privilege", {
+  skip: !enabled ? "Set EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL to an isolated, migrated test database" : false,
+}, async () => {
+  const parsed = new URL(databaseUrl);
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
+    "Refusing to exercise enqueue idempotency outside a disposable test/CI/sandbox database");
+
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 3, connectionTimeoutMillis: 3000 });
+  const tenantId = "scheduler-enqueue-idempotency-" + randomUUID();
+  const applicationId = "app-enqueue-idempotency-" + randomUUID();
+  const store = new PostgresCampaignSchedulerStore(pool, "sandbox", "postgres-enqueue-idempotency-test");
+  let scheduleId;
+  try {
+    const schedule = await store.createSchedule({
+      tenantId, applicationId, campaignId: "campaign-enqueue-idempotency",
+      triggerType: "once", timezone: "UTC",
+      scheduleDefinition: { at: "2035-01-01T00:00:00Z" }, createdBy: "integration-test",
+    });
+    scheduleId = schedule.id;
+    await store.approveAndSchedule({
+      tenantId, applicationId, scheduleId, actorId: "integration-test",
+      nextRunAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const idempotencyKey = "enqueue:duplicate:" + randomUUID();
+    const input = {
+      tenantId, applicationId, scheduleId,
+      scheduledFor: new Date(Date.now() + 60_000).toISOString(),
+      idempotencyKey,
+      payload: { integrationTest: true, immutableIdentity: "original" },
+    };
+    const first = await store.enqueueExecution(input);
+    const duplicate = await store.enqueueExecution({
+      ...input,
+      payload: { integrationTest: true, immutableIdentity: "must-not-replace-original" },
+    });
+
+    assert.ok(first, "Expected first enqueue to create a durable execution");
+    assert.ok(duplicate, "Expected duplicate enqueue to return the existing execution");
+    assert.equal(duplicate.id, first.id, "Duplicate enqueue must return the original execution ID");
+    assert.equal(duplicate.idempotencyKey, idempotencyKey);
+    assert.deepEqual(duplicate.payload, input.payload,
+      "Duplicate enqueue must not overwrite the original execution payload");
+
+    const persisted = await pool.query(
+      `SELECT id, payload, idempotency_key
+       FROM eper_campaign_executions
+       WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3`,
+      [tenantId, applicationId, idempotencyKey],
+    );
+    assert.equal(persisted.rowCount, 1, "Duplicate enqueue must not create a second execution");
+    assert.equal(String(persisted.rows[0].id), first.id);
+    assert.equal(persisted.rows[0].idempotency_key, idempotencyKey);
+    assert.deepEqual(persisted.rows[0].payload, input.payload);
+  } finally {
+    if (scheduleId) {
+      await pool.query(
+        "DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+      await pool.query(
+        "DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+    }
+    await pool.end();
+  }
+});
