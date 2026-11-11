@@ -113,3 +113,18 @@ test("adapter preserves rule condition and rejects mixed routing it cannot repre
   assert.equal(result.composition, null);
   assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.mixed_routing_unsupported"));
 });
+
+
+test("rejects valid capability nodes disconnected from the declared entry", () => {
+  const graph = {
+    ...base,
+    nodes: [
+      ...base.nodes,
+      { id: "orphan-report", capabilityTypeId: "reporting.pending", contractVersion: 1,
+        label: "Unreachable report", configuration: {} },
+    ],
+  };
+  const diagnostics = validateCapabilityComposition(graph, catalogue);
+  assert.ok(diagnostics.some(item =>
+    item.code === "composition.node.unreachable" && item.nodeId === "orphan-report"));
+});
