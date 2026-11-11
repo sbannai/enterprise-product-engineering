@@ -61,3 +61,29 @@ test("scanner child supervisor enforces output and environment bounds", async ()
     environment: { "DATABASE_URL": "postgres://must-not-be-passed" + "\n" },
   }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/);
 });
+
+
+test("scanner child receives only its explicit environment allowlist, never inherited parent secrets", async () => {
+  const sentinel = "EPER_PARENT_SECRET_SENTINEL";
+  const previous = process.env[sentinel];
+  process.env[sentinel] = "must-not-cross-process-boundary";
+  try {
+    const script = [
+      "if (process.env.EPER_PARENT_SECRET_SENTINEL) process.exit(41);",
+      "if (process.env.NODE_ENV !== 'test') process.exit(42);",
+      "let s='';process.stdin.on('data',c=>s+=c);",
+      "process.stdin.on('end',()=>{const m=JSON.parse(s);",
+      "process.stdout.write(JSON.stringify({version:1,type:'result',jobToken:m.jobToken,",
+      "claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});",
+    ].join("");
+    const outcome = await runCustomerAssetScanChild({
+      executable: node, args: ["-e", script], start: start(), timeoutMs: 2_000,
+      environment: { NODE_ENV: "test" },
+    });
+    assert.equal(outcome.kind, "result",
+      "child should see the explicit allowlisted variable and not inherit the parent sentinel");
+  } finally {
+    if (previous === undefined) delete process.env[sentinel];
+    else process.env[sentinel] = previous;
+  }
+});
