@@ -65,6 +65,8 @@ jobs:
         run: node --test tests/customer-asset-scan-child-protocol.test.mjs tests/customer-asset-scan-child-supervisor.test.mjs
       - name: Scanner child identity and scan-only authorization regressions
         run: node --test tests/customer-asset-scan-child-identity.test.mjs
+      - name: Scanner child SPIFFE Workload API identity regressions
+        run: node --test tests/customer-asset-scan-child-spiffe-identity.test.mjs
       - name: Scanner child-local provider credential resolution regressions
         run: node --test tests/customer-asset-scan-child-provider-credential-resolver.test.mjs
       - name: Peripheral management UI feature-flag and security-header regressions
