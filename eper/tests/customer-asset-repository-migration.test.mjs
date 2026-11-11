@@ -142,3 +142,31 @@ test("expected upload checksum migration is additive, repeatable and fails close
   assert.ok(expectedChecksumMigration.includes("BEGIN;"));
   assert.ok(expectedChecksumMigration.includes("COMMIT;"));
 });
+
+
+const scanChildIsolationMigration = await readFile(new URL("../packages/audit/migrations/046_customer_asset_scan_child_readonly_input.sql", import.meta.url), "utf8");
+
+test("scanner child input resolver binds the authenticated LOGIN identity to one tenant, application, worker and service", () => {
+  assert.ok(scanChildIsolationMigration.includes("CREATE TABLE IF NOT EXISTS public.eper_customer_asset_scan_child_identities"));
+  assert.ok(scanChildIsolationMigration.includes("login_role name PRIMARY KEY"));
+  assert.ok(scanChildIsolationMigration.includes("WHERE i.login_role = session_user::name"));
+  assert.ok(scanChildIsolationMigration.includes("v_identity.worker_id <> p_worker_id"));
+  assert.ok(scanChildIsolationMigration.includes("v_identity.scanner_service_id <> p_scanner_service_id"));
+  assert.ok(scanChildIsolationMigration.includes("v_identity.tenant_id <> p_tenant_id"));
+  assert.ok(scanChildIsolationMigration.includes("v_identity.application_id <> p_application_id"));
+});
+
+test("scanner child source lookup is lease- and generation-fenced and exposes no mutation path", () => {
+  assert.ok(scanChildIsolationMigration.includes("SECURITY DEFINER"));
+  assert.ok(scanChildIsolationMigration.includes("j.lease_owner = p_worker_id"));
+  assert.ok(scanChildIsolationMigration.includes("j.lease_expires_at > pg_catalog.clock_timestamp()"));
+  assert.ok(scanChildIsolationMigration.includes("j.claim_generation = p_claim_generation"));
+  assert.ok(scanChildIsolationMigration.includes("s.upload_status = 'completed'"));
+  assert.ok(scanChildIsolationMigration.includes("a.upload_status = 'scanning'"));
+  assert.ok(scanChildIsolationMigration.includes("a.scan_status = 'pending'"));
+  assert.ok(scanChildIsolationMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_resolve_customer_asset_scan_child_input"));
+  assert.doesNotMatch(scanChildIsolationMigration, /GRANT (SELECT|INSERT|UPDATE|DELETE|ALL).*eper_customer_asset_(assets|upload_sessions|scan_jobs).*eper_customer_asset_scan_child_access/i);
+  assert.doesNotMatch(scanChildIsolationMigration, /GRANT .*eper_audit_(events|chain_head).*eper_customer_asset_scan_child_access/i);
+  assert.ok(scanChildIsolationMigration.includes("REVOKE ALL ON FUNCTION public.eper_resolve_customer_asset_scan_child_input"));
+  assert.ok(scanChildIsolationMigration.includes("COMMIT;"));
+});
