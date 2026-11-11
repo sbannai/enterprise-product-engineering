@@ -32,6 +32,9 @@ export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApi
       spiffeId: input.spiffeId,
     });
     if (!svid) return [];
+    if (typeof svid.token !== "string" || svid.token.length === 0) {
+      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SVID_INVALID");
+    }
     return [{
       spiffeId: svid.spiffeId,
       expiresAtMs: svid.expiresAtMs,
