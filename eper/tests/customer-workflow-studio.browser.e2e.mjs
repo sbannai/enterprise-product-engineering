@@ -10,6 +10,7 @@ import { PostgresWorkflowRoleDefinitionStore } from "../dist/packages/workflows/
 import { PostgresWorkflowActorRoleAssignmentStore } from "../dist/packages/workflows/postgres-workflow-actor-role-assignment-store.js";
 import { PostgresWorkflowDefinitionDraftStore } from "../dist/packages/workflows/postgres-workflow-definition-draft-store.js";
 import { WorkflowDefinitionPublisher } from "../dist/packages/workflows/workflow-definition-publisher.js";
+import { PostgresWorkflowExecutionService } from "../dist/packages/workflows/postgres-workflow-execution-service.js";
 
 const { Pool } = pg;
 
@@ -32,12 +33,13 @@ test("Customer Admin workflow studio isolates same-ID drafts across applications
   const actorRoleStore = new PostgresWorkflowActorRoleAssignmentStore(pool);
   const draftStore = new PostgresWorkflowDefinitionDraftStore(pool);
   const publisher = new WorkflowDefinitionPublisher(pool);
+  const executionService = new PostgresWorkflowExecutionService(pool, "workflow-studio-browser-e2e");
   let server;
   let browser;
 
   try {
     Object.assign(process.env, {
-      EPER_WORKFLOW_EXECUTION_API_ENABLED: "false",
+      EPER_WORKFLOW_EXECUTION_API_ENABLED: "true",
       EPER_ADMIN_CONFIG_API_ENABLED: "true",
       EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
       EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({ [credential]: { tenantId, actorId, roleKey: "customer_admin" } }),
@@ -70,6 +72,7 @@ test("Customer Admin workflow studio isolates same-ID drafts across applications
       workflowActorRoleAssignmentStore: actorRoleStore,
       workflowDefinitionDraftStore: draftStore,
       workflowDefinitionPublisher: publisher,
+      workflowExecutionService: executionService,
       adminConfigEnvironment: "sandbox",
       serviceVersion: "workflow-studio-browser-e2e",
     });
