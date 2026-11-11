@@ -18,6 +18,7 @@ export interface SpiffeWorkloadApiClient {
   fetchJwtSvid(input: {
     audience: readonly [typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE];
     spiffeId: string;
+    signal?: AbortSignal;
   }): Promise<readonly SpiffeWorkloadApiJwtSvid[]>;
 }
 
@@ -65,11 +66,12 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
     }
   }
 
-  async verifyCurrentProcessIdentity(): Promise<CustomerAssetScanChildSpiffeIdentity> {
+  async verifyCurrentProcessIdentity(signal?: AbortSignal): Promise<CustomerAssetScanChildSpiffeIdentity> {
     try {
       const fetched = await this.client.fetchJwtSvid({
         audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
         spiffeId: this.expectedSpiffeId,
+        signal,
       });
       if (!Array.isArray(fetched) || fetched.length !== 1 ||
           fetched[0]?.spiffeId !== this.expectedSpiffeId ||
