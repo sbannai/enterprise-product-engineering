@@ -124,6 +124,7 @@ export class CustomerAssetScanChildIdentityService<TCredentials> {
     private readonly credentials: CustomerAssetScanChildCredentialResolver<TCredentials>,
     private readonly options: {
       now?: () => number;
+      expectedIssuer: string;
       maximumLifetimeSeconds?: number;
       clockSkewSeconds?: number;
     } = {},
@@ -146,6 +147,9 @@ export class CustomerAssetScanChildIdentityService<TCredentials> {
       throw new CustomerAssetScanChildIdentityError("CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_UNAVAILABLE");
     }
     const identity = parseClaims(raw);
+    if (!boundedIdentity(this.options.expectedIssuer) || identity.issuer !== this.options.expectedIssuer) {
+      throw new CustomerAssetScanChildIdentityError("CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_INVALID");
+    }
     const now = Math.floor((this.options.now ?? (() => Date.now()))() / 1000);
     const skew = this.options.clockSkewSeconds ?? 30;
     const maximumLifetime = this.options.maximumLifetimeSeconds ?? 300;
@@ -191,10 +195,12 @@ export function requireCustomerAssetScanChildIdentityRuntime<TCredentials>(input
   environment: "development" | "test" | "uat" | "production";
   verifier?: CustomerAssetScanChildIdentityVerifier;
   credentials?: CustomerAssetScanChildCredentialResolver<TCredentials>;
-  synthetic?: boolean;
+  synthetic: boolean;
+  expectedIssuer: string;
 }): CustomerAssetScanChildIdentityService<TCredentials> {
   if (!input || !["development", "test", "uat", "production"].includes(input.environment) ||
-      !input.verifier || !input.credentials) {
+      !input.verifier || !input.credentials || typeof input.synthetic !== "boolean" ||
+      !boundedIdentity(input.expectedIssuer)) {
     throw new CustomerAssetScanChildIdentityError("CUSTOMER_ASSET_SCAN_CHILD_RUNTIME_DISABLED");
   }
   if (input.environment === "production" && input.synthetic === true) {
@@ -204,5 +210,7 @@ export function requireCustomerAssetScanChildIdentityRuntime<TCredentials>(input
     // Non-synthetic adapters are permitted in non-production only when explicitly
     // supplied; this is useful for integration testing a real verifier contract.
   }
-  return new CustomerAssetScanChildIdentityService(input.verifier, input.credentials);
+  return new CustomerAssetScanChildIdentityService(input.verifier, input.credentials, {
+    expectedIssuer: input.expectedIssuer,
+  });
 }
