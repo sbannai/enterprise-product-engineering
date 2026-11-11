@@ -53,6 +53,23 @@ test("SPIFFE verifier fetches a child-local JWT-SVID and delegates validation to
   assert.equal(JSON.stringify(identity).includes("opaque-jwt-svid-token"), false);
 });
 
+test("SPIFFE verifier accepts the three claims required by the JWT-SVID standard", async () => {
+  const standardClaims = {
+    sub: spiffeId,
+    aud: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+    exp: Math.floor(now / 1000) + 120,
+  };
+  const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
+    client({ validated: { spiffeId, claims: standardClaims } }), spiffeId, () => now,
+  );
+  const identity = await verifier.verifyCurrentProcessIdentity();
+  assert.equal(identity.spiffeId, spiffeId);
+  assert.equal(identity.trustDomain, "eper.example");
+  assert.equal(identity.expiresAt, standardClaims.exp);
+  assert.equal("issuedAt" in identity, false);
+  assert.equal("tokenId" in identity, false);
+});
+
 test("SPIFFE verifier rejects an unexpected or ambiguous fetched identity", async () => {
   for (const fetched of [
     [],
@@ -72,11 +89,10 @@ test("SPIFFE verifier rejects an unexpected or ambiguous fetched identity", asyn
   }
 });
 
-test("SPIFFE verifier rejects a validated subject mismatch, trust-domain mismatch, or wrong audience", async () => {
+test("SPIFFE verifier rejects a validated subject mismatch or wrong audience", async () => {
   for (const validated of [
     { spiffeId: "spiffe://eper.example/other", claims: claims() },
     { spiffeId, claims: claims({ sub: "spiffe://eper.example/other" }) },
-    { spiffeId, claims: claims({ iss: "attacker.example" }) },
     { spiffeId, claims: claims({ aud: ["different-audience"] }) },
   ]) {
     const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
@@ -93,7 +109,7 @@ test("SPIFFE verifier rejects expired, future-issued, overlong, or incomplete SV
     { exp: Math.floor(now / 1000) - 1 },
     { iat: Math.floor(now / 1000) + 60 },
     { exp: Math.floor(now / 1000) + 600 },
-    { jti: "" },
+    { exp: undefined },
   ]) {
     const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
       client({ validated: { spiffeId, claims: claims(override) } }), spiffeId, () => now,
