@@ -111,7 +111,7 @@ test("adapter preserves rule condition and rejects mixed routing it cannot repre
   };
   const result = adaptWorkflowDefinitionToComposition(definition);
   assert.equal(result.composition, null);
-  assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.mixed_routing_unsupported"));
+  assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.priority_routing_not_representable"));
 });
 
 
@@ -142,4 +142,24 @@ test("adapter returns a blocking diagnostic for malformed runtime arrays", () =>
   const result = adaptWorkflowDefinitionToComposition(malformed);
   assert.equal(result.composition, null);
   assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.input_shape_invalid"));
+});
+
+
+test("adapter fails closed for pure priority routing instead of creating parallel branches", () => {
+  const definition = {
+    id: "priority-flow", name: "Priority flow", status: "DRAFT",
+    activities: [
+      { id: "start", title: "Start", type: "FORM", roleId: "employee", permission: "workflow:act",
+        nextActivityIds: ["preferred", "fallback"], fields: [], routingRuleIds: ["preferred-rule", "fallback-rule"] },
+      { id: "preferred", title: "Preferred", type: "TASK", roleId: "ops", permission: "workflow:act", nextActivityIds: [], fields: [] },
+      { id: "fallback", title: "Fallback", type: "TASK", roleId: "ops", permission: "workflow:act", nextActivityIds: [], fields: [] },
+    ],
+    rules: [
+      { id: "preferred-rule", name: "Preferred", priority: 20, targetActivityId: "preferred", condition: { kind: "condition", field: "score", operator: "gte", value: 80 } },
+      { id: "fallback-rule", name: "Fallback", priority: 10, targetActivityId: "fallback", condition: { kind: "condition", field: "score", operator: "lt", value: 80 } },
+    ],
+  };
+  const result = adaptWorkflowDefinitionToComposition(definition);
+  assert.equal(result.composition, null);
+  assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.priority_routing_not_representable"));
 });
