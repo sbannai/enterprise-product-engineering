@@ -10,6 +10,12 @@ import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/st
 import type { StorageUploadRequest } from "../assets/storage-upload-adapter.js";
 import type { StorageUploadLookupOutcome, StorageUploadProviderOutcome } from "../assets/storage-upload-provider-contract.js";
 
+/** Marker credentials issued only by the local synthetic secret resolver. */
+export interface SyntheticStorageCredentials {
+  readonly synthetic: true;
+  readonly marker: "ephemeral-test-only";
+}
+
 /**
  * Deterministic, in-memory provider fixture for tests and local demonstrations.
  *
@@ -18,6 +24,7 @@ import type { StorageUploadLookupOutcome, StorageUploadProviderOutcome } from ".
  * only. Register it with synthetic: true; production composition must reject it.
  */
 export class SyntheticProviderStorageDriver implements ProviderStorageDriver<unknown> {
+  readonly synthetic = true;
   readonly synthetic = true;
   readonly capabilities = {
     idempotentCreateByUploadSessionId: true,

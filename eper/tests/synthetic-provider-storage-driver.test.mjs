@@ -5,7 +5,7 @@ import { assertProviderStorageDriver } from "../dist/packages/integrations/provi
 
 const context = {
   tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
-  providerKey: "synthetic-storage", credentials: { fixtureOnly: true },
+  providerKey: "synthetic-storage", credentials: { synthetic: true, marker: "ephemeral-test-only" },
 };
 const upload = {
   tenantId: "tenant-a", applicationId: "app-a", actorId: "actor-a",
