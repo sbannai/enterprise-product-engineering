@@ -191,5 +191,26 @@ export function validateCapabilityComposition(
   };
   for (const nodeId of nodes.keys()) visit(nodeId);
 
+  // Every valid node must be reachable from the declared entry through control
+  // flow. A disconnected component is not an executable workflow branch.
+  if (resolved.has(graph.entryNodeId)) {
+    const reachable = new Set<string>();
+    const queue = [graph.entryNodeId];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (reachable.has(current)) continue;
+      reachable.add(current);
+      for (const next of adjacency.get(current) ?? []) {
+        if (!reachable.has(next)) queue.push(next);
+      }
+    }
+    for (const nodeId of resolved.keys()) {
+      if (!reachable.has(nodeId)) {
+        add("composition.node.unreachable",
+          "Every building block must be reachable from the workflow starting point.", { nodeId });
+      }
+    }
+  }
+
   return diagnostics;
 }

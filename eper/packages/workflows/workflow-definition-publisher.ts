@@ -6,6 +6,7 @@ import {
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
 import { workflowPermissionGranted, validateWorkflowRuleConfiguration, type WorkflowDefinition, type WorkflowPermission } from "./workflow-configuration.js";
+import { assertWorkflowCapabilityComposition } from "./workflow-capability-adapter.js";
 
 export interface WorkflowPublisherContext {
   tenantId: string;
@@ -128,6 +129,15 @@ type DefinitionRow = {
 export class WorkflowDefinitionPublisher {
   constructor(private readonly pool: AuditSqlPool) {}
 
+  private validateCapabilityComposition(definition: WorkflowDefinition): string {
+    try {
+      return assertWorkflowCapabilityComposition(definition).catalogueVersion;
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "WORKFLOW_CAPABILITY_COMPOSITION_INVALID";
+      throw new WorkflowDefinitionPublishError(code, 400);
+    }
+  }
+
   async publish(
     context: WorkflowPublisherContext,
     definition: WorkflowDefinition,
@@ -135,6 +145,7 @@ export class WorkflowDefinitionPublisher {
   ): Promise<PublishedWorkflowDefinition> {
     validateContext(context);
     validateDefinition(definition);
+    const capabilityCatalogueVersion = this.validateCapabilityComposition(definition);
     const snapshot = structuredClone(definition);
     const definitionDigest = createHash("sha256").update(canonical(snapshot)).digest("hex");
     const client = await this.pool.connect();
@@ -210,6 +221,11 @@ export class WorkflowDefinitionPublisher {
         const lockedDraft = typeof draftRow.definition === "string"
           ? JSON.parse(draftRow.definition) as WorkflowDefinition
           : draftRow.definition;
+        // Revalidate the exact row held under FOR UPDATE; never trust the earlier API snapshot.
+        const lockedCatalogueVersion = this.validateCapabilityComposition(lockedDraft);
+        if (lockedCatalogueVersion !== capabilityCatalogueVersion) {
+          throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_CAPABILITY_CATALOGUE_VERSION_CONFLICT", 409);
+        }
         const lockedActive = { ...lockedDraft, status: "ACTIVE" as const };
         if (lockedDraft.id !== snapshot.id || canonical(lockedActive) !== canonical(snapshot)) {
           throw new WorkflowDefinitionPublishError("WORKFLOW_PUBLISH_DRAFT_CONTENT_CONFLICT", 409);
@@ -256,7 +272,7 @@ export class WorkflowDefinitionPublisher {
         operationName: "POST /applications/:applicationId/workflows/:workflowId/publish",
         serviceVersion: context.serviceVersion,
         afterHash: definitionDigest,
-        payload: { workflowId: snapshot.id, definitionVersion, definitionDigest },
+        payload: { workflowId: snapshot.id, definitionVersion, definitionDigest, capabilityCatalogueVersion },
       });
       await client.query("COMMIT");
       const storedDefinition = typeof row.definition === "string" ? JSON.parse(row.definition) : row.definition;
