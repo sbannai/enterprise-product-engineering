@@ -2,10 +2,7 @@ import { createRequire } from "node:module";
 
 const CHANNEL = "eper_campaign_execution_wake";
 
-interface NotificationMessage {
-  channel?: string;
-  payload?: string;
-}
+interface NotificationMessage { channel?: string; payload?: string; }
 interface PgClientLike {
   connect(): Promise<void>;
   query(sql: string): Promise<unknown>;
@@ -14,7 +11,7 @@ interface PgClientLike {
   on(event: "error" | "end", listener: (error?: unknown) => void): this;
 }
 interface PgClientConstructor {
-  new (options: { connectionString: string; application_name: string }): PgClientLike;
+  new (options: { connectionString: string; application_name: string; connectionTimeoutMillis: number }): PgClientLike;
 }
 
 export interface CampaignSchedulerWakeListener {
@@ -22,7 +19,6 @@ export interface CampaignSchedulerWakeListener {
   waitForWake(timeoutMs: number, signal?: AbortSignal): Promise<void>;
   close(): Promise<void>;
 }
-
 export interface CampaignSchedulerWakeListenerOptions {
   connectionString: string;
   reconnectDelayMs?: number;
@@ -48,10 +44,11 @@ export function createCampaignSchedulerWakeListener(
   const require = createRequire(import.meta.url);
   const pg = require("pg") as { Client: PgClientConstructor };
   const waiters = new Set<() => void>();
+  const stopWaiters = new Set<() => void>();
   let stopped = false;
   let started = false;
-  let connected = false;
   let pendingWake = false;
+  let disconnectCurrent: (() => void) | undefined;
   let connectionLoop: Promise<void> | undefined;
   let initialConnection: Promise<void> | undefined;
   let resolveInitialConnection: (() => void) | undefined;
@@ -60,13 +57,17 @@ export function createCampaignSchedulerWakeListener(
     pendingWake = true;
     for (const wake of [...waiters]) wake();
   };
-
   const delay = (milliseconds: number) => new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, milliseconds);
-    if (stopped) {
-      clearTimeout(timer);
+    const timer = setTimeout(() => {
+      stopWaiters.delete(stop);
       resolve();
-    }
+    }, milliseconds);
+    const stop = () => {
+      clearTimeout(timer);
+      stopWaiters.delete(stop);
+      resolve();
+    };
+    stopWaiters.add(stop);
   });
 
   const connectLoop = async (): Promise<void> => {
@@ -75,17 +76,19 @@ export function createCampaignSchedulerWakeListener(
       const client = new pg.Client({
         connectionString: options.connectionString,
         application_name: "eper-campaign-scheduler-wake-listener",
+        connectionTimeoutMillis: 5_000,
       });
-      let disconnect: (() => void) | undefined;
-      const disconnected = new Promise<void>((resolve) => { disconnect = resolve; });
+      let resolveDisconnected: (() => void) | undefined;
+      const disconnected = new Promise<void>((resolve) => { resolveDisconnected = resolve; });
       let disconnectedOnce = false;
       const markDisconnected = (error?: unknown) => {
         if (disconnectedOnce) return;
         disconnectedOnce = true;
-        connected = false;
+        disconnectCurrent = undefined;
         if (error) options.onError?.(error);
-        disconnect?.();
+        resolveDisconnected?.();
       };
+      disconnectCurrent = () => markDisconnected();
       client.on("notification", (message) => {
         if (message.channel === CHANNEL) notifyWaiters();
       });
@@ -94,18 +97,17 @@ export function createCampaignSchedulerWakeListener(
 
       try {
         await client.connect();
-        await client.query("LISTEN " + CHANNEL);
-        connected = true;
-        backoff = reconnectDelayMs;
+        if (!stopped) await client.query("LISTEN " + CHANNEL);
         resolveInitialConnection?.();
         resolveInitialConnection = undefined;
+        backoff = reconnectDelayMs;
         await disconnected;
       } catch (error) {
         markDisconnected(error);
         resolveInitialConnection?.();
         resolveInitialConnection = undefined;
       } finally {
-        connected = false;
+        disconnectCurrent = undefined;
         try { await client.end(); } catch (error) { options.onError?.(error); }
       }
       if (!stopped) {
@@ -155,6 +157,8 @@ export function createCampaignSchedulerWakeListener(
       if (stopped) return connectionLoop;
       stopped = true;
       notifyWaiters();
+      disconnectCurrent?.();
+      for (const stop of [...stopWaiters]) stop();
       resolveInitialConnection?.();
       resolveInitialConnection = undefined;
       await connectionLoop;
