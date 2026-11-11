@@ -35,10 +35,14 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
              to_regclass('public.eper_audit_events') AS audit_events,
              (SELECT 1 FROM information_schema.columns
               WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                AND column_name='dispatch_started_at') AS dispatch_fence
+                AND column_name='dispatch_started_at') AS dispatch_fence,
+             (SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                AND column_name='claim_generation') AS claim_generation
     `);
     assert.ok(schema.rows[0]?.schedules && schema.rows[0]?.executions && schema.rows[0]?.audit_events,
       "Apply the campaign scheduler and audit migrations to this disposable test database first");
+    assert.equal(schema.rows[0]?.claim_generation, 1, "Apply migration 004_campaign_claim_generation.sql before running this integration test");
     assert.equal(schema.rows[0]?.dispatch_fence, 1,
       "Apply migration 002_campaign_dispatch_fence.sql before running this integration test");
 
@@ -72,6 +76,7 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
     const claimed = await store.claimExecutions("race-worker", 1);
     assert.equal(claimed.length, 1);
     assert.equal(claimed[0].id, executionId);
+    assert.equal(claimed[0].claimGeneration, 1, "A newly claimed execution must start at generation 1");
 
     const blocker = await pool.connect();
     try {
@@ -88,7 +93,7 @@ test("PostgreSQL serializes pause against dispatch fence and prevents dispatch a
       let dispatchOutcome = "pending";
       let dispatchError = null;
       const dispatchPromise = store.beginExecutionDispatch({
-        tenantId, applicationId, executionId, workerId: "race-worker",
+        tenantId, applicationId, executionId, workerId: "race-worker", claimGeneration: claimed[0].claimGeneration,
       }).then((result) => {
         dispatchOutcome = String(result);
         return result;
