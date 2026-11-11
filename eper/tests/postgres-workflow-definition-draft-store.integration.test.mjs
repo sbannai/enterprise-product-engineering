@@ -272,3 +272,106 @@ test("PostgreSQL workflow save-versus-publish race never publishes a stale or un
       await pool.end();
     }
   });
+
+
+test("PostgreSQL workflow drafts isolate same-named definitions across applications in one tenant",
+  { skip: !databaseConfigured },
+  async () => {
+    const pool = createPostgresPaymentPool();
+    const suffix = randomUUID();
+    const tenantId = "wf-two-app-tenant-" + suffix;
+    const applicationA = "wf-two-app-a-" + suffix;
+    const applicationB = "wf-two-app-b-" + suffix;
+    const actorId = "wf-two-app-actor-" + suffix;
+    const workflowId = "shared-expense-workflow";
+    const correlationId = "wf-two-app-correlation-" + suffix;
+    const store = new PostgresWorkflowDefinitionDraftStore(pool);
+    const definition = (name) => ({
+      id: workflowId, name, status: "DRAFT",
+      activities: [{
+        id: "submit", title: "Submit request", type: "TASK",
+        roleId: "requester", permission: "workflow:act",
+        nextActivityIds: [], fields: [],
+      }],
+    });
+    try {
+      await store.assertReady();
+      const setup = await pool.connect();
+      try {
+        await setup.query(
+          `INSERT INTO eper_tenant_application_assignment
+            (tenant_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,'active',$4,$4), ($1,$3,'active',$4,$4)`,
+          [tenantId, applicationA, applicationB, actorId],
+        );
+        await setup.query(
+          `INSERT INTO eper_actor_application_assignment
+            (tenant_id, actor_id, application_id, assignment_status, assigned_by, updated_by)
+           VALUES ($1,$2,$3,'active',$2,$2), ($1,$2,$4,'active',$2,$2)`,
+          [tenantId, actorId, applicationA, applicationB],
+        );
+      } finally { setup.release(); }
+
+      const savedA = await store.replace({
+        tenantId, applicationId: applicationA, workflowId,
+        definition: definition("Application A — Expense approval"),
+        expectedVersion: 0, changedBy: actorId, environment: "sandbox",
+        correlationId: correlationId + "-a",
+      });
+      const savedB = await store.replace({
+        tenantId, applicationId: applicationB, workflowId,
+        definition: definition("Application B — Travel approval"),
+        expectedVersion: 0, changedBy: actorId, environment: "sandbox",
+        correlationId: correlationId + "-b",
+      });
+      assert.equal(savedA.draftVersion, 1);
+      assert.equal(savedB.draftVersion, 1);
+      assert.equal(savedA.definition.name, "Application A — Expense approval");
+      assert.equal(savedB.definition.name, "Application B — Travel approval");
+
+      assert.equal((await store.get(tenantId, applicationA, workflowId))?.definition.name,
+        "Application A — Expense approval");
+      assert.equal((await store.get(tenantId, applicationB, workflowId))?.definition.name,
+        "Application B — Travel approval");
+      assert.equal((await store.list(tenantId, applicationA)).length, 1);
+      assert.equal((await store.list(tenantId, applicationB)).length, 1);
+
+      const updatedA = await store.replace({
+        tenantId, applicationId: applicationA, workflowId,
+        definition: definition("Application A — Revised expense approval"),
+        expectedVersion: 1, changedBy: actorId, environment: "sandbox",
+        correlationId: correlationId + "-a-update",
+      });
+      assert.equal(updatedA.draftVersion, 2);
+      assert.equal((await store.get(tenantId, applicationB, workflowId))?.draftVersion, 1);
+      assert.equal((await store.get(tenantId, applicationB, workflowId))?.definition.name,
+        "Application B — Travel approval");
+    } finally {
+      const cleanup = await pool.connect();
+      try {
+        await cleanup.query("BEGIN");
+        await cleanup.query("SELECT set_config('eper.tenant_id', $1, true)", [tenantId]);
+        await cleanup.query("SELECT set_config('eper.application_id', $1, true)", [applicationA]);
+        await cleanup.query(
+          "DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1 AND application_id IN ($2,$3)",
+          [tenantId, applicationA, applicationB],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_audit_events WHERE tenant_id=$1 AND application_id IN ($2,$3)",
+          [tenantId, applicationA, applicationB],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1 AND actor_id=$2 AND application_id IN ($3,$4)",
+          [tenantId, actorId, applicationA, applicationB],
+        );
+        await cleanup.query(
+          "DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1 AND application_id IN ($2,$3)",
+          [tenantId, applicationA, applicationB],
+        );
+        await cleanup.query("COMMIT");
+      } catch (error) {
+        await cleanup.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally { cleanup.release(); await pool.end(); }
+    }
+  });
