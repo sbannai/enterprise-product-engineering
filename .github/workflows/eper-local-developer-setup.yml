@@ -21,6 +21,7 @@ on:
       - ".github/workflows/eper-payment-postgres-integration.yml"
   pull_request:
     paths:
+      - "eper/docs/**"
       - ".github/workflows/**"
       - "eper/DEVELOPER_SETUP.md"
       - "eper/docker-compose.local.yml"
