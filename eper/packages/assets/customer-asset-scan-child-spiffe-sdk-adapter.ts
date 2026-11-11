@@ -1,4 +1,4 @@
-import {
+import type {
   CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
   SpiffeWorkloadApiClient,
 } from "./customer-asset-scan-child-spiffe-identity.js";
