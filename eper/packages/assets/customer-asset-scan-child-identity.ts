@@ -127,7 +127,7 @@ export class CustomerAssetScanChildIdentityService<TCredentials> {
       expectedIssuer: string;
       maximumLifetimeSeconds?: number;
       clockSkewSeconds?: number;
-    } = {},
+    },
   ) {}
 
   async authorize(input: {
@@ -203,12 +203,11 @@ export function requireCustomerAssetScanChildIdentityRuntime<TCredentials>(input
       !boundedIdentity(input.expectedIssuer)) {
     throw new CustomerAssetScanChildIdentityError("CUSTOMER_ASSET_SCAN_CHILD_RUNTIME_DISABLED");
   }
-  if (input.environment === "production" && input.synthetic === true) {
+  // No production bootstrap adapter has been approved or implemented yet.
+  // Even a caller-supplied interface implementation is not sufficient proof
+  // of independent workload authentication; keep production unconditionally closed.
+  if (input.environment === "production") {
     throw new CustomerAssetScanChildIdentityError("CUSTOMER_ASSET_SCAN_CHILD_RUNTIME_DISABLED");
-  }
-  if (input.synthetic !== true && input.environment !== "production") {
-    // Non-synthetic adapters are permitted in non-production only when explicitly
-    // supplied; this is useful for integration testing a real verifier contract.
   }
   return new CustomerAssetScanChildIdentityService(input.verifier, input.credentials, {
     expectedIssuer: input.expectedIssuer,
