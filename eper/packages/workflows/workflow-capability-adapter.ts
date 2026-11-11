@@ -151,31 +151,6 @@ export function adaptWorkflowDefinitionToComposition(
         activity.id,
       ));
       continue;
-      const ordered = refs.map(id => rules.get(id));
-      if (ordered.some(rule => !rule) || new Set(refs).size !== refs.length) {
-        diagnostics.push(invalid("workflow.adapter.rule_reference_unsupported", "Routing references are missing or duplicated.", activity.id));
-        continue;
-      }
-      // Legacy evaluation chooses the highest-priority matching rule. The graph
-      // represents each configured rule as an explicit branch, retaining order.
-      for (const rule of ordered as WorkflowRule[]) {
-        if (!ruleIds.has(rule.id)) continue;
-        edges.push({
-          id: "edge.route." + activity.id + "." + rule.id, kind: "control",
-          fromNodeId: activity.id, fromPortId: "completed",
-          toNodeId: "rule." + rule.id, toPortId: "trigger",
-        });
-        edges.push({
-          id: "edge.match." + rule.id, kind: "control",
-          fromNodeId: "rule." + rule.id, fromPortId: "matched",
-          toNodeId: rule.targetActivityId, toPortId: "trigger",
-        });
-      }
-      // An activity with rule routing must not also contain unmodelled direct
-      // transitions; those would bypass the legacy rule selection semantics.
-      if (activity.nextActivityIds.some(id => !ordered.some(rule => rule?.targetActivityId === id))) {
-        diagnostics.push(invalid("workflow.adapter.mixed_routing_unsupported", "Direct transitions mixed with rule routing cannot be represented without changing route selection.", activity.id));
-      }
     } else {
       for (const targetId of activity.nextActivityIds) {
         edges.push({
