@@ -208,3 +208,151 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
       await pool.end();
     }
   });
+
+
+test("scanner child LOGIN identity resolves only its live leased generation and has no direct data privileges",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 4 });
+    const suffix = randomUUID().replaceAll("-", "");
+    const tenantId = "scan-child-tenant-" + suffix.slice(0, 12);
+    const applicationId = "scan-child-app-" + suffix.slice(0, 12);
+    const actorId = "scan-child-actor-" + suffix.slice(0, 12);
+    const assetId = randomUUID();
+    const correlationId = "scan-child-correlation-" + suffix.slice(0, 12);
+    const idempotencyKey = "scan-child-key-" + suffix.slice(0, 20);
+    const workerId = "ci-child-service:worker-" + suffix.slice(0, 12);
+    const scannerServiceId = "ci-child-service";
+    const loginRole = "eper_scan_child_" + suffix.slice(0, 18);
+    const password = randomUUID().replaceAll("-", "");
+    const bytes = Buffer.alloc(512, 65);
+    const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
+    const repository = new PostgresCustomerAssetRepository(pool);
+    let childPool;
+    let roleCreated = false;
+    let uploadSessionId;
+    try {
+      await pool.query(
+        "INSERT INTO public.eper_customer_asset_upload_expiry_worker_tenant_scope(login_role, tenant_id, enabled) VALUES (session_user, $1, true) ON CONFLICT (login_role, tenant_id) DO UPDATE SET enabled = true, updated_at = now()",
+        [tenantId],
+      );
+      await repository.create({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId, scope: "application_restricted", ownerApplicationId: applicationId,
+        displayName: "scanner child integration fixture", originalFileName: "scan.pdf",
+        mediaCategory: "document", mimeType: "application/pdf", fileExtension: "pdf",
+        sizeBytes: bytes.length, checksumSha256, storageAdapterKey: "ci-storage",
+        storageObjectReference: "opaque-child-object-" + suffix,
+      });
+      const reservation = await repository.reserveUpload({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId, expectedSizeBytes: bytes.length, expectedChecksumSha256: checksumSha256,
+        idempotencyKey, requestFingerprint: createHash("sha256").update(suffix).digest("hex"),
+      });
+      uploadSessionId = reservation.uploadSessionId;
+      await repository.recordUploadGrant({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        assetId, uploadSessionId, requestFingerprint: createHash("sha256").update(suffix).digest("hex"),
+        providerUploadReference: "opaque-child-provider-ref-" + suffix,
+        grantExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      await repository.completeUpload({
+        tenantId, applicationId, actorId, environment: "sandbox", correlationId,
+        uploadSessionId, receivedSizeBytes: bytes.length, observedMimeType: "application/pdf",
+        checksumSha256, scanStatus: "pending",
+      });
+      const [claim] = await repository.claimScanJobs({
+        tenantId, applicationId, workerId, scannerServiceId,
+        environment: "sandbox", limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(claim, "fixture scan job must be claimable");
+
+      await pool.query(
+        `CREATE ROLE "${loginRole}" WITH LOGIN INHERIT PASSWORD '${password}'
+          NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+      );
+      roleCreated = true;
+      await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${loginRole}"`);
+      await pool.query(
+        `INSERT INTO public.eper_customer_asset_scan_child_identities
+          (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [loginRole, tenantId, applicationId, workerId, scannerServiceId],
+      );
+      const childUrl = new URL(connectionString);
+      childUrl.username = loginRole;
+      childUrl.password = password;
+      childPool = new Pool({ connectionString: childUrl.toString(), max: 1 });
+
+      const privileges = await childPool.query(`
+        SELECT current_user,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT') AS can_read_assets,
+          has_table_privilege(current_user, 'public.eper_customer_asset_upload_sessions', 'SELECT') AS can_read_sessions,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'SELECT') AS can_read_jobs,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'UPDATE') AS can_update_assets,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+          has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT') AS can_write_audit
+      `);
+      assert.deepEqual(privileges.rows[0], {
+        current_user: loginRole, can_read_assets: false, can_read_sessions: false,
+        can_read_jobs: false, can_update_assets: false, can_update_jobs: false,
+        can_write_audit: false,
+      });
+
+      const resolved = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+      );
+      assert.equal(resolved.rowCount, 1);
+      assert.equal(resolved.rows[0].asset_id, assetId);
+      assert.equal(resolved.rows[0].provider_upload_reference, "opaque-child-provider-ref-" + suffix);
+      assert.equal(resolved.rows[0].storage_object_reference, "opaque-child-object-" + suffix);
+      assert.equal(Number(resolved.rows[0].size_bytes), bytes.length);
+      assert.equal(resolved.rows[0].checksum_sha256, checksumSha256);
+
+      await assert.rejects(
+        childPool.query("SELECT asset_id FROM public.eper_customer_assets WHERE tenant_id = $1", [tenantId]),
+        error => error?.code === "42501",
+      );
+      await assert.rejects(
+        childPool.query("UPDATE public.eper_customer_asset_scan_jobs SET state = 'completed' WHERE tenant_id = $1", [tenantId]),
+        error => error?.code === "42501",
+      );
+
+      const stale = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration + 1],
+      );
+      assert.equal(stale.rowCount, 0, "stale claim generation must not resolve source input");
+
+      await assert.rejects(
+        childPool.query(
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
+          ["other-" + tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+        ),
+        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
+      );
+
+      await pool.query(
+        `UPDATE public.eper_customer_asset_scan_jobs
+            SET lease_expires_at = clock_timestamp() - interval '1 second'
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+        [tenantId, applicationId, uploadSessionId],
+      );
+      const expired = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+      );
+      assert.equal(expired.rowCount, 0, "expired lease must not resolve source input");
+    } finally {
+      if (childPool) await childPool.end();
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [loginRole]).catch(() => {});
+      if (roleCreated) await pool.query(`DROP ROLE IF EXISTS "${loginRole}"`).catch(() => {});
+      if (uploadSessionId) {
+        await pool.query("DELETE FROM public.eper_customer_asset_scan_jobs WHERE tenant_id = $1 AND upload_session_id = $2", [tenantId, uploadSessionId]).catch(() => {});
+        await pool.query("DELETE FROM public.eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2", [tenantId, uploadSessionId]).catch(() => {});
+      }
+      await pool.query("DELETE FROM public.eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2", [tenantId, assetId]).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_upload_expiry_worker_tenant_scope WHERE login_role = session_user AND tenant_id = $1", [tenantId]).catch(() => {});
+      await pool.end();
+    }
+  });
