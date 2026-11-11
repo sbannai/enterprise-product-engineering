@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { runMigrations } from "../scripts/migrate-payments.mjs";
+import { PostgresCustomerAssetRepository } from "../dist/packages/assets/postgres-customer-asset-repository.js";
 
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
@@ -346,7 +347,10 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
     } finally {
       if (childPool) await childPool.end();
       await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [loginRole]).catch(() => {});
-      if (roleCreated) await pool.query(`DROP ROLE IF EXISTS "${loginRole}"`).catch(() => {});
+      if (roleCreated) {
+        await pool.query(`REVOKE eper_customer_asset_scan_child_access FROM "${loginRole}"`).catch(() => {});
+        await pool.query(`DROP ROLE IF EXISTS "${loginRole}"`).catch(() => {});
+      }
       if (uploadSessionId) {
         await pool.query("DELETE FROM public.eper_customer_asset_scan_jobs WHERE tenant_id = $1 AND upload_session_id = $2", [tenantId, uploadSessionId]).catch(() => {});
         await pool.query("DELETE FROM public.eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2", [tenantId, uploadSessionId]).catch(() => {});
