@@ -138,7 +138,8 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
           (rawIssuedAt !== undefined && !issuedAt) ||
           (issuedAt !== undefined && issuedAt > nowSeconds + 30) ||
           expiresAt <= nowSeconds ||
-          expiresAt - nowSeconds > 300) {
+          expiresAt - nowSeconds > 300 ||
+          (issuedAt !== undefined && expiresAt - issuedAt > 300)) {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
