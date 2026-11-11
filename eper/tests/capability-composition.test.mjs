@@ -128,3 +128,18 @@ test("rejects valid capability nodes disconnected from the declared entry", () =
   assert.ok(diagnostics.some(item =>
     item.code === "composition.node.unreachable" && item.nodeId === "orphan-report"));
 });
+
+
+test("adapter returns a blocking diagnostic for malformed runtime arrays", () => {
+  const malformed = {
+    id: "malformed-flow", name: "Malformed flow", status: "DRAFT",
+    activities: [{
+      id: "start", title: "Start", type: "FORM", roleId: "employee",
+      permission: "workflow:act", nextActivityIds: null, fields: [],
+    }],
+    rules: [],
+  };
+  const result = adaptWorkflowDefinitionToComposition(malformed);
+  assert.equal(result.composition, null);
+  assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.input_shape_invalid"));
+});
