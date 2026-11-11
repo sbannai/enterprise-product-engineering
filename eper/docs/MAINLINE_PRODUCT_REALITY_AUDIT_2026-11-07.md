@@ -390,3 +390,28 @@ The list is a point-in-time observation, not authority to merge or close any PR.
 ### Governance and UAT boundary
 
 Business UAT remains unauthorized. The latest audit evidence still does not show all 228 requirements business-executed and accepted, nor closure of all B01 case-preparation and entry-gate evidence gaps. No chargeable AWS resources, production credentials, provider activation or production deployment are authorized.
+
+
+
+## 16. Live reconciliation — 2026-11-11 06:20 UTC
+
+This addendum supersedes Section 15's current-main and PR #473 state where they differ. Historical sections remain unchanged.
+
+### Exact current-main validation
+
+- Current `main`: `bd8c7691104d03a50f8fd6aef763f4ef40feba5a`, merge commit for PR #474.
+- Exact-SHA check-runs: **14/14 completed successfully**, including EPER build-and-test, payment/PostgreSQL/receipt contracts, fresh-clone PostgreSQL verification, Chromium OIDC browser E2E, six-family capability HTTP exercise, 228/38 pilot matrix, G9 reconciliation, release artifact, container health and controlled technical readiness lanes.
+- EPER CI run: [42971382674](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971382674); integrated validation: [42971382179](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971382179); fresh clone: [42971382187](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971382187); Chromium OIDC: [42971382176](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971382176).
+- PR #474 is merged. Its CI-only change serializes the two PostgreSQL scheduler integration tests that share the global due-execution queue. No production scheduler behavior was changed.
+
+### PR #473 — branch synchronized; revalidation pending
+
+- The old PR head `3c322714350811e053cdbd97680c5fdf0251fb7a` was 2 commits behind current main and its old-base CI failed in the scheduler worker-restart integration test: a global due-queue claim returned another test's row. The failure matched the shared-queue test-interference diagnosis corrected by #474; it is not evidence to weaken the production no-replay/fencing rule.
+- The PR branch has now been synchronized with main using a two-parent merge commit: `7663d6c289207673130e09d560c7f048d148259c`. Compare against main: 10 commits ahead / 0 behind; only the three PR-scoped files remain in its diff.
+- New exact-head workflows have been queued: [RE-EXEC-001](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971867000), [fresh-clone setup](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971867001), [six-family smoke](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971867003), and [integrated validation](https://github.com/sbannai/enterprise-product-engineering/actions/runs/42971867004).
+- PR #473 remains draft. Do not mark ready or merge until all exact-head checks complete successfully and independent review is recorded.
+
+### Audit status and guardrails
+
+- This audit PR's branch has also been synchronized with current main; the documentation remains the sole PR-scoped change. This addendum records the new mainline evidence without rewriting historical audit observations.
+- The 14/14 technical checks do not establish production operations or business acceptance. Preserve the approved 228 requirements / 38 chapters; no chargeable AWS resources; no production deployment/provider activation; Business UAT remains unauthorized pending all entry-gate and requirement-level acceptance evidence.
