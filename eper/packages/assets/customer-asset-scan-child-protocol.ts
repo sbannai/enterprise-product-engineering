@@ -1,13 +1,17 @@
 /**
  * Versioned, allowlisted IPC contract for one customer-asset scanner child.
- * Excludes credentials, database handles/URLs, secret references, process
- * environments and customer file bytes.
+ * Excludes credentials, database handles/URLs, secret references, upload references,
+ * upload-session identifiers, process environments and customer file bytes.
  */
 export const CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION = 2 as const;
 
 export interface CustomerAssetScanChildInput {
-  tenantId: string; applicationId: string; assetId: string; uploadSessionId: string;
-  providerUploadReference: string; checksumSha256: string; sizeBytes: number; mimeType: string;
+  tenantId: string;
+  applicationId: string;
+  assetId: string;
+  checksumSha256: string;
+  sizeBytes: number;
+  mimeType: string;
 }
 export interface CustomerAssetScanChildStart {
   version: typeof CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION; type: "start";
@@ -50,13 +54,11 @@ export function isCustomerAssetScanChildStart(value: unknown): value is Customer
       !boundedString(value.requestId, 128) || !boundedString(value.scannerServiceId, 128) ||
       !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.scannerServiceId) ||
       !isRecord(value.input) || !hasExactKeys(value.input, [
-        "tenantId", "applicationId", "assetId", "uploadSessionId", "providerUploadReference",
-        "checksumSha256", "sizeBytes", "mimeType",
+        "tenantId", "applicationId", "assetId", "checksumSha256", "sizeBytes", "mimeType",
       ])) return false;
   const input = value.input;
   return boundedString(input.tenantId, 128) && boundedString(input.applicationId, 128) &&
-    boundedString(input.assetId, 128) && boundedString(input.uploadSessionId, 128) &&
-    boundedString(input.providerUploadReference, 2048) &&
+    boundedString(input.assetId, 128) &&
     typeof input.checksumSha256 === "string" && /^[a-f0-9]{64}$/i.test(input.checksumSha256) &&
     Number.isSafeInteger(input.sizeBytes) && (input.sizeBytes as number) > 0 &&
     boundedString(input.mimeType, 128) &&
