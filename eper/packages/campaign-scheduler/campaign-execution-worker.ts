@@ -10,6 +10,8 @@ export interface CampaignWorkerOptions {
   leaseRenewalIntervalMs?: number;
   maxAttempts?: number;
   signal?: AbortSignal;
+  /** Wake on PostgreSQL notifications; timeout remains the reconciliation fallback. */
+  waitForWake?: (timeoutMs: number, signal?: AbortSignal) => Promise<void>;
   /** Must reload current schedule/approval/consent/channel policy immediately before dispatch. */
   authorizeDispatch: (execution: CampaignExecutionRecord) => Promise<boolean>;
   onError?: (error: unknown) => void;
@@ -42,6 +44,7 @@ export async function runCampaignExecutionWorker(
   const idleDelayMs = options.idleDelayMs ?? 1000;
   const leaseRenewalIntervalMs = options.leaseRenewalIntervalMs ?? 60000;
   const maxAttempts = options.maxAttempts ?? 5;
+  const waitForWork = options.waitForWake ?? sleep;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) throw new Error("CAMPAIGN_CLAIM_LIMIT_INVALID");
   if (!Number.isInteger(idleDelayMs) || idleDelayMs < 100 || idleDelayMs > 60000) throw new Error("CAMPAIGN_WORKER_IDLE_DELAY_INVALID");
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) throw new Error("CAMPAIGN_RETRY_POLICY_INVALID");
@@ -56,11 +59,11 @@ export async function runCampaignExecutionWorker(
       executions = await store.claimExecutions(options.workerId, batchSize);
     } catch (error) {
       options.onError?.(error);
-      await sleep(idleDelayMs, options.signal);
+      await waitForWork(idleDelayMs, options.signal);
       continue;
     }
     if (!executions.length) {
-      await sleep(idleDelayMs, options.signal);
+      await waitForWork(idleDelayMs, options.signal);
       continue;
     }
 
