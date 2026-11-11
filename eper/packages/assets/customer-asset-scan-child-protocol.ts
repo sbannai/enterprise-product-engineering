@@ -3,7 +3,7 @@
  * Excludes credentials, database handles/URLs, secret references, process
  * environments and customer file bytes.
  */
-export const CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION = 1 as const;
+export const CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION = 2 as const;
 
 export interface CustomerAssetScanChildInput {
   tenantId: string; applicationId: string; assetId: string; uploadSessionId: string;
