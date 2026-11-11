@@ -129,3 +129,20 @@ test("SPIFFE SDK adapter rejects an SDK result without its opaque token", async 
     spiffeId,
   }), { message: "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SVID_INVALID" });
 });
+
+test("SPIFFE SDK adapter forwards cancellation to the Workload API call", async () => {
+  const controller = new AbortController();
+  let receivedSignal;
+  const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
+    async getJwtSvid(_audience, _filter, signal) {
+      receivedSignal = signal;
+      return { spiffeId, token: "opaque", expiresAtMs };
+    },
+  });
+  await adapter.fetchJwtSvid({
+    audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+    spiffeId,
+    signal: controller.signal,
+  });
+  assert.equal(receivedSignal, controller.signal);
+});
