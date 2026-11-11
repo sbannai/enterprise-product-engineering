@@ -12,7 +12,6 @@ const start = () => ({
   requestId: "scan-request-1", scannerServiceId: "scanner.synthetic.v1",
   input: {
     tenantId: "tenant-1", applicationId: "application-1", assetId: "asset-1",
-    uploadSessionId: "upload-1", providerUploadReference: "synthetic-object-1",
     checksumSha256: "b".repeat(64), sizeBytes: 1024, mimeType: "application/pdf",
   },
 });
@@ -27,7 +26,11 @@ test("scanner child start rejects unknown fields that could smuggle capabilities
   assert.equal(isCustomerAssetScanChildStart(message), false);
   const nested = start();
   nested.input.secretReference = "must-not-cross-ipc";
-  assert.equal(isCustomerAssetScanChildStart(nested), false);\n  for (const forbidden of ["providerUploadReference", "uploadSessionId", "secretReference"]) {\n    const message = start(); message.input[forbidden] = "must-not-cross-ipc";\n    assert.equal(isCustomerAssetScanChildStart(message), false, forbidden + " must never cross child IPC");\n  }
+  assert.equal(isCustomerAssetScanChildStart(nested), false);
+  for (const forbidden of ["providerUploadReference", "uploadSessionId", "secretReference"]) {
+    const message = start(); message.input[forbidden] = "must-not-cross-ipc";
+    assert.equal(isCustomerAssetScanChildStart(message), false, forbidden + " must never cross child IPC");
+  }
 });
 
 test("scanner child start rejects malformed identity, generation and scan input", () => {
