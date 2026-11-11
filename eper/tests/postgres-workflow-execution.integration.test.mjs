@@ -101,6 +101,38 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         idempotencyKey: "transition-" + suffix, action: "submit", payload: {},
       };
 
+      // Publish a new graph after instance one starts. New starts must use v2,
+      // while the already-running instance must continue resolving activities from v1.
+      const definitionV2 = {
+        ...definition,
+        name: "Expense submission v2",
+        activities: [
+          { ...definition.activities[0], nextActivityIds: ["approve-expense-v2"] },
+          { ...definition.activities[1], id: "approve-expense-v2", title: "Approve expense v2" },
+        ],
+      };
+      const publishedV2 = await publisher.publish({
+        tenantId, applicationId, principalId: actorId,
+        correlationId: correlationId + "-publish-v2", environment,
+      }, definitionV2);
+      assert.equal(publishedV2.definitionVersion, 2);
+
+      const secondStarted = await service.start({
+        ...startInput,
+        idempotencyKey: "start-v2-" + suffix,
+        businessReference: "EXP-V2-" + suffix,
+      });
+      assert.equal(secondStarted.definitionVersion, 2);
+      assert.equal(secondStarted.currentActivityId, "submit-expense");
+
+      const secondSubmitted = await service.transition({
+        ...transitionInput,
+        instanceId: secondStarted.instanceId,
+        idempotencyKey: "transition-v2-" + suffix,
+      });
+      assert.equal(secondSubmitted.definitionVersion, 2);
+      assert.equal(secondSubmitted.currentActivityId, "approve-expense-v2");
+
       // Establish valid memberships in a different application and tenant; neither scope
       // may read or mutate the original instance, even when the instance UUID is known.
       const otherTenantId = "wf-tenant-other-" + suffix;
@@ -177,8 +209,12 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
       const outboxStore = new PostgresWorkflowOutboxStore(pool);
       const outboxContext = { tenantId, applicationId };
       const claimed = await outboxStore.claim(outboxContext, { workerId: "worker-a", limit: 10, leaseSeconds: 60 });
-      assert.equal(claimed.length, 3);
-      const byType = Object.fromEntries(claimed.map(event => [event.eventType, event]));
+      // The v2 execution contributes its own started/submitted events to this
+      // application-scoped claim. Assert delivery behavior only for v1's instance.
+      assert.equal(claimed.length, 5);
+      const originalInstanceEvents = claimed.filter(event => event.instanceId === started.instanceId);
+      assert.equal(originalInstanceEvents.length, 3);
+      const byType = Object.fromEntries(originalInstanceEvents.map(event => [event.eventType, event]));
       assert.ok(byType["workflow.instance.started"]);
       assert.ok(byType["workflow.instance.submitted"]);
       assert.ok(byType["workflow.instance.completed"]);
@@ -218,6 +254,16 @@ test("PostgreSQL workflow start, transition, idempotency and audit survive servi
         assert.equal(Number(instances.rows[0].version), 3);
         assert.equal(Number(instances.rows[0].definition_version), 1);
         assert.equal(String(instances.rows[0].definition_digest).trim(), published.definitionDigest);
+
+        const secondInstance = await verify.query(
+          `SELECT definition_version, definition_digest
+             FROM eper_workflow_instances
+            WHERE tenant_id = $1 AND application_id = $2 AND instance_id = $3`,
+          [tenantId, applicationId, secondStarted.instanceId],
+        );
+        assert.equal(secondInstance.rows.length, 1);
+        assert.equal(Number(secondInstance.rows[0].definition_version), 2);
+        assert.equal(String(secondInstance.rows[0].definition_digest).trim(), publishedV2.definitionDigest);
 
         const transitions = await verify.query(
           `SELECT action FROM eper_workflow_transitions
