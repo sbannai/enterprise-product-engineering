@@ -262,24 +262,33 @@ test("PostgreSQL platform application remediation is tenant-scoped, versioned, i
       );
       assert.equal(concurrentAudit.rows[0].count, 1);
 
-      await pool.query(
-        `CREATE FUNCTION public.${functionName}() RETURNS trigger
-         LANGUAGE plpgsql AS $eper$
-         BEGIN
-           IF NEW.tenant_id = '${rollback.tenantId}'
-              AND NEW.action = 'platform.application_assignment.remediate' THEN
-             RAISE EXCEPTION 'INJECTED_PLATFORM_APPLICATION_REMEDIATION_AUDIT_FAILURE';
-           END IF;
-           RETURN NEW;
-         END;
-         $eper$`,
-      );
-      await pool.query(
-        `CREATE TRIGGER ${triggerName}
-         BEFORE INSERT ON eper_audit_events
-         FOR EACH ROW EXECUTE FUNCTION public.${functionName}()`,
-      );
-      triggerInstalled = true;
+      const installTriggerClient = await pool.connect();
+      try {
+        await installTriggerClient.query("BEGIN");
+        await installTriggerClient.query("SELECT pg_advisory_xact_lock(hashtext('eper.audit_events.test-trigger-ddl.v1'))");
+        await installTriggerClient.query(
+          `CREATE FUNCTION public.${functionName}() RETURNS trigger
+           LANGUAGE plpgsql AS $eper$
+           BEGIN
+             IF NEW.tenant_id = '${rollback.tenantId}'
+                AND NEW.action = 'platform.application_assignment.remediate' THEN
+               RAISE EXCEPTION 'INJECTED_PLATFORM_APPLICATION_REMEDIATION_AUDIT_FAILURE';
+             END IF;
+             RETURN NEW;
+           END;
+           $eper$`,
+        );
+        await installTriggerClient.query(
+          `CREATE TRIGGER ${triggerName}
+           BEFORE INSERT ON eper_audit_events
+           FOR EACH ROW EXECUTE FUNCTION public.${functionName}()`,
+        );
+        await installTriggerClient.query("COMMIT");
+        triggerInstalled = true;
+      } catch (error) {
+        try { await installTriggerClient.query("ROLLBACK"); } catch { /* preserve original error */ }
+        throw error;
+      } finally { installTriggerClient.release(); }
 
       const rollbackIdempotencyKey = "rollback-" + suffix;
       await assert.rejects(
@@ -304,8 +313,17 @@ test("PostgreSQL platform application remediation is tenant-scoped, versioned, i
       assert.equal(await ledgerCount(rollback.tenantId, rollback.applicationIds[0], rollbackIdempotencyKey), 0);
     } finally {
       if (triggerInstalled) {
-        await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON eper_audit_events`).catch(() => undefined);
-        await pool.query(`DROP FUNCTION IF EXISTS public.${functionName}()`).catch(() => undefined);
+        const cleanupTriggerClient = await pool.connect();
+        try {
+          await cleanupTriggerClient.query("BEGIN");
+          await cleanupTriggerClient.query("SELECT pg_advisory_xact_lock(hashtext('eper.audit_events.test-trigger-ddl.v1'))");
+          await cleanupTriggerClient.query(`DROP TRIGGER IF EXISTS ${triggerName} ON eper_audit_events`);
+          await cleanupTriggerClient.query(`DROP FUNCTION IF EXISTS public.${functionName}()`);
+          await cleanupTriggerClient.query("COMMIT");
+        } catch (error) {
+          try { await cleanupTriggerClient.query("ROLLBACK"); } catch { /* preserve original error */ }
+          // Best-effort cleanup remains isolated from the test's primary failure.
+        } finally { cleanupTriggerClient.release(); }
       }
       for (const tenant of tenants) await cleanupTenant(tenant);
       await pool.query("DELETE FROM eper_commercial_tariff_plan WHERE tariff_key=$1", [tariffKey]).catch(() => undefined);

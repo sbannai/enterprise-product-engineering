@@ -86,12 +86,18 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
       const auditFailureFunction = "eper_pfafn_" + suffix.replaceAll("-", "");
       const triggerClient = await pool.connect();
       try {
+        await triggerClient.query("BEGIN");
+        await triggerClient.query("SELECT pg_advisory_xact_lock(hashtext('eper.audit_events.test-trigger-ddl.v1'))");
         const functionSql = "CREATE FUNCTION public." + auditFailureFunction +
           "() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN IF NEW.tenant_id = ''" + tenantId +
           "'' THEN RAISE EXCEPTION ''injected platform audit failure''; END IF; RETURN NEW; END;'";
         await triggerClient.query(functionSql);
         await triggerClient.query("CREATE TRIGGER " + auditFailureTrigger +
           " BEFORE INSERT ON eper_audit_events FOR EACH ROW EXECUTE FUNCTION public." + auditFailureFunction + "()");
+        await triggerClient.query("COMMIT");
+      } catch (error) {
+        try { await triggerClient.query("ROLLBACK"); } catch { /* preserve original error */ }
+        throw error;
       } finally { triggerClient.release(); }
       await assert.rejects(provisioning.mutate({
         principal, operation: "provision", tenantId, applicationId,
@@ -112,8 +118,14 @@ test("PostgreSQL platform admin provisions first Customer Admin and recovers onl
       finally { rollbackVerify.release(); }
       const cleanupTrigger = await pool.connect();
       try {
+        await cleanupTrigger.query("BEGIN");
+        await cleanupTrigger.query("SELECT pg_advisory_xact_lock(hashtext('eper.audit_events.test-trigger-ddl.v1'))");
         await cleanupTrigger.query("DROP TRIGGER IF EXISTS " + auditFailureTrigger + " ON eper_audit_events");
         await cleanupTrigger.query("DROP FUNCTION IF EXISTS public." + auditFailureFunction + "()");
+        await cleanupTrigger.query("COMMIT");
+      } catch (error) {
+        try { await cleanupTrigger.query("ROLLBACK"); } catch { /* preserve original error */ }
+        throw error;
       } finally { cleanupTrigger.release(); }
       const first = await provisioning.mutate({
         principal, operation: "provision", tenantId, applicationId,
