@@ -354,3 +354,39 @@ This addendum supersedes the point-in-time PR head/check figures in Section 13 w
 ### Execution boundary
 
 No PR was merged or closed in this refresh. Passing exact-head CI does not substitute for independent review, local measured capacity evidence, approved requirements, or Business UAT entry-gate evidence. The approved 228 requirements / 38 chapters remain unchanged; Business UAT remains unauthorized and no chargeable cloud resources are authorized.
+
+
+## 15. Live reconciliation — 2026-11-11 05:49 UTC
+
+This addendum is based on a fresh read of the repository at the time recorded below. It supersedes earlier statements about current PR inventory, current-main SHA and the review state of this audit PR. Earlier dated sections remain historical evidence and are not rewritten.
+
+### Exact current-main evidence
+
+- Current `main`: `c4ffd3b2d0d9b39cc4f32aab1722a94ddf2aedf3`.
+- Direct commit check-runs query: **14/14 completed successfully**, zero failed and zero pending.
+- These are bounded technical CI results; they do not establish production operations, all 228 business executions, or Business UAT acceptance.
+
+### Current open pull requests
+
+A fresh open-PR listing returned six open PRs:
+
+| PR | Current scope | Observed state | Evidence / next action |
+|---|---|---|---|
+| #473 | Customer Admin Workflow Studio browser isolation and stale-save conflict | Draft; exact head `454e2f871a456c955972e55c0832a33ee303fe4a` | 19 check-runs: 17 success, 1 skipped, 1 failure. The Chromium OIDC login/protected-access/logout/revocation check failed; all other listed checks succeeded. Investigate and correct that failure, rerun exact-head checks, and obtain independent review before merge. |
+| #432 | This audit document | Open, ready for review; historical head at time of inspection `41f7be3b0f8f89b4595e3b1ef0245830a1cc8347` | Independent approval exists on that old head, but it is stale relative to current main. Refresh audit evidence and require fresh exact-head review/checks. |
+| #452 | Asset scan retry / synthetic storage driver | Draft | Previously explicitly designated do-not-merge; retain as historical source only. |
+| #401 | PostgreSQL capacity validation plan | Draft | Historical integration ancestry and broad unrelated changes; do not merge wholesale. Local capacity remains NOT MEASURED until raw workload measurements exist. |
+| #392 | Provider payload/worker consolidation | Draft | Superseded by merged #463; retain as source-history archive. |
+| #377 | Historical scorecard / crosswalk addendum | Draft | Reconcile only still-current evidence; its proposed additions are not approved requirements. |
+
+The list is a point-in-time observation, not authority to merge or close any PR. No PR was merged or closed by this reconciliation.
+
+### Audit review and merge gate
+
+- The prior independent approval by `sbannai-creator` was submitted against the old audit head and cannot be treated as approval of a refreshed commit.
+- The latest Codex review attempt failed because the configured code-review usage limit was reached. This is not a code finding and is not a substitute for an independent review.
+- The audit must receive fresh exact-head CI and independent review after this update. Keep the 228 approved requirements / 38 chapters unchanged.
+
+### Governance and UAT boundary
+
+Business UAT remains unauthorized. The latest audit evidence still does not show all 228 requirements business-executed and accepted, nor closure of all B01 case-preparation and entry-gate evidence gaps. No chargeable AWS resources, production credentials, provider activation or production deployment are authorized.
