@@ -37,7 +37,7 @@ test("Customer Admin workflow studio isolates same-ID drafts across applications
 
   try {
     Object.assign(process.env, {
-      EPER_WORKFLOW_EXECUTION_API_ENABLED: "true",
+      EPER_WORKFLOW_EXECUTION_API_ENABLED: "false",
       EPER_ADMIN_CONFIG_API_ENABLED: "true",
       EPER_ADMIN_CONFIG_PERSISTENCE: "postgres",
       EPER_ADMIN_CONFIG_IDENTITIES_JSON: JSON.stringify({ [credential]: { tenantId, actorId, roleKey: "customer_admin" } }),
