@@ -5,6 +5,7 @@ import {
   type AuditSqlPool,
 } from "../audit/audit-event-store.js";
 import { validateWorkflowRuleConfiguration, type WorkflowDefinition } from "./workflow-configuration.js";
+import { assertWorkflowCapabilityComposition } from "./workflow-capability-adapter.js";
 
 export interface WorkflowDefinitionDraft {
   tenantId: string;
@@ -151,6 +152,7 @@ export class PostgresWorkflowDefinitionDraftStore {
       throw new Error("WORKFLOW_DRAFT_DEFINITION_INVALID");
     }
     validateWorkflowRuleConfiguration(input.definition);
+    const composition = assertWorkflowCapabilityComposition(input.definition);
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
       throw new Error("WORKFLOW_DRAFT_EXPECTED_VERSION_INVALID");
     }
@@ -222,6 +224,9 @@ export class PostgresWorkflowDefinitionDraftStore {
           workflowId: input.workflowId, draftVersion: Number(row.draft_version),
           activityCount: input.definition.activities.length,
           ruleIds: (input.definition.rules ?? []).map(rule => rule.id),
+          capabilityCatalogueVersion: composition.catalogueVersion,
+          capabilityNodeCount: composition.composition?.nodes.length ?? 0,
+          capabilityEdgeCount: composition.composition?.edges.length ?? 0,
           changeReason: input.changeReason,
         },
       });
