@@ -145,8 +145,22 @@ jobs:
         run: |
           set -o pipefail
           node --test tests/transaction-receipt-contract.test.mjs 2>&1 | tee reexec-evidence/ci-logs/transaction-receipt-contract.log
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Use PostgreSQL client from the service container
+        shell: bash
+        run: |
+          set -euo pipefail
+          postgres_container_id="$(docker ps --filter 'ancestor=postgres:16' --format '{{.ID}}' | head -n 1)"
+          test -n "$postgres_container_id"
+          mkdir -p "$RUNNER_TEMP/eper-postgres-client"
+          cat > "$RUNNER_TEMP/eper-postgres-client/psql" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          container_id="${PG_SERVICE_CONTAINER_ID:?PostgreSQL service container ID is missing}"
+          exec docker exec "$container_id" psql "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/eper-postgres-client/psql"
+          echo "PG_SERVICE_CONTAINER_ID=$postgres_container_id" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/eper-postgres-client" >> "$GITHUB_PATH"
       - name: Apply all payment migrations through the deployment runner
         run: npm run migrate:payments
       - name: Apply durable audit schema migrations
