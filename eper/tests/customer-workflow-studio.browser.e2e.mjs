@@ -154,6 +154,8 @@ test("Customer Admin workflow studio isolates same-ID drafts across applications
     if (server) await new Promise(resolve => server.close(resolve));
     try {
       await pool.query("DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1", [tenantId]);
+      // Remove dependent role memberships before their role definitions and actor assignments.
+      await pool.query("DELETE FROM eper_workflow_actor_role_assignment WHERE tenant_id=$1", [tenantId]);
       await pool.query("DELETE FROM eper_workflow_role_definition WHERE tenant_id=$1", [tenantId]);
       await pool.query("DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1", [tenantId]);
       await pool.query("DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1", [tenantId]);
