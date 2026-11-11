@@ -11,6 +11,7 @@ export interface SpiffeSdkJwtClient {
   getJwtSvid(
     audience: string,
     filter?: { spiffeId?: string },
+    signal?: AbortSignal,
   ): Promise<{
     spiffeId: string;
     token: string;
@@ -31,7 +32,7 @@ export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApi
   }): Promise<readonly { spiffeId: string; expiresAtMs: number }[]> {
     const svid = await this.sdk.getJwtSvid(input.audience[0], {
       spiffeId: input.spiffeId,
-    });
+    }, input.signal);
     if (!svid) return [];
     if (typeof svid.token !== "string" || svid.token.length === 0) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SVID_INVALID");
