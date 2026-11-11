@@ -290,3 +290,49 @@ The current observed `main` ref at this update is `fe9974a3e6a41e988a12925bfcff2
 - A commit-scoped workflow lookup for the current main SHA returned no workflow runs at the time of this update. Therefore post-merge push CI on the exact current main SHA is **NOT ASSESSED** here; PR-head checks above are not a substitute for that mainline result.
 
 The approved 228 requirements and 38 chapters remain unchanged. No chargeable AWS resources were provisioned. Business UAT remains unauthorized pending evidence for all entry gates and requirement-level business acceptance.
+
+
+## 13. Mainline and PR inventory refresh — 2026-11-11 04:26 UTC
+
+### Exact current-main validation
+
+- Current `main` ref: `fe9974a3e6a41e988a12925bfcff2b5d74db5700` (merge commit for PR #470).
+- GitHub commit check-runs endpoint returned **14/14 completed successfully**, including EPER build/test, same-commit integrated gate, fresh-clone PostgreSQL verification, all six capability-family HTTP checks, controlled QA, chapter pilot matrix, G9 reconciliation, release artifact, container health, payment/PostgreSQL/receipt contracts, controlled UAT technical simulation and readiness audit.
+- No failing or pending check-runs were present in that exact-main check-runs response.
+- The combined commit-status endpoint returned no status contexts (`state=pending, total=0`). The 14 check-run results above are the concrete evidence; do not describe the empty commit-status collection as a failure.
+- The commit-scoped workflow-run helper returned an empty list because it filters to pull-request-triggered runs. It is not used to override the direct exact-SHA check-run evidence.
+- These results establish the named technical CI scopes on this main SHA only. They do not prove production operations, all 228 business cases, or Business UAT acceptance.
+
+### Current audit PR state
+
+- PR #432 head: `dda4741141d5516600d802fdba4a2dfeb4b00e47`.
+- Base: exact current main `fe9974a3e6a41e988a12925bfcff2b5d74db5700`.
+- Compare: **9 commits ahead / 0 behind**; one documentation file added.
+- The audit's existing Section 12 accurately records merges #471, #469 and #470. This addendum supersedes its earlier statement that current-main push validation was not assessed: the direct check-runs query now shows 14/14 successful on the exact current main SHA.
+- Historical PR counts and compare figures in Sections 4 and 11 remain historical; they are not current inventory.
+
+### Open PR inventory observed at this refresh
+
+Six open PRs were returned. Their scopes and dispositions are:
+
+| PR | Current purpose / state | Next action |
+|---|---|---|
+| #472 | Test-only regression guard for the unconditional provider lifecycle PR trigger; based on current main | Wait for all exact-head checks and independent reviewer approval; do not merge early |
+| #432 | This mainline product reality audit; documentation-only; 9 ahead / 0 behind | Keep draft pending audit review and exact-head validation |
+| #452 | Stale scan retry/synthetic-driver branch; explicitly marked do-not-merge | Retain as historical source; do not merge or cherry-pick wholesale |
+| #392 | Superseded provider payload/worker source-history archive; implementation reconciled in merged #463 | Retain as archive; no rebase or merge |
+| #401 | Local PostgreSQL capacity validation plan; based on integration branch, not main | Execute only against local disposable PostgreSQL and local API; capacity remains NOT MEASURED until raw measurements exist; do not merge to main from its current base |
+| #377 | Historical scorecard / crosswalk addendum draft | Reconcile its useful evidence against current main; do not treat embedded refs or old counts as current |
+
+This inventory is a point-in-time snapshot, not a closure authorization. No PR was closed, deleted, or merged as part of this audit refresh.
+
+### Business and governance boundary
+
+The 228 approved requirements and 38 chapters remain unchanged. The 14 successful exact-main check-runs do not convert the 228-row business execution capture from NOT_RUN/PENDING, do not close B01 case-preparation and approval gaps, and do not authorize Business UAT. No chargeable AWS resources or production credentials were used.
+
+### Next sequence
+
+1. Complete PR #472 exact-head checks and independent review, then merge only if both gates pass.
+2. Keep PR #432 as the current audit artifact; complete its own exact-head CI/review before any merge decision.
+3. Run the #401 local disposable PostgreSQL capacity workload and retain raw API + database observer results; do not claim capacity before measurement.
+4. Reconcile #377 against this updated audit; preserve #392 and #452 as explicitly superseded/stale source records.
