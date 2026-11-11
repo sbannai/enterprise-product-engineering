@@ -336,3 +336,21 @@ The 228 approved requirements and 38 chapters remain unchanged. The 14 successfu
 2. Keep PR #432 as the current audit artifact; complete its own exact-head CI/review before any merge decision.
 3. Run the #401 local disposable PostgreSQL capacity workload and retain raw API + database observer results; do not claim capacity before measurement.
 4. Reconcile #377 against this updated audit; preserve #392 and #452 as explicitly superseded/stale source records.
+
+
+## 14. PR and evidence refresh — 2026-11-11 04:38 UTC
+
+This addendum supersedes the point-in-time PR head/check figures in Section 13 where they differ. All comparisons below are against current `main` at `fe9974a3e6a41e988a12925bfcff2b5d74db5700`.
+
+### Exact-head PR status
+
+- **#472** — head `5ce714f3972bf0dc864cd4daa8455ea2c5f56b2d`, one commit ahead / zero behind. Exact-head check-runs: 17 success, 1 skipped, 0 failed, 0 pending. The requested independent reviewer `sbannai-creator` has not submitted a review. Keep open; no merge until review is recorded.
+- **#432** — head `643f9285c7ee7d09840316d401e34ead6fd1f3ff`, ten commits ahead / zero behind; one documentation file added. Exact-head check-runs: 15 success, 1 skipped, 0 failed, 0 pending. The PR remains draft and the requested independent reviewer `sbannai-creator` has not submitted a review. Keep open/draft; no merge until review and owner disposition.
+- **#401** — head `c123b9bebad2f2991e16e3ea1bdcdcd3851e7e6f`; its own exact-head check-runs are 7/7 successful. However, its base is the historical integration SHA `73dbdf079d9dc32f12661f12f04fc6bbe6d5a81e`. Compared with current main it is **185 commits ahead / 637 behind** and changes a broad set of asset/provider/runtime files in addition to the capacity harness. Do not merge, retarget, or cherry-pick wholesale. The local API + disposable PostgreSQL workload has not been executed; capacity remains **NOT MEASURED**.
+- **#377** — head `492465759af4e7786e1a8ef51118cf1b354529de`; compared with current main it is **80 commits ahead / 637 behind** and changes two documentation files. Its EPER-CW-056–059 addenda are absent from current main and remain owner-directed draft proposals. Do not merge the stale branch wholesale or treat these additions as approved requirements.
+- **#392** remains superseded by merged #463; retain as source-history archive.
+- **#452** remains explicitly do-not-merge due stale ancestry and unsafe retry/synthetic-driver behavior; retain as historical source only.
+
+### Execution boundary
+
+No PR was merged or closed in this refresh. Passing exact-head CI does not substitute for independent review, local measured capacity evidence, approved requirements, or Business UAT entry-gate evidence. The approved 228 requirements / 38 chapters remain unchanged; Business UAT remains unauthorized and no chargeable cloud resources are authorized.
