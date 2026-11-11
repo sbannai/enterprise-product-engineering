@@ -2,36 +2,6 @@ name: EPER Provider Operation PostgreSQL Lifecycle
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/**"
-      - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
-      - "eper/packages/campaign-scheduler/**"
-      - "eper/tests/campaign-scheduler-*.test.mjs"
-      - "eper/packages/integrations/**"
-      - "eper/packages/assets/**"
-      - "eper/apps/worker/customer-asset-scan-main.ts"
-      - "eper/apps/worker/customer-asset-scan-recovery-main.ts"
-      - "eper/apps/worker/customer-asset-upload-expiry-main.ts"
-      - "eper/docs/CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_RUNBOOK.md"
-      - "eper/packages/audit/**"
-      - "eper/scripts/migrate-audit.mjs"
-      - "eper/scripts/migrate-payments.mjs"
-      - "eper/tests/provider-runtime-credential-resolution-service.test.mjs"
-      - "eper/tests/postgres-provider-connection.integration.test.mjs"
-      - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
-      - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
-      - "eper/tests/postgres-customer-asset-upload-expiry.integration.test.mjs"
-      - "eper/tests/postgres-customer-asset-expiry-role.integration.test.mjs"
-      - "eper/tests/customer-asset-upload-expiry-process.integration.test.mjs"
-      - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
-      - "eper/tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs"
-      - "eper/tests/postgres-customer-asset-scan-process.integration.test.mjs"
-      - "eper/tests/customer-asset-scan-worker.test.mjs"
-      - "eper/tests/storage-malware-scan-adapter.test.mjs"
-      - "eper/tests/storage-upload-verification-adapter.test.mjs"
-      - "eper/package.json"
-      - "eper/package-lock.json"
-      - "eper/tsconfig.json"
   push:
     branches: ["main"]
     paths:
