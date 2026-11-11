@@ -163,3 +163,105 @@ test("Product Admin cannot use the Customer Admin workflow draft API", async () 
     }
   }
 });
+
+
+test("Customer Admin cannot read, update, publish or delete another assigned application's workflow draft", async () => {
+  const keys = [
+    "EPER_WORKFLOW_EXECUTION_API_ENABLED", "EPER_ADMIN_CONFIG_API_ENABLED",
+    "EPER_ADMIN_CONFIG_PERSISTENCE", "EPER_ADMIN_CONFIG_IDENTITIES_JSON",
+  ];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const token = "workflow-draft-cross-app-test-token-00000001";
+  process.env.EPER_WORKFLOW_EXECUTION_API_ENABLED = "true";
+  process.env.EPER_ADMIN_CONFIG_API_ENABLED = "true";
+  process.env.EPER_ADMIN_CONFIG_PERSISTENCE = "postgres";
+  process.env.EPER_ADMIN_CONFIG_IDENTITIES_JSON = JSON.stringify({
+    [token]: { tenantId: "tenant-a", actorId: "admin-a", roleKey: "customer_admin" },
+  });
+
+  const storeCalls = [];
+  const workflowDefinitionDraftStore = {
+    async list(tenantId, applicationId) {
+      storeCalls.push(["list", tenantId, applicationId]);
+      return [];
+    },
+    async get(tenantId, applicationId, workflowId) {
+      storeCalls.push(["get", tenantId, applicationId, workflowId]);
+      return null;
+    },
+    async replace(input) {
+      storeCalls.push(["replace", input.tenantId, input.applicationId, input.workflowId]);
+      throw new Error("cross-application write must not reach draft persistence");
+    },
+  };
+  const workflowDefinitionPublisher = {
+    async publish(context, definition) {
+      storeCalls.push(["publish", context.tenantId, context.applicationId, definition.id]);
+      throw new Error("cross-application publish must not reach publisher");
+    },
+  };
+  const server = createAppServer({
+    tenantApplicationAssignmentStore: {
+      async listActive(tenantId) {
+        assert.equal(tenantId, "tenant-a");
+        return ["app-a", "app-b"];
+      },
+    },
+    actorApplicationAssignmentStore: {
+      async isAssigned(tenantId, actorId, applicationId) {
+        assert.equal(tenantId, "tenant-a");
+        assert.equal(actorId, "admin-a");
+        return applicationId === "app-a";
+      },
+    },
+    workflowRoleDefinitionStore: { async list() { return []; } },
+    workflowActorRoleAssignmentStore: {},
+    workflowDefinitionPublisher,
+    workflowDefinitionDraftStore,
+    workflowExecutionService: unusedWorkflowExecutionService,
+  });
+
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const base = "http://127.0.0.1:" + server.address().port;
+    const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
+    const draftUrl = base + "/admin/applications/app-b/workflow-definitions/expense-approval/draft";
+    const publishUrl = base + "/admin/applications/app-b/workflow-definitions/expense-approval/publish";
+    const definition = {
+      id: "expense-approval", name: "Expense approval", status: "DRAFT", activities: [{
+        id: "submit", title: "Submit expense", type: "FORM", roleId: "requester",
+        permission: "workflow:act", nextActivityIds: [], fields: [],
+      }],
+    };
+
+    const read = await fetch(draftUrl, { headers });
+    assert.equal(read.status, 403);
+    assert.equal((await read.json()).error.code, "ADMIN_NOT_ASSIGNED_TO_APPLICATION");
+
+    const update = await fetch(draftUrl, {
+      method: "PUT", headers,
+      body: JSON.stringify({ definition, expectedVersion: 0 }),
+    });
+    assert.equal(update.status, 403);
+    assert.equal((await update.json()).error.code, "ADMIN_NOT_ASSIGNED_TO_APPLICATION");
+
+    const publish = await fetch(publishUrl, { method: "POST", headers, body: "{}" });
+    assert.equal(publish.status, 403);
+    assert.equal((await publish.json()).error.code, "ADMIN_NOT_ASSIGNED_TO_APPLICATION");
+
+    const remove = await fetch(draftUrl, { method: "DELETE", headers });
+    assert.equal(remove.status, 403);
+    assert.equal((await remove.json()).error.code, "ADMIN_NOT_ASSIGNED_TO_APPLICATION");
+
+    assert.deepEqual(storeCalls, []);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
