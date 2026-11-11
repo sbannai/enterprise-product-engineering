@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CustomerAssetScanChildSpiffeSdkAdapter,
+} from "../dist/packages/assets/customer-asset-scan-child-spiffe-sdk-adapter.js";
+import {
   CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
   CustomerAssetScanChildSpiffeIdentityError,
   CustomerAssetScanChildSpiffeIdentityVerifier,
@@ -85,4 +88,34 @@ test("SPIFFE verifier rejects malformed configured workload identities", () => {
       CustomerAssetScanChildSpiffeIdentityError,
     );
   }
+});
+
+test("SPIFFE SDK adapter requests the exact child identity and discards the bearer token", async () => {
+  const sdkCalls = [];
+  const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
+    async getJwtSvid(audience, filter) {
+      sdkCalls.push({ audience, filter });
+      return { spiffeId, token: "do-not-propagate-this-token", expiresAtMs };
+    },
+  });
+  const result = await adapter.fetchJwtSvid({
+    audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+    spiffeId,
+  });
+  assert.deepEqual(sdkCalls, [{
+    audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
+    filter: { spiffeId },
+  }]);
+  assert.deepEqual(result, [{ spiffeId, expiresAtMs }]);
+  assert.equal(JSON.stringify(result).includes("do-not-propagate-this-token"), false);
+});
+
+test("SPIFFE SDK adapter returns no identity when the workload has no entitled SVID", async () => {
+  const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
+    async getJwtSvid() { return null; },
+  });
+  assert.deepEqual(await adapter.fetchJwtSvid({
+    audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+    spiffeId,
+  }), []);
 });
