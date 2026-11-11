@@ -27,7 +27,7 @@ test("scanner child start rejects unknown fields that could smuggle capabilities
   assert.equal(isCustomerAssetScanChildStart(message), false);
   const nested = start();
   nested.input.secretReference = "must-not-cross-ipc";
-  assert.equal(isCustomerAssetScanChildStart(nested), false);
+  assert.equal(isCustomerAssetScanChildStart(nested), false);\n  for (const forbidden of ["providerUploadReference", "uploadSessionId", "secretReference"]) {\n    const message = start(); message.input[forbidden] = "must-not-cross-ipc";\n    assert.equal(isCustomerAssetScanChildStart(message), false, forbidden + " must never cross child IPC");\n  }
 });
 
 test("scanner child start rejects malformed identity, generation and scan input", () => {
