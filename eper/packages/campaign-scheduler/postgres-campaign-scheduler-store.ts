@@ -630,7 +630,7 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{ authorized: boolean }>(
-        `SELECT (e.status='running' AND e.locked_by=$4
+        `SELECT (e.status='running' AND e.locked_by=$4 AND e.claim_generation=$5
                   AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
                   AND s.approval_status='approved') AS authorized
          FROM eper_campaign_executions e
@@ -638,7 +638,7 @@ export class PostgresCampaignSchedulerStore {
            ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3
          LIMIT 1`,
-        [tenantId, applicationId, input.executionId, workerId],
+        [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       return result.rows[0]?.authorized === true;
     } finally { client.release(); }
