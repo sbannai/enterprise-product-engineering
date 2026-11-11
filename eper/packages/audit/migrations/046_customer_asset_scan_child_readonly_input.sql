@@ -47,6 +47,16 @@ GRANT SELECT (tenant_id, asset_id, repository_scope, owner_application_id,
   mime_type, size_bytes, checksum_sha256, storage_adapter_key,
   storage_object_reference, upload_status, scan_status, lifecycle_status)
   ON public.eper_customer_assets TO eper_customer_asset_scan_child_definer;
+GRANT SELECT (tenant_id, application_id, asset_id)
+  ON public.eper_customer_asset_application_links TO eper_customer_asset_scan_child_definer;
+DROP POLICY IF EXISTS customer_asset_scan_child_link_read ON public.eper_customer_asset_application_links;
+CREATE POLICY customer_asset_scan_child_link_read
+  ON public.eper_customer_asset_application_links FOR SELECT
+  TO eper_customer_asset_scan_child_definer
+  USING (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND application_id = current_setting('eper.application_id', true)
+  );
 GRANT SELECT (tenant_id, application_id, upload_session_id, asset_id,
   provider_upload_reference, upload_status)
   ON public.eper_customer_asset_upload_sessions TO eper_customer_asset_scan_child_definer;
