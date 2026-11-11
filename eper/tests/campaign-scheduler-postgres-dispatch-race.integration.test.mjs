@@ -294,3 +294,45 @@ test("PostgreSQL committed campaign execution insert wakes the dedicated LISTEN 
     await pool.end();
   }
 });
+
+test("campaign scheduler worker database role is non-login and limited to execution and audit operations", {
+  skip: !enabled ? "Set EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL to an isolated, migrated test database" : false,
+}, async () => {
+  const parsed = new URL(databaseUrl);
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
+    "Refusing to inspect worker-role grants outside a disposable test/CI/sandbox database");
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 2, connectionTimeoutMillis: 3000 });
+  try {
+    const role = await pool.query(
+      "SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls FROM pg_catalog.pg_roles WHERE rolname=$1",
+      ["eper_campaign_scheduler_worker_access"],
+    );
+    assert.equal(role.rowCount, 1, "Apply migration 006_campaign_scheduler_worker_access_role.sql");
+    assert.deepEqual(role.rows[0], {
+      rolcanlogin: false, rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolbypassrls: false,
+    });
+    const grants = await pool.query(`
+      SELECT
+        has_table_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_schedules', 'SELECT') AS schedule_select,
+        has_table_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_executions', 'SELECT') AS execution_select,
+        has_table_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_executions', 'DELETE') AS execution_delete,
+        has_table_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_schedules', 'DELETE') AS schedule_delete,
+        has_column_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_schedules', 'next_run_at', 'UPDATE') AS schedule_advance,
+        has_column_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_schedules', 'campaign_id', 'UPDATE') AS schedule_definition_update,
+        has_column_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_executions', 'status', 'UPDATE') AS execution_status_update,
+        has_column_privilege('eper_campaign_scheduler_worker_access', 'public.eper_campaign_executions', 'payload', 'UPDATE') AS execution_payload_update,
+        has_table_privilege('eper_campaign_scheduler_worker_access', 'public.eper_audit_events', 'INSERT') AS audit_append,
+        has_table_privilege('eper_campaign_scheduler_worker_access', 'public.eper_audit_events', 'UPDATE') AS audit_rewrite
+    `);
+    assert.deepEqual(grants.rows[0], {
+      schedule_select: true, execution_select: true,
+      execution_delete: false, schedule_delete: false,
+      schedule_advance: true, schedule_definition_update: false,
+      execution_status_update: true, execution_payload_update: false,
+      audit_append: true, audit_rewrite: false,
+    });
+  } finally {
+    await pool.end();
+  }
+});

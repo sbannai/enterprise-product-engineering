@@ -10,6 +10,7 @@ const workerEntrypoint = resolve(packageRoot, "dist/apps/worker/campaign-schedul
 function runWorker(overrides = {}) {
   const env = { ...process.env, ...overrides };
   delete env.EPER_PAYMENT_DATABASE_URL;
+  delete env.EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL;
   delete env.DATABASE_URL;
   return spawnSync(process.execPath, [workerEntrypoint], {
     cwd: packageRoot,
@@ -72,3 +73,15 @@ test("campaign worker rejects unsupported audit environments before opening a po
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /EPER_AUDIT_ENVIRONMENT_INVALID/);
 });
+
+test("campaign worker requires a dedicated scheduler database URL instead of falling back to the payment or default URL", () => {
+  const result = runWorker({
+    EPER_CAMPAIGN_SCHEDULER_WORKER_ENABLED: "true",
+    EPER_AUDIT_PERSISTENCE: "postgres",
+    EPER_CAMPAIGN_SCHEDULER_WORKER_ID: "worker-test",
+    EPER_CAMPAIGN_WORKER_ADAPTER_MODULE: "./dist/packages/campaign-scheduler/adapters/provider.js",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL_REQUIRED/);
+});
+

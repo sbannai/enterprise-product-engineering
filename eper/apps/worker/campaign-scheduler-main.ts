@@ -1,6 +1,7 @@
 import { resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createPostgresPaymentPool } from "../../packages/payments/postgres-payment-runtime.js";
+import { createPostgresCampaignSchedulerWorkerPool } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-worker-runtime.js";
 import { PostgresCampaignSchedulerStore } from "../../packages/campaign-scheduler/postgres-campaign-scheduler-store.js";
 import { createCampaignSchedulerWakeListener } from "../../packages/campaign-scheduler/campaign-scheduler-postgres-wake-listener.js";
 import { runCampaignExecutionWorker } from "../../packages/campaign-scheduler/campaign-execution-worker.js";
@@ -37,20 +38,17 @@ const auditEnvironment = process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox";
 if (!["production", "uat", "sandbox"].includes(auditEnvironment)) {
   throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
 }
-const pool = createPostgresPaymentPool();
+const workerDatabaseUrl = required("EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL");
+const workerPool = createPostgresCampaignSchedulerWorkerPool();
+let adapterPool: ReturnType<typeof createPostgresPaymentPool> | undefined;
 const store = new PostgresCampaignSchedulerStore(
-  pool,
+  workerPool,
   auditEnvironment as "production" | "uat" | "sandbox",
   process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID,
 );
 
-const wakeDatabaseUrl = process.env.EPER_CAMPAIGN_SCHEDULER_WAKE_DATABASE_URL
-  ?? process.env.EPER_CAMPAIGN_SCHEDULER_DATABASE_URL
-  ?? process.env.EPER_PAYMENT_DATABASE_URL
-  ?? process.env.DATABASE_URL
-  ?? "";
 const wakeListener = createCampaignSchedulerWakeListener({
-  connectionString: wakeDatabaseUrl,
+  connectionString: workerDatabaseUrl,
   onError(error) { console.error("EPER campaign worker wake listener error", error); },
 });
 
@@ -67,15 +65,16 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 try {
+  adapterPool = createPostgresPaymentPool();
   await store.assertReady();
-  await assertAuditStoreReady(pool);
+  await assertAuditStoreReady(workerPool);
   const adapterModule = await import(pathToFileURL(adapterPath).href) as {
     createCampaignWorkerAdapter?: CampaignWorkerAdapterFactory;
   };
   if (typeof adapterModule.createCampaignWorkerAdapter !== "function") {
     throw new Error("CAMPAIGN_WORKER_ADAPTER_FACTORY_REQUIRED");
   }
-  const adapter = await adapterModule.createCampaignWorkerAdapter({ pool, env: process.env });
+  const adapter = await adapterModule.createCampaignWorkerAdapter({ pool: adapterPool, env: process.env });
   if (!adapter || typeof adapter.authorizeDispatch !== "function" ||
       typeof adapter.dispatch !== "function") {
     throw new Error("CAMPAIGN_WORKER_ADAPTER_CONTRACT_INVALID");
@@ -91,5 +90,6 @@ try {
   });
 } finally {
   await wakeListener.close();
-  await pool.end();
+  await workerPool.end();
+  if (adapterPool) await adapterPool.end();
 }
