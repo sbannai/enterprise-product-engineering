@@ -27,6 +27,14 @@ Use **SPIFFE/SPIRE as the workload identity mechanism** for scanner child proces
 
 SPIFFE standardizes workload identity across hosting environments and avoids binding EPER to a single cloud IAM implementation. The Workload API is designed for local workload identity delivery, supports JWT-SVID and X.509-SVID profiles, and uses gRPC over a Unix Domain Socket by preference. SPIRE can make the identity decision using out-of-band process attestation rather than trusting a token or claims supplied by the parent.
 
+## Node.js client assessment (2026-11-11)
+
+The SPIFFE ecosystem SDK catalogue lists `jeengbe/spiffe` as its TypeScript client. Its published package is `@jeengbe/spiffe`; the repository source currently reports version 2.1.1 and uses ConnectRPC over gRPC, including the required `workload.spiffe.io: true` metadata and Unix-domain-socket transport. It exposes `getJwtSvid(audience, { spiffeId })` for the calling workload and `validateJwt(audience, token)` for validating an incoming token.
+
+This is a community TypeScript SDK, not one of SPIRE's officially maintained Go or Java SDKs. It is MIT-licensed, but has a single named maintainer and a comparatively small adoption footprint. Treat it as a candidate, not as a trusted security boundary by itself. Pin an exact version, review its dependency tree and source, and run protocol-level tests against a local SPIRE Agent before production composition. Keep the EPER adapter interface so the SDK can be replaced without changing scanner authorization logic.
+
+Important API distinction: `getJwtSvid` obtains the current process's own SVID; SPIRE's Workload API attests the caller out-of-band. `validateJwt` is for validating an incoming JWT-SVID and is not required merely to prove the caller's own identity after a successful local fetch. EPER must still compare the returned SPIFFE ID exactly and must not derive tenant/application scope from the token.
+
 ## Implementation sequence and gates
 
 1. Add a Node.js SPIFFE Workload API client adapter using a maintained gRPC implementation. Validate the fixed audience, trust domain, exact SPIFFE ID, token signature, expiry, and token identifier. Do not implement a home-grown JWT parser or accept arbitrary issuers.
