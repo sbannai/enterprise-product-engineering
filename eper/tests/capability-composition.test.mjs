@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { validateCapabilityComposition } from "../dist/packages/workflows/capability-composition.js";
+import { assertWorkflowCapabilityComposition } from "../dist/packages/workflows/workflow-capability-adapter.js";
 
 const catalogue = [
   { typeId: "activity.approval", contractVersion: 1, kind: "activity", label: "Approval", description: "Human approval",
@@ -162,4 +163,33 @@ test("adapter fails closed for pure priority routing instead of creating paralle
   const result = adaptWorkflowDefinitionToComposition(definition);
   assert.equal(result.composition, null);
   assert.ok(result.diagnostics.some(item => item.code === "workflow.adapter.priority_routing_not_representable"));
+});
+
+
+test("shared lifecycle gate accepts a representable single-activity draft", () => {
+  const result = assertWorkflowCapabilityComposition({
+    id: "expense-approval", name: "Expense approval", status: "DRAFT",
+    activities: [{
+      id: "submit", title: "Submit expense", type: "FORM", roleId: "requester",
+      permission: "workflow:act", nextActivityIds: [], fields: [],
+    }],
+  });
+  assert.equal(result.catalogueVersion, "1.0.0");
+  assert.equal(result.composition.nodes.length, 1);
+  assert.deepEqual(result.diagnostics, []);
+});
+
+test("shared lifecycle gate rejects priority routing rather than persisting a fan-out graph", () => {
+  assert.throws(() => assertWorkflowCapabilityComposition({
+    id: "expense-approval", name: "Expense approval", status: "DRAFT",
+    activities: [{
+      id: "review", title: "Review expense", type: "APPROVAL", roleId: "finance",
+      permission: "workflow:approve", nextActivityIds: [], routingRuleIds: ["high-value"],
+      fields: [],
+    }],
+    rules: [{
+      id: "high-value", name: "High value", priority: 10, targetActivityId: "review",
+      condition: { kind: "condition", field: "amount", operator: "greater_than", value: 1000 },
+    }],
+  }), /WORKFLOW_CAPABILITY_COMPOSITION_INVALID:workflow.adapter.priority_routing_not_representable/);
 });
