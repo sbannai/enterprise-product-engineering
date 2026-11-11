@@ -195,7 +195,12 @@ jobs:
       - name: Apply campaign scheduler migrations to ephemeral CI database
         run: npm run migrate:campaign-scheduler
       - name: Campaign scheduler claim fencing, worker lifecycle and PostgreSQL recovery regressions
-        run: node --test tests/campaign-scheduler-store.test.mjs tests/campaign-scheduler-worker.test.mjs tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs tests/campaign-scheduler-worker-restart.integration.test.mjs
+        run: |
+          node --test tests/campaign-scheduler-store.test.mjs tests/campaign-scheduler-worker.test.mjs
+          # These PostgreSQL integration tests share the global due-execution queue.
+          # Run them in separate processes so one test cannot claim the other's rows.
+          node --test tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs
+          node --test tests/campaign-scheduler-worker-restart.integration.test.mjs
       - name: Apply capability persistence migrations to ephemeral CI database
         run: npm run migrate:capabilities
       - name: Apply ticketing persistence migrations to ephemeral CI database
