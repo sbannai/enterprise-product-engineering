@@ -18,6 +18,7 @@ on:
       - "eper/tests/customer-browser-*.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/platform-application-remediation.browser.e2e.mjs"
+      - "eper/tests/customer-workflow-studio.browser.e2e.mjs"
       - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
       - "eper/packages/assets/**"
       - "eper/packages/integrations/synthetic-provider-storage-*.ts"
@@ -73,3 +74,5 @@ jobs:
         run: node --test tests/customer-oidc-browser.e2e.mjs
       - name: Run real-browser Product Admin application remediation
         run: node --test tests/platform-application-remediation.browser.e2e.mjs
+      - name: Run real-browser Customer Admin workflow studio isolation
+        run: node --test tests/customer-workflow-studio.browser.e2e.mjs
