@@ -3,11 +3,10 @@
 CREATE OR REPLACE FUNCTION eper_notify_campaign_execution_wake()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $ BEGIN
+AS $function$ BEGIN
   PERFORM pg_notify('eper_campaign_execution_wake', NEW.id::text);
   RETURN NEW;
-END;
-$$;
+END; $function$;
 
 DROP TRIGGER IF EXISTS eper_campaign_execution_wake_insert
   ON eper_campaign_executions;
