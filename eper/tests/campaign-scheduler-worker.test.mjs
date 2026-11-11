@@ -37,6 +37,26 @@ function fakeStore(claimed = []) {
   };
 }
 
+test("worker wakes early when the PostgreSQL notification listener signals new work", async () => {
+  const controller = new AbortController();
+  const store = fakeStore();
+  let wakeCalls = 0;
+  await runCampaignExecutionWorker(store, async () => ({ outcome: {} }), {
+    workerId: "worker-event-wake",
+    signal: controller.signal,
+    idleDelayMs: 30_000,
+    authorizeDispatch: async () => true,
+    waitForWake: async (timeoutMs, signal) => {
+      wakeCalls += 1;
+      assert.equal(timeoutMs, 30_000);
+      assert.equal(signal, controller.signal);
+      controller.abort();
+    },
+  });
+  assert.equal(wakeCalls, 1);
+  assert.equal(store.calls.filter((call) => Array.isArray(call) && call[0] === "claim").length, 1);
+});
+
 test("worker processes claimed executions asynchronously and completes with tenant scope and idempotency", async () => {
   const controller = new AbortController();
   const store = fakeStore([execution()]);
