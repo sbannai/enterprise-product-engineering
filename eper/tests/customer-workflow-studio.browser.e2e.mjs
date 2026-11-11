@@ -146,7 +146,6 @@ test("Customer Admin workflow studio isolates same-ID drafts across applications
     try {
       await pool.query("DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1", [tenantId]);
       await pool.query("DELETE FROM eper_workflow_role_definition WHERE tenant_id=$1", [tenantId]);
-      await pool.query("DELETE FROM eper_audit_events WHERE tenant_id=$1", [tenantId]);
       await pool.query("DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1", [tenantId]);
       await pool.query("DELETE FROM eper_tenant_application_assignment WHERE tenant_id=$1", [tenantId]);
     } finally {
