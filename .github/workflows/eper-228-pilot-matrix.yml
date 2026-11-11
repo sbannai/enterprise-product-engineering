@@ -9,11 +9,13 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - ".github/workflows/**"
       - "eper/**"
       - ".github/workflows/eper-228-pilot-matrix.yml"
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
 
 permissions:

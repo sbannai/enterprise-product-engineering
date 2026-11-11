@@ -3,26 +3,28 @@
 name: EPER Customer OIDC Browser E2E
 
 on:
+  # This check is a repository-required status context, so it must emit on every PR.
+  # Path-filtering pull_request would leave the required context permanently pending
+  # for unrelated PRs. Keep narrower path filters only for main pushes.
   pull_request:
-    paths:
-      - "eper/apps/api/**"
-      - "eper/packages/identity/**"
-      - "eper/tests/customer-oidc-*.mjs"
-      - "eper/tests/customer-browser-*.mjs"
-      - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
-      - "eper/tests/platform-application-remediation.browser.e2e.mjs"
-      - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
-      - ".github/workflows/eper-customer-oidc-browser-e2e.yml"
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - "eper/apps/api/**"
       - "eper/packages/identity/**"
+      - "eper/tests/customer-portal-preview.test.mjs"
       - "eper/tests/customer-oidc-*.mjs"
       - "eper/tests/customer-browser-*.mjs"
       - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
       - "eper/tests/platform-application-remediation.browser.e2e.mjs"
       - "eper/tests/postgres-module-entitlement-commercial-guard.integration.test.mjs"
+      - "eper/packages/assets/**"
+      - "eper/packages/integrations/synthetic-provider-storage-*.ts"
+      - "eper/tests/customer-asset-*.mjs"
+      - "eper/tests/postgres-customer-asset-*.integration.test.mjs"
+      - "eper/tests/storage-*.test.mjs"
+      - "eper/tests/synthetic-provider-storage-*.mjs"
       - ".github/workflows/eper-customer-oidc-browser-e2e.yml"
 
 permissions:

@@ -42,6 +42,7 @@ export interface CampaignExecutionRecord {
   idempotencyKey: string;
   payload: Record<string, unknown>;
   availableAt: string;
+  claimGeneration: number;
 }
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const TZ_PATTERN = /^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+.-]+)*$/;
@@ -93,7 +94,7 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{
-        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null;
+        schedules_table: string | null; executions_table: string | null; dispatch_started_column: string | null; error_detail_column: string | null; claim_generation_column: string | null;
       }>(
         `SELECT to_regclass('public.eper_campaign_schedules')::text AS schedules_table,
                 to_regclass('public.eper_campaign_executions')::text AS executions_table,
@@ -102,7 +103,10 @@ export class PostgresCampaignSchedulerStore {
                    AND column_name='dispatch_started_at') AS dispatch_started_column,
                 (SELECT column_name FROM information_schema.columns
                  WHERE table_schema='public' AND table_name='eper_campaign_executions'
-                   AND column_name='last_error_detail_code') AS error_detail_column`,
+                   AND column_name='last_error_detail_code') AS error_detail_column,
+                (SELECT column_name FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='eper_campaign_executions'
+                   AND column_name='claim_generation') AS claim_generation_column`,
       );
       if (!result.rows[0]?.schedules_table || !result.rows[0]?.executions_table) {
         throw new Error("EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED");
@@ -113,11 +117,15 @@ export class PostgresCampaignSchedulerStore {
       if (!result.rows[0]?.error_detail_column) {
         throw new Error("EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED");
       }
+      if (!result.rows[0]?.claim_generation_column) {
+        throw new Error("EPER_CAMPAIGN_CLAIM_GENERATION_MIGRATION_NOT_APPLIED");
+      }
     } catch (error) {
       if (error instanceof Error && (
         error.message === "EPER_CAMPAIGN_SCHEDULER_SCHEMA_NOT_APPLIED" ||
         error.message === "EPER_CAMPAIGN_DISPATCH_FENCE_MIGRATION_NOT_APPLIED" ||
-        error.message === "EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED"
+        error.message === "EPER_CAMPAIGN_ERROR_DETAIL_MIGRATION_NOT_APPLIED" ||
+        error.message === "EPER_CAMPAIGN_CLAIM_GENERATION_MIGRATION_NOT_APPLIED"
       )) throw error;
       throw new Error("EPER_CAMPAIGN_SCHEDULER_READINESS_CHECK_FAILED", { cause: error });
     } finally { client.release(); }
@@ -331,6 +339,7 @@ export class PostgresCampaignSchedulerStore {
         status: row.status as CampaignExecutionStatus, attemptCount: Number(row.attempt_count),
         idempotencyKey: String(row.idempotency_key), payload: storedPayload as Record<string, unknown>,
         availableAt: new Date(row.available_at as string | Date).toISOString(),
+        claimGeneration: Number(row.claim_generation ?? 0),
       };
     } finally { client.release(); }
   }
@@ -475,7 +484,7 @@ export class PostgresCampaignSchedulerStore {
            LIMIT $2
          )
          UPDATE eper_campaign_executions e
-         SET status='running', attempt_count=e.attempt_count+1, locked_at=now(), locked_by=$1,
+         SET status='running', attempt_count=e.attempt_count+1, claim_generation=e.claim_generation+1, locked_at=now(), locked_by=$1,
              started_at=COALESCE(e.started_at, now()), updated_at=now()
          FROM due WHERE e.id=due.id
          RETURNING e.*`,
@@ -491,19 +500,28 @@ export class PostgresCampaignSchedulerStore {
             resourceType: "campaign-execution", resourceId: String(row.id),
             source: "job", operationName: "campaign.execution.claim",
             serviceVersion: this.serviceVersion,
-            payload: { resultingStatus: "running", attemptCount: Number(row.attempt_count) },
+            payload: {
+              resultingStatus: "running",
+              attemptCount: Number(row.attempt_count),
+              claimGeneration: Number(row.claim_generation),
+            },
           });
         } catch { throw new Error("CAMPAIGN_AUDIT_PERSISTENCE_FAILED"); }
       }
       await client.query("COMMIT");
       return result.rows.map((row) => {
         const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+        const claimGeneration = Number(row.claim_generation);
+        if (!Number.isSafeInteger(claimGeneration) || claimGeneration < 1) {
+          throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
+        }
         return {
           id: String(row.id), scheduleId: String(row.schedule_id), tenantId: String(row.tenant_id),
           applicationId: String(row.application_id), scheduledFor: new Date(row.scheduled_for as string | Date).toISOString(),
           status: row.status as CampaignExecutionStatus, attemptCount: Number(row.attempt_count),
           idempotencyKey: String(row.idempotency_key), payload: payload as Record<string, unknown>,
           availableAt: new Date(row.available_at as string | Date).toISOString(),
+          claimGeneration: Number(row.claim_generation),
         };
       });
     } catch (error) {
@@ -522,11 +540,12 @@ export class PostgresCampaignSchedulerStore {
    * Cancellation takes the same schedule lock and is rejected once this fence exists.
    */
   async beginExecutionDispatch(input: {
-    tenantId: string; applicationId: string; executionId: string; workerId: string;
+    tenantId: string; applicationId: string; executionId: string; workerId: string; claimGeneration: number;
   }): Promise<boolean> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.claimGeneration) || input.claimGeneration < 1) throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
@@ -537,11 +556,12 @@ export class PostgresCampaignSchedulerStore {
          JOIN eper_campaign_executions e
            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
-           AND e.locked_by=$4 AND e.dispatch_started_at IS NULL
+           AND e.locked_by=$4 AND e.claim_generation=$5 AND e.dispatch_started_at IS NULL
+           AND e.locked_at >= now() - interval '300 seconds'
            AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
            AND s.approval_status='approved'
          FOR UPDATE OF s, e`,
-        [tenantId, applicationId, input.executionId, workerId],
+        [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       if (!result.rows.length) {
         await client.query("ROLLBACK");
@@ -550,8 +570,8 @@ export class PostgresCampaignSchedulerStore {
       await client.query(
         `UPDATE eper_campaign_executions SET dispatch_started_at=now(), updated_at=now()
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
-           AND dispatch_started_at IS NULL`,
-        [tenantId, applicationId, input.executionId, workerId],
+           AND claim_generation=$5 AND dispatch_started_at IS NULL`,
+        [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       try {
         await appendAuditEventInTransaction(client, {
@@ -602,7 +622,7 @@ export class PostgresCampaignSchedulerStore {
   }
 
   async isExecutionAuthorizedForDispatch(input: {
-    tenantId: string; applicationId: string; executionId: string; workerId: string;
+    tenantId: string; applicationId: string; executionId: string; workerId: string; claimGeneration: number;
   }): Promise<boolean> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
@@ -611,7 +631,8 @@ export class PostgresCampaignSchedulerStore {
     const client = await this.pool.connect();
     try {
       const result = await client.query<{ authorized: boolean }>(
-        `SELECT (e.status='running' AND e.locked_by=$4
+        `SELECT (e.status='running' AND e.locked_by=$4 AND e.claim_generation=$5
+                  AND e.locked_at >= now() - interval '300 seconds'
                   AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
                   AND s.approval_status='approved') AS authorized
          FROM eper_campaign_executions e
@@ -619,18 +640,19 @@ export class PostgresCampaignSchedulerStore {
            ON s.id=e.schedule_id AND s.tenant_id=e.tenant_id AND s.application_id=e.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3
          LIMIT 1`,
-        [tenantId, applicationId, input.executionId, workerId],
+        [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       return result.rows[0]?.authorized === true;
     } finally { client.release(); }
   }
 
   async completeExecution(input: {
-    tenantId: string; applicationId: string; executionId: string; workerId: string; result?: Record<string, unknown>;
+    tenantId: string; applicationId: string; executionId: string; workerId: string; claimGeneration: number; result?: Record<string, unknown>;
   }): Promise<boolean> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.claimGeneration) || input.claimGeneration < 1) throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
@@ -638,9 +660,9 @@ export class PostgresCampaignSchedulerStore {
       const result = await client.query<{ id: string; attempt_count: number }>(
         `UPDATE eper_campaign_executions
          SET status='succeeded', result=$5::jsonb, last_error_code=NULL, last_error_detail_code=NULL, completed_at=now(), updated_at=now(), locked_at=NULL, locked_by=NULL
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4 AND claim_generation=$6
          RETURNING id, attempt_count`,
-        [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {})],
+        [tenantId, applicationId, input.executionId, workerId, JSON.stringify(input.result ?? {}), input.claimGeneration],
       );
       if (result.rows.length === 1) {
         try {
@@ -666,11 +688,12 @@ export class PostgresCampaignSchedulerStore {
 
   /** Release a claimed execution when its schedule was paused before dispatch; pausing is not a failed attempt. */
   async deferExecutionForSchedulePause(input: {
-    tenantId: string; applicationId: string; executionId: string; workerId: string;
+    tenantId: string; applicationId: string; executionId: string; workerId: string; claimGeneration: number;
   }): Promise<boolean> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.claimGeneration) || input.claimGeneration < 1) throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
@@ -681,9 +704,9 @@ export class PostgresCampaignSchedulerStore {
              available_at=now(), last_error_code=NULL, last_error_detail_code=NULL, updated_at=now(),
              locked_at=NULL, locked_by=NULL, completed_at=NULL
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running'
-           AND locked_by=$4 AND dispatch_started_at IS NULL
+           AND locked_by=$4 AND claim_generation=$5 AND dispatch_started_at IS NULL
          RETURNING id`,
-        [tenantId, applicationId, input.executionId, workerId],
+        [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       if (result.rows.length === 1) {
         try {
@@ -746,11 +769,12 @@ export class PostgresCampaignSchedulerStore {
 
   async failExecution(input: {
     tenantId: string; applicationId: string; executionId: string; workerId: string;
-    errorCode: string; maxAttempts?: number; baseDelaySeconds?: number;
+    errorCode: string; claimGeneration: number; maxAttempts?: number; baseDelaySeconds?: number;
   }): Promise<"retry_wait" | "dead_letter" | "not_owned"> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.claimGeneration) || input.claimGeneration < 1) throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
     const errorCode = required(input.errorCode, "CAMPAIGN_ERROR_CODE_REQUIRED").toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0,64);
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const maxAttempts = input.maxAttempts ?? 5;
@@ -774,9 +798,9 @@ export class PostgresCampaignSchedulerStore {
                ELSE now() + (LEAST($7 * power(2, GREATEST(attempt_count - 1, 0)), 3600) * interval '1 second') END,
              updated_at=now(), locked_at=NULL, locked_by=NULL,
              completed_at=CASE WHEN dispatch_started_at IS NOT NULL OR attempt_count >= $5 THEN now() ELSE NULL END
-         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4
+         WHERE tenant_id=$1 AND application_id=$2 AND id=$3 AND status='running' AND locked_by=$4 AND claim_generation=$9
          RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
-        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds, errorCode],
+        [tenantId, applicationId, input.executionId, workerId, maxAttempts, errorCode, baseDelaySeconds, errorCode, input.claimGeneration],
       );
       let row = result.rows[0];
       if (!row && errorCode === "CAMPAIGN_EXECUTION_COMPLETION_LEASE_LOST") {
@@ -792,10 +816,10 @@ export class PostgresCampaignSchedulerStore {
                last_error_detail_code=$4, updated_at=now(), locked_at=NULL, locked_by=NULL,
                completed_at=COALESCE(completed_at, now())
            WHERE tenant_id=$1 AND application_id=$2 AND id=$3
-             AND dispatch_started_at IS NOT NULL
+             AND dispatch_started_at IS NOT NULL AND claim_generation=$5
              AND (status='running' OR (status='dead_letter' AND last_error_code='DISPATCH_OUTCOME_UNKNOWN'))
            RETURNING status, last_error_code, last_error_detail_code, attempt_count`,
-          [tenantId, applicationId, input.executionId, errorCode],
+          [tenantId, applicationId, input.executionId, errorCode, input.claimGeneration],
         );
         row = diagnostic.rows[0];
       }
@@ -822,19 +846,21 @@ export class PostgresCampaignSchedulerStore {
 
   /** Extend only the live lease owned by this worker; never resurrect a recovered or reassigned execution. */
   async renewExecutionLease(input: {
-    tenantId: string; applicationId: string; executionId: string; workerId: string;
+    tenantId: string; applicationId: string; executionId: string; workerId: string; claimGeneration: number;
   }): Promise<boolean> {
     const tenantId = required(input.tenantId, "CAMPAIGN_TENANT_REQUIRED");
     const applicationId = required(input.applicationId, "CAMPAIGN_APPLICATION_REQUIRED");
     const workerId = required(input.workerId, "CAMPAIGN_WORKER_ID_REQUIRED");
+    if (!Number.isSafeInteger(input.claimGeneration) || input.claimGeneration < 1) throw new Error("CAMPAIGN_CLAIM_GENERATION_INVALID");
     if (!ID_PATTERN.test(input.executionId)) throw new Error("CAMPAIGN_EXECUTION_ID_INVALID");
     const client = await this.pool.connect();
     try {
       const result = await client.query(
         `UPDATE eper_campaign_executions SET locked_at=now(), updated_at=now()
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3
-           AND status='running' AND locked_by=$4 RETURNING id`,
-        [tenantId, applicationId, input.executionId, workerId],
+           AND status='running' AND locked_by=$4 AND claim_generation=$5
+           AND locked_at >= now() - interval '300 seconds' RETURNING id`,
+        [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       return result.rows.length === 1;
     } finally {

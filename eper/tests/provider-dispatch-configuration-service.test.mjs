@@ -120,3 +120,83 @@ test("dispatch validates required tenant, application and capability identifiers
     tenantId: " ", applicationId: "app-a", capabilityKey: "email.send",
   }), /PROVIDER_DISPATCH_TENANT_INVALID/);
 });
+
+test("dispatch rejects policy returned for a different tenant, application or connection", async () => {
+  for (const effective of [
+    { tenantId: "tenant-b", applicationId: "app-a", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 1 },
+    { tenantId: "tenant-a", applicationId: "app-b", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 1 },
+    { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-b",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 1 },
+  ]) {
+    const { instance } = service([connection()], effective);
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH");
+  }
+});
+test("dispatch rejects malformed policy provenance and invalid tenant-default versions", async () => {
+  for (const effective of [
+    { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "UNTRUSTED", tenantDefaultVersion: 1 },
+    { tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+      policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: 0 },
+  ]) {
+    const { instance } = service([connection()], effective);
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+  }
+});
+
+test("dispatch rejects credential-shaped keys in effective policy, including nested keys", async () => {
+  for (const policy of [
+    { client_secret: "must-not-dispatch" },
+    { storage: { apiKey: "must-not-dispatch" } },
+    { headers: [{ authorization: "must-not-dispatch" }] },
+  ]) {
+    const { instance } = service([connection()], {
+      tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+      policy, source: "TENANT_DEFAULT", tenantDefaultVersion: 1,
+    });
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+  }
+});
+test("dispatch rejects missing or undefined tenant-default version metadata", async () => {
+  const { instance } = service([connection()], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    policy: { retryLimit: 1 }, source: "TENANT_DEFAULT",
+  });
+  await assert.rejects(() => instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+  }), error => error instanceof ProviderDispatchConfigurationError
+    && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+});
+
+test("dispatch requires a persisted tenant-default version when policy source is TENANT_DEFAULT", async () => {
+  const { instance } = service([connection()], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    policy: { retryLimit: 1 }, source: "TENANT_DEFAULT", tenantDefaultVersion: null,
+  });
+  await assert.rejects(() => instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+  }), error => error instanceof ProviderDispatchConfigurationError
+    && error.code === "PROVIDER_DISPATCH_POLICY_INVALID");
+});
+test("dispatch permits application override when no tenant default exists", async () => {
+  const { instance } = service([connection()], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-a",
+    policy: { approvalRequired: true }, source: "APPLICATION_OVERRIDE", tenantDefaultVersion: null,
+  });
+  const result = await instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+  });
+  assert.equal(result.policySource, "APPLICATION_OVERRIDE");
+  assert.equal(result.tenantDefaultVersion, null);
+});

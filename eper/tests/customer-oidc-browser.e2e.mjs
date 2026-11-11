@@ -23,7 +23,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
   for (const key of proxyKeys) delete process.env[key];
   process.env.NO_PROXY = "127.0.0.1,localhost";
   process.env.no_proxy = process.env.NO_PROXY;
-  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE","EPER_ADMIN_CONFIG_API_ENABLED","EPER_ADMIN_CONFIG_PERSISTENCE","EPER_AUDIT_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON"];
+  const keys = ["EPER_CUSTOMER_OIDC_ENABLED","EPER_CUSTOMER_IDENTITY_PERSISTENCE","EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE","EPER_ADMIN_CONFIG_API_ENABLED","EPER_ADMIN_CONFIG_PERSISTENCE","EPER_AUDIT_PERSISTENCE","EPER_CUSTOMER_PORTAL_API_ENABLED","EPER_TICKETING_API_ENABLED","EPER_CUSTOMER_WORKSPACE_MODULES_JSON","EPER_CUSTOMER_APPLICATION_SETTINGS_JSON","EPER_CUSTOMER_ASSETS_API_ENABLED","EPER_CUSTOMER_APPLICATION_ASSETS_JSON"];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   const state="s".repeat(43), nonce="n".repeat(43);
   const issuer="https://idp.example.test";
@@ -41,7 +41,9 @@ test("browser OIDC login grants the customer workspace and support journey, logo
       EPER_CUSTOMER_ACTOR_ASSIGNMENT_PERSISTENCE:"postgres",
       EPER_ADMIN_CONFIG_API_ENABLED:"true", EPER_ADMIN_CONFIG_PERSISTENCE:"postgres", EPER_AUDIT_PERSISTENCE:"postgres",
       EPER_CUSTOMER_PORTAL_API_ENABLED:"true", EPER_TICKETING_API_ENABLED:"true",
-      EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({[tenantId]:["settings","tickets-feedback"]}),
+      EPER_CUSTOMER_WORKSPACE_MODULES_JSON:JSON.stringify({[tenantId]:["settings","tickets-feedback","client-assets"]}),
+      EPER_CUSTOMER_ASSETS_API_ENABLED:"true",
+      EPER_CUSTOMER_APPLICATION_ASSETS_JSON:JSON.stringify({[tenantId]:{[applicationId]:[]}}),
       EPER_CUSTOMER_APPLICATION_SETTINGS_JSON:JSON.stringify({[tenantId]:{[applicationId]:{displayName:"Customer workspace",locale:"en-US",currency:"USD"}}}),
     });
     const store=new PostgresCustomerIdentitySessionStore(pool);
@@ -153,6 +155,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
       "browser workspace bootstrap failed; message="+connectionMessage+" url="+page.url()+" customer responses="+JSON.stringify(customerResponses)+" request failures="+JSON.stringify(requestFailures)+" page errors="+JSON.stringify(pageErrors)+" console errors="+JSON.stringify(consoleErrors));
     const sessionIdentity=await page.evaluate(async()=>{const response=await fetch("/customer/session");return response.json();});
     assert.equal(sessionIdentity.data?.roleKey,"customer-user","OIDC claims must not elevate the customer workspace role");
+    assert.match(sessionIdentity.data?.sessionBinding||"",/^[a-f0-9]{64}$/,"browser session introspection must expose only the opaque server-derived session binding needed for retry isolation");
     const tariffAttempt=await page.evaluate(async()=>{
       const csrf=document.cookie.split("; ").find(value=>value.startsWith("__Host-eper_csrf="))?.split("=").slice(1).join("=")||"";
       const response=await fetch("/customer/commercial-tariff",{method:"POST",headers:{"content-type":"application/json","x-csrf-token":csrf},body:JSON.stringify({accepted:true,acceptanceReference:"BROWSER-E2E-UNAUTHORIZED",tariffKey:"multi-app",tariffVersion:1,expectedVersion:1,revokeApplications:[]})});
@@ -181,6 +184,110 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     assert.equal(ticketAudit.rows[0].tenant_id,tenantId);
     assert.equal(ticketAudit.rows[0].application_id,applicationId);
     assert.equal(ticketAudit.rows[0].actor_id,actorId);
+    const uploadIdempotencyKeys=[];
+    await page.route("**/customer/assets?applicationId=*",async route=>{
+      if(route.request().method()!=="POST"){await route.continue();return;}
+      uploadIdempotencyKeys.push(route.request().headers()["idempotency-key"]||"");
+      await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"customer_asset_metadata_persistence_unavailable"})});
+    });
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Browser retry brief");
+    const retryFile={name:"brief.pdf",mimeType:"application/pdf",buffer:Buffer.from("%PDF-1.4 browser retry fixture")};
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
+    assert.equal(uploadIdempotencyKeys.length,1);
+    assert.match(uploadIdempotencyKeys[0],/^[a-f0-9]{32}$/);
+    const storedRetryState=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")||"null"));
+    assert.deepEqual(Object.keys(storedRetryState||{}).sort(),["identityFingerprint","metadataFingerprint","operationId","uploadIdempotencyKey"]);
+    assert.match(storedRetryState.metadataFingerprint,/^[a-f0-9]{64}$/);
+    assert.match(storedRetryState.operationId,/^[a-f0-9]{32}$/);
+    assert.match(storedRetryState.uploadIdempotencyKey,/^[a-f0-9]{32}$/);
+    assert.match(storedRetryState.identityFingerprint,/^[a-f0-9]{64}$/);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Browser retry brief");
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
+    assert.equal(uploadIdempotencyKeys.length,2);
+    assert.equal(uploadIdempotencyKeys[1],uploadIdempotencyKeys[0],"same-tab reload must reuse the original metadata operation key");
+    await page.getByLabel("Display name").fill("Changed display name");
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.getByText("A previous upload has an uncertain result. Re-select the same file and keep all metadata unchanged before retrying.").waitFor();
+    assert.equal(uploadIdempotencyKeys.length,2,"changed metadata must be rejected before another network request");
+    await page.getByLabel("Display name").fill("Browser retry brief");
+    const sessionBindingOverride=async route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({data:{authenticated:true,tenantId,actorId,roleKey:"customer-user",sessionBinding:"f".repeat(64),authentication:"postgres-browser-session"}})});
+    await page.route("**/customer/session",sessionBindingOverride);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Your organization session changed. Confirm the selected customer account and retry.");
+    assert.equal(uploadIdempotencyKeys.length,2,"a changed verified session must not replay an earlier upload operation");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"a changed verified session must clear persisted retry state");
+    await page.unroute("**/customer/session",sessionBindingOverride);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    await page.unroute("**/customer/assets?applicationId=*");
+    const metadataSuccessKeys=[],reservationKeys=[],reservationBodies=[];
+    const expectedRetrySha256=createHash("sha256").update(retryFile.buffer).digest("hex");
+    await page.route("**/customer/assets?applicationId=*",async route=>{
+      if(route.request().method()!=="POST"){await route.continue();return;}
+      metadataSuccessKeys.push(route.request().headers()["idempotency-key"]||"");
+      await route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({data:{assetId:"asset-browser-e2e",applicationId,uploadStatus:"pending",scanStatus:"pending"}})});
+    });
+    await page.route("**/customer/applications/*/assets/*/upload-grant",async route=>{
+      if(route.request().method()!=="POST"){await route.continue();return;}
+      reservationKeys.push(route.request().headers()["idempotency-key"]||"");
+      reservationBodies.push(route.request().postDataJSON()||{});
+      await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"customer_asset_upload_provider_unavailable"})});
+    });
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Reservation retry brief");
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
+    assert.equal(metadataSuccessKeys.length,1);
+    assert.equal(reservationKeys.length,1);
+    assert.match(reservationKeys[0],/^[a-f0-9]{32}$/);
+    assert.equal(reservationBodies.length,1);
+    assert.deepEqual(reservationBodies[0],{expectedSizeBytes:retryFile.buffer.length,expectedChecksumSha256:expectedRetrySha256,fileName:retryFile.name,mimeType:retryFile.mimeType});
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    await page.getByRole("button",{name:"Client Assets"}).click();
+    await page.getByLabel("Assigned application").selectOption(applicationId);
+    await page.getByLabel("Display name").fill("Reservation retry brief");
+    await page.locator("#assetUploadFile").setInputFiles(retryFile);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Storage, authorization or trusted verification is not configured. The upload was stopped safely.");
+    assert.equal(metadataSuccessKeys.length,2);
+    assert.equal(metadataSuccessKeys[1],metadataSuccessKeys[0],"metadata-create retries must retain the same operation identity");
+    assert.equal(reservationKeys.length,2);
+    assert.equal(reservationKeys[1],reservationKeys[0],"lost upload-reservation responses must reuse the same idempotency key");
+    assert.deepEqual(reservationBodies[1],reservationBodies[0],"upload retries must preserve the expected size and file checksum");
+    const reservationSessionOverride=async route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({data:{authenticated:true,tenantId,actorId,roleKey:"customer-user",sessionBinding:"e".repeat(64),authentication:"postgres-browser-session"}})});
+    await page.route("**/customer/session",reservationSessionOverride);
+    await page.getByRole("button",{name:"Upload file"}).click();
+    await page.waitForFunction(()=>document.querySelector("#assetUploadStatus")?.textContent==="Your organization session changed. Confirm the selected customer account and retry.");
+    assert.equal(reservationKeys.length,2,"session rotation must block reservation replay");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null);
+    await page.unroute("**/customer/session",reservationSessionOverride);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    const expiredSession=async route=>route.fulfill({status:401,contentType:"application/json",body:JSON.stringify({error:"unauthorized"})});
+    await page.route("**/customer/session",expiredSession);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Sign in through your organization to open your workspace.");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"an expired or revoked session must discard pending upload retry identity");
+    await page.unroute("**/customer/session",expiredSession);
+    await page.evaluate(()=>sessionStorage.setItem("eper.customerAsset.pendingUpload.v1","{malformed"));
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector("#connectResult")?.textContent==="Your organization session is active.");
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"malformed persisted retry data must be discarded after session verification");
+    await page.getByRole("button",{name:"Tickets & Feedback"}).click();
+    await page.getByRole("button",{name:"View conversation"}).waitFor();
     await page.getByRole("button",{name:"View conversation"}).click();
     await page.getByLabel("Reply to support").fill("Additional details from the customer browser session.");
     await page.getByRole("button",{name:"Send reply"}).click();
@@ -203,6 +310,7 @@ test("browser OIDC login grants the customer workspace and support journey, logo
     await page.goto(origin+"/customer-portal-preview");
     await page.getByRole("button",{name:"Sign out"}).click();
     await page.getByRole("link",{name:"Sign in with your organization"}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem("eper.customerAsset.pendingUpload.v1")),null,"logout must clear persisted upload retry identity");
     const denied=await page.goto(origin+"/customer/settings?applicationId="+encodeURIComponent(applicationId));
     assert.equal(denied.status(),401);
     assert.equal((await denied.json()).error.code,"UNAUTHENTICATED");

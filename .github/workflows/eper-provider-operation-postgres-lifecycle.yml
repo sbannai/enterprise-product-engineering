@@ -2,25 +2,35 @@ name: EPER Provider Operation PostgreSQL Lifecycle
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
-      - "eper/packages/integrations/**"
-      - "eper/packages/audit/**"
-      - "eper/scripts/migrate-audit.mjs"
-      - "eper/scripts/migrate-payments.mjs"
-      - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
-      - "eper/package.json"
-      - "eper/package-lock.json"
-      - "eper/tsconfig.json"
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
+      - "eper/packages/campaign-scheduler/**"
+      - "eper/tests/campaign-scheduler-*.test.mjs"
       - "eper/packages/integrations/**"
+      - "eper/packages/assets/**"
+      - "eper/apps/worker/customer-asset-scan-main.ts"
+      - "eper/apps/worker/customer-asset-scan-recovery-main.ts"
+      - "eper/apps/worker/customer-asset-upload-expiry-main.ts"
+      - "eper/docs/CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_RUNBOOK.md"
       - "eper/packages/audit/**"
       - "eper/scripts/migrate-audit.mjs"
       - "eper/scripts/migrate-payments.mjs"
+      - "eper/tests/provider-runtime-credential-resolution-service.test.mjs"
+      - "eper/tests/postgres-provider-connection.integration.test.mjs"
       - "eper/tests/postgres-provider-operation-lifecycle.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-upload-recovery.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-upload-expiry.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-expiry-role.integration.test.mjs"
+      - "eper/tests/customer-asset-upload-expiry-process.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-migration-assurance.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs"
+      - "eper/tests/postgres-customer-asset-scan-process.integration.test.mjs"
+      - "eper/tests/customer-asset-scan-worker.test.mjs"
+      - "eper/tests/storage-malware-scan-adapter.test.mjs"
+      - "eper/tests/storage-upload-verification-adapter.test.mjs"
       - "eper/package.json"
       - "eper/package-lock.json"
       - "eper/tsconfig.json"
@@ -49,6 +59,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://eper:eper_test_password@localhost:5432/eper_test
+      EPER_CUSTOMER_ASSET_LIVE_TESTS: "1"
     defaults:
       run:
         working-directory: eper
@@ -65,5 +76,30 @@ jobs:
         run: npm run migrate:payments
       - name: Apply provider and audit migrations, including payload references and leases
         run: npm run migrate:audit
+      - name: Provision isolated restricted customer-asset expiry worker login
+        run: |
+          worker_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$worker_password"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_customer_asset_upload_expiry_worker_test WITH LOGIN PASSWORD '${worker_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_customer_asset_upload_expiry_worker_test"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_customer_asset_upload_expiry_worker_access TO eper_customer_asset_upload_expiry_worker_test"
+          echo "EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_DATABASE_URL=postgres://eper_customer_asset_upload_expiry_worker_test:${worker_password}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          echo "EPER_EXPECTED_EXPIRY_WORKER_DATABASE_ROLE=eper_customer_asset_upload_expiry_worker_test" >> "$GITHUB_ENV"
+      - name: Exercise tenant-bound expiry and restricted-login worker lifecycle on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-upload-expiry.integration.test.mjs tests/postgres-customer-asset-expiry-role.integration.test.mjs tests/customer-asset-upload-expiry-process.integration.test.mjs
+      - name: Verify provider credential error redaction and post-secret authorization boundary
+        run: node --test tests/provider-runtime-credential-resolution-service.test.mjs
+      - name: Verify provider connection dispatch authorization before and after secret resolution
+        run: node --test tests/postgres-provider-connection.integration.test.mjs
       - name: Exercise durable provider-operation concurrency, fencing and recovery
         run: node --test tests/postgres-provider-operation-lifecycle.integration.test.mjs
+      - name: Exercise customer-asset upload recovery and scan lifecycle on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
+      - name: Verify customer-asset migration catalog, RLS role boundary and checksum drift on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-migration-assurance.integration.test.mjs
+      - name: Verify customer-asset legacy upgrade and provider-outcome backfill on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-legacy-upgrade.integration.test.mjs
+      - name: Exercise customer-asset scan worker and fail-closed storage adapters
+        run: node --test tests/customer-asset-scan-worker.test.mjs tests/storage-malware-scan-adapter.test.mjs tests/storage-upload-verification-adapter.test.mjs
+      - name: Verify customer-asset scan and recovery worker processes on PostgreSQL 16
+        run: node --test tests/postgres-customer-asset-scan-process.integration.test.mjs

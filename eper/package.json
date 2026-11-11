@@ -17,7 +17,11 @@
     "dev:verify": "node scripts/dev-verify.mjs",
     "migrate:identity": "node scripts/migrate-identity.mjs",
     "start:campaign-worker": "node dist/apps/worker/campaign-scheduler-main.js",
-    "start:agent-worker": "node dist/apps/worker/agent-worker-main.js"
+    "start:agent-worker": "node dist/apps/worker/agent-worker-main.js",
+    "start:workflow-outbox-worker": "node dist/apps/worker/workflow-outbox-main.js",
+    "start:customer-asset-scan-worker": "node dist/apps/worker/customer-asset-scan-main.js",
+    "start:customer-asset-scan-recovery-worker": "node dist/apps/worker/customer-asset-scan-recovery-main.js",
+    "start:customer-asset-upload-expiry-worker": "node dist/apps/worker/customer-asset-upload-expiry-main.js"
   },
   "devDependencies": {
     "@types/node": "20.14.15",

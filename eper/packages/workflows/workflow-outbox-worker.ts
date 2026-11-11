@@ -1,3 +1,4 @@
+import { WorkflowOutboxDispatchNotApprovedError } from "./workflow-outbox-errors.js";
 import {
   PostgresWorkflowOutboxStore,
   type WorkflowOutboxContext,
@@ -41,6 +42,24 @@ class WorkflowOutboxLeaseLostError extends Error {
 }
 
 /** One bounded worker pass; scheduling/lifecycle is owned by the host worker process. */
+function awaitDispatchOrAbort(dispatch: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    // The dispatcher may be non-cooperative; observe any eventual rejection without
+    // keeping the worker pass blocked after the host has requested shutdown.
+    void dispatch.catch(() => undefined);
+    return Promise.reject(signal.reason ?? new Error("WORKFLOW_OUTBOX_DISPATCH_ABORTED"));
+  }
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error("WORKFLOW_OUTBOX_DISPATCH_ABORTED"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  return Promise.race([dispatch, aborted]).finally(() => {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  });
+}
+
 export class WorkflowOutboxWorker {
   private readonly maxAttempts: number;
   private readonly baseRetryDelaySeconds: number;
@@ -116,7 +135,7 @@ export class WorkflowOutboxWorker {
       renewalInFlight = (async () => {
         try {
           const renewed = await this.store.renewLease(
-            context, event.eventId, this.options.workerId, this.leaseSeconds,
+            context, event.eventId, this.options.workerId, this.leaseSeconds, event.claimGeneration,
           );
           if (!renewed) {
             leaseLost = true;
@@ -134,7 +153,8 @@ export class WorkflowOutboxWorker {
         result.interrupted += 1;
         return;
       }
-      await this.dispatcher.dispatch(event, controller.signal);
+      const dispatch = this.dispatcher.dispatch(event, controller.signal);
+      await awaitDispatchOrAbort(dispatch, controller.signal);
       if (shutdownRequested) {
         result.interrupted += 1;
         return;
@@ -143,7 +163,7 @@ export class WorkflowOutboxWorker {
       if (heartbeat) clearInterval(heartbeat);
       if (renewalInFlight) await renewalInFlight;
       if (leaseLost) throw new WorkflowOutboxLeaseLostError();
-      await this.store.markDelivered(context, event.eventId, this.options.workerId);
+      await this.store.markDelivered(context, event.eventId, this.options.workerId, event.claimGeneration);
       result.delivered += 1;
     } catch (error) {
       if (heartbeat) clearInterval(heartbeat);
@@ -158,14 +178,21 @@ export class WorkflowOutboxWorker {
         result.leaseLost += 1;
         return;
       }
-      const message = error instanceof Error ? error.message : "WORKFLOW_OUTBOX_DISPATCH_FAILED";
-      const delay = Math.min(
+      const approvalDenied = error instanceof WorkflowOutboxDispatchNotApprovedError;
+      const message = approvalDenied
+        ? error.code
+        : error instanceof Error ? error.message : "WORKFLOW_OUTBOX_DISPATCH_FAILED";
+      const delay = approvalDenied ? 0 : Math.min(
         this.baseRetryDelaySeconds * (2 ** Math.max(0, event.attempts - 1)),
         this.maxRetryDelaySeconds,
       );
       const failure = await this.store.markFailed(context, event.eventId, {
-        workerId: this.options.workerId, maxAttempts: this.maxAttempts,
-        retryDelaySeconds: delay, error: message,
+        workerId: this.options.workerId,
+        claimGeneration: event.claimGeneration,
+        // A missing human approval is deterministic: park immediately for review.
+        maxAttempts: approvalDenied ? event.attempts : this.maxAttempts,
+        retryDelaySeconds: delay,
+        error: message,
       });
       if (failure.status === "dead_letter") result.deadLettered += 1;
       else result.retried += 1;

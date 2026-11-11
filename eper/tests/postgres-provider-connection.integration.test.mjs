@@ -5,6 +5,7 @@ import pg from "pg";
 import { PostgresProviderConnectionRepository } from "../dist/packages/integrations/postgres-provider-connection-repository.js";
 import { PostgresProviderValidationStore } from "../dist/packages/integrations/postgres-provider-validation-store.js";
 import { ProviderConnectionValidationService } from "../dist/packages/integrations/provider-connection-validation-service.js";
+import { createPostgresProviderDispatchConfigurationService } from "../dist/packages/integrations/postgres-provider-dispatch-configuration-service.js";
 
 const { Pool } = pg;
 const connectionString = process.env.DATABASE_URL;
@@ -153,6 +154,25 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       assert.equal(appAConnections[0].connectionId, connectionId);
       assert.deepEqual(appAConnections[0].allowedCapabilities, ["email.send"]);
       assert.equal("secretReference" in appAConnections[0], false);
+      const runtimeReference = await repository.getRuntimeSecretReference({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "email.send",
+      });
+      assert.deepEqual(runtimeReference, {
+        secretReference: "vault://tenant-a/provider/credential-v1", authMode: "oauth",
+      });
+      await repository.assertDispatchAuthorization({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "email.send",
+      });
+      await assert.rejects(() => repository.assertDispatchAuthorization({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "meeting.create",
+      }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/);
+      await assert.rejects(() => repository.getRuntimeSecretReference({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 2, providerKey, capability: "meeting.create",
+      }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/);
       assert.deepEqual(await repository.listForApplication(tenantA, appB), []);
 
       const secondConnection = await repository.createAndBindApplication({
@@ -315,6 +335,22 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
         );
       });
 
+      // Exercise the real PostgreSQL dispatch factory against both the app
+      // override and tenant-default fallback under the runtime's scoped role.
+      const dispatch = createPostgresProviderDispatchConfigurationService(scopedPool);
+      const appOverride = await dispatch.resolve({
+        tenantId: tenantA, applicationId: appA, capabilityKey: "email.send",
+      });
+      assert.deepEqual(appOverride.policy, { approvalRequired: true });
+      assert.equal(appOverride.policySource, "APPLICATION_OVERRIDE");
+      assert.equal(appOverride.tenantDefaultVersion, 2);
+      const tenantPolicy = await dispatch.resolve({
+        tenantId: tenantA, applicationId: appB, capabilityKey: "email.send",
+      });
+      assert.deepEqual(tenantPolicy.policy, { retryLimit: 4 });
+      assert.equal(tenantPolicy.policySource, "TENANT_DEFAULT");
+      assert.equal(tenantPolicy.tenantDefaultVersion, 2);
+
       const hiddenFromOtherApplication = await withScope(scopedPool, tenantA, appB, async (client) => {
         const policies = await client.query(
           "SELECT connection_id FROM eper_application_provider_policies WHERE tenant_id=$1",
@@ -364,6 +400,11 @@ test("provider connections enforce tenant RLS, application-scoped records, rotat
       const rotated = rotations.find(result => result.status === "fulfilled").value;
       assert.equal(rotated.version, 5);
       assert.equal(rotated.status, "PENDING_VALIDATION");
+      await assert.rejects(() => repository.assertDispatchAuthorization({
+        tenantId: tenantA, applicationId: appA, connectionId,
+        expectedVersion: 5, providerKey, capability: "email.send",
+      }), /PROVIDER_RUNTIME_BINDING_STALE_OR_INACTIVE/,
+      "secret rotation must suspend dispatch until the new credential is validated");
       const rotationAudit = await pool.query(
         "SELECT action FROM eper_audit_events WHERE resource_id=$1 AND action='provider.connection.rotate_secret_reference'",
         [connectionId],

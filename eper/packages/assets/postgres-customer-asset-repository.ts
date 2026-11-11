@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   appendAuditEventInTransaction,
   type AuditEnvironment,
@@ -35,6 +35,7 @@ export interface CreateCustomerAssetInput {
   environment: AuditEnvironment;
   correlationId: string;
   assetId?: string;
+  clientOperationId?: string;
   scope: CustomerAssetScope;
   ownerApplicationId?: string;
   displayName: string;
@@ -90,16 +91,57 @@ export class PostgresCustomerAssetRepository {
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null }>(
-        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\"",
+      const result = await client.query<{ assets: string | null; links: string | null; sessions: string | null; scanJobs: string | null; metadata_operations: string | null }> (
+        "SELECT to_regclass('public.eper_customer_assets')::text AS assets, to_regclass('public.eper_customer_asset_application_links')::text AS links, to_regclass('public.eper_customer_asset_upload_sessions')::text AS sessions, to_regclass('public.eper_customer_asset_scan_jobs')::text AS \"scanJobs\", to_regclass('public.eper_customer_asset_metadata_operations')::text AS metadata_operations"
       );
       const row = result.rows[0];
-      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
-      const recovery = await client.query<{ column_name: string | null }>("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='eper_customer_asset_upload_sessions' AND column_name='request_fingerprint'");
-      if (!recovery.rows[0]?.column_name) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RECOVERY_SCHEMA_NOT_APPLIED");
+      if (!row?.assets || !row.links || !row.sessions || !row.scanJobs || !row.metadata_operations) throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED");
+      const recovery = await client.query<{ column_name: string | null }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='eper_customer_asset_upload_sessions' AND column_name IN ('request_fingerprint', 'provider_outcome', 'attempt_generation')",
+      );
+      const recoveryColumns = new Set(recovery.rows.map((row) => row.column_name));
+      if (!recoveryColumns.has("request_fingerprint")) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_RECOVERY_SCHEMA_NOT_APPLIED");
+      if (!recoveryColumns.has("provider_outcome")) throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_OUTCOME_SCHEMA_NOT_APPLIED");
+      if (!recoveryColumns.has("attempt_generation")) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ATTEMPT_GENERATION_SCHEMA_NOT_APPLIED");
     } catch (error) {
       if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_SCHEMA_NOT_APPLIED") throw error;
       throw new Error("EPER_CUSTOMER_ASSET_SCHEMA_READINESS_FAILED", { cause: error });
+    } finally { client.release(); }
+  }
+
+  async assertUploadExpiryWorkerReady(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      // This identity intentionally has no direct SELECT access to asset/session
+      // tables. Validate only the definer-function and append-only audit grants
+      // that the isolated worker actually needs.
+      const result = await client.query<{
+        schema_usage: boolean;
+        expiry_function_execute: boolean;
+        audit_event_insert: boolean;
+        audit_chain_head_select: boolean;
+        audit_chain_hash_update: boolean;
+        audit_chain_timestamp_update: boolean;
+      }>(`
+        SELECT
+          coalesce(has_schema_privilege(current_user, 'public', 'USAGE'), false) AS schema_usage,
+          coalesce(has_function_privilege(
+            current_user,
+            to_regprocedure('public.eper_expire_customer_asset_upload_sessions(character varying,integer,uuid)')::oid,
+            'EXECUTE'
+          ), false) AS expiry_function_execute,
+          coalesce(has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT'), false) AS audit_event_insert,
+          coalesce(has_table_privilege(current_user, 'public.eper_audit_chain_head', 'SELECT'), false) AS audit_chain_head_select,
+          coalesce(has_column_privilege(current_user, 'public.eper_audit_chain_head', 'last_event_hash', 'UPDATE'), false) AS audit_chain_hash_update,
+          coalesce(has_column_privilege(current_user, 'public.eper_audit_chain_head', 'updated_at', 'UPDATE'), false) AS audit_chain_timestamp_update
+      `);
+      const row = result.rows[0];
+      if (!row || !Object.values(row).every((value) => value === true)) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_PRIVILEGES_NOT_READY") throw error;
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_WORKER_READINESS_FAILED", { cause: error });
     } finally { client.release(); }
   }
 
@@ -130,6 +172,65 @@ export class PostgresCustomerAssetRepository {
       );
       await client.query("COMMIT");
       return result.rows.map(mapAsset);
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Returns a downloadable provider reference only for a completed, clean asset visible to this application. */
+  async getDownloadAsset(tenantId: string, applicationId: string, assetId: string): Promise<{
+    accessReference: string; fileName: string; mimeType: string;
+  } | null> {
+    this.validateId(tenantId, "tenantId");
+    this.validateId(applicationId, "applicationId");
+    this.validateId(assetId, "assetId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      await this.setContext(client, tenantId, applicationId);
+      const result = await client.query<{
+        provider_upload_reference: string; original_file_name: string; mime_type: string;
+      }>(
+        `SELECT s.provider_upload_reference, a.original_file_name, a.mime_type
+         FROM eper_customer_assets a
+         JOIN eper_customer_asset_upload_sessions s
+           ON s.tenant_id = a.tenant_id AND s.asset_id = a.asset_id
+         WHERE a.tenant_id = $1 AND a.asset_id = $2
+           AND (
+             s.application_id = $3
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = a.asset_id
+             ))
+           )
+           AND s.upload_status = 'completed'
+           AND s.provider_upload_reference IS NOT NULL
+           AND btrim(s.provider_upload_reference) <> ''
+           AND a.lifecycle_status = 'active'
+           AND a.upload_status = 'available'
+           AND a.scan_status IN ('clean', 'not_required')
+           AND (
+             (a.repository_scope = 'application_restricted' AND a.owner_application_id = $3)
+             OR (a.repository_scope = 'customer_shared' AND EXISTS (
+               SELECT 1 FROM eper_customer_asset_application_links l
+                WHERE l.tenant_id = a.tenant_id
+                  AND l.application_id = $3
+                  AND l.asset_id = a.asset_id
+             ))
+           )`,
+        [tenantId, assetId, applicationId],
+      );
+      await client.query("COMMIT");
+      const row = result.rows[0];
+      if (result.rows.length !== 1 || !row) return null;
+      return {
+        accessReference: row.provider_upload_reference,
+        fileName: row.original_file_name,
+        mimeType: row.mime_type,
+      };
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
@@ -173,13 +274,49 @@ export class PostgresCustomerAssetRepository {
       throw new Error("EPER_CUSTOMER_ASSET_SHARED_OWNER_MUST_BE_NULL");
     }
     if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) throw new Error("EPER_CUSTOMER_ASSET_SIZE_INVALID");
-    if (input.checksumSha256 && !/^[a-f0-9]{64}$/.test(input.checksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
+    if (input.checksumSha256 !== undefined && !/^[a-f0-9]{64}$/.test(input.checksumSha256)) throw new Error("EPER_CUSTOMER_ASSET_CHECKSUM_INVALID");
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    if (input.clientOperationId !== undefined && !/^[a-f0-9]{32,64}$/i.test(input.clientOperationId)) {
+      throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_KEY_INVALID");
+    }
     const assetId = input.assetId ?? randomUUID();
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({
+      applicationId: input.applicationId, actorId: input.actorId, scope: input.scope,
+      ownerApplicationId: input.ownerApplicationId ?? null, displayName: input.displayName,
+      originalFileName: input.originalFileName, mediaCategory: input.mediaCategory,
+      mimeType: input.mimeType, fileExtension: input.fileExtension.toLowerCase(),
+      sizeBytes: input.sizeBytes, checksumSha256: input.checksumSha256 ?? null,
+      storageAdapterKey: input.storageAdapterKey,
+    })).digest("hex");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
+      if (input.clientOperationId) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          "eper-asset-metadata:" + input.tenantId + ":" + input.applicationId + ":" + input.actorId + ":" + input.clientOperationId,
+        ]);
+        const prior = await client.query<AssetRow & { request_fingerprint: string }>(
+          `SELECT a.tenant_id, a.asset_id, a.repository_scope, a.owner_application_id,
+            a.display_name, a.original_file_name, a.media_category, a.mime_type, a.file_extension,
+            a.size_bytes, a.checksum_sha256, a.storage_adapter_key, a.upload_status,
+            a.scan_status, a.lifecycle_status, a.version, a.created_by, a.created_at,
+            o.request_fingerprint
+           FROM eper_customer_asset_metadata_operations o
+           JOIN eper_customer_assets a ON a.tenant_id = o.tenant_id AND a.asset_id = o.asset_id
+           WHERE o.tenant_id = $1 AND o.application_id = $2 AND o.actor_id = $3
+             AND o.client_operation_id = $4
+           FOR UPDATE OF o, a`,
+          [input.tenantId, input.applicationId, input.actorId, input.clientOperationId],
+        );
+        if (prior.rows[0]) {
+          if (prior.rows[0].request_fingerprint !== requestFingerprint) {
+            throw new Error("EPER_CUSTOMER_ASSET_METADATA_IDEMPOTENCY_CONFLICT");
+          }
+          await client.query("COMMIT");
+          return mapAsset(prior.rows[0]);
+        }
+      }
       await client.query(
         `INSERT INTO eper_customer_assets (
           tenant_id, asset_id, repository_scope, owner_application_id, display_name,
@@ -220,6 +357,14 @@ export class PostgresCustomerAssetRepository {
       );
       const row = selected.rows[0];
       if (!row) throw new Error("EPER_CUSTOMER_ASSET_CREATE_RETURNED_NO_ROW");
+      if (input.clientOperationId) {
+        await client.query(
+          `INSERT INTO eper_customer_asset_metadata_operations
+            (tenant_id, application_id, actor_id, client_operation_id, request_fingerprint, asset_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [input.tenantId, input.applicationId, input.actorId, input.clientOperationId, requestFingerprint, assetId],
+        );
+      }
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
         actorType: "human", actorId: input.actorId, action: "customer.asset.metadata.create",
@@ -235,14 +380,66 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  async expireStaleUploadSessions(input: {
+    tenantId: string; applicationId: string; environment: AuditEnvironment;
+    correlationId: string; limit?: number;
+    onMetrics?: (metrics: { expiredCount: number; queueAgeMs: number }) => void;
+  }): Promise<number> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_EXPIRY_BATCH_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      // The NOLOGIN definer role performs a tenant-bound transition; the
+      // process role receives no direct session or asset table privileges.
+      const expired = await client.query<{
+        application_id: string; upload_session_id: string; asset_id: string; expires_at: string | Date;
+      }>(
+        "SELECT application_id, upload_session_id, asset_id, expires_at FROM public.eper_expire_customer_asset_upload_sessions($1, $2)",
+        [input.tenantId, limit],
+      );
+      const oldestExpiredAt = expired.rows.reduce<Date | null>((oldest, row) => {
+        const value = new Date(row.expires_at);
+        return oldest === null || value < oldest ? value : oldest;
+      }, null);
+      input.onMetrics?.({
+        expiredCount: expired.rows.length,
+        queueAgeMs: oldestExpiredAt === null ? 0 : Math.max(0, Date.now() - oldestExpiredAt.getTime()),
+      });
+      for (const row of expired.rows) {
+        await this.setContext(client, input.tenantId, row.application_id);
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: row.application_id, environment: input.environment,
+          actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
+          outcome: "success", resourceType: "customer-asset-upload", resourceId: row.upload_session_id,
+          correlationId: input.correlationId, source: "job",
+          operationName: "customer-asset-upload-expiry-worker",
+          payload: { assetId: row.asset_id, reason: "reservation_expired" },
+        });
+      }
+      await client.query("COMMIT");
+      return expired.rows.length;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async reserveUpload(input: {
     tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
-    correlationId: string; assetId: string; expectedSizeBytes: number; idempotencyKey: string;
+    correlationId: string; assetId: string; expectedSizeBytes: number; expectedChecksumSha256: string; idempotencyKey: string;
     requestFingerprint: string; uploadSessionId?: string;
   }): Promise<{
+    disposition: "created" | "replayed";
     uploadSessionId: string; providerUploadReference: string | null;
     uploadStatus: "initiated" | "in_progress" | "completed" | "aborted" | "expired" | "failed";
-    expiresAt: string; providerGrantExpiresAt: string | null;
+    expiresAt: string; providerGrantExpiresAt: string | null; attemptGeneration: number;
   }> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
@@ -250,6 +447,9 @@ export class PostgresCustomerAssetRepository {
     this.validateId(input.assetId, "assetId");
     if (!Number.isSafeInteger(input.expectedSizeBytes) || input.expectedSizeBytes <= 0) {
       throw new Error("EPER_CUSTOMER_ASSET_EXPECTED_SIZE_INVALID");
+    }
+    if (!/^[a-f0-9]{64}$/.test(input.expectedChecksumSha256)) {
+      throw new Error("EPER_CUSTOMER_ASSET_EXPECTED_CHECKSUM_INVALID");
     }
     if (!/^[a-zA-Z0-9._:-]{16,128}$/.test(input.idempotencyKey)) {
       throw new Error("EPER_CUSTOMER_ASSET_IDEMPOTENCY_KEY_INVALID");
@@ -264,26 +464,27 @@ export class PostgresCustomerAssetRepository {
       transactionOpen = true;
       await this.setContext(client, input.tenantId, input.applicationId);
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-        "eper-asset-upload:" + input.tenantId + ":" + input.idempotencyKey,
+        "eper-asset-upload:" + input.tenantId + ":" + input.applicationId + ":" + input.idempotencyKey,
       ]);
       const prior = await client.query<{
         upload_session_id: string; application_id: string; actor_id: string; asset_id: string;
-        expected_size_bytes: number | string; provider_upload_reference: string | null;
+        expected_size_bytes: number | string; expected_checksum_sha256: string | null; provider_upload_reference: string | null;
         upload_status: "initiated" | "in_progress" | "completed" | "aborted" | "expired" | "failed";
         expires_at: string | Date; provider_grant_expires_at: string | Date | null;
-        request_fingerprint: string | null;
+        request_fingerprint: string | null; attempt_generation: number | string;
       }>(
         `SELECT upload_session_id, application_id, actor_id, asset_id, expected_size_bytes,
-          provider_upload_reference, upload_status, expires_at, provider_grant_expires_at,
-          request_fingerprint
+          expected_checksum_sha256, provider_upload_reference, upload_status, expires_at, provider_grant_expires_at,
+          request_fingerprint, attempt_generation
          FROM eper_customer_asset_upload_sessions
-         WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
-        [input.tenantId, input.idempotencyKey],
+         WHERE tenant_id = $1 AND application_id = $2 AND idempotency_key = $3 FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.idempotencyKey],
       );
       if (prior.rows[0]) {
         const row = prior.rows[0];
         if (row.application_id !== input.applicationId || row.actor_id !== input.actorId ||
             row.asset_id !== input.assetId || Number(row.expected_size_bytes) !== input.expectedSizeBytes ||
+            row.expected_checksum_sha256 !== input.expectedChecksumSha256 ||
             row.request_fingerprint !== input.requestFingerprint) {
           // Persist a denial after rolling back the reservation transaction. Do not
           // disclose the prior session id or fingerprint in the denial event.
@@ -308,32 +509,73 @@ export class PostgresCustomerAssetRepository {
         await client.query("COMMIT");
         transactionOpen = false;
         return {
+          disposition: "replayed",
           uploadSessionId: row.upload_session_id,
           providerUploadReference: row.provider_upload_reference,
           uploadStatus: row.upload_status,
           expiresAt: new Date(row.expires_at).toISOString(),
           providerGrantExpiresAt: row.provider_grant_expires_at
             ? new Date(row.provider_grant_expires_at).toISOString() : null,
+          attemptGeneration: Number(row.attempt_generation),
         };
       }
-      const asset = await client.query<{ asset_id: string }>(
-        "SELECT asset_id FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
+      // Reconcile the single possible stale active reservation for this asset
+      // across applications before taking the asset row lock. The definer routine
+      // remains tenant-bound and returns only rows it actually expired.
+      const expiredSessions = await client.query<{
+        application_id: string; upload_session_id: string; asset_id: string;
+      }>(
+        "SELECT application_id, upload_session_id, asset_id FROM public.eper_expire_customer_asset_upload_sessions($1, 1, $2)",
+        [input.tenantId, input.assetId],
+      );
+      for (const expired of expiredSessions.rows) {
+        await this.setContext(client, input.tenantId, expired.application_id);
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: expired.application_id, environment: input.environment,
+          actorType: "system", actorId: "eper-upload-expiry", action: "customer.asset.upload.expire",
+          outcome: "success", resourceType: "customer-asset-upload", resourceId: expired.upload_session_id,
+          correlationId: input.correlationId, source: "job",
+          operationName: "customer-asset-upload-retry-reconciliation",
+          payload: { assetId: expired.asset_id, reason: "reservation_expired_before_retry" },
+        });
+      }
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const asset = await client.query<{ asset_id: string; upload_status: string; upload_attempt_generation: number | string }>(
+        "SELECT asset_id, upload_status, upload_attempt_generation FROM eper_customer_assets WHERE tenant_id = $1 AND asset_id = $2 AND lifecycle_status = 'active' FOR UPDATE",
         [input.tenantId, input.assetId],
       );
       if (!asset.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
+      if (asset.rows[0].upload_status !== "pending") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_RETRYABLE");
+      }
+      // The asset-row counter is visible under the caller's application RLS
+      // context and remains tenant-wide for explicitly shared assets. Increment
+      // it under the already-held row lock; transaction rollback also rolls back
+      // the generation reservation if the session insert/audit fails.
+      const generation = await client.query<{ attempt_generation: number | string }>(
+        `UPDATE eper_customer_assets
+            SET upload_attempt_generation = upload_attempt_generation + 1,
+                updated_by = $3, updated_at = clock_timestamp()
+          WHERE tenant_id = $1 AND asset_id = $2
+            AND lifecycle_status = 'active' AND upload_status = 'pending'
+          RETURNING upload_attempt_generation AS attempt_generation`,
+        [input.tenantId, input.assetId, input.actorId],
+      );
+      if (!generation.rows[0]) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_RETRYABLE");
+      const attemptGeneration = Number(generation.rows[0].attempt_generation);
       const sessionId = input.uploadSessionId ?? randomUUID();
       this.validateId(sessionId, "uploadSessionId");
       const expiry = await client.query<{ expires_at: string | Date }>(
-        "SELECT now() + interval '15 minutes' AS expires_at",
+        "SELECT clock_timestamp() + interval '15 minutes' AS expires_at",
       );
       const expiresAt = new Date(expiry.rows[0].expires_at).toISOString();
       await client.query(
         `INSERT INTO eper_customer_asset_upload_sessions
           (tenant_id, application_id, upload_session_id, asset_id, actor_id, expected_size_bytes,
-           provider_upload_reference, upload_status, idempotency_key, expires_at, request_fingerprint)
-         VALUES ($1,$2,$3,$4,$5,$6,NULL,'initiated',$7,$8,$9)`,
+           expected_checksum_sha256, provider_upload_reference, upload_status, idempotency_key, expires_at, request_fingerprint, attempt_generation)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,'initiated',$8,$9,$10,$11)`,
         [input.tenantId, input.applicationId, sessionId, input.assetId, input.actorId,
-          input.expectedSizeBytes, input.idempotencyKey, expiresAt, input.requestFingerprint],
+          input.expectedSizeBytes, input.expectedChecksumSha256, input.idempotencyKey, expiresAt, input.requestFingerprint, attemptGeneration],
       );
       await appendAuditEventInTransaction(client as AuditSqlClient, {
         tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
@@ -342,17 +584,49 @@ export class PostgresCustomerAssetRepository {
         correlationId: input.correlationId, idempotencyKey: input.idempotencyKey,
         source: "api", operationName: "POST /customer/assets/:assetId/uploads",
         payload: { assetId: input.assetId, expectedSizeBytes: input.expectedSizeBytes,
-          requestFingerprint: input.requestFingerprint },
+          attemptGeneration, requestFingerprint: input.requestFingerprint },
       });
       await client.query("COMMIT");
       transactionOpen = false;
       return {
+        disposition: "created",
         uploadSessionId: sessionId, providerUploadReference: null,
-        uploadStatus: "initiated", expiresAt, providerGrantExpiresAt: null,
+        uploadStatus: "initiated", expiresAt, providerGrantExpiresAt: null, attemptGeneration,
       };
     } catch (error) {
       if (transactionOpen) {
         try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+        transactionOpen = false;
+      }
+      const databaseError = error as { code?: string; constraint?: string };
+      if (databaseError.code === "23505" &&
+          databaseError.constraint === "eper_customer_asset_upload_active_asset_uq") {
+        // The reservation itself rolled back, so record the denial in a new
+        // transaction under the requesting application's RLS context. Do not
+        // disclose which other application owns the active reservation.
+        try {
+          await client.query("BEGIN");
+          transactionOpen = true;
+          await this.setContext(client, input.tenantId, input.applicationId);
+          await appendAuditEventInTransaction(client as AuditSqlClient, {
+            tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+            actorType: "human", actorId: input.actorId, action: "customer.asset.upload.reserve",
+            outcome: "denied", reasonCode: "active_upload_conflict",
+            resourceType: "customer-asset-upload", resourceId: input.assetId,
+            correlationId: input.correlationId, source: "api",
+            operationName: "POST /customer/assets/:assetId/uploads",
+            payload: { assetId: input.assetId, conflict: true },
+          });
+          await client.query("COMMIT");
+          transactionOpen = false;
+        } catch (auditError) {
+          if (transactionOpen) {
+            try { await client.query("ROLLBACK"); } catch { /* preserve audit error */ }
+            transactionOpen = false;
+          }
+          throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_DENIAL_AUDIT_FAILED", { cause: auditError });
+        }
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ALREADY_ACTIVE", { cause: error });
       }
       throw error;
     } finally { client.release(); }
@@ -382,9 +656,9 @@ export class PostgresCustomerAssetRepository {
       await this.setContext(client, input.tenantId, input.applicationId);
       const current = await client.query<{
         provider_upload_reference: string | null; actor_id: string; asset_id: string;
-        request_fingerprint: string | null; upload_status: string;
+        request_fingerprint: string | null; upload_status: string; expires_at: string | Date;
       }>(
-        `SELECT provider_upload_reference, actor_id, asset_id, request_fingerprint, upload_status
+        `SELECT provider_upload_reference, actor_id, asset_id, request_fingerprint, upload_status, expires_at
          FROM eper_customer_asset_upload_sessions
          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3 FOR UPDATE`,
         [input.tenantId, input.applicationId, input.uploadSessionId],
@@ -398,10 +672,20 @@ export class PostgresCustomerAssetRepository {
       if (row.provider_upload_reference && row.provider_upload_reference !== input.providerUploadReference) {
         throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REFERENCE_CONFLICT");
       }
+      // Date.now() above is only an early input check. Revalidate both the
+      // reservation and provider grant after the session row lock is held.
+      const liveGrantExpiry = await client.query<{ valid: boolean }>(
+        "SELECT $1::timestamptz > clock_timestamp() AND $1::timestamptz <= clock_timestamp() + interval '15 minutes' AND $2::timestamptz > clock_timestamp() AS valid",
+        [input.grantExpiresAt, row.expires_at],
+      );
+      if (!liveGrantExpiry.rows[0]?.valid) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_GRANT_EXPIRY_INVALID");
+      }
       await client.query(
         `UPDATE eper_customer_asset_upload_sessions
             SET provider_upload_reference = COALESCE(provider_upload_reference, $4),
-                provider_grant_expires_at = $5, last_recovered_at = now(), updated_at = now()
+                provider_outcome = 'succeeded',
+                provider_grant_expires_at = $5, last_recovered_at = clock_timestamp(), updated_at = clock_timestamp()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
         [input.tenantId, input.applicationId, input.uploadSessionId,
           input.providerUploadReference, new Date(expiry).toISOString()],
@@ -421,9 +705,53 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
+  /** Persist only a definitive provider rejection; unknown outcomes must remain recoverable. */
+  async recordUploadProviderRejection(input: {
+    tenantId: string; applicationId: string; actorId: string; environment: AuditEnvironment;
+    correlationId: string; assetId: string; uploadSessionId: string; rejectionCode: string;
+  }): Promise<void> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.actorId, "actorId");
+    this.validateId(input.assetId, "assetId");
+    this.validateId(input.uploadSessionId, "uploadSessionId");
+    if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(input.rejectionCode)) {
+      throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_CODE_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const updated = await client.query(
+        `UPDATE eper_customer_asset_upload_sessions
+            SET upload_status = 'failed', provider_outcome = 'rejected', updated_at = now()
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            AND actor_id = $4 AND asset_id = $5
+            AND upload_status IN ('initiated', 'in_progress')
+            AND provider_upload_reference IS NULL AND provider_outcome = 'unknown'`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.actorId, input.assetId],
+      );
+      if (updated.rowCount !== 1) {
+        throw new Error("EPER_CUSTOMER_ASSET_PROVIDER_REJECTION_NOT_APPLICABLE");
+      }
+      await appendAuditEventInTransaction(client as AuditSqlClient, {
+        tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+        actorType: "human", actorId: input.actorId, action: "customer.asset.upload.provider.reject",
+        outcome: "failure", resourceType: "customer-asset-upload", resourceId: input.uploadSessionId,
+        correlationId: input.correlationId, source: "api",
+        operationName: "POST /customer/assets/:assetId/uploads",
+        payload: { assetId: input.assetId, rejectionCode: input.rejectionCode },
+      });
+      await client.query("COMMIT");
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
   async getUploadSessionForVerification(tenantId: string, applicationId: string, uploadSessionId: string): Promise<{
     assetId: string; actorId: string; providerUploadReference: string;
-    expectedSizeBytes: number; expectedMimeType: string; expiresAt: string;
+    expectedSizeBytes: number; expectedChecksumSha256: string | null; expectedMimeType: string; expiresAt: string;
   } | null> {
     this.validateId(tenantId, "tenantId");
     this.validateId(applicationId, "applicationId");
@@ -434,17 +762,17 @@ export class PostgresCustomerAssetRepository {
       await this.setContext(client, tenantId, applicationId);
       const result = await client.query<{
         asset_id: string; actor_id: string; provider_upload_reference: string;
-        expected_size_bytes: number | string; expected_mime_type: string; expires_at: string | Date;
+        expected_size_bytes: number | string; expected_checksum_sha256: string | null; expected_mime_type: string; expires_at: string | Date;
       }>(
         `SELECT s.asset_id, s.actor_id, s.provider_upload_reference,
-          s.expected_size_bytes, a.mime_type AS expected_mime_type, s.expires_at
+          s.expected_size_bytes, s.expected_checksum_sha256, a.mime_type AS expected_mime_type, s.expires_at
          FROM eper_customer_asset_upload_sessions s
          JOIN eper_customer_assets a
            ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
          WHERE s.tenant_id = $1 AND s.application_id = $2
            AND s.upload_session_id = $3
            AND s.upload_status IN ('initiated', 'in_progress')
-           AND s.expires_at > now()
+           AND s.expires_at > clock_timestamp()
            AND a.upload_status = 'pending' AND a.lifecycle_status = 'active'`,
         [tenantId, applicationId, uploadSessionId],
       );
@@ -454,6 +782,7 @@ export class PostgresCustomerAssetRepository {
         assetId: row.asset_id, actorId: row.actor_id,
         providerUploadReference: row.provider_upload_reference,
         expectedSizeBytes: Number(row.expected_size_bytes),
+        expectedChecksumSha256: row.expected_checksum_sha256,
         expectedMimeType: row.expected_mime_type,
         expiresAt: new Date(row.expires_at).toISOString(),
       } : null;
@@ -463,7 +792,7 @@ export class PostgresCustomerAssetRepository {
     } finally { client.release(); }
   }
 
-  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string, workerId: string): Promise<{
+  async getUploadSessionForScanning(tenantId: string, applicationId: string, uploadSessionId: string, workerId: string, claimGeneration: number): Promise<{
     assetId: string; providerUploadReference: string; checksumSha256: string;
     sizeBytes: number; mimeType: string; attempt: number;
   } | null> {
@@ -471,6 +800,7 @@ export class PostgresCustomerAssetRepository {
     this.validateId(applicationId, "applicationId");
     this.validateId(uploadSessionId, "uploadSessionId");
     this.validateId(workerId, "workerId");
+    this.validateScanClaimGeneration(claimGeneration);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN READ ONLY");
@@ -490,8 +820,9 @@ export class PostgresCustomerAssetRepository {
            AND s.upload_session_id = $3 AND s.upload_status = 'completed'
            AND a.upload_status = 'scanning' AND a.scan_status = 'pending'
            AND a.lifecycle_status = 'active' AND a.checksum_sha256 IS NOT NULL
-           AND j.state = 'leased' AND j.lease_owner = $4 AND j.lease_expires_at > now()`,
-        [tenantId, applicationId, uploadSessionId, workerId],
+           AND j.state = 'leased' AND j.lease_owner = $4 AND j.lease_expires_at > now()
+           AND j.claim_generation = $5::bigint`,
+        [tenantId, applicationId, uploadSessionId, workerId, claimGeneration],
       );
       await client.query("COMMIT");
       const row = result.rows[0];
@@ -530,39 +861,60 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const locked = await client.query<{
+      // All lifecycle writers lock upload session -> asset -> scan job.
+      // Avoid joined FOR UPDATE: PostgreSQL's plan may choose a different row-lock order.
+      const lockedSession = await client.query<{
         upload_session_id: string; asset_id: string; actor_id: string;
-        expected_size_bytes: number | string; expires_at: string | Date;
-        upload_status: string; asset_mime_type: string; asset_upload_status: string;
-        session_not_expired: boolean;
+        expected_size_bytes: number | string; expected_checksum_sha256: string | null;
+        upload_status: string;
       }>(
-        `SELECT s.upload_session_id, s.asset_id, s.actor_id, s.expected_size_bytes,
-          s.expires_at, s.upload_status, (s.expires_at > now()) AS session_not_expired,
-          a.mime_type AS asset_mime_type, a.upload_status AS asset_upload_status
-         FROM eper_customer_asset_upload_sessions s
-         JOIN eper_customer_assets a
-           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         WHERE s.tenant_id = $1 AND s.upload_session_id = $2
-           AND a.lifecycle_status = 'active'
-         FOR UPDATE OF s, a`,
-        [input.tenantId, input.uploadSessionId],
+        `SELECT upload_session_id, asset_id, actor_id, expected_size_bytes, expected_checksum_sha256,
+          upload_status
+         FROM eper_customer_asset_upload_sessions
+         WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+         FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
       );
-      const session = locked.rows[0];
+      const session = lockedSession.rows[0];
       if (!session) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const lockedAsset = await client.query<{
+        mime_type: string; upload_status: string; lifecycle_status: string;
+      }>(
+        `SELECT mime_type, upload_status, lifecycle_status
+           FROM eper_customer_assets
+          WHERE tenant_id = $1 AND asset_id = $2
+          FOR UPDATE`,
+        [input.tenantId, session.asset_id],
+      );
+      const asset = lockedAsset.rows[0];
+      if (!asset || asset.lifecycle_status !== "active") {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      }
       if (session.actor_id !== input.actorId) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_ACTOR_MISMATCH");
       if (session.upload_status !== "initiated" && session.upload_status !== "in_progress") {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_COMPLETABLE");
       }
-      if (session.asset_upload_status !== "pending") {
+      if (asset.upload_status !== "pending") {
         throw new Error("EPER_CUSTOMER_ASSET_NOT_PENDING_UPLOAD");
       }
-      if (!session.session_not_expired) {
+      // Revalidate only after both the session and asset locks are held. The
+      // earlier SELECT may have waited on the session lock, and the asset lock
+      // below may itself wait long enough for the upload capability to expire.
+      const liveSessionExpiry = await client.query<{ future: boolean }>(
+        "SELECT expires_at > clock_timestamp() AS future FROM eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3",
+        [input.tenantId, input.applicationId, input.uploadSessionId],
+      );
+      if (!liveSessionExpiry.rows[0]?.future) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_EXPIRED");
+      }
+      if (!session.expected_checksum_sha256 || !/^[a-f0-9]{64}$/.test(session.expected_checksum_sha256) ||
+          session.expected_checksum_sha256 !== input.checksumSha256) {
+        throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_CHECKSUM_MISMATCH");
       }
       if (Number(session.expected_size_bytes) !== input.receivedSizeBytes) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SIZE_MISMATCH");
       }
-      if (session.asset_mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
+      if (asset.mime_type.toLowerCase() !== input.observedMimeType.toLowerCase()) {
         throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_MIME_MISMATCH");
       }
       // Upload completion is not a scanner attestation. Always hold the asset
@@ -623,6 +975,107 @@ export class PostgresCustomerAssetRepository {
    * authorized service operation can move a scanning asset to available.
    */
   /**
+   * Independently finalizes expired scan leases after the persisted attempt limit.
+   * Candidate discovery is unlocked; each row is then locked session -> asset -> job.
+   * Quarantine and audit remain atomic with the dead-letter transition.
+   */
+  async recoverExhaustedScanJobs(input: {
+    tenantId: string; applicationId: string; scannerServiceId: string;
+    environment: AuditEnvironment; limit?: number;
+  }): Promise<number> {
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.scannerServiceId, "scannerServiceId");
+    const limit = input.limit ?? 25;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new Error("EPER_CUSTOMER_ASSET_SCAN_RECOVERY_LIMIT_INVALID");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const candidates = await client.query<{
+        upload_session_id: string; asset_id: string; correlation_id: string;
+      }>(
+        `SELECT upload_session_id, asset_id, correlation_id
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2
+            AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+            AND attempt_count >= max_attempts
+          ORDER BY lease_expires_at, upload_session_id
+          LIMIT $3`,
+        [input.tenantId, input.applicationId, limit],
+      );
+      let recovered = 0;
+      for (const candidate of candidates.rows) {
+        const session = await client.query<{ asset_id: string; upload_status: string }>(
+          `SELECT asset_id, upload_status
+             FROM eper_customer_asset_upload_sessions
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (!session.rows[0] || session.rows[0].upload_status !== "completed"
+          || session.rows[0].asset_id !== candidate.asset_id) continue;
+        const asset = await client.query<{ upload_status: string }>(
+          `SELECT upload_status FROM eper_customer_assets
+            WHERE tenant_id = $1 AND asset_id = $2
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, candidate.asset_id],
+        );
+        if (!asset.rows[0] || asset.rows[0].upload_status !== "scanning") continue;
+        const job = await client.query<{ correlation_id: string }>(
+          `SELECT correlation_id
+             FROM eper_customer_asset_scan_jobs
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+              AND attempt_count >= max_attempts
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (!job.rows[0]) continue;
+        const deadLetter = await client.query(
+          `UPDATE eper_customer_asset_scan_jobs
+              SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
+                  last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = clock_timestamp()
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+              AND attempt_count >= max_attempts`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (deadLetter.rowCount !== 1) continue;
+        const quarantined = await client.query(
+          `UPDATE eper_customer_assets
+              SET upload_status = 'failed', scan_status = 'error',
+                  lifecycle_status = 'quarantined', updated_by = $3,
+                  updated_at = clock_timestamp(), version = version + 1
+            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'`,
+          [input.tenantId, candidate.asset_id, input.scannerServiceId],
+        );
+        if (quarantined.rowCount !== 1) {
+          throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
+        }
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "service", actorId: input.scannerServiceId,
+          action: "customer.asset.scan.exhausted", outcome: "failure",
+          reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
+          resourceId: candidate.asset_id, correlationId: job.rows[0].correlation_id, source: "job",
+          operationName: "independent customer asset scan recovery",
+          payload: { assetId: candidate.asset_id, uploadSessionId: candidate.upload_session_id,
+            scanStatus: "error", resultingAssetStatus: "failed" },
+        });
+        recovered += 1;
+      }
+      await client.query("COMMIT");
+      return recovered;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /**
    * Claims due scan jobs using SKIP LOCKED. Expired leases are reclaimable;
    * attempts are bounded in the database and worker identity fences completion.
    */
@@ -630,7 +1083,7 @@ export class PostgresCustomerAssetRepository {
     tenantId: string; applicationId: string; workerId: string;
     scannerServiceId: string; environment: AuditEnvironment;
     limit?: number; leaseMs?: number;
-  }): Promise<Array<{ uploadSessionId: string; assetId: string; correlationId: string; attempt: number; leaseExpiresAt: string }>> {
+  }): Promise<Array<{ uploadSessionId: string; assetId: string; correlationId: string; attempt: number; leaseExpiresAt: string; claimGeneration: number }>> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.workerId, "workerId");
@@ -643,48 +1096,15 @@ export class PostgresCustomerAssetRepository {
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const exhausted = await client.query<{
-        upload_session_id: string; asset_id: string; correlation_id: string;
-      }>(
-        `UPDATE eper_customer_asset_scan_jobs
-            SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
-                last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = now()
-          WHERE tenant_id = $1 AND application_id = $2
-            AND state = 'leased' AND lease_expires_at <= now()
-            AND attempt_count >= max_attempts
-          RETURNING upload_session_id, asset_id, correlation_id`,
-        [input.tenantId, input.applicationId],
-      );
-      // An exhausted lease may have expired after the worker crashed before
-      // finalization. Close the asset lifecycle and append its audit event in
-      // this same transaction; never leave a scanning asset behind a dead letter.
-      for (const job of exhausted.rows) {
-        const failed = await client.query(
-          `UPDATE eper_customer_assets
-              SET upload_status = 'failed', scan_status = 'error',
-                  lifecycle_status = 'quarantined', updated_by = $3,
-                  updated_at = now(), version = version + 1
-            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'
-            RETURNING asset_id`,
-          [input.tenantId, job.asset_id, input.scannerServiceId],
-        );
-        if (failed.rowCount !== 1) {
-          throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
-        }
-        await appendAuditEventInTransaction(client as AuditSqlClient, {
-          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
-          actorType: "service", actorId: input.scannerServiceId,
-          action: "customer.asset.scan.exhausted", outcome: "failure",
-          reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
-          resourceId: job.asset_id, correlationId: job.correlation_id, source: "job",
-          operationName: "customer asset scan lease recovery",
-          payload: { assetId: job.asset_id, uploadSessionId: job.upload_session_id,
-            scanStatus: "error", resultingAssetStatus: "failed" },
-        });
-      }
+      // Exhausted leases are finalized through the same ordered recovery path
+      // used by the independently supervised recovery process.
+      await this.recoverExhaustedScanJobs({
+        tenantId: input.tenantId, applicationId: input.applicationId,
+        scannerServiceId: input.scannerServiceId, environment: input.environment, limit,
+      });
       const claimed = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
-        attempt_count: number; lease_expires_at: string | Date;
+        attempt_count: number; lease_expires_at: string | Date; claim_generation: number | string;
       }>(
         `WITH candidates AS (
            SELECT tenant_id, upload_session_id
@@ -699,11 +1119,12 @@ export class PostgresCustomerAssetRepository {
          UPDATE eper_customer_asset_scan_jobs j
             SET state = 'leased', lease_owner = $4,
                 lease_expires_at = now() + ($5::bigint * interval '1 millisecond'),
-                attempt_count = j.attempt_count + 1, updated_at = now()
+                attempt_count = j.attempt_count + 1,
+                claim_generation = j.claim_generation + 1, updated_at = now()
            FROM candidates c
           WHERE j.tenant_id = c.tenant_id AND j.upload_session_id = c.upload_session_id
          RETURNING j.upload_session_id, j.asset_id, j.correlation_id,
-                   j.attempt_count, j.lease_expires_at`,
+                   j.attempt_count, j.lease_expires_at, j.claim_generation`,
         [input.tenantId, input.applicationId, limit, input.workerId, leaseMs],
       );
       await client.query("COMMIT");
@@ -711,6 +1132,7 @@ export class PostgresCustomerAssetRepository {
         uploadSessionId: row.upload_session_id, assetId: row.asset_id,
         correlationId: row.correlation_id, attempt: Number(row.attempt_count),
         leaseExpiresAt: new Date(row.lease_expires_at).toISOString(),
+        claimGeneration: Number(row.claim_generation),
       }));
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
@@ -720,11 +1142,13 @@ export class PostgresCustomerAssetRepository {
 
   async completeScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
+    claimGeneration: number;
   }): Promise<boolean> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     this.validateId(input.workerId, "workerId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -735,8 +1159,8 @@ export class PostgresCustomerAssetRepository {
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2
             AND upload_session_id = $3 AND state = 'leased' AND lease_owner = $4
-            AND lease_expires_at > now()`,
-        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId],
+            AND lease_expires_at > now() AND claim_generation = $5::bigint`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.claimGeneration],
       );
       await client.query("COMMIT");
       return result.rowCount === 1;
@@ -748,12 +1172,13 @@ export class PostgresCustomerAssetRepository {
 
   async renewScanJobLease(input: {
     tenantId: string; applicationId: string; uploadSessionId: string;
-    workerId: string; leaseMs: number;
+    workerId: string; leaseMs: number; claimGeneration: number;
   }): Promise<boolean> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     this.validateId(input.workerId, "workerId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     if (!Number.isInteger(input.leaseMs) || input.leaseMs < 5_000 || input.leaseMs > 900_000) {
       throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_INVALID");
     }
@@ -767,8 +1192,9 @@ export class PostgresCustomerAssetRepository {
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+            AND claim_generation = $6::bigint
           RETURNING upload_session_id`,
-        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.leaseMs],
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.leaseMs, input.claimGeneration],
       );
       await client.query("COMMIT");
       return renewed.rowCount === 1;
@@ -780,12 +1206,13 @@ export class PostgresCustomerAssetRepository {
 
   async retryScanJob(input: {
     tenantId: string; applicationId: string; uploadSessionId: string; workerId: string;
-    errorCode: string; retryAfterMs: number;
+    errorCode: string; retryAfterMs: number; claimGeneration: number;
   }): Promise<"pending" | "dead_letter" | "lease_lost"> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
     this.validateId(input.workerId, "workerId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     if (!/^[A-Z0-9_]{1,64}$/.test(input.errorCode)) throw new Error("EPER_CUSTOMER_ASSET_SCAN_ERROR_CODE_INVALID");
     if (!Number.isInteger(input.retryAfterMs) || input.retryAfterMs < 1_000 || input.retryAfterMs > 3_600_000) {
       throw new Error("EPER_CUSTOMER_ASSET_SCAN_RETRY_DELAY_INVALID");
@@ -805,9 +1232,10 @@ export class PostgresCustomerAssetRepository {
                 updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
             AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+            AND claim_generation = $7::bigint
           RETURNING CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE state END AS state`,
         [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId,
-          input.retryAfterMs, input.errorCode],
+          input.retryAfterMs, input.errorCode, input.claimGeneration],
       );
       await client.query("COMMIT");
       return result.rows[0]?.state ?? "lease_lost";
@@ -820,37 +1248,62 @@ export class PostgresCustomerAssetRepository {
   async recordScanResult(input: {
     tenantId: string; applicationId: string; scannerServiceId: string; workerId: string;
     environment: AuditEnvironment; correlationId: string; uploadSessionId: string;
-    scanStatus: "clean" | "infected" | "error" | "not_required";
+    scanStatus: "clean" | "infected" | "error" | "not_required"; claimGeneration: number;
   }): Promise<CustomerAsset> {
     this.validateId(input.tenantId, "tenantId");
     this.validateId(input.applicationId, "applicationId");
     this.validateId(input.scannerServiceId, "scannerServiceId");
     this.validateId(input.workerId, "workerId");
     this.validateId(input.uploadSessionId, "uploadSessionId");
+    this.validateScanClaimGeneration(input.claimGeneration);
     if (!input.correlationId?.trim()) throw new Error("EPER_CUSTOMER_ASSET_CORRELATION_ID_REQUIRED");
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       await this.setContext(client, input.tenantId, input.applicationId);
-      const locked = await client.query<{
-        asset_id: string; upload_status: string; scan_status: string;
-        lifecycle_status: string; session_status: string;
-        job_state: string; lease_owner: string | null; lease_active: boolean;
-      }>(
-        `SELECT a.asset_id, a.upload_status, a.scan_status, a.lifecycle_status,
-          s.upload_status AS session_status, j.state AS job_state, j.lease_owner,
-          (j.lease_expires_at > now()) AS lease_active
-         FROM eper_customer_asset_upload_sessions s
-         JOIN eper_customer_assets a
-           ON a.tenant_id = s.tenant_id AND a.asset_id = s.asset_id
-         JOIN eper_customer_asset_scan_jobs j
-           ON j.tenant_id = s.tenant_id AND j.upload_session_id = s.upload_session_id
-         WHERE s.tenant_id = $1 AND s.application_id = $2 AND s.upload_session_id = $3
-         FOR UPDATE OF s, a, j`,
+      // Canonical lifecycle lock order: upload session -> asset -> scan job.
+      // Never use a joined FOR UPDATE here; planner-dependent lock acquisition can
+      // deadlock with exhausted-lease recovery.
+      const session = await client.query<{ asset_id: string; upload_status: string }>(
+        `SELECT asset_id, upload_status
+           FROM eper_customer_asset_upload_sessions
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+          FOR UPDATE`,
         [input.tenantId, input.applicationId, input.uploadSessionId],
       );
-      const current = locked.rows[0];
-      if (!current) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const sessionRow = session.rows[0];
+      if (!sessionRow) throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_SESSION_NOT_FOUND");
+      const asset = await client.query<{
+        asset_id: string; upload_status: string; scan_status: string; lifecycle_status: string;
+      }>(
+        `SELECT asset_id, upload_status, scan_status, lifecycle_status
+           FROM eper_customer_assets
+          WHERE tenant_id = $1 AND asset_id = $2
+          FOR UPDATE`,
+        [input.tenantId, sessionRow.asset_id],
+      );
+      const assetRow = asset.rows[0];
+      if (!assetRow) throw new Error("EPER_CUSTOMER_ASSET_NOT_FOUND");
+      const job = await client.query<{
+        state: string; lease_owner: string | null; lease_active: boolean; claim_generation: number | string;
+      }>(
+        `SELECT state, lease_owner, (lease_expires_at > clock_timestamp()) AS lease_active, claim_generation
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+          FOR UPDATE`,
+        [input.tenantId, input.applicationId, input.uploadSessionId],
+      );
+      const jobRow = job.rows[0];
+      if (!jobRow) throw new Error("EPER_CUSTOMER_ASSET_SCAN_JOB_NOT_FOUND");
+      const current = {
+        asset_id: assetRow.asset_id, upload_status: assetRow.upload_status,
+        scan_status: assetRow.scan_status, lifecycle_status: assetRow.lifecycle_status,
+        session_status: sessionRow.upload_status, job_state: jobRow.state,
+        lease_owner: jobRow.lease_owner, lease_active: jobRow.lease_active,
+        claim_generation: Number(jobRow.claim_generation),
+      };
+      // Check the fencing token before the idempotent-result shortcut.
+      if (current.claim_generation !== input.claimGeneration) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST");
       if (current.session_status !== "completed") throw new Error("EPER_CUSTOMER_ASSET_UPLOAD_NOT_COMPLETED");
       if (current.scan_status !== "pending") {
         if (current.scan_status === input.scanStatus) {
@@ -896,8 +1349,9 @@ export class PostgresCustomerAssetRepository {
             SET state = CASE WHEN $5 = 'error' THEN 'dead_letter' ELSE 'completed' END,
                 lease_owner = NULL, lease_expires_at = NULL, updated_at = now()
           WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
-            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()`,
-        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.scanStatus],
+            AND state = 'leased' AND lease_owner = $4 AND lease_expires_at > now()
+            AND claim_generation = $6::bigint`,
+        [input.tenantId, input.applicationId, input.uploadSessionId, input.workerId, input.scanStatus, input.claimGeneration],
       );
       if (finalized.rowCount !== 1) throw new Error("EPER_CUSTOMER_ASSET_SCAN_LEASE_LOST");
       await appendAuditEventInTransaction(client as AuditSqlClient, {
@@ -965,4 +1419,8 @@ export class PostgresCustomerAssetRepository {
       throw new Error("EPER_CUSTOMER_ASSET_INVALID_" + name.toUpperCase());
     }
   }
+  private validateScanClaimGeneration(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error("EPER_CUSTOMER_ASSET_SCAN_CLAIM_GENERATION_INVALID");
+  }
+
 }

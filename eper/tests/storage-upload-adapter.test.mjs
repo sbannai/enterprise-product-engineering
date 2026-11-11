@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createStorageUploadAdapter } from "../dist/packages/assets/storage-upload-adapter.js";
+import { createStorageUploadAdapter, createStorageUploadLookupAdapter } from "../dist/packages/assets/storage-upload-adapter.js";
 
 const request = {
   tenantId: "tenant-a", actorId: "actor-a", applicationId: "app-a",
@@ -12,8 +12,8 @@ const request = {
 test("storage upload adapter returns a scoped short-lived HTTPS capability", async () => {
   let received;
   const adapter = createStorageUploadAdapter({
-    invoke: async (input, correlationId) => {
-      received = { input, correlationId };
+    invoke: async (input, correlationId, operationId) => {
+      received = { input, correlationId, operationId };
       return { success: true, externalReference: "opaque-provider-object-001", value: {
         url: "https://storage.example.test/upload?signature=opaque",
         method: "PUT", expiresAt: new Date(1_700_000_060_000).toISOString(),
@@ -24,6 +24,8 @@ test("storage upload adapter returns a scoped short-lived HTTPS capability", asy
   const result = await adapter(request, "upload-request-001");
   assert.equal(received.input, request);
   assert.equal(received.correlationId, "upload-request-001");
+  assert.equal(received.operationId, request.uploadSessionId);
+  assert.equal(result.kind, "succeeded");
   assert.equal(result.method, "PUT");
   assert.equal(result.expiresAt, new Date(1_700_000_060_000).toISOString());
   assert.equal(result.headers["content-type"], request.mimeType);
@@ -42,7 +44,7 @@ test("storage upload adapter rejects untrusted, insecure and overlong grants", a
     const adapter = createStorageUploadAdapter({
       invoke: async () => ({ success: true, value: grant }),
     }, { allowedHosts: ["storage.example.test"], now: () => 1_700_000_000_000 });
-    assert.equal(await adapter(request, "upload-request-002"), null);
+    assert.equal((await adapter(request, "upload-request-002")).kind, "unknown");
   }
 });
 
@@ -50,7 +52,7 @@ test("storage upload adapter fails closed for provider errors and unsafe headers
   const failed = createStorageUploadAdapter({
     invoke: async () => { throw new Error("provider secret must not escape"); },
   }, { allowedHosts: ["storage.example.test"] });
-  assert.equal(await failed(request, "upload-request-003"), null);
+  assert.deepEqual(await failed(request, "upload-request-003"), { kind: "unknown", reason: "transport" });
 
   const unsafe = createStorageUploadAdapter({
     invoke: async () => ({ success: true, value: {
@@ -59,7 +61,7 @@ test("storage upload adapter fails closed for provider errors and unsafe headers
       headers: { "x-injected": "value\\r\\nX-Evil: yes" },
     } }),
   }, { allowedHosts: ["storage.example.test"] });
-  assert.equal(await unsafe(request, "upload-request-004"), null);
+  assert.equal((await unsafe(request, "upload-request-004")).kind, "unknown");
 });
 
 test("storage upload adapter validates allowlist and TTL configuration", () => {
@@ -79,5 +81,48 @@ test("storage upload adapter refuses to renew a different provider object", asyn
       },
     }),
   }, { allowedHosts: ["storage.example.test"], now: () => 1_700_000_000_000 });
-  assert.equal(await adapter({ ...request, providerUploadReference: "provider-object-original" }, "upload-recovery-001"), null);
+  assert.equal((await adapter({ ...request, providerUploadReference: "provider-object-original" }, "upload-recovery-001")).kind, "unknown");
+});
+
+test("storage upload adapter distinguishes definitive provider rejection from retryable uncertainty", async () => {
+  const rejected = createStorageUploadAdapter({
+    invoke: async () => ({ success: false, definitiveRejection: true, rejectionCode: "policy_denied" }),
+  }, { allowedHosts: ["storage.example.test"] });
+  const unknown = createStorageUploadAdapter({
+    invoke: async () => ({ success: false, retryable: false }),
+  }, { allowedHosts: ["storage.example.test"] });
+  assert.deepEqual(await rejected(request, "upload-reject-001"), { kind: "rejected", rejectionCode: "policy_denied" });
+  assert.deepEqual(await unknown(request, "upload-unknown-001"), { kind: "unknown", reason: "transport" });
+});
+
+
+test("storage lookup adapter separates request correlation from durable operation ID", async () => {
+  let received;
+  const lookup = createStorageUploadLookupAdapter({
+    invoke: async (input, correlationId, operationId) => {
+      received = { input, correlationId, operationId };
+      return { success: true, value: { kind: "found", providerUploadReference: "opaque-existing-object" } };
+    },
+  });
+  assert.deepEqual(await lookup("upload-session-stable-001", "api-request-correlation-001", { tenantId: "tenant-a", applicationId: "app-a" }), {
+    kind: "found", providerUploadReference: "opaque-existing-object",
+  });
+  assert.deepEqual(received, {
+    input: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "upload-session-stable-001" },
+    correlationId: "api-request-correlation-001", operationId: "upload-session-stable-001",
+  });
+});
+
+test("storage lookup adapter never infers absence from transport or malformed results", async () => {
+  const thrown = createStorageUploadLookupAdapter({ invoke: async () => { throw new Error("secret"); } });
+  const failed = createStorageUploadLookupAdapter({ invoke: async () => ({ success: false, retryable: false }) });
+  const unavailable = createStorageUploadLookupAdapter({ invoke: async () => ({ success: false, retryable: true }) });
+  const malformed = createStorageUploadLookupAdapter({ invoke: async () => ({ success: true, value: { kind: "found", providerUploadReference: " " } }) });
+  const absent = createStorageUploadLookupAdapter({ invoke: async () => ({ success: true, value: { kind: "not_found" } }) });
+  const scope = { tenantId: "tenant-a", applicationId: "app-a" };
+  assert.deepEqual(await thrown("session-001", "request-001", scope), { kind: "unavailable" });
+  assert.deepEqual(await failed("session-001", "request-001", scope), { kind: "unknown" });
+  assert.deepEqual(await unavailable("session-001", "request-001", scope), { kind: "unavailable" });
+  assert.deepEqual(await malformed("session-001", "request-001", scope), { kind: "unknown" });
+  assert.deepEqual(await absent("session-001", "request-001", scope), { kind: "not_found" });
 });

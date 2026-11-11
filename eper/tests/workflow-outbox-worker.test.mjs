@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { WorkflowOutboxWorker } from "../dist/packages/workflows/workflow-outbox-worker.js";
+import { WorkflowOutboxDispatchNotApprovedError } from "../dist/packages/workflows/workflow-outbox-errors.js";
 
 const events = [
   { eventId: "11111111-1111-4111-8111-111111111111", eventType: "workflow.instance.started", attempts: 1 },
   { eventId: "22222222-2222-4222-8222-222222222222", eventType: "workflow.instance.submitted", attempts: 1 },
   { eventId: "33333333-3333-4333-8333-333333333333", eventType: "workflow.instance.completed", attempts: 2 },
 ].map(event => ({
-  ...event, tenantId: "tenant-01", applicationId: "app-01",
+  ...event, tenantId: "tenant-01", applicationId: "app-01", claimGeneration: 1,
   instanceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   transitionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   eventVersion: 1, payload: {}, occurredAt: "2026-10-31T12:00:00.000Z",
@@ -17,8 +18,8 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   const calls = [];
   const store = {
     async claim(context, options) { calls.push({ method: "claim", context, options }); return events; },
-    async renewLease(context, eventId, workerId, leaseSeconds) { calls.push({ method: "renew", eventId, workerId, leaseSeconds }); return true; },
-    async markDelivered(context, eventId, workerId) { calls.push({ method: "delivered", eventId, workerId }); },
+    async renewLease(context, eventId, workerId, leaseSeconds, claimGeneration) { calls.push({ method: "renew", eventId, workerId, leaseSeconds, claimGeneration }); return true; },
+    async markDelivered(context, eventId, workerId, claimGeneration) { calls.push({ method: "delivered", eventId, workerId, claimGeneration }); },
     async markFailed(context, eventId, options) {
       calls.push({ method: "failed", eventId, options });
       return { status: options.maxAttempts <= events.find(event => event.eventId === eventId).attempts ? "dead_letter" : "pending",
@@ -37,6 +38,8 @@ test("outbox worker dispatches, retries transient failures and dead-letters exha
   assert.deepEqual(result, { claimed: 3, delivered: 1, retried: 1, deadLettered: 1, leaseLost: 0, interrupted: 0 });
   assert.equal(dispatched.length, 3);
   assert.equal(calls.filter(call => call.method === "delivered").length, 1);
+  assert.equal(calls.find(call => call.method === "delivered").claimGeneration, 1);
+  assert.equal(calls.filter(call => call.method === "renew").every(call => call.claimGeneration === 1), true);
   const failures = calls.filter(call => call.method === "failed");
   assert.equal(failures.length, 2);
   assert.equal(failures[0].options.retryDelaySeconds, 3);
@@ -131,7 +134,7 @@ test("outbox worker starts heartbeats for every claimed event without a serial l
   const batch = events.slice(0, 2);
   const store = {
     async claim() { return batch; },
-    async renewLease(_context, eventId) { renewals.push(eventId); return true; },
+    async renewLease(_context, eventId, _workerId, _leaseSeconds, claimGeneration) { renewals.push({ eventId, claimGeneration }); return true; },
     async markDelivered() {},
     async markFailed() { throw new Error("unexpected failure"); },
   };
@@ -147,8 +150,8 @@ test("outbox worker starts heartbeats for every claimed event without a serial l
     },
   }, { workerId: "worker-01", leaseSeconds: 10 });
   const result = await worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 2);
-  assert.equal(renewals.includes(batch[0].eventId), true);
-  assert.equal(renewals.includes(batch[1].eventId), true, "later claimed events must not wait behind serial dispatch");
+  assert.equal(renewals.some(item => item.eventId === batch[0].eventId && item.claimGeneration === 1), true);
+  assert.equal(renewals.some(item => item.eventId === batch[1].eventId && item.claimGeneration === 1), true, "later claimed events must not wait behind serial dispatch");
   assert.deepEqual(result, { claimed: 2, delivered: 2, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 0 });
 });
 
@@ -250,13 +253,47 @@ test("outbox worker stops renewing a non-cooperative dispatch after shutdown", a
     async markFailed() {},
   };
   const shutdown = new AbortController();
+  let dispatchStarted;
+  const started = new Promise(resolve => { dispatchStarted = resolve; });
   const worker = new WorkflowOutboxWorker(store, {
     async dispatch() {
+      dispatchStarted();
       await new Promise(() => {});
     },
   }, { workerId: "worker-01", leaseSeconds: 10 });
-  void worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1, shutdown.signal);
+  const running = worker.runOnce({ tenantId: "tenant-01", applicationId: "app-01" }, 1, shutdown.signal);
+  await started;
   shutdown.abort(new Error("host shutdown"));
+  const result = await running;
+  assert.deepEqual(result, {
+    claimed: 1, delivered: 0, retried: 0, deadLettered: 0, leaseLost: 0, interrupted: 1,
+  }, "shutdown must release the worker pass even if the dispatcher ignores AbortSignal");
   await new Promise(resolve => setTimeout(resolve, 3_600));
   assert.deepEqual(renewals, [], "a non-cooperative dispatcher must not keep extending its lease after shutdown");
+});
+
+test("unapproved workflow outbox dispatch is parked immediately without transient retry", async () => {
+  const event = events[0];
+  const failures = [];
+  const store = {
+    async claim() { return [event]; },
+    async renewLease() { return true; },
+    async markDelivered() { throw new Error("unapproved event must not be delivered"); },
+    async markFailed(_context, _eventId, options) {
+      failures.push(options);
+      return { status: "dead_letter", attempts: event.attempts };
+    },
+  };
+  const worker = new WorkflowOutboxWorker(store, {
+    async dispatch() { throw new WorkflowOutboxDispatchNotApprovedError(); },
+  }, { workerId: "worker-01", maxAttempts: 8, baseRetryDelaySeconds: 5 });
+
+  const result = await worker.runOnce({ tenantId: event.tenantId, applicationId: event.applicationId }, 1);
+  assert.deepEqual(result, {
+    claimed: 1, delivered: 0, retried: 0, deadLettered: 1, leaseLost: 0, interrupted: 0,
+  });
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].maxAttempts, event.attempts);
+  assert.equal(failures[0].retryDelaySeconds, 0);
+  assert.equal(failures[0].error, "WORKFLOW_OUTBOX_DISPATCH_NOT_APPROVED");
 });

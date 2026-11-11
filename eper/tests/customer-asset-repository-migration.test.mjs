@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const migration = await readFile(new URL("../packages/audit/migrations/021_customer_asset_repository.sql", import.meta.url), "utf8");
 const scanDispatchMigration = await readFile(new URL("../packages/audit/migrations/022_customer_asset_scan_dispatch.sql", import.meta.url), "utf8");
 const uploadRecoveryMigration = await readFile(new URL("../packages/audit/migrations/023_customer_asset_upload_recovery.sql", import.meta.url), "utf8");
+const scanClaimGenerationMigration = await readFile(new URL("../packages/audit/migrations/033_customer_asset_scan_claim_generation.sql", import.meta.url), "utf8");
 
 test("customer asset repository migration separates customer assets from application links", () => {
   assert.ok(migration.includes("CREATE TABLE IF NOT EXISTS eper_customer_assets"));
@@ -71,4 +72,73 @@ test("customer asset upload recovery persists immutable request identity without
   assert.doesNotMatch(uploadRecoveryMigration, /signed_url|bearer_token|access_token/i);
   assert.ok(uploadRecoveryMigration.includes("BEGIN;"));
   assert.ok(uploadRecoveryMigration.includes("COMMIT;"));
+});
+
+const uploadProviderOutcomeMigration = await readFile(new URL("../packages/audit/migrations/024_customer_asset_upload_provider_outcomes.sql", import.meta.url), "utf8");
+
+test("provider outcome migration preserves uncertainty for legacy rows and constrains outcome/reference consistency", () => {
+  assert.ok(uploadProviderOutcomeMigration.includes("ADD COLUMN IF NOT EXISTS provider_outcome varchar(16) NOT NULL DEFAULT 'unknown'"));
+  assert.ok(uploadProviderOutcomeMigration.includes("SET provider_outcome = 'succeeded'"));
+  assert.ok(uploadProviderOutcomeMigration.includes("WHERE provider_upload_reference IS NOT NULL"));
+  assert.ok(uploadProviderOutcomeMigration.includes("provider_outcome IN ('unknown', 'succeeded', 'rejected')"));
+  assert.ok(uploadProviderOutcomeMigration.includes("provider_outcome <> 'succeeded' OR provider_upload_reference IS NOT NULL"));
+  assert.ok(uploadProviderOutcomeMigration.includes("provider_outcome <> 'rejected' OR provider_upload_reference IS NULL"));
+  assert.match(uploadProviderOutcomeMigration, /Legacy rows without a persisted provider reference remain unknown/);
+  assert.ok(!uploadProviderOutcomeMigration.includes("SET provider_outcome = 'rejected'"), "legacy failures must not be reclassified as definitive rejections");
+});
+
+const expiryWorkerRoleMigration = await readFile(new URL("../packages/audit/migrations/029_customer_asset_upload_expiry_worker_role.sql", import.meta.url), "utf8");
+const expiryQueueAgeMigration = await readFile(new URL("../packages/audit/migrations/030_customer_asset_upload_expiry_queue_age.sql", import.meta.url), "utf8");
+
+test("expiry worker role is non-login and limited to expiry function plus append-only audit", () => {
+  assert.ok(expiryWorkerRoleMigration.includes("CREATE ROLE eper_customer_asset_upload_expiry_worker_access"));
+  assert.ok(expiryWorkerRoleMigration.includes("NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT INSERT ON public.eper_audit_events"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT SELECT ON public.eper_audit_chain_head"));
+  assert.ok(expiryWorkerRoleMigration.includes("GRANT UPDATE (last_event_hash, updated_at)"));
+  assert.doesNotMatch(expiryWorkerRoleMigration, /GRANT .* ON public\\.eper_customer_asset_(assets|application_links|upload_sessions|scan_jobs)/i);
+  assert.doesNotMatch(expiryWorkerRoleMigration, /eper_payment_|eper_provider_/i);
+});
+
+test("expiry queue-age migration retains tenant scope, optional asset filter and bounded SKIP LOCKED processing", () => {
+  assert.ok(expiryQueueAgeMigration.includes("DROP FUNCTION public.eper_expire_customer_asset_upload_sessions(varchar, integer, uuid)"));
+  assert.ok(expiryQueueAgeMigration.includes("expires_at timestamptz"));
+  assert.ok(expiryQueueAgeMigration.includes("p_asset_id uuid DEFAULT NULL"));
+  assert.ok(expiryQueueAgeMigration.includes("FOR UPDATE SKIP LOCKED"));
+  assert.ok(expiryQueueAgeMigration.includes("clock_timestamp()"));
+  assert.ok(expiryQueueAgeMigration.includes("TO eper_customer_asset_access, eper_customer_asset_upload_expiry_worker_access"));
+});
+
+
+test("scan claim-generation migration is additive, repeatable and nonnegative", () => {
+  assert.match(scanClaimGenerationMigration, /BEGIN;/);
+  assert.match(scanClaimGenerationMigration, /ADD COLUMN IF NOT EXISTS claim_generation bigint NOT NULL DEFAULT 0/);
+  assert.match(scanClaimGenerationMigration, /claim_generation >= 0/);
+  assert.match(scanClaimGenerationMigration, /COMMIT;/);
+  assert.match(scanClaimGenerationMigration, /stale worker/i);
+});
+
+const uploadAttemptGenerationMigration = await readFile(new URL("../packages/audit/migrations/045_customer_asset_upload_attempt_generations.sql", import.meta.url), "utf8");
+
+test("upload attempt generations are monotonic, unique and immutable while historical attempts remain", () => {
+  assert.ok(uploadAttemptGenerationMigration.includes("ADD COLUMN IF NOT EXISTS attempt_generation bigint"));
+  assert.ok(uploadAttemptGenerationMigration.includes("row_number() OVER"));
+  assert.ok(uploadAttemptGenerationMigration.includes("PARTITION BY tenant_id, asset_id"));
+  assert.ok(uploadAttemptGenerationMigration.includes("attempt_generation > 0"));
+  assert.ok(uploadAttemptGenerationMigration.includes("upload_attempt_generation bigint NOT NULL DEFAULT 0"));
+  assert.ok(uploadAttemptGenerationMigration.includes("UNIQUE INDEX IF NOT EXISTS eper_customer_asset_upload_attempt_generation_uq"));
+  assert.ok(uploadAttemptGenerationMigration.includes("EPER_CUSTOMER_ASSET_UPLOAD_ATTEMPT_IDENTITY_IMMUTABLE"));
+  assert.ok(uploadAttemptGenerationMigration.includes("BEFORE UPDATE ON eper_customer_asset_upload_sessions"));
+  assert.ok(uploadAttemptGenerationMigration.includes("COMMIT;"));
+});
+
+const expectedChecksumMigration = await readFile(new URL("../packages/audit/migrations/032_customer_asset_upload_expected_checksum.sql", import.meta.url), "utf8");
+
+test("expected upload checksum migration is additive, repeatable and fails closed for legacy NULL rows", () => {
+  assert.ok(expectedChecksumMigration.includes("ADD COLUMN IF NOT EXISTS expected_checksum_sha256 char(64)"));
+  assert.ok(expectedChecksumMigration.includes("expected_checksum_sha256 IS NULL OR expected_checksum_sha256 ~ '^[a-f0-9]{64}$'"));
+  assert.ok(expectedChecksumMigration.includes("NULL is legacy-only and fails closed at completion"));
+  assert.ok(expectedChecksumMigration.includes("BEGIN;"));
+  assert.ok(expectedChecksumMigration.includes("COMMIT;"));
 });

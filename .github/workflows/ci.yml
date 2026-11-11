@@ -12,12 +12,15 @@ on:
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main", "reconcile/payment-153-168-integration"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
+      - ".github/workflows/ci.yml"
 
 jobs:
   build-and-test:
@@ -58,6 +61,8 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Peripheral management UI feature-flag and security-header regressions
+        run: node --test tests/customer-peripheral-management-ui.test.mjs
       - name: Workflow rules, capability composition and tariff entitlement unit regressions
         run: node --test tests/workflow-rule-engine.test.mjs tests/capability-composition.test.mjs tests/postgres-module-entitlement-service.test.mjs
       - name: Customer asset upload recovery and provider binding regressions
@@ -66,6 +71,16 @@ jobs:
         run: npm run migrate:payments
       - name: Apply audit and admin-configuration migrations to ephemeral CI database
         run: npm run migrate:audit
+      - name: Remote Desktop Sharing session and consent schema regressions
+        run: node --test tests/remote-desktop-persistence-migration.test.mjs
+      - name: Remote Desktop Sharing audited PostgreSQL session-store regressions
+        run: node --test tests/remote-desktop-session-store.test.mjs
+      - name: Remote Desktop Sharing authorization and paid add-on regressions
+        run: node --test tests/remote-desktop-application-service.test.mjs
+      - name: Remote Desktop Sharing API identity and feature-flag regressions
+        run: node --test tests/remote-desktop-api.test.mjs
+      - name: Live PostgreSQL peripheral adapter consistency and application RLS
+        run: node --test tests/postgres-peripheral-adapter-consistency.integration.test.mjs
       - name: Verify customer asset migrations replay on PostgreSQL 16 with RLS and data intact
         run: |
           set -euo pipefail
@@ -127,10 +142,40 @@ jobs:
         env:
           EPER_CUSTOMER_ASSET_LIVE_TESTS: "1"
         run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
+      - name: Live PostgreSQL customer asset metadata idempotency and migration assurance
+        run: node --test tests/postgres-customer-asset-migration-assurance.integration.test.mjs tests/postgres-customer-asset-metadata-idempotency.integration.test.mjs
+      - name: PostgreSQL 16 customer asset scan worker process and recovery integration
+        run: node --test tests/postgres-customer-asset-scan-process.integration.test.mjs
       - name: Apply workflow execution, publication and role migrations to ephemeral CI database
         run: npm run migrate:workflows
       - name: Verify workflow migrations are safely repeatable
         run: npm run migrate:workflows
+      - name: Provision isolated restricted workflow outbox login for privilege proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_password_a="$(openssl rand -hex 32)"
+          worker_password_b="$(openssl rand -hex 32)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_test WITH LOGIN PASSWORD '${worker_password_a}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_workflow_outbox_worker_test_b WITH LOGIN PASSWORD '${worker_password_b}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_workflow_outbox_worker_test, eper_workflow_outbox_worker_test_b"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_workflow_outbox_worker_access TO eper_workflow_outbox_worker_test, eper_workflow_outbox_worker_test_b"
+          echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL=postgres://eper_workflow_outbox_worker_test:${worker_password_a}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          echo "EPER_WORKFLOW_OUTBOX_EXPECTED_DATABASE_ROLE=eper_workflow_outbox_worker_test" >> "$GITHUB_ENV"
+          echo "EPER_WORKFLOW_OUTBOX_TEST_DATABASE_URL_B=postgres://eper_workflow_outbox_worker_test_b:${worker_password_b}@localhost:5432/eper_test" >> "$GITHUB_ENV"
+          echo "EPER_WORKFLOW_OUTBOX_EXPECTED_DATABASE_ROLE_B=eper_workflow_outbox_worker_test_b" >> "$GITHUB_ENV"
+      - name: Verify dedicated workflow outbox login privileges on PostgreSQL 16
+        run: node --test tests/workflow-outbox-worker-access.integration.test.mjs
+      - name: Verify worker startup privilege gate with dedicated PostgreSQL 16 login
+        run: node --test tests/workflow-outbox-worker-database.integration.test.mjs
+      - name: Prove PostgreSQL claim-generation fencing against stale worker acknowledgements
+        run: node --test tests/workflow-outbox-claim-generation.integration.test.mjs
+      - name: Prove two restricted PostgreSQL logins compete safely for the same outbox event
+        run: node --test tests/workflow-outbox-two-worker-concurrency.integration.test.mjs
+      - name: Prove two-worker retry, dead-letter, audited replay and synthetic redelivery lifecycle
+        run: node --test tests/workflow-outbox-retry-deadletter-replay.integration.test.mjs
+      - name: Verify worker configuration, claim fencing, store and approval dispatcher contracts
+        run: node --test tests/workflow-outbox-claim-generation-migration.test.mjs tests/workflow-outbox-worker-access-migration.test.mjs tests/workflow-outbox-store.test.mjs tests/workflow-outbox-worker-config.test.mjs tests/workflow-outbox-dispatcher-adapter.test.mjs tests/workflow-outbox-worker.test.mjs tests/workflow-outbox-dispatcher-module.test.mjs tests/workflow-outbox-worker-main.test.mjs
       - name: Live PostgreSQL workflow execution integration
         run: node --test tests/postgres-workflow-execution.integration.test.mjs
       - name: Live PostgreSQL tenant and actor application assignment integration
@@ -139,8 +184,18 @@ jobs:
         run: node --test tests/postgres-application-assignment-live.integration.test.mjs
       - name: Live PostgreSQL commercial tariff access guard integration
         run: node --test tests/postgres-module-entitlement-commercial-guard.integration.test.mjs
+      - name: Provision restricted application add-on RLS role and prove tenant/application isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_application_addon_access NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO eper_application_addon_access"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE ON eper_application_addon_entitlement TO eper_application_addon_access"
+          node --test tests/postgres-application-addon-rls.integration.test.mjs
       - name: Apply campaign scheduler migrations to ephemeral CI database
         run: npm run migrate:campaign-scheduler
+      - name: Campaign scheduler claim fencing, worker lifecycle and PostgreSQL recovery regressions
+        run: node --test tests/campaign-scheduler-store.test.mjs tests/campaign-scheduler-worker.test.mjs tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs tests/campaign-scheduler-worker-restart.integration.test.mjs
       - name: Apply capability persistence migrations to ephemeral CI database
         run: npm run migrate:capabilities
       - name: Apply ticketing persistence migrations to ephemeral CI database

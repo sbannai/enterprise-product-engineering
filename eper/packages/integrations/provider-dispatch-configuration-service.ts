@@ -23,10 +23,21 @@ export class ProviderDispatchConfigurationError extends Error {
   constructor(readonly code:
     | "PROVIDER_DISPATCH_NO_ACTIVE_BINDING"
     | "PROVIDER_DISPATCH_AMBIGUOUS_BINDING"
-    | "PROVIDER_DISPATCH_POLICY_INVALID") {
+    | "PROVIDER_DISPATCH_POLICY_INVALID"
+    | "PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH") {
     super(code);
     this.name = "ProviderDispatchConfigurationError";
   }
+}
+
+const sensitivePolicyKey = /(password|passwd|secret|token|authorization|cookie|api[_-]?key|client[_-]?secret|credential|private[_-]?key)/i;
+
+function containsSensitivePolicyKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsSensitivePolicyKey);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, nested]) => sensitivePolicyKey.test(key) || containsSensitivePolicyKey(nested),
+  );
 }
 
 function eligible(connection: ApplicationProviderConnection, capabilityKey: string): boolean {
@@ -77,7 +88,17 @@ export class ProviderDispatchConfigurationService {
       applicationId: input.applicationId,
       connectionId: selected.connectionId,
     });
-    if (effective.source === "NONE" || !effective.policy || typeof effective.policy !== "object" || Array.isArray(effective.policy)) {
+    if (effective.tenantId !== input.tenantId ||
+        effective.applicationId !== input.applicationId ||
+        effective.connectionId !== selected.connectionId) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH");
+    }
+    if ((effective.source !== "APPLICATION_OVERRIDE" && effective.source !== "TENANT_DEFAULT") ||
+        !effective.policy || typeof effective.policy !== "object" || Array.isArray(effective.policy) ||
+        containsSensitivePolicyKey(effective.policy) ||
+        !(effective.tenantDefaultVersion === null ||
+          (Number.isSafeInteger(effective.tenantDefaultVersion) && effective.tenantDefaultVersion >= 1)) ||
+        (effective.source === "TENANT_DEFAULT" && effective.tenantDefaultVersion === null)) {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_POLICY_INVALID");
     }
 

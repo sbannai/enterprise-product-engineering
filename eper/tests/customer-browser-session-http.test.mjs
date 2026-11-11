@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { createAppServer } from "../dist/apps/api/server.js";
 import { createCustomerCsrfToken } from "../dist/packages/identity/customer-browser-security.js";
@@ -27,15 +28,23 @@ test("application session context requires durable browser session and both acti
   process.env.EPER_CUSTOMER_ACCESS_IDENTITIES_JSON = JSON.stringify({
     ["b".repeat(48)]: { tenantId: "wrong-tenant", actorId: "wrong-actor", roleKey: "super-admin" },
   });
+  const sessionBindingSecret = "d".repeat(48);
   const server = createAppServer({
-    customerIdentitySessionStore: { async resolveSession(value) { assert.equal(value, token); return session; } },
+    customerCsrfSecret: sessionBindingSecret,
+    customerIdentitySessionStore: { async resolveSession(value) { assert.ok([token, "t".repeat(43)].includes(value)); return session; } },
     tenantApplicationAssignmentStore: { async listActive(tenantId) {
       assert.equal(tenantId, "tenant-01"); return ["application-01"];
     } },
-    actorApplicationAssignmentStore: { async isAssigned(tenantId, actorId, applicationId) {
+    actorApplicationAssignmentStore: {
+      async listActive(tenantId, actorId) {
+        assert.deepEqual([tenantId, actorId], ["tenant-01", "actor-01"]);
+        return ["application-01"];
+      },
+      async isAssigned(tenantId, actorId, applicationId) {
       assert.deepEqual([tenantId, actorId, applicationId], ["tenant-01", "actor-01", "application-01"]);
       return true;
-    } },
+      },
+    },
   });
   try {
     await new Promise((resolve, reject) => {
@@ -44,6 +53,18 @@ test("application session context requires durable browser session and both acti
     });
     const address = server.address();
     assert.ok(address && typeof address === "object");
+    const sessionUrl = "http://127.0.0.1:" + address.port + "/customer/session";
+    const sessionResponse = await fetch(sessionUrl, { headers: { cookie: "__Host-eper_session=" + token } });
+    assert.equal(sessionResponse.status, 200);
+    const sessionEnvelope = await sessionResponse.json();
+    const expectedBinding = createHmac("sha256", sessionBindingSecret)
+      .update("eper/customer-session-binding/v1\0", "utf8").update(token, "utf8").digest("hex");
+    assert.equal(sessionEnvelope.data.sessionBinding, expectedBinding);
+    assert.match(sessionEnvelope.data.sessionBinding, /^[a-f0-9]{64}$/);
+    const newLoginResponse = await fetch(sessionUrl, { headers: { cookie: "__Host-eper_session=" + "t".repeat(43) } });
+    const newLoginEnvelope = await newLoginResponse.json();
+    assert.notEqual(newLoginEnvelope.data.sessionBinding, sessionEnvelope.data.sessionBinding,
+      "a new login by the same actor must produce a different session binding");
     const url = "http://127.0.0.1:" + address.port + "/customer/applications/application-01/session";
     const bearerOnly = await fetch(url, { headers: { authorization: "Bearer " + "b".repeat(48) } });
     assert.equal(bearerOnly.status, 401, "postgres browser mode must not fall back to bearer identity mappings");
