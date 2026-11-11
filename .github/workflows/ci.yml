@@ -65,6 +65,8 @@ jobs:
         run: node --test tests/customer-peripheral-management-ui.test.mjs
       - name: Workflow rules, capability composition and tariff entitlement unit regressions
         run: node --test tests/workflow-rule-engine.test.mjs tests/capability-composition.test.mjs tests/postgres-module-entitlement-service.test.mjs
+      - name: Workflow draft API isolation and stale-save conflict regressions
+        run: node --test tests/workflow-definition-draft-api.test.mjs tests/workflow-definition-draft-api-concurrency.test.mjs
       - name: Customer asset upload recovery and provider binding regressions
         run: node --test tests/customer-asset-upload-recovery-service.test.mjs tests/customer-asset-upload-authorization.test.mjs tests/customer-asset-upload-request-authorization.test.mjs tests/customer-asset-upload-readiness.test.mjs tests/customer-asset-upload-api.test.mjs tests/storage-upload-adapter.test.mjs tests/customer-asset-repository-migration.test.mjs
       - name: Apply payment schema migrations to ephemeral CI database
