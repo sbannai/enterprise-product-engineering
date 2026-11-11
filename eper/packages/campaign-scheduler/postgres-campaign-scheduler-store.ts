@@ -557,6 +557,7 @@ export class PostgresCampaignSchedulerStore {
            ON e.schedule_id=s.id AND e.tenant_id=s.tenant_id AND e.application_id=s.application_id
          WHERE e.tenant_id=$1 AND e.application_id=$2 AND e.id=$3 AND e.status='running'
            AND e.locked_by=$4 AND e.claim_generation=$5 AND e.dispatch_started_at IS NULL
+           AND e.locked_at >= now() - interval '300 seconds'
            AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
            AND s.approval_status='approved'
          FOR UPDATE OF s, e`,
@@ -631,6 +632,7 @@ export class PostgresCampaignSchedulerStore {
     try {
       const result = await client.query<{ authorized: boolean }>(
         `SELECT (e.status='running' AND e.locked_by=$4 AND e.claim_generation=$5
+                  AND e.locked_at >= now() - interval '300 seconds'
                   AND (s.status='scheduled' OR (s.status='completed' AND s.trigger_type='once'))
                   AND s.approval_status='approved') AS authorized
          FROM eper_campaign_executions e
@@ -856,7 +858,8 @@ export class PostgresCampaignSchedulerStore {
       const result = await client.query(
         `UPDATE eper_campaign_executions SET locked_at=now(), updated_at=now()
          WHERE tenant_id=$1 AND application_id=$2 AND id=$3
-           AND status='running' AND locked_by=$4 AND claim_generation=$5 RETURNING id`,
+           AND status='running' AND locked_by=$4 AND claim_generation=$5
+           AND locked_at >= now() - interval '300 seconds' RETURNING id`,
         [tenantId, applicationId, input.executionId, workerId, input.claimGeneration],
       );
       return result.rows.length === 1;
