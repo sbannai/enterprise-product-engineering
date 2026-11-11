@@ -71,7 +71,7 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
       const fetched = await this.client.fetchJwtSvid({
         audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
         spiffeId: this.expectedSpiffeId,
-        signal,
+        ...(signal ? { signal } : {}),
       });
       if (!Array.isArray(fetched) || fetched.length !== 1 ||
           fetched[0]?.spiffeId !== this.expectedSpiffeId ||
