@@ -83,6 +83,21 @@ export function adaptWorkflowDefinitionToComposition(
       diagnostics: [invalid("workflow.adapter.definition_invalid", "The workflow definition cannot be represented as a capability composition.")] };
   }
 
+  // Treat persisted/API JSON as untrusted at this boundary even though the
+  // TypeScript interface is stricter. Return stable diagnostics, never runtime
+  // TypeErrors from array operations on malformed customer input.
+  if (!Array.isArray(definition.rules ?? []) ||
+      definition.activities.some(activity => !activity ||
+        !Array.isArray(activity.nextActivityIds) || !Array.isArray(activity.fields) ||
+        (activity.routingRuleIds !== undefined && !Array.isArray(activity.routingRuleIds))) ||
+      (definition.rules ?? []).some(rule => !rule || typeof rule !== "object" ||
+        !ID.test(rule.id ?? "") || typeof rule.targetActivityId !== "string" ||
+        !Number.isSafeInteger(rule.priority) || !rule.condition || typeof rule.condition !== "object")) {
+    return { catalogueVersion: WORKFLOW_CAPABILITY_CATALOGUE_VERSION, composition: null,
+      diagnostics: [invalid("workflow.adapter.input_shape_invalid",
+        "Workflow activities and routing rules must contain valid arrays and rule fields.")] };
+  }
+
   const activityIds = new Set<string>();
   const ruleIds = new Set<string>();
   const nodes: CapabilityComposition["nodes"] = [];
