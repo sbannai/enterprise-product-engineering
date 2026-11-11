@@ -40,6 +40,7 @@ type StoredObject = {
  */
 export class SyntheticProviderStorageDriver
 implements ProviderStorageDriver<SyntheticStorageCredentials> {
+  readonly synthetic = true;
   readonly capabilities = Object.freeze({
     idempotentCreateByUploadSessionId: true,
     lookupByUploadSessionId: true,

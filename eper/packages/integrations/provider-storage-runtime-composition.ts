@@ -89,8 +89,12 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
     if (!registration || typeof registration.synthetic !== "boolean") {
       throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID");
     }
-    if (input.environment === "production" && registration.synthetic) {
+    const adapterMarkedSynthetic = (registration.adapter as ProviderStorageDriver<TCredentials> & { synthetic?: unknown }).synthetic === true;
+    if (input.environment === "production" && (registration.synthetic || adapterMarkedSynthetic)) {
       throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN");
+    }
+    if (adapterMarkedSynthetic && registration.synthetic !== true) {
+      throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID");
     }
     try {
       assertProviderStorageDriver(registration.adapter);

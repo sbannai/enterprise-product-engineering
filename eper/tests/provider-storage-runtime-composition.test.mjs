@@ -86,3 +86,26 @@ test("enabled composition fails closed without a complete provider registration"
   assert.throws(() => createProviderStorageRuntimeComposition(input({ secretResolver: undefined })),
     error => error.code === "PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
 });
+
+
+test("production rejects a driver that self-identifies as synthetic even if registration mislabels it", () => {
+  const configured = input({ environment: "production" });
+  configured.registrations[0].adapter.synthetic = true;
+  configured.registrations[0].synthetic = false;
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(configured),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN",
+  );
+});
+
+test("non-production composition requires synthetic driver provenance to be declared accurately", () => {
+  const configured = input();
+  configured.registrations[0].adapter.synthetic = true;
+  configured.registrations[0].synthetic = false;
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(configured),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID",
+  );
+});
