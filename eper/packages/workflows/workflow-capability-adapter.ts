@@ -62,6 +62,17 @@ export interface WorkflowCompositionResult {
   diagnostics: CompositionDiagnostic[];
 }
 
+/** Shared fail-closed lifecycle gate used by draft persistence and publication. */
+export function assertWorkflowCapabilityComposition(definition: WorkflowDefinition): WorkflowCompositionResult {
+  const result = adaptWorkflowDefinitionToComposition(definition);
+  const blocking = result.diagnostics.filter(item => item.blocking);
+  if (!result.composition || blocking.length > 0) {
+    const codes = blocking.map(item => item.code).sort();
+    throw new Error("WORKFLOW_CAPABILITY_COMPOSITION_INVALID:" + (codes.join(",") || "composition_missing"));
+  }
+  return result;
+}
+
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 function invalid(code: string, message: string, nodeId?: string): CompositionDiagnostic {
