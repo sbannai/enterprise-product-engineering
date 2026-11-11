@@ -37,7 +37,7 @@ Important API distinction: `getJwtSvid` obtains the current process's own SVID; 
 
 ## Implementation sequence and gates
 
-1. Add a Node.js SPIFFE Workload API client adapter using a maintained gRPC implementation. Validate the fixed audience, trust domain, exact SPIFFE ID, token signature, expiry, and token identifier. Do not implement a home-grown JWT parser or accept arbitrary issuers.
+1. Add the child-local SDK adapter using `getJwtSvid(fixedAudience, { spiffeId })`. The local Workload API performs caller attestation and audience-scoped SVID delivery. Compare the returned SPIFFE ID exactly and enforce a bounded remaining lifetime. Do not call `ValidateJWTSVID` merely to revalidate the same workload's locally fetched SVID; reserve it for incoming SVIDs from other workloads. Do not implement a home-grown JWT parser.
 2. Add child bootstrap that reads only the explicitly configured Workload API socket endpoint and obtains identity from SPIRE. No fallback to environment credentials or parent-supplied claims.
 3. Select and implement an approved secret broker integration. It must authorize the exact scanner SPIFFE ID and resolve only the selected tenant/application provider connection; it must not expose secret references to IPC.
 4. Define operator deployment evidence for SPIRE Agent, process selectors/attestation, socket permissions/mount, dedicated DB LOGIN role, database TLS/authentication, and secret-broker policy. The current API-only Dockerfile and PostgreSQL-only local Compose are not sufficient deployment evidence.
@@ -53,7 +53,7 @@ Important API distinction: `getJwtSvid` obtains the current process's own SVID; 
 
 ## Consequences
 
-- The current synthetic verifier remains test-only.
+- The SDK adapter and verifier are still test-only until the pinned SDK dependency, explicit socket configuration, and local SPIRE integration tests are completed.
 - The provider credential resolver adapter is groundwork only; it cannot establish process identity.
 - The worker must not be wired to the child supervisor until the Workload API verifier and approved secret-broker adapter exist.
 - Production scanner startup remains unconditionally disabled.
