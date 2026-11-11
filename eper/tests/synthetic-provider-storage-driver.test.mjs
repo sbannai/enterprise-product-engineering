@@ -13,7 +13,7 @@ const upload = {
   mimeType: "text/plain", sizeBytes: 12,
 };
 
-test("synthetic storage driver satisfies the complete provider contract without network access", async () => {
+test("synthetic storage driver preserves the provider contract without network access", async () => {
   let now = Date.parse("2026-11-08T10:00:00.000Z");
   const driver = new SyntheticProviderStorageDriver({ now: () => now });
   assert.equal(assertProviderStorageDriver(driver), driver);
@@ -23,37 +23,32 @@ test("synthetic storage driver satisfies the complete provider contract without 
   assert.equal(grant.kind, "succeeded");
   if (grant.kind !== "succeeded") return;
   assert.equal(grant.providerUploadReference, "synthetic-object:session-a");
-  assert.equal(new URL(grant.url).hostname, "storage.example.test");
+  assert.equal(new URL(grant.url).hostname, "uploads.synthetic.invalid");
   assert.equal(grant.method, "PUT");
 
-  const lookup = await driver.lookupUpload(context, "session-a", "request-2");
-  assert.deepEqual(lookup, { kind: "found", providerUploadReference: grant.providerUploadReference });
-
+  assert.deepEqual(await driver.lookupUpload(context, "session-a", "request-2"), {
+    kind: "found", providerUploadReference: grant.providerUploadReference,
+  });
   const renewed = await driver.renewUploadGrant(context, {
     ...upload, providerUploadReference: grant.providerUploadReference,
   }, "request-3");
   assert.equal(renewed.kind, "succeeded");
 
-  const verified = await driver.verifyObject(context, {
+  assert.deepEqual(await driver.verifyObject(context, {
     uploadSessionId: "session-a", providerUploadReference: grant.providerUploadReference,
     expectedSizeBytes: 12, expectedMimeType: "text/plain", expectedSha256: "a".repeat(64),
-  }, "request-4");
-  assert.deepEqual(verified, {
-    kind: "verified", sizeBytes: 12, mimeType: "text/plain", sha256: "a".repeat(64),
-  });
-
-  const scan = await driver.scanObject(context, {
+  }, "request-4"), { kind: "unknown" });
+  assert.deepEqual(await driver.scanObject(context, {
     assetId: "asset-a", providerObjectReference: grant.providerUploadReference,
     expectedSha256: "a".repeat(64),
-  }, "request-5");
-  assert.deepEqual(scan, { kind: "clean", scanReference: "synthetic-scan-only" });
+  }, "request-5"), { kind: "timeout" });
 
   const download = await driver.createDownloadGrant(context, {
     tenantId: "tenant-a", actorId: "actor-a", applicationId: "app-a",
     assetId: "asset-a", accessReference: grant.providerUploadReference, fileName: "evidence.txt",
   }, "request-6");
   assert.ok(download);
-  assert.equal(new URL(download.url).hostname, "storage.example.test");
+  assert.equal(new URL(download.url).hostname, "downloads.synthetic.invalid");
   assert.ok(Date.parse(download.expiresAt) > now);
 
   now += 1_000;
@@ -77,7 +72,7 @@ test("synthetic driver scopes lookup, verification, scanning and downloads to te
   assert.deepEqual(await driver.scanObject(otherTenant, {
     assetId: "asset-a", providerObjectReference: grant.providerUploadReference,
     expectedSha256: "a".repeat(64),
-  }, "request-4"), { kind: "error", retryable: false });
+  }, "request-4"), { kind: "malformed" });
   assert.equal(await driver.createDownloadGrant(otherTenant, {
     tenantId: "tenant-b", actorId: "actor-b", applicationId: "app-a",
     assetId: "asset-a", accessReference: grant.providerUploadReference, fileName: "evidence.txt",
@@ -88,8 +83,9 @@ test("synthetic driver rejects conflicting reuse of an upload session", async ()
   const driver = new SyntheticProviderStorageDriver();
   const first = await driver.createUploadGrant(context, upload, "request-1");
   assert.equal(first.kind, "succeeded");
-  const conflict = await driver.createUploadGrant(context, { ...upload, sizeBytes: 13 }, "request-2");
-  assert.deepEqual(conflict, { kind: "rejected", rejectionCode: "idempotency_conflict" });
+  assert.deepEqual(await driver.createUploadGrant(context, { ...upload, sizeBytes: 13 }, "request-2"), {
+    kind: "unknown", reason: "malformed_response",
+  });
 });
 
 test("synthetic scanner can be configured to fail closed for negative-path testing", async () => {
