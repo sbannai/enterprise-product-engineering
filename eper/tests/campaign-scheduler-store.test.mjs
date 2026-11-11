@@ -170,6 +170,23 @@ test("successful completion rolls back if its audit event cannot be persisted", 
   assert.equal(calls.some((call) => call.sql === "COMMIT"), false);
 });
 
+test("lease renewal refuses an expired claim even when worker and generation still match", async () => {
+  const { pool, calls } = fakePool(async (sql) => ({
+    rows: sql.includes("UPDATE eper_campaign_executions") ? [] : [],
+    rowCount: 0,
+  }));
+  const store = new PostgresCampaignSchedulerStore(pool);
+  const renewed = await store.renewExecutionLease({
+    tenantId: "tenant-a", applicationId: "app-a", executionId: "job-1",
+    workerId: "worker-a", claimGeneration: 1,
+  });
+  assert.equal(renewed, false);
+  const update = calls.find((call) => call.sql.includes("UPDATE eper_campaign_executions"));
+  assert.ok(update);
+  assert.match(update.sql, /locked_at >= now\(\) - interval '300 seconds'/);
+  assert.deepEqual(update.values, ["tenant-a", "app-a", "job-1", "worker-a", 1]);
+});
+
 test("stale worker recovery validates policy and requeues or dead-letters expired leases", async () => {
   const { pool, calls } = fakePool(async (sql) => ({
     rows: sql.includes("UPDATE eper_campaign_executions") ? [
@@ -268,6 +285,7 @@ test("dispatch authorization re-reads current schedule approval and worker lease
   assert.match(calls[0].sql, /\(s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)\)/);
   assert.match(calls[0].sql, /s\.approval_status='approved'/);
   assert.match(calls[0].sql, /e\.status='running' AND e\.locked_by=\$4 AND e\.claim_generation=\$5/);
+  assert.match(calls[0].sql, /e\.locked_at >= now\(\) - interval '300 seconds'/);
   assert.match(calls[0].sql, /WHERE e\.tenant_id=\$1 AND e\.application_id=\$2 AND e\.id=\$3/);
   assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a", 1]);
 });
@@ -396,6 +414,7 @@ test("dispatch-start fence rejects a stale claim generation for the same worker"
   const lock = calls.find((call) => call.sql.includes("FOR UPDATE OF s, e"));
   assert.ok(lock);
   assert.match(lock.sql, /e\.claim_generation=\$5/);
+  assert.match(lock.sql, /e\.locked_at >= now\(\) - interval '300 seconds'/);
   assert.deepEqual(lock.values, ["tenant-a", "app-a", "c7d2a1a8-6a54-4ec4-a1cb-1a31e8b43c31", "worker-a", 1]);
   assert.ok(!calls.some((call) => call.sql.includes("SET dispatch_started_at=now()")));
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
