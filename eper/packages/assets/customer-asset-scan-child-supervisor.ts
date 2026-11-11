@@ -46,7 +46,7 @@ export async function runCustomerAssetScanChild(
   }
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(options.environment ?? {})) {
-    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) || typeof value !== "string" || value.length > 4096) {
+    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) || /(?:DATABASE|DB_URL|PASSWORD|PRIVATE_KEY|SECRET)/.test(key) || typeof value !== "string" || value.length > 4096) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID");
     }
     env[key] = value;
