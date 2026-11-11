@@ -34,7 +34,7 @@ const fixture = ({ identity = claims(), credentials = { marker: "synthetic-only"
       calls.push(input);
       return credentials;
     } },
-    { now: () => now * 1000 },
+    { now: () => now * 1000, expectedIssuer: "eper-workload-identity" },
   );
   return { service, calls };
 };
@@ -84,6 +84,7 @@ test("child identity rejects expired, future-issued and overlong attestations", 
 
 test("child identity rejects malformed and extra claims", async () => {
   for (const identity of [
+    claims({ issuer: "untrusted-issuer" }),
     claims({ extraSecret: "must-not-be-accepted" }),
     claims({ tokenId: "" }),
     claims({ audience: "eper:api" }),
@@ -109,14 +110,14 @@ test("child identity fails closed when workload proof or scan credentials are un
 });
 
 test("production runtime requires independent verifier and resolver and rejects synthetic adapters", () => {
-  assert.throws(() => requireCustomerAssetScanChildIdentityRuntime({ environment: "production" }),
+  assert.throws(() => requireCustomerAssetScanChildIdentityRuntime({ environment: "production", synthetic: false, expectedIssuer: "eper-workload-identity" }),
     /CUSTOMER_ASSET_SCAN_CHILD_RUNTIME_DISABLED/);
   const verifier = { async verifyCurrentProcessIdentity() { return claims(); } };
   const credentials = { async resolveScanCredentials() { return { marker: "test" }; } };
   assert.throws(() => requireCustomerAssetScanChildIdentityRuntime({
-    environment: "production", verifier, credentials, synthetic: true,
+    environment: "production", verifier, credentials, synthetic: true, expectedIssuer: "eper-workload-identity",
   }), /CUSTOMER_ASSET_SCAN_CHILD_RUNTIME_DISABLED/);
   assert.doesNotThrow(() => requireCustomerAssetScanChildIdentityRuntime({
-    environment: "test", verifier, credentials, synthetic: true,
+    environment: "test", verifier, credentials, synthetic: true, expectedIssuer: "eper-workload-identity",
   }));
 });
