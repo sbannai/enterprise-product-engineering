@@ -124,3 +124,27 @@ test("outbox claim sweep dead-letters crash-expired claims at the finite attempt
   const worker = await readFile(new URL("../packages/workflows/workflow-outbox-worker.ts", import.meta.url), "utf8");
   assert.match(worker, /maxAttempts: this\.maxAttempts/);
 });
+
+
+test("workflow role permission schema accepts the complete API permission catalogue", async () => {
+  const sql = await readFile(new URL("../packages/workflows/migrations/017_workflow_role_permission_catalogue.sql", import.meta.url), "utf8");
+  const store = await readFile(new URL("../packages/workflows/postgres-workflow-actor-role-assignment-store.ts", import.meta.url), "utf8");
+  assert.match(sql, /DROP CONSTRAINT IF EXISTS eper_workflow_role_definition_permissions_check/);
+  assert.match(sql, /ADD CONSTRAINT eper_workflow_role_definition_permissions_check/);
+  assert.match(sql, /jsonb_array_length\(permissions\) BETWEEN 1 AND 24/);
+  const permissions = [...store.matchAll(/"([a-z][a-z0-9._:-]+)"/g)].map(match => match[1]);
+  const expected = [
+    "workflow:view", "workflow:act", "workflow:approve", "workflow:admin", "role:assign", "access:manage",
+    "provider.connection.create", "provider.connection.read", "provider.connection.bind",
+    "provider.connection.validate", "provider.connection.rotate", "provider.connection.revoke",
+    "customer.asset.upload", "peripheral.register", "peripheral.configure", "peripheral.read",
+    "peripheral.activate", "peripheral.suspend", "remote_desktop.session.request",
+    "remote_desktop.consent.accept", "remote_desktop.control.grant", "remote_desktop.consent.revoke",
+    "remote_desktop.session.start", "remote_desktop.session.stop",
+  ];
+  for (const permission of expected) {
+    assert.ok(sql.includes('"' + permission + '"'), "database permission constraint must include " + permission);
+    assert.ok(permissions.includes(permission), "API authorization catalogue must include " + permission);
+  }
+  assert.equal(new Set(expected).size, 24);
+});
