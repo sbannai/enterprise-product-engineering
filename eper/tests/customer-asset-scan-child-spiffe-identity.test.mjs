@@ -119,3 +119,13 @@ test("SPIFFE SDK adapter returns no identity when the workload has no entitled S
     spiffeId,
   }), []);
 });
+
+test("SPIFFE SDK adapter rejects an SDK result without its opaque token", async () => {
+  const adapter = new CustomerAssetScanChildSpiffeSdkAdapter({
+    async getJwtSvid() { return { spiffeId, expiresAtMs }; },
+  });
+  await assert.rejects(adapter.fetchJwtSvid({
+    audience: [CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE],
+    spiffeId,
+  }), { message: "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SVID_INVALID" });
+});
