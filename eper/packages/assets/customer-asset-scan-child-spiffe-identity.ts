@@ -1,49 +1,31 @@
 /**
  * SPIFFE Workload API identity adapter boundary for scanner child processes.
  *
- * The concrete transport must use gRPC over the local Workload API Unix socket.
- * SPIRE performs caller attestation out-of-band; this adapter never treats an
- * environment variable, parent IPC claim, or caller-provided token as identity.
- *
- * JWT signature, issuer, expiry and audience validation are delegated to the
- * Workload API ValidateJWTSVID RPC, as recommended by the SPIFFE specification.
+ * The SDK fetch operation is made by the child itself through the local
+ * Workload API. SPIRE attests the calling process out-of-band. No parent IPC,
+ * environment claim, or caller-provided token is accepted as identity.
  */
 export const CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE =
   "eper:customer-asset-scan-child" as const;
 
 export interface SpiffeWorkloadApiJwtSvid {
   spiffeId: string;
-  svid: string;
+  expiresAtMs: number;
 }
 
-export interface SpiffeWorkloadApiValidatedJwtSvid {
-  spiffeId: string;
-  claims: Readonly<Record<string, unknown>>;
-}
-
-/**
- * Narrow port implemented by the gRPC transport. The implementation must
- * connect only to the configured local SPIFFE Workload Endpoint and use its
- * FetchJWTSVID and ValidateJWTSVID RPCs.
- */
+/** Narrow port implemented by the SPIFFE SDK adapter. */
 export interface SpiffeWorkloadApiClient {
   fetchJwtSvid(input: {
     audience: readonly [typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE];
     spiffeId: string;
   }): Promise<readonly SpiffeWorkloadApiJwtSvid[]>;
-  validateJwtSvid(input: {
-    audience: typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE;
-    svid: string;
-  }): Promise<SpiffeWorkloadApiValidatedJwtSvid>;
 }
 
 export interface CustomerAssetScanChildSpiffeIdentity {
   readonly spiffeId: string;
   readonly trustDomain: string;
   readonly audience: typeof CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE;
-  readonly issuedAt?: number;
   readonly expiresAt: number;
-  readonly tokenId?: string;
 }
 
 export class CustomerAssetScanChildSpiffeIdentityError extends Error {
@@ -57,8 +39,6 @@ export class CustomerAssetScanChildSpiffeIdentityError extends Error {
 
 function validSpiffeId(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 512) return false;
-  // SPIFFE IDs are URI values. Reject credentials, query, fragment, and path
-  // traversal; the expected ID is compared byte-for-byte after this check.
   return /^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(value) &&
     !value.includes("..") && !value.includes("//", 9);
 }
@@ -68,25 +48,11 @@ function validTrustDomain(value: string): boolean {
     !value.startsWith(".") && !value.endsWith(".") && !value.includes("..");
 }
 
-function stringClaim(claims: Readonly<Record<string, unknown>>, key: string): string | undefined {
-  const value = claims[key];
-  return typeof value === "string" && value.length > 0 && value.length <= 512 ? value : undefined;
-}
-
-function numericClaim(claims: Readonly<Record<string, unknown>>, key: string): number | undefined {
-  const value = claims[key];
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
-}
-
-function audienceIncludes(value: unknown): boolean {
-  return value === CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE ||
-    (Array.isArray(value) && value.includes(CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE));
-}
-
 /**
- * Obtains a short-lived SVID for the current process and asks the local SPIFFE
- * Workload API to validate it. No JWT is parsed or cryptographically verified
- * in application code, and the token is never returned or logged.
+ * Fetches the current process's own short-lived SVID. The SDK delegates
+ * caller attestation to SPIRE through the local Workload API. We deliberately
+ * do not call ValidateJWTSVID on this locally fetched token: that RPC is for
+ * validating an incoming SVID from another workload.
  */
 export class CustomerAssetScanChildSpiffeIdentityVerifier {
   constructor(
@@ -107,39 +73,17 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
       });
       if (!Array.isArray(fetched) || fetched.length !== 1 ||
           fetched[0]?.spiffeId !== this.expectedSpiffeId ||
-          typeof fetched[0]?.svid !== "string" || fetched[0].svid.length < 16 ||
-          fetched[0].svid.length > 16_384) {
+          !Number.isSafeInteger(fetched[0]?.expiresAtMs)) {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
-      const validated = await this.client.validateJwtSvid({
-        audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
-        svid: fetched[0].svid,
-      });
-      const claims = validated?.claims;
-      if (!validated || validated.spiffeId !== this.expectedSpiffeId ||
-          !claims || typeof claims !== "object" || Array.isArray(claims)) {
-        throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
-      }
-
-      const subject = stringClaim(claims, "sub");
-      const tokenAudience = claims.aud;
-      const rawIssuedAt = claims.iat;
-      const issuedAt = rawIssuedAt === undefined ? undefined : numericClaim(claims, "iat");
-      const expiresAt = numericClaim(claims, "exp");
-      const tokenId = stringClaim(claims, "jti");
-      const trustDomain = this.expectedSpiffeId.slice("spiffe://".length).split("/")[0];
+      const expiresAt = Math.floor(fetched[0].expiresAtMs / 1000);
       const nowSeconds = Math.floor(this.now() / 1000);
+      const trustDomain = this.expectedSpiffeId.slice("spiffe://".length).split("/")[0];
 
       if (!validTrustDomain(trustDomain) ||
-          subject !== this.expectedSpiffeId ||
-          !audienceIncludes(tokenAudience) ||
-          !expiresAt ||
-          (rawIssuedAt !== undefined && !issuedAt) ||
-          (issuedAt !== undefined && issuedAt > nowSeconds + 30) ||
           expiresAt <= nowSeconds ||
-          expiresAt - nowSeconds > 300 ||
-          (issuedAt !== undefined && expiresAt - issuedAt > 300)) {
+          expiresAt - nowSeconds > 300) {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
@@ -147,9 +91,7 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
         spiffeId: this.expectedSpiffeId,
         trustDomain,
         audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
-        ...(issuedAt === undefined ? {} : { issuedAt }),
         expiresAt,
-        ...(tokenId === undefined ? {} : { tokenId }),
       });
     } catch (error) {
       if (error instanceof CustomerAssetScanChildSpiffeIdentityError) throw error;
