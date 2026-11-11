@@ -25,7 +25,6 @@ export interface SyntheticStorageCredentials {
  */
 export class SyntheticProviderStorageDriver implements ProviderStorageDriver<unknown> {
   readonly synthetic = true;
-  readonly synthetic = true;
   readonly capabilities = {
     idempotentCreateByUploadSessionId: true,
     lookupByUploadSessionId: true,
