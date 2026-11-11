@@ -267,9 +267,9 @@ test("dispatch authorization re-reads current schedule approval and worker lease
   assert.equal(authorized, true);
   assert.match(calls[0].sql, /\(s\.status='scheduled' OR \(s\.status='completed' AND s\.trigger_type='once'\)\)/);
   assert.match(calls[0].sql, /s\.approval_status='approved'/);
-  assert.match(calls[0].sql, /e\.status='running' AND e\.locked_by=\$4/);
+  assert.match(calls[0].sql, /e\.status='running' AND e\.locked_by=\$4 AND e\.claim_generation=\$5/);
   assert.match(calls[0].sql, /WHERE e\.tenant_id=\$1 AND e\.application_id=\$2 AND e\.id=\$3/);
-  assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a"]);
+  assert.deepEqual(calls[0].values, ["tenant-a", "app-a", "job-1", "worker-a", 1]);
 });
 
 test("dispatch authorization denies when current schedule is paused or approval is revoked", async () => {
