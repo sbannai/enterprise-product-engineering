@@ -333,6 +333,14 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
 
+      await assert.rejects(
+        childPool.query(
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
+          [tenantId, "other-" + applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+        ),
+        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
+      );
+
       await pool.query(
         `UPDATE public.eper_customer_asset_scan_jobs
             SET lease_expires_at = clock_timestamp() - interval '1 second'
