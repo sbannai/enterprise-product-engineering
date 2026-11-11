@@ -58,9 +58,15 @@ test("Customer Admin workflow studio isolates same-ID drafts across applications
       );
       await roleStore.replace({
         tenantId, applicationId, roleId: "requester", name: "Requester",
-        description: "Browser test workflow role", permissions: ["workflow:act"],
+        description: "Browser test workflow role", permissions: ["workflow:act", "role:assign"],
         delegable: false, status: "active", expectedVersion: 0, changedBy: actorId,
         environment: "sandbox", correlationId: correlationId + "-" + applicationId,
+        serviceVersion: "workflow-studio-browser-e2e",
+      });
+      await actorRoleStore.assign({
+        tenantId, applicationId, actorId, roleId: "requester",
+        changedBy: actorId, expectedVersion: 0, environment: "sandbox",
+        correlationId: correlationId + "-role-assignment-" + applicationId,
         serviceVersion: "workflow-studio-browser-e2e",
       });
     }
