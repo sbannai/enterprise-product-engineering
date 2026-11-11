@@ -3,7 +3,10 @@ name: EPER Provider Operation PostgreSQL Lifecycle
 on:
   pull_request:
     paths:
+      - ".github/workflows/**"
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
+      - "eper/packages/campaign-scheduler/**"
+      - "eper/tests/campaign-scheduler-*.test.mjs"
       - "eper/packages/integrations/**"
       - "eper/packages/assets/**"
       - "eper/apps/worker/customer-asset-scan-main.ts"
@@ -32,7 +35,10 @@ on:
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - ".github/workflows/eper-provider-operation-postgres-lifecycle.yml"
+      - "eper/packages/campaign-scheduler/**"
+      - "eper/tests/campaign-scheduler-*.test.mjs"
       - "eper/packages/integrations/**"
       - "eper/packages/assets/**"
       - "eper/apps/worker/customer-asset-scan-main.ts"

@@ -12,11 +12,13 @@ on:
   push:
     branches: ["main"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main", "reconcile/payment-153-168-integration"]
     paths:
+      - ".github/workflows/**"
       - "eper/**"
       - ".github/workflows/ci.yml"
 
