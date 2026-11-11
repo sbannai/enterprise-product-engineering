@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS public.eper_customer_asset_scan_child_identities (
   enabled boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK (worker_id LIKE scanner_service_id || ':%')
+  CHECK (pg_catalog.left(worker_id, pg_catalog.length(scanner_service_id) + 1) = scanner_service_id || ':')
 );
 
 COMMENT ON TABLE public.eper_customer_asset_scan_child_identities IS
