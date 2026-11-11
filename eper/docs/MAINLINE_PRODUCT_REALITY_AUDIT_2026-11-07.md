@@ -261,3 +261,32 @@ Current main `2f42e87b0b88a74ef856a9b709d68d1d39eba1de` has all 9 observed workf
 3. In parallel, prove workflow outbox lease fencing using two-connection PostgreSQL tests; keep provider payload lifecycle independent until its migration sequence is resolved.
 4. Salvage the capacity benchmark script from #401 and run only against local/test PostgreSQL, no chargeable cloud infrastructure.
 5. Once each source PR's unique value is either extracted or proven already present on main, close it as superseded with a traceable disposition comment. No PR is closed by this audit.
+
+## 12. Mainline merge-cycle update — 2026-11-11
+
+### Verified merges since the 7 November audit baseline
+
+The following pull requests were merged to `main` after the historical audit sections above. These are incremental mainline changes; they do not retroactively alter the 7 November baseline or prove production/business acceptance.
+
+| PR | Scope | Merge commit |
+|---|---|---|
+| [#471](https://github.com/sbannai/enterprise-product-engineering/pull/471) | Ensure provider PostgreSQL lifecycle required check runs on every PR | `2f5dde0540bfec52a4c5479f4ec4364f5ce0ca80` |
+| [#469](https://github.com/sbannai/enterprise-product-engineering/pull/469) | Integrate capability composition into workflow draft lifecycle | `b3f16d6717974b7c963b5099a4c3a4ff9f150982` |
+| [#470](https://github.com/sbannai/enterprise-product-engineering/pull/470) | Serialize shared PostgreSQL audit-trigger DDL | `fe9974a3e6a41e988a12925bfcff2b5d74db5700` |
+
+The current observed `main` ref at this update is `fe9974a3e6a41e988a12925bfcff2b5d74db5700`.
+
+### Exact PR validation and merge evidence
+
+- #471: the required lifecycle workflow trigger was corrected by removing the `pull_request.paths` filter while retaining the existing push filters and manual dispatch trigger. The PR was merged after its applicable checks and independent approval passed.
+- #469: branch synchronized to the then-current main. On exact head `7a4be6eafd2b175e38ce52a1cbf74cb8382ef330`, 17 checks succeeded, one matrix check was skipped, no checks failed, and independent reviewer `sbannai-creator` approval matched the exact head. Squash merge succeeded.
+- #470: branch synchronized after #469. On exact head `46f34c32581e5b7eb1c6d8e4ce9aa9c7248f2024`, 17 checks succeeded, one matrix check was skipped, no checks failed, and independent reviewer `sbannai-creator` approval matched the exact head. Squash merge succeeded. The Chromium OIDC/browser run completed successfully, including fresh-clone PostgreSQL migrations/integration verification and Product Admin browser remediation.
+
+### Evidence boundaries and follow-up
+
+- The skipped `228 requirements / 38 chapter pilot matrix` entry in the integrated check matrix is not a failed check; a separate chapter-pilot-matrix workflow completed successfully on each updated PR head.
+- The successful controlled UAT simulation and readiness-audit workflows are technical evidence only. They do not authorize Business UAT.
+- The previous open-PR inventory and ahead/behind figures in Section 11 are historical and must not be presented as current after these three merges. Recompute all remaining open PR heads against the new main before any further merge or closure decision.
+- A commit-scoped workflow lookup for the current main SHA returned no workflow runs at the time of this update. Therefore post-merge push CI on the exact current main SHA is **NOT ASSESSED** here; PR-head checks above are not a substitute for that mainline result.
+
+The approved 228 requirements and 38 chapters remain unchanged. No chargeable AWS resources were provisioned. Business UAT remains unauthorized pending evidence for all entry gates and requirement-level business acceptance.
