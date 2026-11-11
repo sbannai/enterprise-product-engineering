@@ -109,6 +109,7 @@ test("SPIFFE verifier rejects expired, future-issued, overlong, or incomplete SV
     { exp: Math.floor(now / 1000) - 1 },
     { iat: Math.floor(now / 1000) + 60 },
     { exp: Math.floor(now / 1000) + 600 },
+    { iat: Math.floor(now / 1000) - 600, exp: Math.floor(now / 1000) + 120 },
     { exp: undefined },
   ]) {
     const verifier = new CustomerAssetScanChildSpiffeIdentityVerifier(
