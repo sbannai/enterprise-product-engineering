@@ -177,8 +177,11 @@ jobs:
           set -euo pipefail
           platform_password="$(openssl rand -hex 32)"
           catalogue_password="$(openssl rand -hex 32)"
+          scheduler_worker_password="$(openssl rand -hex 32)"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_platform_admin_runtime WITH LOGIN PASSWORD '${platform_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_provider_catalogue_runtime WITH LOGIN PASSWORD '${catalogue_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE eper_campaign_scheduler_worker_runtime WITH LOGIN PASSWORD '${scheduler_worker_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_campaign_scheduler_worker_access TO eper_campaign_scheduler_worker_runtime"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "REVOKE ALL ON TABLE public.eper_audit_events, public.eper_audit_chain_head, public.eper_platform_admin_credentials, public.eper_provider_definitions, public.eper_payment_orders, public.eper_payment_receipts, public.eper_payment_webhook_events, public.eper_provider_connections, public.eper_provider_connection_applications, public.eper_provider_validation_events, public.eper_tenant_provider_defaults, public.eper_application_provider_policies, public.eper_provider_operations, public.eper_provider_webhook_receipts FROM PUBLIC"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE eper_test TO eper_platform_admin_runtime, eper_provider_catalogue_runtime"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT eper_platform_admin_access TO eper_platform_admin_runtime"
@@ -186,6 +189,7 @@ jobs:
           {
             echo "EPER_PLATFORM_ADMIN_TEST_DATABASE_URL=postgres://eper_platform_admin_runtime:${platform_password}@localhost:5432/eper_test"
             echo "EPER_PROVIDER_CATALOGUE_TEST_DATABASE_URL=postgres://eper_provider_catalogue_runtime:${catalogue_password}@localhost:5432/eper_test"
+            echo "EPER_CAMPAIGN_SCHEDULER_WORKER_TEST_DATABASE_URL=postgres://eper_campaign_scheduler_worker_runtime:${scheduler_worker_password}@localhost:5432/eper_test"
           } >> "$GITHUB_ENV"
       - name: Verify dedicated PostgreSQL runtime-role privileges
         run: node --test tests/privileged-postgres-role-contract.integration.test.mjs
@@ -205,9 +209,10 @@ jobs:
         run: node --test tests/postgres-platform-customer-admin-provisioning.integration.test.mjs
       - name: Exercise platform application remediation transaction, tenant isolation and audit rollback
         run: node --test tests/postgres-platform-application-remediation.integration.test.mjs
-      - name: Exercise PostgreSQL campaign dispatch race and event idempotency
+      - name: Exercise PostgreSQL campaign dispatch race, event idempotency and dedicated worker LOGIN role
         env:
           EPER_CAMPAIGN_SCHEDULER_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+          EPER_CAMPAIGN_SCHEDULER_WORKER_TEST_DATABASE_URL: ${{ env.EPER_CAMPAIGN_SCHEDULER_WORKER_TEST_DATABASE_URL }}
         run: node --test tests/campaign-scheduler-postgres-dispatch-race.integration.test.mjs
 
       - name: Upload payment diagnostic evidence
