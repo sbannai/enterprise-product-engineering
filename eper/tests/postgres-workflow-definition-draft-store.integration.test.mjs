@@ -357,10 +357,8 @@ test("PostgreSQL workflow drafts isolate same-named definitions across applicati
             "DELETE FROM eper_workflow_definition_drafts WHERE tenant_id=$1 AND application_id=$2",
             [tenantId, applicationId],
           );
-          await cleanup.query(
-            "DELETE FROM eper_audit_events WHERE tenant_id=$1 AND application_id=$2",
-            [tenantId, applicationId],
-          );
+          // Audit events are append-only by design. Keep these uniquely scoped
+          // test records as immutable evidence; only remove mutable fixtures.
           await cleanup.query(
             "DELETE FROM eper_actor_application_assignment WHERE tenant_id=$1 AND actor_id=$2 AND application_id=$3",
             [tenantId, actorId, applicationId],
