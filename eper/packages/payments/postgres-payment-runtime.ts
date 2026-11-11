@@ -15,6 +15,7 @@ export interface PostgresPoolHandle extends SqlPool {
  */
 export function createPostgresPaymentPool(
   env: NodeJS.ProcessEnv = process.env,
+  applicationName = "eper-api",
 ): PostgresPoolHandle {
   const connectionString = env.EPER_PAYMENT_DATABASE_URL ?? env.DATABASE_URL ?? "";
   if (!connectionString.trim()) {
@@ -71,6 +72,6 @@ export function createPostgresPaymentPool(
     query_timeout: queryTimeout,
     lock_timeout: lockTimeout,
     idle_in_transaction_session_timeout: idleInTransactionTimeout,
-    application_name: "eper-api",
+    application_name: applicationName,
   });
 }
