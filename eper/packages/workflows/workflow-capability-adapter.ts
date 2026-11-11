@@ -142,6 +142,15 @@ export function adaptWorkflowDefinitionToComposition(
     if (!activities.has(activity.id)) continue;
     const refs = activity.routingRuleIds ?? [];
     if (refs.length > 0) {
+      // The current graph contract has no single-winner decision primitive.
+      // Emitting one edge per rule would fan out and change legacy priority,
+      // tie and no-match behavior. Fail closed until that contract exists.
+      diagnostics.push(invalid(
+        "workflow.adapter.priority_routing_not_representable",
+        "Priority-based routing requires a single-winner decision capability; parallel rule branches are not equivalent.",
+        activity.id,
+      ));
+      continue;
       const ordered = refs.map(id => rules.get(id));
       if (ordered.some(rule => !rule) || new Set(refs).size !== refs.length) {
         diagnostics.push(invalid("workflow.adapter.rule_reference_unsupported", "Routing references are missing or duplicated.", activity.id));
