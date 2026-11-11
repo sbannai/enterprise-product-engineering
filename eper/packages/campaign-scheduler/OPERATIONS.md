@@ -55,8 +55,21 @@ The API process does not start the campaign worker. Run the worker as a separate
 `npm run build`
 `npm run start:campaign-worker`
 
-The worker is disabled unless `EPER_CAMPAIGN_SCHEDULER_WORKER_ENABLED=true`. It requires `EPER_AUDIT_PERSISTENCE=postgres`, `EPER_PAYMENT_DATABASE_URL` (or the supported `DATABASE_URL` fallback), `EPER_CAMPAIGN_SCHEDULER_WORKER_ID`, and `EPER_CAMPAIGN_WORKER_ADAPTER_MODULE`.
+The worker is disabled unless `EPER_CAMPAIGN_SCHEDULER_WORKER_ENABLED=true`. It requires `EPER_AUDIT_PERSISTENCE=postgres`, `EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL`, `EPER_PAYMENT_DATABASE_URL` (or the supported `DATABASE_URL` fallback for the deployment-owned adapter pool), `EPER_CAMPAIGN_SCHEDULER_WORKER_ID`, and `EPER_CAMPAIGN_WORKER_ADAPTER_MODULE`.
 
 The adapter module must be a compiled JavaScript file under `dist/packages/campaign-scheduler/adapters/` and export `createCampaignWorkerAdapter({ pool, env })`. The factory must return both `authorizeDispatch(execution)` and `dispatch(execution)`. Authorization must re-read current tenant/application assignment, schedule approval, consent, quiet-hours and channel policy; it must fail closed on missing or unavailable policy data. Dispatch must pass `execution.idempotencyKey` to the provider and return a structured outcome. No built-in permissive or no-op adapter is supplied.
 
-The worker validates scheduler and audit schemas before claiming work, handles SIGINT/SIGTERM by stopping its loop, and closes its dedicated PostgreSQL pool on exit. Keep the worker disabled until a reviewed deployment-owned adapter exists and has its own contract/integration tests. API and worker pools are separate; include both in the database connection budget.
+The worker execution store and PostgreSQL LISTEN connection use only `EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL`; there is no fallback to `DATABASE_URL` or the payment URL for this pool. The deployment-owned adapter receives a separate payment/policy pool so its live authorization and provider configuration lookups do not broaden the scheduler queue role. The worker validates scheduler and audit schemas before claiming work, handles SIGINT/SIGTERM by stopping its loop, and closes both pools on exit. Keep the worker disabled until a reviewed deployment-owned adapter exists and has its own contract/integration tests. API, worker-store, adapter, and migration pools are separate; include all of them in the database connection budget.
+
+### Worker database role provisioning
+
+Apply campaign-scheduler migration `006_campaign_scheduler_worker_access_role.sql` with the migration owner. It creates the non-login group role `eper_campaign_scheduler_worker_access` with only the column-level schedule/execution mutations needed by the worker and append-only audit-chain privileges. It cannot create schedules, alter schedule definitions, delete executions, or rewrite audit history.
+
+The database operator must provision a separate LOGIN role and secret outside source control, then grant membership in the group role. For example (replace the login name and use the database secret manager for its credential):
+
+```sql
+CREATE ROLE eper_campaign_scheduler_worker_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+GRANT eper_campaign_scheduler_worker_access TO eper_campaign_scheduler_worker_login;
+```
+
+Set `EPER_CAMPAIGN_SCHEDULER_WORKER_DATABASE_URL` to that login's connection string. Do not put credentials in migration files, CI logs, repository secrets committed as code, or this operations document. Verify the login can exercise the worker's required grants and cannot delete queue rows or mutate schedule definitions before enabling the worker. Keep `EPER_CAMPAIGN_SCHEDULER_WORKER_ENABLED` unset until that verification and adapter review are complete.
