@@ -124,3 +124,26 @@ test("scanner child supervisor settles spawn errors only after the child close e
     timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED/);
 });
+
+test("a hung scanner child cannot block a separate clean child from completing", async () => {
+  const hungStart = { ...start(), jobToken: "c".repeat(64), claimGeneration: 11 };
+  const cleanStart = { ...start(), jobToken: "d".repeat(64), claimGeneration: 12 };
+  const began = Date.now();
+  const hung = runCustomerAssetScanChild({
+    executable: node,
+    args: ["-e", "process.stdin.resume();setInterval(()=>{},1000)"],
+    start: hungStart,
+    timeoutMs: 300,
+  });
+  const clean = await runCustomerAssetScanChild({
+    executable: node,
+    args: ["-e", "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const m=JSON.parse(s);process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});"],
+    start: cleanStart,
+    timeoutMs: 2_000,
+  });
+  assert.equal(clean.kind, "result");
+  assert.equal(clean.value.jobToken, cleanStart.jobToken);
+  assert.ok(Date.now() - began < 2_000, "clean child must finish without waiting for hung child");
+  await assert.rejects(hung, /CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT/);
+});
+
