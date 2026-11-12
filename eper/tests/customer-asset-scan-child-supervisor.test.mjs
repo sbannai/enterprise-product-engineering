@@ -45,7 +45,7 @@ test("scanner child supervisor rejects malformed output and non-zero exits", asy
 test("scanner child supervisor rejects a response for another claim generation", async () => {
   await assert.rejects(runCustomerAssetScanChild({
     executable: node,
-    args: ["-e", "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const m=JSON.parse(s);process.stdout.write(JSON.stringify({version:2,type:'result',jobToken:m.jobToken,claimGeneration:m.claimGeneration+1,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});"],
+    args: ["-e", "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const m=JSON.parse(s);process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,claimGeneration:m.claimGeneration+1,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});"],
     start: start(), timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID/);
 });
@@ -72,7 +72,7 @@ test("scanner child receives only its explicit environment allowlist, never inhe
       "if (process.env.NODE_ENV !== 'test') process.exit(42);",
       "let s='';process.stdin.on('data',c=>s+=c);",
       "process.stdin.on('end',()=>{const m=JSON.parse(s);",
-      "process.stdout.write(JSON.stringify({version:2,type:'result',jobToken:m.jobToken,",
+      "process.stdout.write(JSON.stringify({version:3,type:'result',jobToken:m.jobToken,",
       "claimGeneration:m.claimGeneration,scannerServiceId:m.scannerServiceId,scanStatus:'clean'}));});",
     ].join("");
     const outcome = await runCustomerAssetScanChild({
