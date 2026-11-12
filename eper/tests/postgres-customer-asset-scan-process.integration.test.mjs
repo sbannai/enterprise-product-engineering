@@ -1114,7 +1114,7 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
       const resolveInput = (tenantId = fixture.tenantId) =>
         childPool.query(
           `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input(
-             $1, $2, $3, $4, $5, $6
+             $1, $2, $3, $4, $5, $6, $7
            )`,
           [tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId,
             job.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
@@ -1126,6 +1126,16 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
       assert.equal(resolved.rows[0].checksum_sha256, createHash("sha256").update(fixture.testObjectBytes).digest("hex"));
       await assert.rejects(resolveInput(fixture.tenantId + "-other"),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/);
+      await assert.rejects(
+        childPool.query(
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input(
+             $1, $2, $3, $4, $5, $6, $7
+           )`,
+          [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId,
+            job.claimGeneration, "spiffe://eper.example/asset-scanner/forged"],
+        ),
+        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
+      );
       await assert.rejects(
         childPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
         error => error.code === "42501",
