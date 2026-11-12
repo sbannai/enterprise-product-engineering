@@ -71,6 +71,8 @@ jobs:
         # system libraries. Avoid --with-deps: it invokes apt and can stall/fail
         # when the runner's Ubuntu mirror DNS is unavailable.
         run: npx playwright install chromium
+      - name: Configure ephemeral PostgreSQL scanner-child client certificate authentication
+        run: bash scripts/configure-scan-child-client-cert-ci.sh
       - name: Run fresh-clone PostgreSQL migrations and integration verification
         run: npm run dev:verify
       - name: Run real-browser customer OIDC lifecycle
