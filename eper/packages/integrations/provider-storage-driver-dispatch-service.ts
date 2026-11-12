@@ -143,7 +143,8 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const selection = resolved.runtime.selection;
     if (selection.tenantId !== input.tenantId || selection.applicationId !== input.applicationId ||
-        selection.capabilityKey !== capability || resolved.runtime.capability !== capability) {
+        selection.capabilityKey !== capability || resolved.runtime.capability !== capability ||
+        (input.expectedConnectionId !== undefined && selection.connectionId !== input.expectedConnectionId)) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
     }
 
