@@ -9,7 +9,7 @@ import {
 
 const start = () => ({
   version: VERSION, type: "start", jobToken: "a".repeat(64), claimGeneration: 3,
-  requestId: "scan-request-1", scannerServiceId: "scanner.synthetic.v1",
+  requestId: "scan-request-1", workerId: "scanner.synthetic.v1:worker-1", scannerServiceId: "scanner.synthetic.v1",
   input: {
     tenantId: "tenant-1", applicationId: "application-1", assetId: "asset-1",
     checksumSha256: "b".repeat(64), sizeBytes: 1024, mimeType: "application/pdf",
@@ -38,6 +38,7 @@ test("scanner child start rejects malformed identity, generation and scan input"
     (m) => { m.version = 1; },
     (m) => { m.jobToken = "short"; },
     (m) => { m.claimGeneration = 0; },
+    (m) => { m.workerId = "wrong worker"; },
     (m) => { m.input.checksumSha256 = "not-a-digest"; },
     (m) => { m.input.sizeBytes = -1; },
     (m) => { m.input.mimeType = "application/pdf\\nsecret"; },
