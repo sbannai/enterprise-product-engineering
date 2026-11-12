@@ -521,7 +521,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
           has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
           has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT') AS can_insert_audit,
           has_function_privilege(current_user,
-            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)',
             'EXECUTE') AS can_resolve_scan_input
       `);
       assert.deepEqual(privileges.rows[0], {
@@ -544,8 +544,8 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       );
 
       const resolved = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
-        [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId, job.claimGeneration, spiffeId],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [fixture.assetId, job.claimGeneration],
       );
       assert.equal(resolved.rowCount, 1, "mapped child should resolve the exact active generation");
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
@@ -555,8 +555,8 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
 
       await assert.rejects(
         childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
-          [fixture.tenantId, fixture.applicationId + "-other", fixture.assetId, workerId, scannerServiceId, job.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+          [fixture.assetId, job.claimGeneration],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
@@ -1103,7 +1103,7 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
           has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT') AS can_select_assets,
           has_table_privilege(current_user, 'public.eper_customer_assets', 'UPDATE') AS can_update_assets,
           has_function_privilege(current_user,
-            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)',
             'EXECUTE') AS can_resolve_input
       `);
       assert.deepEqual(boundary.rows[0], {
@@ -1116,11 +1116,8 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
 
       const resolveInput = (tenantId = fixture.tenantId) =>
         childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input(
-             $1, $2, $3, $4, $5, $6, $7
-           )`,
-          [tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId,
-            job.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+          [fixture.assetId, job.claimGeneration],
         );
       const resolved = await resolveInput();
       assert.equal(resolved.rowCount, 1);
@@ -1131,11 +1128,8 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/);
       await assert.rejects(
         childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input(
-             $1, $2, $3, $4, $5, $6, $7
-           )`,
-          [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId,
-            job.claimGeneration, "spiffe://eper.example/asset-scanner/forged"],
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+          [fixture.assetId, job.claimGeneration],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
