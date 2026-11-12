@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
 import type { AuditEnvironment } from "../audit/audit-event-store.js";
+import type { CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
+import type { CustomerAssetScanChildOutcome } from "./customer-asset-scan-child-supervisor.js";
 import type { PostgresCustomerAssetRepository } from "./postgres-customer-asset-repository.js";
 import type { TrustedMalwareScanOutcome } from "./storage-malware-scan-adapter.js";
 
@@ -16,7 +19,8 @@ export interface CustomerAssetScanner {
 }
 export interface CustomerAssetScanWorkerOptions {
   repository: PostgresCustomerAssetRepository;
-  scanner: CustomerAssetScanner;
+  scanner?: CustomerAssetScanner;
+  childRunner?: (start: CustomerAssetScanChildStart, signal: AbortSignal, timeoutMs: number) => Promise<CustomerAssetScanChildOutcome>;
   tenantId: string; applicationId: string; workerId: string; scannerServiceId: string;
   environment: AuditEnvironment; signal: AbortSignal;
   pollIntervalMs?: number; leaseMs?: number; batchSize?: number; concurrency?: number; scanTimeoutMs?: number;
@@ -41,6 +45,7 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
   const batchSize = options.batchSize ?? 10;
   const concurrency = options.concurrency ?? 2;
   const scanTimeoutMs = options.scanTimeoutMs ?? 120_000;
+  if (!!options.scanner === !!options.childRunner) throw new Error("EPER_CUSTOMER_ASSET_SCAN_EXECUTOR_INVALID");
   if (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 100 || pollIntervalMs > 60_000 ||
       !Number.isInteger(leaseMs) || leaseMs < 5_000 || leaseMs > 900_000 ||
       !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 50 ||
@@ -95,12 +100,34 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             try {
               // Keep the scanner promise in the race so normal completion and rejection are observed.
               // On timeout, do not await it: cancellation is cooperative and generation fencing rejects late writes.
-              const scanPromise = Promise.resolve().then(() => options.scanner.scan({
-                tenantId: options.tenantId, applicationId: options.applicationId,
-                assetId: session.assetId, uploadSessionId: job.uploadSessionId,
-                providerUploadReference: session.providerUploadReference,
-                checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-              }, job.correlationId, scanController.signal));
+              const scanPromise = Promise.resolve().then(async () => {
+                if (options.childRunner) {
+                  const start: CustomerAssetScanChildStart = {
+                    version: 3, type: "start", jobToken: randomBytes(32).toString("hex"),
+                    claimGeneration: job.claimGeneration, requestId: job.correlationId,
+                    workerId: options.workerId, scannerServiceId: options.scannerServiceId,
+                    input: {
+                      tenantId: options.tenantId, applicationId: options.applicationId,
+                      assetId: session.assetId, checksumSha256: session.checksumSha256,
+                      sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+                    },
+                  };
+                  const child = await options.childRunner(start, scanController.signal, scanTimeoutMs);
+                  if (child.kind !== "result") return {
+                    scanStatus: "error" as const, scannerServiceId: options.scannerServiceId,
+                  };
+                  return {
+                    scanStatus: child.value.scanStatus,
+                    scannerServiceId: child.value.scannerServiceId,
+                  };
+                }
+                return options.scanner!.scan({
+                  tenantId: options.tenantId, applicationId: options.applicationId,
+                  assetId: session.assetId, uploadSessionId: job.uploadSessionId,
+                  providerUploadReference: session.providerUploadReference,
+                  checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+                }, job.correlationId, scanController.signal);
+              });
               const timeout = new Promise<never>((_, reject) => {
                 scanTimer = setTimeout(() => {
                   // Cancellation is cooperative. Stop renewing this claim immediately so
