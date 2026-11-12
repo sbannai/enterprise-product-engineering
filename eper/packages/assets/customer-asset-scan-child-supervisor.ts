@@ -60,6 +60,8 @@ export async function runCustomerAssetScanChild(
     env,
     stdio: ["pipe", "pipe", "ignore"],
     windowsHide: true,
+    // Dedicated POSIX process group lets cancellation terminate descendants.
+    detached: process.platform !== "win32",
   });
   return supervise(child, options.start, options.timeoutMs, maxOutputBytes, options.signal);
 }
@@ -87,38 +89,44 @@ function supervise(
       if (error) reject(error);
       else resolve(value!);
     };
-    const abortChild = () => {
-      aborted = true;
+    const terminateChild = () => {
+      if (process.platform !== "win32" && child.pid !== undefined) {
+        try { process.kill(-child.pid, "SIGKILL"); return; } catch { /* fall back */ }
+      }
       child.kill("SIGKILL");
     };
-    if (aborted) child.kill("SIGKILL");
+    const abortChild = () => {
+      aborted = true;
+      terminateChild();
+    };
+    if (aborted) terminateChild();
     else signal?.addEventListener("abort", abortChild, { once: true });
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      terminateChild();
     }, timeoutMs);
 
     // Do not settle on the error event: Node emits "close" after "error",
     // and the supervisor must not release the job for retry before process exit.
     child.once("error", () => {
       spawnError = true;
-      child.kill("SIGKILL");
+      terminateChild();
     });
     // A child may exit before consuming its one-shot request. Handle EPIPE and
     // stdout stream errors explicitly; let the process close event settle the
     // attempt so a started child is never mistaken for an exited child.
     child.stdin?.on("error", () => {
-      child.kill("SIGKILL");
+      terminateChild();
     });
     child.stdout?.on("error", () => {
-      child.kill("SIGKILL");
+      terminateChild();
     });
     child.stdout?.on("data", (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       outputBytes += buffer.length;
       if (outputBytes > maxOutputBytes) {
         overflowed = true;
-        child.kill("SIGKILL");
+        terminateChild();
         return;
       }
       output += buffer.toString("utf8");
