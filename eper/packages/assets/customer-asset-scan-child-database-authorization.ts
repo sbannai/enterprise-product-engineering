@@ -59,6 +59,7 @@ export class CustomerAssetScanChildDatabaseAuthorizationService<TCredentials> {
 }
 
 export class CustomerAssetScanChildDatabaseAuthorizationError extends Error {
+  readonly code = "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_AUTHORIZATION_UNAVAILABLE" as const;
   constructor() {
     super("CUSTOMER_ASSET_SCAN_CHILD_DATABASE_AUTHORIZATION_UNAVAILABLE");
     this.name = "CustomerAssetScanChildDatabaseAuthorizationError";
