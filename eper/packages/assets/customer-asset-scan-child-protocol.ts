@@ -1,45 +1,80 @@
 /**
- * Versioned least-privilege IPC contract. Provider references, credentials,
- * DB URLs, secret references and file bytes are intentionally excluded.
+ * Versioned, allowlisted IPC contract for one customer-asset scanner child.
+ * Excludes credentials, database handles/URLs, secret references, upload references,
+ * upload-session identifiers, process environments and customer file bytes.
  */
-export const CUSTOMER_ASSET_SCAN_PROTOCOL_VERSION = 1 as const;
-export interface CustomerAssetScanChildRequestV1 {
-  protocolVersion: typeof CUSTOMER_ASSET_SCAN_PROTOCOL_VERSION;
-  correlationId: string; tenantId: string; applicationId: string; assetId: string;
-  uploadSessionId: string; claimGeneration: number; checksumSha256: string;
-  sizeBytes: number; mimeType: string;
+export const CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION = 2 as const;
+
+export interface CustomerAssetScanChildInput {
+  tenantId: string;
+  applicationId: string;
+  assetId: string;
+  checksumSha256: string;
+  sizeBytes: number;
+  mimeType: string;
 }
-export interface CustomerAssetScanChildResultV1 {
-  protocolVersion: typeof CUSTOMER_ASSET_SCAN_PROTOCOL_VERSION;
-  correlationId: string; assetId: string; claimGeneration: number;
+export interface CustomerAssetScanChildStart {
+  version: typeof CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION; type: "start";
+  jobToken: string; claimGeneration: number; requestId: string; scannerServiceId: string;
+  input: CustomerAssetScanChildInput;
+}
+export interface CustomerAssetScanChildResult {
+  version: typeof CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION; type: "result";
+  jobToken: string; claimGeneration: number; scannerServiceId: string;
   scanStatus: "clean" | "infected" | "error";
-  engine?: string; signatureVersion?: string;
 }
-const REQUEST_KEYS = ["protocolVersion","correlationId","tenantId","applicationId","assetId","uploadSessionId","claimGeneration","checksumSha256","sizeBytes","mimeType"] as const;
-const RESULT_KEYS = ["protocolVersion","correlationId","assetId","claimGeneration","scanStatus","engine","signatureVersion"] as const;
-function record(v: unknown): v is Record<string, unknown> { return v !== null && typeof v === "object" && !Array.isArray(v); }
-function exact(v: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(v).every(k => (keys as readonly string[]).includes(k)) &&
-    keys.filter(k => k !== "engine" && k !== "signatureVersion").every(k => k in v);
+export interface CustomerAssetScanChildFailure {
+  version: typeof CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION; type: "failure";
+  jobToken: string; claimGeneration: number;
+  code: "SCANNER_BOOTSTRAP_FAILED" | "SCANNER_EXECUTION_FAILED" | "SCANNER_RESULT_INVALID";
 }
-function bounded(v: unknown, max=256): v is string { return typeof v === "string" && v.length > 0 && v.length <= max && v.trim() === v; }
-export function validateCustomerAssetScanChildRequestV1(v: unknown): v is CustomerAssetScanChildRequestV1 {
-  if (!record(v) || !exact(v, REQUEST_KEYS)) return false;
-  return v.protocolVersion === 1 && bounded(v.correlationId,128) && bounded(v.tenantId) &&
-    bounded(v.applicationId) && bounded(v.assetId) && bounded(v.uploadSessionId) &&
-    Number.isSafeInteger(v.claimGeneration) && (v.claimGeneration as number)>0 &&
-    typeof v.checksumSha256==="string" && /^[a-f0-9]{64}$/.test(v.checksumSha256) &&
-    Number.isSafeInteger(v.sizeBytes) && (v.sizeBytes as number)>0 && bounded(v.mimeType,256);
+export type CustomerAssetScanChildMessage =
+  | CustomerAssetScanChildStart | CustomerAssetScanChildResult | CustomerAssetScanChildFailure;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-export function validateCustomerAssetScanChildResultV1(v: unknown): v is CustomerAssetScanChildResultV1 {
-  if (!record(v) || !exact(v, RESULT_KEYS)) return false;
-  return v.protocolVersion===1 && bounded(v.correlationId,128) && bounded(v.assetId) &&
-    Number.isSafeInteger(v.claimGeneration) && (v.claimGeneration as number)>0 &&
-    ["clean","infected","error"].includes(String(v.scanStatus)) &&
-    (v.engine===undefined || bounded(v.engine,128)) &&
-    (v.signatureVersion===undefined || bounded(v.signatureVersion,128));
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort(), expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 }
-export function isCustomerAssetScanChildResultForRequest(r: CustomerAssetScanChildRequestV1, v: CustomerAssetScanChildResultV1): boolean {
-  return v.protocolVersion===r.protocolVersion && v.correlationId===r.correlationId &&
-    v.assetId===r.assetId && v.claimGeneration===r.claimGeneration;
+function boundedString(value: unknown, maximum: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= maximum &&
+    !/[\u0000-\u001f\u007f]/.test(value);
+}
+function validJobIdentity(value: Record<string, unknown>): boolean {
+  return value.version === CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION &&
+    boundedString(value.jobToken, 128) && /^[a-f0-9]{32,128}$/i.test(value.jobToken) &&
+    Number.isSafeInteger(value.claimGeneration) && (value.claimGeneration as number) > 0;
+}
+export function isCustomerAssetScanChildStart(value: unknown): value is CustomerAssetScanChildStart {
+  if (!isRecord(value) || !hasExactKeys(value, [
+    "version", "type", "jobToken", "claimGeneration", "requestId", "scannerServiceId", "input",
+  ]) || !validJobIdentity(value) || value.type !== "start" ||
+      !boundedString(value.requestId, 128) || !boundedString(value.scannerServiceId, 128) ||
+      !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.scannerServiceId) ||
+      !isRecord(value.input) || !hasExactKeys(value.input, [
+        "tenantId", "applicationId", "assetId", "checksumSha256", "sizeBytes", "mimeType",
+      ])) return false;
+  const input = value.input;
+  return boundedString(input.tenantId, 128) && boundedString(input.applicationId, 128) &&
+    boundedString(input.assetId, 128) &&
+    typeof input.checksumSha256 === "string" && /^[a-f0-9]{64}$/i.test(input.checksumSha256) &&
+    Number.isSafeInteger(input.sizeBytes) && (input.sizeBytes as number) > 0 &&
+    boundedString(input.mimeType, 128) &&
+    /^[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*$/.test(input.mimeType);
+}
+export function isCustomerAssetScanChildResult(value: unknown): value is CustomerAssetScanChildResult {
+  return isRecord(value) && hasExactKeys(value, [
+    "version", "type", "jobToken", "claimGeneration", "scannerServiceId", "scanStatus",
+  ]) && validJobIdentity(value) && value.type === "result" &&
+    boundedString(value.scannerServiceId, 128) &&
+    /^[a-zA-Z0-9._:-]{2,128}$/.test(value.scannerServiceId) &&
+    ["clean", "infected", "error"].includes(String(value.scanStatus));
+}
+export function isCustomerAssetScanChildFailure(value: unknown): value is CustomerAssetScanChildFailure {
+  return isRecord(value) && hasExactKeys(value, [
+    "version", "type", "jobToken", "claimGeneration", "code",
+  ]) && validJobIdentity(value) && value.type === "failure" &&
+    ["SCANNER_BOOTSTRAP_FAILED", "SCANNER_EXECUTION_FAILED", "SCANNER_RESULT_INVALID"].includes(String(value.code));
 }
