@@ -344,3 +344,28 @@ test("internal object read rejects invalid size or checksum before credential re
     error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
   assert.equal(f.calls.length, 0);
 });
+
+test("internal object read rejects a runtime that violates the authenticated connection pin", async () => {
+  let driverInvoked = false;
+  const f = fixture({
+    selection: { connectionId: "connection-other" },
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      async readObjectInternal() {
+        driverInvoked = true;
+        return (async function* () { yield new Uint8Array([1]); })();
+      },
+    },
+  });
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-wrong-connection",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 1, expectedSha256: createHash("sha256").update(new Uint8Array([1])).digest("hex"),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+  assert.equal(driverInvoked, false, "a driver must not run on a connection other than the authenticated pin");
+});
+
