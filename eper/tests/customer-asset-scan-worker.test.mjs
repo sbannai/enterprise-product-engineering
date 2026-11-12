@@ -168,6 +168,36 @@ test("customer asset scan worker delegates an allowlisted metadata envelope to t
   assert.ok(f.calls.some(call => call[0] === "record" && call[1] === "clean"));
 });
 
+test("customer asset scan worker waits for child process exit before persisting retry", async () => {
+  const f = fixture("clean");
+  let childExited = false;
+  let retryObservedAfterExit = false;
+  f.repository.retryScanJob = async () => {
+    retryObservedAfterExit = childExited;
+    f.calls.push(["retry", "SCANNER_PROVIDER_ERROR", 15_000]);
+    return "pending";
+  };
+  await runCustomerAssetScanWorker({
+    repository: f.repository,
+    childRunner: async (_message, _signal, timeoutMs) => {
+      assert.equal(timeoutMs, 50);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      childExited = true; // Models the supervisor's close event after SIGKILL.
+      return { kind: "failure", value: {
+        version: 3, type: "failure", jobToken: "a".repeat(64),
+        claimGeneration: 1, code: "SCANNER_EXECUTION_FAILED",
+      } };
+    },
+    tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
+    scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
+    scanTimeoutMs: 50, onJob() { f.controller.abort(); },
+  });
+  assert.equal(retryObservedAfterExit, true,
+    "retry must not be persisted until the child supervisor confirms process exit");
+  assert.ok(f.calls.some(call => call[0] === "retry"));
+  assert.equal(f.calls.filter(call => call[0] === "record").length, 0);
+});
+
 test("customer asset scan worker rejects ambiguous or missing scan executors", async () => {
   const f = fixture("clean");
   await assert.rejects(runCustomerAssetScanWorker({
