@@ -107,3 +107,12 @@ test("fails closed and suppresses database diagnostics", async () => {
     error.code === "CUSTOMER_ASSET_SCAN_CHILD_INPUT_UNAVAILABLE" &&
     !error.message.includes("do-not-leak") && !error.message.includes("private-db"));
 });
+
+test("rejects malformed IPC envelope before dereferencing input or querying PostgreSQL", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.resolver.resolve({
+    start: { ...start, input: undefined }, identity, workload,
+  }), error => error instanceof CustomerAssetScanChildInputResolverError &&
+    error.code === "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID");
+  assert.equal(f.calls.length, 0);
+});
