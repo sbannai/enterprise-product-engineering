@@ -634,3 +634,86 @@ test("PostgreSQL 16 scanner-supervisor LOGIN is isolated behind the operator-man
       await pool.end();
     }
   });
+
+
+test("PostgreSQL 16 scanner-supervisor LOGIN can renew only its mapped active claim generation",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 5 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-supervisor-renew");
+    const workerId = "ci-asset-scanner:supervisor-renew-test";
+    const scannerServiceId = "ci-asset-scanner";
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+    const role = "eper_scan_supervisor_" + suffix;
+    const password = randomUUID().replaceAll("-", "");
+    const supervisorUrl = new URL(connectionString);
+    supervisorUrl.username = role;
+    supervisorUrl.password = password;
+    const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 1 });
+    try {
+      const [job] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        workerId, scannerServiceId, environment: "sandbox", limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(job, "fixture must create a live leased scan job");
+
+      await pool.query(
+        `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+           NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+      );
+      await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+      await pool.query(
+        `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+      );
+
+      const boundary = await supervisorPool.query(`
+        SELECT
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'SELECT') AS can_select_jobs,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+          has_function_privilege(current_user,
+            'public.eper_renew_customer_asset_scan_lease(varchar,varchar,uuid,varchar,integer,bigint)',
+            'EXECUTE') AS can_renew
+      `);
+      assert.deepEqual(boundary.rows[0], {
+        can_select_jobs: false,
+        can_update_jobs: false,
+        can_renew: true,
+      });
+
+      const renew = (tenantId, applicationId, generation) => supervisorPool.query(
+        `SELECT public.eper_renew_customer_asset_scan_lease($1, $2, $3, $4, $5, $6) AS renewed`,
+        [tenantId, applicationId, fixture.uploadSessionId, workerId, 15_000, generation],
+      );
+      assert.equal((await renew(fixture.tenantId, fixture.applicationId, job.claimGeneration)).rows[0].renewed,
+        true, "mapped supervisor must renew the active claim");
+      assert.equal((await renew(fixture.tenantId, fixture.applicationId, job.claimGeneration - 1)).rows[0].renewed,
+        false, "stale generation must not renew");
+      await assert.rejects(
+        renew(fixture.tenantId, fixture.applicationId + "-other", job.claimGeneration),
+        /EPER_CUSTOMER_ASSET_SCAN_SUPERVISOR_IDENTITY_DENIED/,
+      );
+      await pool.query(
+        "UPDATE public.eper_customer_asset_scan_supervisor_identities SET enabled = false WHERE login_role = $1",
+        [role],
+      );
+      await assert.rejects(
+        renew(fixture.tenantId, fixture.applicationId, job.claimGeneration),
+        /EPER_CUSTOMER_ASSET_SCAN_SUPERVISOR_IDENTITY_DENIED/,
+      );
+      await assert.rejects(
+        supervisorPool.query("UPDATE public.eper_customer_asset_scan_jobs SET attempt_count = 99"),
+        error => error.code === "42501",
+      );
+    } finally {
+      await supervisorPool.end();
+      await pool.query(
+        "DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1",
+        [role],
+      ).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+      await pool.end();
+    }
+  });
