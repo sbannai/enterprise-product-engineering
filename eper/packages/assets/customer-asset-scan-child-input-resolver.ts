@@ -41,6 +41,26 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
+function validIdentityClaims(value: unknown, nowSeconds: number): value is CustomerAssetScanChildIdentityClaims {
+  if (!value || typeof value !== "object") return false;
+  const claims = value as Record<string, unknown>;
+  return boundedText(claims.issuer, 128) &&
+    boundedText(claims.subject, 128) &&
+    claims.audience === "eper:customer-asset-scan-child" &&
+    boundedText(claims.tenantId, 128) &&
+    boundedText(claims.applicationId, 128) &&
+    boundedText(claims.connectionId, 128) &&
+    boundedText(claims.scannerServiceId, 128) &&
+    claims.capability === "storage.object.read.internal" &&
+    boundedText(claims.tokenId, 128) &&
+    typeof claims.issuedAt === "number" && Number.isSafeInteger(claims.issuedAt) &&
+    typeof claims.expiresAt === "number" && Number.isSafeInteger(claims.expiresAt) &&
+    claims.issuedAt > 0 && claims.expiresAt > claims.issuedAt &&
+    claims.issuedAt <= nowSeconds + 30 &&
+    claims.expiresAt > nowSeconds - 30 &&
+    claims.expiresAt - claims.issuedAt <= 300;
+}
+
 function validWorkloadIdentity(value: unknown, nowSeconds: number): value is CustomerAssetScanChildSpiffeIdentity {
   if (!value || typeof value !== "object") return false;
   const workload = value as Record<string, unknown>;
@@ -70,7 +90,8 @@ export class PostgresCustomerAssetScanChildInputResolver {
   }): Promise<CustomerAssetScanChildResolvedInput> {
     const { start, identity, workload } = input ?? {};
     const nowSeconds = Math.floor(Date.now() / 1000);
-    if (!isCustomerAssetScanChildStart(start) || !identity ||
+    if (!isCustomerAssetScanChildStart(start) ||
+        !validIdentityClaims(identity, nowSeconds) ||
         !validWorkloadIdentity(workload, nowSeconds) ||
         !isUuid(start.input.assetId) ||
         !boundedText(start.input.tenantId, 128) ||
