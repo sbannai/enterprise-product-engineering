@@ -369,3 +369,16 @@ test("internal object read rejects a runtime that violates the authenticated con
   assert.equal(driverInvoked, false, "a driver must not run on a connection other than the authenticated pin");
 });
 
+test("internal object read requires an explicit authenticated provider connection pin", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-unpinned-read",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 1, expectedSha256: createHash("sha256").update(new Uint8Array([1])).digest("hex"),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+  assert.equal(f.calls.length, 0, "un-pinned reads must fail before runtime or credential resolution");
+});
+
