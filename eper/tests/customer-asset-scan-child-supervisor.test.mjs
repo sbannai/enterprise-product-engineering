@@ -147,3 +147,16 @@ test("a hung scanner child cannot block a separate clean child from completing",
   await assert.rejects(hung, /CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT/);
 });
 
+
+
+test("scanner child supervisor creates a killable process group on POSIX", async () => {
+  if (process.platform === "win32") return;
+  const script = [
+    "const {spawn}=require('node:child_process');",
+    "spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});",
+    "process.stdin.resume();setInterval(()=>{},1000);",
+  ].join("");
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", script], start: start(), timeoutMs: 150,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT/);
+});
