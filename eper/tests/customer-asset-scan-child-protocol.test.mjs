@@ -1,70 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION as VERSION,
-  isCustomerAssetScanChildStart,
-  isCustomerAssetScanChildResult,
-  isCustomerAssetScanChildFailure,
-} from "../dist/packages/assets/customer-asset-scan-child-protocol.js";
-
-const start = () => ({
-  version: VERSION, type: "start", jobToken: "a".repeat(64), claimGeneration: 3,
-  requestId: "scan-request-1", scannerServiceId: "scanner.synthetic.v1",
-  input: {
-    tenantId: "tenant-1", applicationId: "application-1", assetId: "asset-1",
-    checksumSha256: "b".repeat(64), sizeBytes: 1024, mimeType: "application/pdf",
-  },
-});
-
-test("scanner child start accepts the versioned least-privilege envelope", () => {
-  assert.equal(isCustomerAssetScanChildStart(start()), true);
-});
-
-test("scanner child start rejects unknown fields that could smuggle capabilities", () => {
-  const message = start();
-  message.databaseUrl = "postgres://must-not-cross-ipc";
-  assert.equal(isCustomerAssetScanChildStart(message), false);
-  const nested = start();
-  nested.input.secretReference = "must-not-cross-ipc";
-  assert.equal(isCustomerAssetScanChildStart(nested), false);
-  for (const forbidden of ["providerUploadReference", "uploadSessionId", "secretReference"]) {
-    const message = start(); message.input[forbidden] = "must-not-cross-ipc";
-    assert.equal(isCustomerAssetScanChildStart(message), false, forbidden + " must never cross child IPC");
-  }
-});
-
-test("scanner child start rejects malformed identity, generation and scan input", () => {
-  for (const mutate of [
-    (m) => { m.version = 1; },
-    (m) => { m.jobToken = "short"; },
-    (m) => { m.claimGeneration = 0; },
-    (m) => { m.input.checksumSha256 = "not-a-digest"; },
-    (m) => { m.input.sizeBytes = -1; },
-    (m) => { m.input.mimeType = "application/pdf\\nsecret"; },
-  ]) {
-    const message = start();
-    mutate(message);
-    assert.equal(isCustomerAssetScanChildStart(message), false);
-  }
-});
-
-test("scanner child result is bound to a positive claim generation and known status", () => {
-  const result = {
-    version: VERSION, type: "result", jobToken: "c".repeat(64), claimGeneration: 3,
-    scannerServiceId: "scanner.synthetic.v1", scanStatus: "clean",
-  };
-  assert.equal(isCustomerAssetScanChildResult(result), true);
-  assert.equal(isCustomerAssetScanChildResult({ ...result, claimGeneration: 2.5 }), false);
-  assert.equal(isCustomerAssetScanChildResult({ ...result, scanStatus: "verified" }), false);
-  assert.equal(isCustomerAssetScanChildResult({ ...result, databaseUrl: "secret" }), false);
-});
-
-test("scanner child failure exposes only bounded stable error codes", () => {
-  const failure = {
-    version: VERSION, type: "failure", jobToken: "d".repeat(64), claimGeneration: 4,
-    code: "SCANNER_EXECUTION_FAILED",
-  };
-  assert.equal(isCustomerAssetScanChildFailure(failure), true);
-  assert.equal(isCustomerAssetScanChildFailure({ ...failure, code: "provider-secret-error" }), false);
-  assert.equal(isCustomerAssetScanChildFailure({ ...failure, rawError: "secret" }), false);
-});
+import { validateCustomerAssetScanChildRequestV1 as vr, validateCustomerAssetScanChildResultV1 as vs, isCustomerAssetScanChildResultForRequest as matches } from "../dist/packages/assets/customer-asset-scan-child-protocol.js";
+const req=()=>({protocolVersion:1,correlationId:"corr-1",tenantId:"t1",applicationId:"a1",assetId:"x1",uploadSessionId:"s1",claimGeneration:2,checksumSha256:"a".repeat(64),sizeBytes:1024,mimeType:"application/pdf"});
+const res=()=>({protocolVersion:1,correlationId:"corr-1",assetId:"x1",claimGeneration:2,scanStatus:"clean"});
+test("accepts bounded versioned request",()=>assert.equal(vr(req()),true));
+test("rejects unsupported versions and secret-bearing/opaque fields",()=>{for(const patch of [{protocolVersion:2},{databaseUrl:"postgres://secret"},{providerUploadReference:"opaque"},{secretRef:"vault://secret"}]) assert.equal(vr({...req(),...patch}),false);});
+test("rejects malformed checksum, size and generation",()=>{for(const patch of [{checksumSha256:"bad"},{sizeBytes:0},{claimGeneration:0},{tenantId:""}]) assert.equal(vr({...req(),...patch}),false);});
+test("accepts valid result and bounded scanner metadata",()=>assert.equal(vs({...res(),engine:"engine",signatureVersion:"2026.11"}),true));
+test("rejects invalid status, generation and unknown result fields",()=>{for(const patch of [{scanStatus:"unknown"},{claimGeneration:-1},{providerError:"sensitive"}]) assert.equal(vs({...res(),...patch}),false);});
+test("fences results to exact correlation, asset and claim generation",()=>{const r=req(),v=res();assert.equal(matches(r,v),true);assert.equal(matches(r,{...v,claimGeneration:1}),false);assert.equal(matches(r,{...v,assetId:"other"}),false);assert.equal(matches(r,{...v,correlationId:"other"}),false);});
