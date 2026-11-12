@@ -30,7 +30,8 @@ docker exec "$container_id" psql -U eper -d eper_test -v ON_ERROR_STOP=1 -c "ALT
 docker exec "$container_id" psql -U eper -d eper_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ssl_cert_file = 'server.crt'"
 docker exec "$container_id" psql -U eper -d eper_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ssl_key_file = 'server.key'"
 docker exec "$container_id" psql -U eper -d eper_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ssl_ca_file = 'ca.crt'"
-docker exec -u root "$container_id" sh -c "sed -i '1ihostssl eper_test eper_scan_child_ci 0.0.0.0/0 cert\nhostssl eper_test eper_scan_child_ci ::/0 cert' /var/lib/postgresql/data/pg_hba.conf"
+docker exec -u root "$container_id" sh -c "sed -i '1ihostssl eper_test eper_scan_child_ci ::/0 cert' /var/lib/postgresql/data/pg_hba.conf"
+docker exec -u root "$container_id" sh -c "sed -i '1ihostssl eper_test eper_scan_child_ci 0.0.0.0/0 cert' /var/lib/postgresql/data/pg_hba.conf"
 docker restart "$container_id" >/dev/null
 for attempt in $(seq 1 30); do
   if docker exec "$container_id" pg_isready -U eper -d eper_test >/dev/null 2>&1; then break; fi
