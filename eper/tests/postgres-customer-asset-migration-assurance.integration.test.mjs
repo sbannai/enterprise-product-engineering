@@ -276,9 +276,10 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${loginRole}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_child_identities
-          (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [loginRole, tenantId, applicationId, workerId, scannerServiceId, spiffeId],
+          (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+           spiffe_id, provider_connection_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+        [loginRole, tenantId, applicationId, workerId, scannerServiceId, spiffeId, "ci-storage-connection"],
       );
       const childUrl = new URL(connectionString);
       childUrl.username = loginRole;
@@ -320,6 +321,20 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       assert.equal(resolved.rows[0].storage_object_reference, "opaque-child-object-" + suffix);
       assert.equal(Number(resolved.rows[0].size_bytes), bytes.length);
       assert.equal(resolved.rows[0].checksum_sha256, checksumSha256);
+
+      const providerBinding = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_provider_binding($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, spiffeId],
+      );
+      assert.deepEqual(providerBinding.rows, [{ provider_connection_id: "ci-storage-connection" }],
+        "provider connection must come from the authenticated child identity mapping");
+
+      const staleProviderBinding = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_provider_binding($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration + 1, spiffeId],
+      );
+      assert.equal(staleProviderBinding.rowCount, 0,
+        "provider connection must not resolve for a stale claim generation");
       // PostgreSQL cert authentication rejects an expired cert, untrusted issuer, mismatched CN, and no cert.
       for (const candidate of [
         { cert: "wrong-cn.crt", key: "wrong-cn.key", label: "wrong certificate CN" },
@@ -397,6 +412,12 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
         [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
       );
       assert.equal(expired.rowCount, 0, "expired lease must not resolve source input");
+      const expiredProviderBinding = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_provider_binding($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, spiffeId],
+      );
+      assert.equal(expiredProviderBinding.rowCount, 0,
+        "expired lease must not resolve provider connection");
     } finally {
       if (childPool) await childPool.end();
       await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [loginRole]).catch(() => {});
