@@ -20,6 +20,14 @@ const CHILD_ENTRYPOINT = fileURLToPath(
   new URL("../../apps/worker/customer-asset-scan-child-main.js", import.meta.url),
 );
 
+function validSpiffeId(value: string): boolean {
+  if (!/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(value)) return false;
+  const path = value.slice("spiffe://".length).split("/").slice(1);
+  return path.length > 0 && path.every(segment =>
+    segment.length > 0 && segment !== "." && segment !== ".." && !/%2e/i.test(segment),
+  );
+}
+
 /**
  * Fixed production launch boundary. Callers cannot select an executable,
  * module path, Node flags, or arbitrary environment variables. Credentials
@@ -32,17 +40,18 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
   environment: Record<string, string>;
 } {
   const required = (value: unknown, code: string, max = 1024): string => {
-    if (typeof value !== "string" || !value.trim() || value.length > max || value.includes("\\0")) {
+    if (typeof value !== "string" || !value.trim() || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) {
       throw new Error(code);
     }
     return value;
   };
   const socket = required(configuration?.workloadApiSocket, "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SOCKET_INVALID");
-  if (!socket.startsWith("unix:///") || !isAbsolute(socket.slice("unix://".length))) {
+  if (!socket.startsWith("unix:///") || !isAbsolute(socket.slice("unix://".length)) ||
+      socket.split("/").includes("..")) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SOCKET_INVALID");
   }
   const spiffeId = required(configuration.expectedSpiffeId, "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_ID_INVALID", 512);
-  if (!/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(spiffeId)) {
+  if (!validSpiffeId(spiffeId)) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_ID_INVALID");
   }
   const audience = required(configuration.audience, "CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID", 256);
@@ -54,7 +63,7 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
   }
   const absoluteFile = (value: string, code: string) => {
     const result = required(value, code);
-    if (!isAbsolute(result)) throw new Error(code);
+    if (!isAbsolute(result) || result.split("/").includes("..")) throw new Error(code);
     return result;
   };
   const environment = {
