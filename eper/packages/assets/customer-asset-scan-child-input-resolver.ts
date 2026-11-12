@@ -1,4 +1,4 @@
-import type { CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
+import { isCustomerAssetScanChildStart, type CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
 import type { CustomerAssetScanChildIdentityClaims } from "./customer-asset-scan-child-identity.js";
 import type { CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
@@ -57,8 +57,8 @@ export class PostgresCustomerAssetScanChildInputResolver {
     workload: CustomerAssetScanChildSpiffeIdentity;
   }): Promise<CustomerAssetScanChildResolvedInput> {
     const { start, identity, workload } = input ?? {};
-    if (!start || !identity || !workload ||
-        start.input.assetId === undefined || !isUuid(start.input.assetId) ||
+    if (!isCustomerAssetScanChildStart(start) || !identity || !workload ||
+        !isUuid(start.input.assetId) ||
         !boundedText(start.input.tenantId, 128) ||
         !boundedText(start.input.applicationId, 128) ||
         !boundedText(start.workerId, 128) ||
