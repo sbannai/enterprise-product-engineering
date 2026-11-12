@@ -26,7 +26,8 @@ const identity = {
   issuedAt: 1_800_000_000, expiresAt: 1_800_000_120, tokenId: "token-9",
 };
 const workload = { spiffeId: "spiffe://eper.example/asset-scanner/child",
-  trustDomain: "eper.example", audience: "eper:customer-asset-scan-child", expiresAt: 1_800_000_120 };
+  trustDomain: "eper.example", audience: "eper:customer-asset-scan-child",
+  expiresAt: Math.floor(Date.now() / 1000) + 120 };
 const sourceRow = {
   asset_id: start.input.assetId, storage_adapter_key: "synthetic.storage.v1",
   storage_object_reference: "opaque-storage-object", provider_upload_reference: "opaque-upload",
