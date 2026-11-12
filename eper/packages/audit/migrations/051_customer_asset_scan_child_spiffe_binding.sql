@@ -86,8 +86,7 @@ BEGIN
      OR p_scanner_service_id IS NULL OR length(btrim(p_scanner_service_id)) < 2 OR length(p_scanner_service_id) > 128
      OR p_claim_generation IS NULL OR p_claim_generation < 1
      OR p_spiffe_id IS NULL OR length(btrim(p_spiffe_id)) < 12 OR length(p_spiffe_id) > 512
-     OR p_spiffe_id !~ '^spiffe://[a-z0-9.-]+/[A-Za-z0-9._~!
-COMMIT;''()*+,;=:@%/-]+
+     OR p_spiffe_id !~ '^spiffe://[a-z0-9.-]+/[A-Za-z0-9._~!$&()*+,;=:@%/-]+$'
 
      OR position('..' in p_spiffe_id) > 0 THEN
     RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID';
