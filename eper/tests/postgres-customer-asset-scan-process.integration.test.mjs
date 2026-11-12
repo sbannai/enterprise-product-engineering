@@ -719,6 +719,270 @@ test("PostgreSQL 16 scanner-supervisor LOGIN can renew only its mapped active cl
   });
 
 
+test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { skip: !connectionString }, async () => {
+  const pool = new Pool({ connectionString, max: 6 });
+  const fixtureRepository = new PostgresCustomerAssetRepository(pool);
+  const fixture = await createPendingScanFixture(pool, fixtureRepository, "scan-supervisor-recovery");
+  const workerId = "ci-asset-scanner:supervisor-recovery";
+  const scannerServiceId = "ci-asset-scanner";
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+  const role = "eper_scan_recovery_" + suffix;
+  const password = randomUUID().replaceAll("-", "");
+  const supervisorUrl = new URL(connectionString);
+  supervisorUrl.username = role;
+  supervisorUrl.password = password;
+  const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 1 });
+  try {
+    await fixtureRepository.claimScanJobs({
+      tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+      workerId, scannerServiceId, environment: "sandbox", limit: 1, leaseMs: 5_000,
+    });
+    await pool.query(
+      `UPDATE public.eper_customer_asset_scan_jobs
+          SET attempt_count = max_attempts,
+              lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+        WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+      [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+    );
+    await pool.query(
+      `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+         NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+    );
+    await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+    await pool.query(
+      `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+         (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+       VALUES ($1, $2, $3, $4, $5, true)`,
+      [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+    );
+    const privilegeProbe = await pool.query(
+      `SELECT current_user AS probe_user,
+              session_user AS probe_session_user,
+              pg_catalog.pg_get_userbyid(p.proowner) AS recovery_function_owner,
+              p.prosecdef AS recovery_is_security_definer,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_upload_sessions', 'tenant_id', 'SELECT') AS session_tenant_select,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_upload_sessions', 'asset_id', 'SELECT') AS session_asset_select,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_upload_sessions', 'upload_status', 'SELECT') AS session_status_select,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_upload_sessions', 'UPDATE') AS session_update,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_assets', 'tenant_id', 'SELECT') AS asset_tenant_select,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_assets', 'asset_id', 'SELECT') AS asset_id_select,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_assets', 'upload_status', 'SELECT') AS asset_status_select,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_assets', 'UPDATE') AS asset_update,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_application_links', 'tenant_id', 'SELECT') AS link_tenant_select,
+              pg_catalog.has_column_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_application_links', 'application_id', 'SELECT') AS link_application_select,
+              pg_catalog.pg_has_role('eper_customer_asset_scan_supervisor_definer',
+                'eper_customer_asset_access', 'USAGE') AS inherits_asset_runtime_role
+         FROM pg_catalog.pg_proc p
+        WHERE p.oid = 'public.eper_recover_exhausted_customer_asset_scan_jobs(varchar,varchar,varchar,integer)'::regprocedure`,
+    );
+    console.log("[scan-supervisor-recovery privilege probe]", privilegeProbe.rows[0]);
+    assert.equal(privilegeProbe.rows[0].recovery_function_owner,
+      "eper_customer_asset_scan_supervisor_definer");
+    assert.equal(privilegeProbe.rows[0].recovery_is_security_definer, true);
+    assert.equal(privilegeProbe.rows[0].session_update, false,
+      "supervisor definer must not have table-wide upload-session UPDATE");
+    assert.equal(privilegeProbe.rows[0].asset_update, false,
+      "supervisor definer must not have table-wide asset UPDATE");
+    assert.equal(privilegeProbe.rows[0].inherits_asset_runtime_role, false,
+      "supervisor definer must not inherit the customer asset runtime role");
+
+    // Execute isolated probes as the real SECURITY DEFINER owner. This distinguishes
+    // base SELECT, row-lock and asset-policy failures without widening any grants.
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION public.eper_test_probe_scan_recovery_privilege(
+        p_tenant_id varchar, p_application_id varchar, p_upload_session_id uuid, p_asset_id uuid
+      ) RETURNS jsonb
+      LANGUAGE plpgsql SECURITY DEFINER
+      SET search_path = pg_catalog
+      SET row_security = on
+      AS $probe$
+      DECLARE v_result jsonb := '{}'::jsonb; v_code text; v_message text;
+      BEGIN
+        PERFORM pg_catalog.set_config('eper.tenant_id', p_tenant_id, true);
+        PERFORM pg_catalog.set_config('eper.application_id', p_application_id, true);
+        BEGIN
+          PERFORM s.asset_id FROM public.eper_customer_asset_upload_sessions s
+           WHERE s.tenant_id = p_tenant_id AND s.application_id = p_application_id
+             AND s.upload_session_id = p_upload_session_id;
+          v_result := v_result || jsonb_build_object('session_select', 'ok');
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+          v_result := v_result || jsonb_build_object('session_select', v_code || ': ' || v_message);
+        END;
+        BEGIN
+          PERFORM s.asset_id FROM public.eper_customer_asset_upload_sessions s
+           WHERE s.tenant_id = p_tenant_id AND s.application_id = p_application_id
+             AND s.upload_session_id = p_upload_session_id
+           FOR UPDATE SKIP LOCKED;
+          v_result := v_result || jsonb_build_object('session_for_update', 'ok');
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+          v_result := v_result || jsonb_build_object('session_for_update', v_code || ': ' || v_message);
+        END;
+        BEGIN
+          PERFORM a.asset_id FROM public.eper_customer_assets a
+           WHERE a.tenant_id = p_tenant_id AND a.asset_id = p_asset_id;
+          v_result := v_result || jsonb_build_object('asset_select', 'ok');
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+          v_result := v_result || jsonb_build_object('asset_select', v_code || ': ' || v_message);
+        END;
+        v_result := v_result || jsonb_build_object(
+          'session_policies', (
+            SELECT coalesce(jsonb_agg(jsonb_build_object(
+              'name', policyname, 'command', cmd, 'roles', roles,
+              'qual', qual, 'with_check', with_check
+            )), '[]'::jsonb)
+              FROM pg_catalog.pg_policies
+             WHERE schemaname = 'public'
+               AND tablename = 'eper_customer_asset_upload_sessions'
+          ),
+          'session_triggers', (
+            SELECT coalesce(jsonb_agg(jsonb_build_object(
+              'name', t.tgname, 'definition', pg_catalog.pg_get_triggerdef(t.oid)
+            )), '[]'::jsonb)
+              FROM pg_catalog.pg_trigger t
+              JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+              JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relname = 'eper_customer_asset_upload_sessions'
+               AND NOT t.tgisinternal
+          ),
+          'session_constraints', (
+            SELECT coalesce(jsonb_agg(jsonb_build_object(
+              'name', con.conname, 'definition', pg_catalog.pg_get_constraintdef(con.oid)
+            )), '[]'::jsonb)
+              FROM pg_catalog.pg_constraint con
+             WHERE con.conrelid = 'public.eper_customer_asset_upload_sessions'::regclass
+          )
+        );
+        RETURN v_result;
+      END
+      $probe$;
+      ALTER FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)
+        OWNER TO eper_customer_asset_scan_supervisor_definer;
+      REVOKE ALL ON FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)
+        TO eper_customer_asset_scan_supervisor_access;
+    `);
+    const isolatedProbe = await supervisorPool.query(
+      'SELECT public.eper_test_probe_scan_recovery_privilege($1,$2,$3,$4) AS result',
+      [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, fixture.assetId],
+    );
+    console.log("[scan-supervisor-recovery isolated privilege probes]", isolatedProbe.rows[0]?.result);
+    assert.equal(isolatedProbe.rows[0]?.result?.session_select, "ok");
+    assert.equal(isolatedProbe.rows[0]?.result?.session_for_update, "ok",
+      "supervisor definer must have the narrow row-lock capability needed by recovery");
+    assert.equal(isolatedProbe.rows[0]?.result?.asset_select, "ok");
+    await pool.query('DROP FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)');
+
+    const supervisorRepository = new PostgresCustomerAssetRepository(pool, supervisorPool);
+
+    // A row locked by another transaction must be skipped, not waited on or
+    // partially transitioned. The recovery operation should return zero.
+    const lockClient = await pool.connect();
+    try {
+      await lockClient.query("BEGIN");
+      await lockClient.query(
+        "SELECT upload_session_id FROM public.eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2 FOR UPDATE",
+        [fixture.tenantId, fixture.uploadSessionId],
+      );
+      assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId, environment: "sandbox", limit: 5,
+      }), 0, "locked upload session must be skipped");
+      const skippedState = await pool.query(
+        `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+           FROM public.eper_customer_assets a
+           JOIN public.eper_customer_asset_scan_jobs j
+             ON j.tenant_id = a.tenant_id AND j.asset_id = a.asset_id
+          WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+        [fixture.tenantId, fixture.assetId],
+      );
+      assert.equal(skippedState.rows[0].upload_status, "scanning");
+      assert.equal(skippedState.rows[0].state, "leased");
+    } finally {
+      await lockClient.query("ROLLBACK");
+      lockClient.release();
+    }
+
+    // Force the canonical audit append to fail. The recovery transition and
+    // quarantine must roll back with it, leaving the expired job recoverable.
+    await pool.query("REVOKE INSERT ON public.eper_audit_events FROM eper_customer_asset_scan_audit_writer");
+    try {
+      await assert.rejects(
+        supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId, environment: "sandbox", limit: 5,
+        }),
+        error => error.code === "42501",
+        "audit append failure must abort the recovery transaction",
+      );
+    } finally {
+      await pool.query("GRANT INSERT ON public.eper_audit_events TO eper_customer_asset_scan_audit_writer");
+    }
+    const rolledBackState = await pool.query(
+      `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+         FROM public.eper_customer_assets a
+         JOIN public.eper_customer_asset_scan_jobs j
+           ON j.tenant_id = a.tenant_id AND j.asset_id = a.asset_id
+        WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+      [fixture.tenantId, fixture.assetId],
+    );
+    assert.deepEqual(rolledBackState.rows[0], {
+      upload_status: "scanning", scan_status: "pending",
+      lifecycle_status: "active", state: "leased",
+    }, "failed audit append must roll back asset and job transitions");
+
+    assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+      tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+      scannerServiceId, environment: "sandbox", limit: 5,
+    }), 1);
+    await assert.rejects(
+      supervisorPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
+      error => error.code === "42501",
+    );
+    const state = await pool.query(
+      `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+         FROM public.eper_customer_assets a
+         JOIN public.eper_customer_asset_scan_jobs j
+           ON j.tenant_id = a.tenant_id AND j.asset_id = a.asset_id
+        WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+      [fixture.tenantId, fixture.assetId],
+    );
+    assert.deepEqual(state.rows[0], {
+      upload_status: "failed", scan_status: "error",
+      lifecycle_status: "quarantined", state: "dead_letter",
+    });
+    const audit = await pool.query(
+      `SELECT action FROM public.eper_audit_events
+        WHERE tenant_id = $1 AND correlation_id = $2
+          AND action = 'customer.asset.scan.exhausted'`,
+      [fixture.tenantId, fixture.correlationId],
+    );
+    assert.equal(audit.rowCount, 1, "state transition must have its canonical audit event");
+  } finally {
+    await supervisorPool.end();
+    await pool.query(
+      "DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1",
+      [role],
+    ).catch(() => {});
+    await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+    await pool.end();
+  }
+});
+
+
 test("PostgreSQL 16 scanner-supervisor LOGIN claims only jobs in its exact mapped scope",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 5 });
