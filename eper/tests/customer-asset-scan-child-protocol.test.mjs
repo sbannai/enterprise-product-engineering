@@ -37,7 +37,8 @@ test("scanner child start rejects malformed identity, generation and scan input"
   for (const mutate of [
     (m) => { m.version = 1; },
     (m) => { m.jobToken = "short"; },
-    (m) => { m.claimGeneration = 0; },\n    (m) => { m.workerId = "wrong worker"; },
+    (m) => { m.claimGeneration = 0; },
+    (m) => { m.workerId = "wrong worker"; },
     (m) => { m.input.checksumSha256 = "not-a-digest"; },
     (m) => { m.input.sizeBytes = -1; },
     (m) => { m.input.mimeType = "application/pdf\\nsecret"; },
