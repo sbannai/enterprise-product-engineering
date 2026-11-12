@@ -115,3 +115,12 @@ test("scanner child supervisor safely handles a child that exits before reading 
     start: start(), timeoutMs: 2_000,
   }), /CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID|CUSTOMER_ASSET_SCAN_CHILD_EXITED/);
 });
+
+test("scanner child supervisor settles spawn errors only after the child close event", async () => {
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node + ".missing-executable",
+    args: [],
+    start: start(),
+    timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED/);
+});

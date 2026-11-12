@@ -77,6 +77,7 @@ function supervise(
     let settled = false;
     let timedOut = false;
     let overflowed = false;
+    let spawnError = false;
     let aborted = signal?.aborted ?? false;
     const finish = (error?: Error, value?: CustomerAssetScanChildOutcome) => {
       if (settled) return;
@@ -97,7 +98,12 @@ function supervise(
       child.kill("SIGKILL");
     }, timeoutMs);
 
-    child.once("error", () => finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED")));
+    // Do not settle on the error event: Node emits "close" after "error",
+    // and the supervisor must not release the job for retry before process exit.
+    child.once("error", () => {
+      spawnError = true;
+      child.kill("SIGKILL");
+    });
     // A child may exit before consuming its one-shot request. Handle EPIPE and
     // stdout stream errors explicitly; let the process close event settle the
     // attempt so a started child is never mistaken for an exited child.
@@ -118,6 +124,7 @@ function supervise(
       output += buffer.toString("utf8");
     });
     child.once("close", (code, signal) => {
+      if (spawnError) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED"));
       if (aborted) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED"));
       if (timedOut) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT"));
       if (overflowed) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_OUTPUT_LIMIT"));
