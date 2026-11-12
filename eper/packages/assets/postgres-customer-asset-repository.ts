@@ -1106,6 +1106,9 @@ export class PostgresCustomerAssetRepository {
            FROM public.eper_recover_exhausted_customer_asset_scan_jobs($1, $2, $3, $4)`,
         [input.tenantId, input.applicationId, input.scannerServiceId, limit],
       );
+      if (recovered.rows.length > 0) {
+        await client.query("SET LOCAL ROLE eper_customer_asset_scan_audit_writer");
+      }
       for (const item of recovered.rows) {
         await appendAuditEventInTransaction(client as AuditSqlClient, {
           tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
