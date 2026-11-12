@@ -504,3 +504,101 @@ test("dedicated scheduler LOGIN role can enqueue idempotently without UPDATE pri
     await adminPool.end();
   }
 });
+   }
+ });
+
+
+test("dedicated scheduler LOGIN role materializes, claims, fences, completes and audits a one-time execution", {
+  skip: !enabled || !workerDatabaseUrl
+    ? "Set isolated admin and EPER_CAMPAIGN_SCHEDULER_WORKER_TEST_DATABASE_URL connections"
+    : false,
+}, async () => {
+  const adminParsed = new URL(databaseUrl);
+  const workerParsed = new URL(workerDatabaseUrl);
+  const databaseName = decodeURIComponent(adminParsed.pathname.slice(1));
+  assert.match(databaseName, /(^|[_-])(test|ci|sandbox)([_-]|$)/i,
+    "Refusing to exercise worker lifecycle outside a disposable test/CI/sandbox database");
+  assert.equal(workerParsed.pathname, adminParsed.pathname,
+    "Admin and worker URLs must target the same disposable database");
+
+  const adminPool = new pg.Pool({ connectionString: databaseUrl, max: 2, connectionTimeoutMillis: 3000 });
+  const workerPool = new pg.Pool({ connectionString: workerDatabaseUrl, max: 3, connectionTimeoutMillis: 3000 });
+  const tenantId = "scheduler-worker-lifecycle-" + randomUUID();
+  const applicationId = "app-worker-lifecycle-" + randomUUID();
+  const workerId = "worker-login-lifecycle-" + randomUUID();
+  const adminStore = new PostgresCampaignSchedulerStore(adminPool, "sandbox", "worker-login-lifecycle-setup");
+  const workerStore = new PostgresCampaignSchedulerStore(workerPool, "sandbox", "worker-login-lifecycle");
+  let scheduleId;
+  try {
+    const identity = await workerPool.query("SELECT current_user AS role_name");
+    assert.equal(identity.rows[0]?.role_name, "eper_campaign_scheduler_worker_runtime");
+
+    const schedule = await adminStore.createSchedule({
+      tenantId, applicationId, campaignId: "campaign-worker-lifecycle",
+      triggerType: "once", timezone: "UTC",
+      scheduleDefinition: { at: "2035-01-01T00:00:00Z" }, createdBy: "integration-test",
+    });
+    scheduleId = schedule.id;
+    const nextRunAt = new Date(Date.now() + 1200).toISOString();
+    await adminStore.approveAndSchedule({
+      tenantId, applicationId, scheduleId, actorId: "integration-test", nextRunAt,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, Date.parse(nextRunAt) - Date.now() + 100)));
+    assert.equal(await workerStore.materializeDueOneTimeSchedules(), 1,
+      "Worker LOGIN role must materialize the due one-time schedule");
+
+    const claimed = await workerStore.claimExecutions(workerId, 1);
+    assert.equal(claimed.length, 1, "Worker LOGIN role must claim the durable execution");
+    const execution = claimed[0];
+    assert.equal(execution.status, "running");
+    assert.equal(execution.claimGeneration, 1);
+
+    const fenced = await workerStore.beginExecutionDispatch({
+      tenantId, applicationId, executionId: execution.id, workerId,
+      claimGeneration: execution.claimGeneration,
+    });
+    assert.equal(fenced, true, "Worker LOGIN role must acquire the atomic dispatch fence");
+
+    const completed = await workerStore.completeExecution({
+      tenantId, applicationId, executionId: execution.id, workerId,
+      claimGeneration: execution.claimGeneration,
+      result: { integrationTest: true, completedBy: "dedicated-worker-login" },
+    });
+    assert.equal(completed, true, "Worker LOGIN role must complete its claimed execution");
+
+    const persisted = await adminPool.query(
+      "SELECT status, dispatch_started_at, result FROM eper_campaign_executions WHERE id=$1 AND tenant_id=$2 AND application_id=$3",
+      [execution.id, tenantId, applicationId],
+    );
+    assert.equal(persisted.rowCount, 1);
+    assert.equal(persisted.rows[0].status, "succeeded");
+    assert.ok(persisted.rows[0].dispatch_started_at);
+    assert.deepEqual(persisted.rows[0].result, {
+      integrationTest: true, completedBy: "dedicated-worker-login",
+    });
+
+    const audit = await adminPool.query(
+      "SELECT action FROM eper_audit_events WHERE tenant_id=$1 AND application_id=$2 AND resource_id=$3 ORDER BY occurred_at, event_id",
+      [tenantId, applicationId, execution.id],
+    );
+    assert.deepEqual(
+      audit.rows.map((row) => row.action).sort(),
+      ["campaign_execution_claimed", "campaign_execution_dispatch_started", "campaign_execution_succeeded"].sort(),
+      "Worker lifecycle must append claim, dispatch-fence and completion audit events",
+    );
+  } finally {
+    if (scheduleId) {
+      await adminPool.query(
+        "DELETE FROM eper_campaign_executions WHERE tenant_id=$1 AND application_id=$2 AND schedule_id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+      await adminPool.query(
+        "DELETE FROM eper_campaign_schedules WHERE tenant_id=$1 AND application_id=$2 AND id=$3",
+        [tenantId, applicationId, scheduleId],
+      );
+    }
+    await workerPool.end();
+    await adminPool.end();
+  }
+});
