@@ -44,3 +44,55 @@ export class CustomerAssetScanChildSpiffeSdkAdapter implements SpiffeWorkloadApi
     }];
   }
 }
+
+
+export interface SpiffeSdkClientLifecycle extends SpiffeSdkJwtClient {
+  close(): void | Promise<void>;
+}
+
+export interface SpiffeSdkClientConstructor {
+  new (options: {
+    connection: string;
+    retry: { enabled: false };
+  }): SpiffeSdkClientLifecycle;
+}
+
+export interface CustomerAssetScanChildSpiffeSdkRuntime {
+  readonly adapter: CustomerAssetScanChildSpiffeSdkAdapter;
+  close(): Promise<void>;
+}
+
+function isExplicitUnixSocket(value: string): boolean {
+  if (!value.startsWith("unix:///")) return false;
+  const path = value.slice("unix://".length);
+  return path.startsWith("/") &&
+    !/[?#\\s\\u0000-\\u001f\\u007f]/.test(path) &&
+    !path.split("/").includes("..");
+}
+
+/**
+ * Constructs the SDK only from a deployment-supplied absolute Unix socket.
+ * No environment fallback is permitted. SDK retries are disabled because the
+ * parent supervisor owns retry policy and the child attempt has a hard deadline.
+ */
+export function createCustomerAssetScanChildSpiffeSdkRuntime(input: {
+  readonly endpoint: string;
+  readonly SpiffeClient: SpiffeSdkClientConstructor;
+}): CustomerAssetScanChildSpiffeSdkRuntime {
+  if (!isExplicitUnixSocket(input.endpoint)) {
+    throw new Error("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_SOCKET_INVALID");
+  }
+  const sdk = new input.SpiffeClient({
+    connection: input.endpoint,
+    retry: { enabled: false },
+  });
+  let closed = false;
+  return Object.freeze({
+    adapter: new CustomerAssetScanChildSpiffeSdkAdapter(sdk),
+    async close() {
+      if (closed) return;
+      closed = true;
+      await sdk.close();
+    },
+  });
+}
