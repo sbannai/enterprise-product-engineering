@@ -556,7 +556,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       await assert.rejects(
         childPool.query(
           `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
-          [fixture.assetId, job.claimGeneration],
+          [fixture.assetId, job.claimGeneration + 1],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
@@ -1114,22 +1114,22 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
         can_resolve_input: true,
       });
 
-      const resolveInput = (tenantId = fixture.tenantId) =>
+      const resolveInput = (claimGeneration = job.claimGeneration) =>
         childPool.query(
           `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
-          [fixture.assetId, job.claimGeneration],
+          [fixture.assetId, claimGeneration],
         );
       const resolved = await resolveInput();
       assert.equal(resolved.rowCount, 1);
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
       assert.equal(resolved.rows[0].storage_adapter_key, "ci-storage");
       assert.equal(resolved.rows[0].checksum_sha256, createHash("sha256").update(fixture.testObjectBytes).digest("hex"));
-      await assert.rejects(resolveInput(fixture.tenantId + "-other"),
+      await assert.rejects(resolveInput(job.claimGeneration + 1),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/);
       await assert.rejects(
         childPool.query(
           `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
-          [fixture.assetId, job.claimGeneration],
+          [fixture.assetId, job.claimGeneration + 1],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
