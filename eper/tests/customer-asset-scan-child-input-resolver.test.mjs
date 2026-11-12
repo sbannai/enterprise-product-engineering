@@ -54,7 +54,7 @@ test("resolves only the current leased input and exact workload-bound provider c
     attempt: 2, providerConnectionId: "connection-a",
   });
   assert.deepEqual(f.calls.map(call => call.values), [
-    ["tenant-a", "app-a", start.input.assetId, "asset-scanner:worker-1", "asset-scanner", 9],
+    ["tenant-a", "app-a", start.input.assetId, "asset-scanner:worker-1", "asset-scanner", 9, workload.spiffeId],
     ["tenant-a", "app-a", start.input.assetId, "asset-scanner:worker-1", "asset-scanner", 9, workload.spiffeId],
   ]);
   assert.match(f.calls[0].statement, /eper_resolve_customer_asset_scan_child_input/);
