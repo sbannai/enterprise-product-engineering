@@ -121,9 +121,9 @@ export class PostgresCustomerAssetScanChildInputResolver {
         mime_type: string;
         attempt: number | string;
       }>(
-        "SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1,$2,$3,$4,$5,$6)",
+        "SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1,$2,$3,$4,$5,$6,$7)",
         [start.input.tenantId, start.input.applicationId, start.input.assetId,
-          start.workerId, start.scannerServiceId, start.claimGeneration],
+          start.workerId, start.scannerServiceId, start.claimGeneration, workload.spiffeId],
       );
       if (result.rows.length !== 1) {
         throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_INPUT_STALE");
