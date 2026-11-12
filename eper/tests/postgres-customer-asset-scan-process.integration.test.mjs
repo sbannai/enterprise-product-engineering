@@ -1058,3 +1058,87 @@ test("PostgreSQL 16 scanner-supervisor LOGIN claims only jobs in its exact mappe
       await pool.end();
     }
   });
+
+
+test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity and read-only scan-input function",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 5 });
+    const repository = new PostgresCustomerAssetRepository(pool);
+    const fixture = await createPendingScanFixture(pool, repository, "scan-child-spiffe");
+    const workerId = "ci-asset-scanner:spiffe-child-test";
+    const scannerServiceId = "ci-asset-scanner";
+    const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+    const role = "eper_scan_child_" + suffix;
+    const password = randomUUID().replaceAll("-", "");
+    const childUrl = new URL(connectionString);
+    childUrl.username = role;
+    childUrl.password = password;
+    const childPool = new Pool({ connectionString: childUrl.toString(), max: 1 });
+    try {
+      const [job] = await repository.claimScanJobs({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        workerId, scannerServiceId, environment: "sandbox", limit: 1, leaseMs: 30_000,
+      });
+      assert.ok(job);
+      await pool.query(
+        `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+           NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+      );
+      await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
+      await pool.query(
+        `INSERT INTO public.eper_customer_asset_scan_child_identities
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, spiffeId],
+      );
+
+      const boundary = await childPool.query(`
+        SELECT
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'SELECT') AS can_select_jobs,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT') AS can_select_assets,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'UPDATE') AS can_update_assets,
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'EXECUTE') AS can_resolve_input
+      `);
+      assert.deepEqual(boundary.rows[0], {
+        can_select_jobs: false,
+        can_update_jobs: false,
+        can_select_assets: false,
+        can_update_assets: false,
+        can_resolve_input: true,
+      });
+
+      const resolveInput = (identity = spiffeId, tenantId = fixture.tenantId) =>
+        childPool.query(
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input(
+             $1, $2, $3, $4, $5, $6, $7
+           )`,
+          [tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId,
+            job.claimGeneration, identity],
+        );
+      const resolved = await resolveInput();
+      assert.equal(resolved.rowCount, 1);
+      assert.equal(resolved.rows[0].asset_id, fixture.assetId);
+      assert.equal(resolved.rows[0].storage_adapter_key, "ci-storage");
+      assert.equal(resolved.rows[0].checksum_sha256, createHash("sha256").update(fixture.testObjectBytes).digest("hex"));
+      await assert.rejects(resolveInput("spiffe://eper.example/asset-scanner/other"),
+        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/);
+      await assert.rejects(resolveInput(spiffeId, fixture.tenantId + "-other"),
+        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/);
+      await assert.rejects(
+        childPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
+        error => error.code === "42501",
+      );
+    } finally {
+      await childPool.end();
+      await pool.query(
+        "DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1",
+        [role],
+      ).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+      await pool.end();
+    }
+  });
