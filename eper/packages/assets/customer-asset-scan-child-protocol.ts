@@ -3,7 +3,7 @@
  * Excludes credentials, database handles/URLs, secret references, upload references,
  * upload-session identifiers, process environments and customer file bytes.
  */
-export const CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION = 2 as const;
+export const CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION = 3 as const;
 
 export interface CustomerAssetScanChildInput {
   tenantId: string;
@@ -15,7 +15,7 @@ export interface CustomerAssetScanChildInput {
 }
 export interface CustomerAssetScanChildStart {
   version: typeof CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_VERSION; type: "start";
-  jobToken: string; claimGeneration: number; requestId: string; scannerServiceId: string;
+  jobToken: string; claimGeneration: number; requestId: string; workerId: string; scannerServiceId: string;
   input: CustomerAssetScanChildInput;
 }
 export interface CustomerAssetScanChildResult {
@@ -49,9 +49,9 @@ function validJobIdentity(value: Record<string, unknown>): boolean {
 }
 export function isCustomerAssetScanChildStart(value: unknown): value is CustomerAssetScanChildStart {
   if (!isRecord(value) || !hasExactKeys(value, [
-    "version", "type", "jobToken", "claimGeneration", "requestId", "scannerServiceId", "input",
+    "version", "type", "jobToken", "claimGeneration", "requestId", "workerId", "scannerServiceId", "input",
   ]) || !validJobIdentity(value) || value.type !== "start" ||
-      !boundedString(value.requestId, 128) || !boundedString(value.scannerServiceId, 128) ||
+      !boundedString(value.requestId, 128) || !boundedString(value.workerId, 128) ||\n      !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.workerId) || !boundedString(value.scannerServiceId, 128) ||
       !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.scannerServiceId) ||
       !isRecord(value.input) || !hasExactKeys(value.input, [
         "tenantId", "applicationId", "assetId", "checksumSha256", "sizeBytes", "mimeType",
