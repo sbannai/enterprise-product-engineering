@@ -15,6 +15,7 @@ export interface CustomerAssetScanChildSupervisorOptions {
   timeoutMs: number;
   maxOutputBytes?: number;
   environment?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export type CustomerAssetScanChildOutcome =
@@ -57,7 +58,7 @@ export async function runCustomerAssetScanChild(
     stdio: ["pipe", "pipe", "ignore"],
     windowsHide: true,
   });
-  return supervise(child, options.start, options.timeoutMs, maxOutputBytes);
+  return supervise(child, options.start, options.timeoutMs, maxOutputBytes, options.signal);
 }
 
 function supervise(
@@ -65,6 +66,7 @@ function supervise(
   start: CustomerAssetScanChildStart,
   timeoutMs: number,
   maxOutputBytes: number,
+  signal?: AbortSignal,
 ): Promise<CustomerAssetScanChildOutcome> {
   return new Promise((resolve, reject) => {
     let output = "";
@@ -72,13 +74,21 @@ function supervise(
     let settled = false;
     let timedOut = false;
     let overflowed = false;
+    let aborted = signal?.aborted ?? false;
     const finish = (error?: Error, value?: CustomerAssetScanChildOutcome) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abortChild);
       if (error) reject(error);
       else resolve(value!);
     };
+    const abortChild = () => {
+      aborted = true;
+      child.kill("SIGKILL");
+    };
+    if (aborted) child.kill("SIGKILL");
+    else signal?.addEventListener("abort", abortChild, { once: true });
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
@@ -96,6 +106,7 @@ function supervise(
       output += buffer.toString("utf8");
     });
     child.once("close", (code, signal) => {
+      if (aborted) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_ABORTED"));
       if (timedOut) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_TIMEOUT"));
       if (overflowed) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_OUTPUT_LIMIT"));
       if (code !== 0 || signal !== null) return finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_EXITED"));

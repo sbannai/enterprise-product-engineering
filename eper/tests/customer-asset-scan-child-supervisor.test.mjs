@@ -86,3 +86,14 @@ test("scanner child receives only its explicit environment allowlist, never inhe
     else process.env[sentinel] = previous;
   }
 });
+
+
+test("scanner child supervisor hard-kills the child when the parent shuts down", async () => {
+  const controller = new AbortController();
+  const pending = runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.stdin.resume();setInterval(()=>{},1000)"],
+    start: start(), timeoutMs: 10_000, signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 50);
+  await assert.rejects(pending, /CUSTOMER_ASSET_SCAN_CHILD_ABORTED/);
+});
