@@ -120,6 +120,7 @@ BEGIN
      WHERE j.tenant_id = p_tenant_id
        AND j.application_id = p_application_id
        AND j.state = 'leased'
+       AND j.lease_owner = v_identity.worker_id
        AND j.lease_expires_at <= pg_catalog.clock_timestamp()
        AND j.attempt_count >= j.max_attempts
      ORDER BY j.lease_expires_at, j.upload_session_id
@@ -150,6 +151,7 @@ BEGIN
        AND j.application_id = p_application_id
        AND j.upload_session_id = v_candidate.upload_session_id
        AND j.state = 'leased'
+       AND j.lease_owner = v_identity.worker_id
        AND j.lease_expires_at <= pg_catalog.clock_timestamp()
        AND j.attempt_count >= j.max_attempts
      FOR UPDATE SKIP LOCKED;
