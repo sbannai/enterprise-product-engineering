@@ -1,6 +1,6 @@
 import { isCustomerAssetScanChildStart, type CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
 import type { CustomerAssetScanChildIdentityClaims } from "./customer-asset-scan-child-identity.js";
-import type { CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
+import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE, type CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
 /** Structural subset of node-postgres used by the dedicated child LOGIN pool. */
 export interface CustomerAssetScanChildSqlExecutor {
@@ -41,6 +41,21 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
+function validWorkloadIdentity(value: unknown, nowSeconds: number): value is CustomerAssetScanChildSpiffeIdentity {
+  if (!value || typeof value !== "object") return false;
+  const workload = value as Record<string, unknown>;
+  if (typeof workload.spiffeId !== "string" || typeof workload.trustDomain !== "string" ||
+      workload.audience !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE ||
+      !Number.isSafeInteger(workload.expiresAt)) return false;
+  const match = /^spiffe:\/\/([a-z0-9.-]+)\/[A-Za-z0-9._~!function isUuid(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}'()*+,;=:@%/-]+$/.exec(workload.spiffeId);
+  return !!match && !workload.spiffeId.includes("..") &&
+    match[1] === workload.trustDomain &&
+    workload.expiresAt > nowSeconds &&
+    workload.expiresAt - nowSeconds <= 300;
+}
 
 /**
  * Resolves scan metadata only through the SECURITY DEFINER functions installed
@@ -57,7 +72,9 @@ export class PostgresCustomerAssetScanChildInputResolver {
     workload: CustomerAssetScanChildSpiffeIdentity;
   }): Promise<CustomerAssetScanChildResolvedInput> {
     const { start, identity, workload } = input ?? {};
-    if (!isCustomerAssetScanChildStart(start) || !identity || !workload ||
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (!isCustomerAssetScanChildStart(start) || !identity ||
+        !validWorkloadIdentity(workload, nowSeconds) ||
         !isUuid(start.input.assetId) ||
         !boundedText(start.input.tenantId, 128) ||
         !boundedText(start.input.applicationId, 128) ||
