@@ -130,7 +130,9 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const capability = CAPABILITY_BY_OPERATION[input.operation.kind];
     if (!capability || !validText(input.tenantId, 128) || !validText(input.applicationId, 128) ||
-        !validOperationRequest(input.operation)) {
+        !validOperationRequest(input.operation) ||
+        (input.operation.kind === "read_object_internal" && !validText(input.expectedConnectionId, 128)) ||
+        (input.expectedConnectionId !== undefined && !validText(input.expectedConnectionId, 128))) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
 
