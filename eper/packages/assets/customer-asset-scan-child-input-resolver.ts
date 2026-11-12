@@ -1,5 +1,4 @@
 import { isCustomerAssetScanChildStart, type CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
-import type { CustomerAssetScanChildIdentityClaims } from "./customer-asset-scan-child-identity.js";
 import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE, type CustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
 /** Structural subset of node-postgres used by the dedicated child LOGIN pool. */
@@ -11,6 +10,10 @@ export interface CustomerAssetScanChildSqlExecutor {
 }
 
 export interface CustomerAssetScanChildResolvedInput {
+  readonly tenantId: string;
+  readonly applicationId: string;
+  readonly workerId: string;
+  readonly scannerServiceId: string;
   readonly assetId: string;
   readonly storageAdapterKey: string;
   readonly providerObjectReference: string;
@@ -35,32 +38,12 @@ export class CustomerAssetScanChildInputResolverError extends Error {
 
 function boundedText(value: unknown, maximum = 2048): value is string {
   return typeof value === "string" && value.trim().length > 0 &&
-    value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value);
+    value.length <= maximum && !/[\\u0000-\\u001f\\u007f]/.test(value);
 }
 function isUuid(value: unknown): value is string {
   return typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
-function validIdentityClaims(value: unknown, nowSeconds: number): value is CustomerAssetScanChildIdentityClaims {
-  if (!value || typeof value !== "object") return false;
-  const claims = value as Record<string, unknown>;
-  return boundedText(claims.issuer, 128) &&
-    boundedText(claims.subject, 128) &&
-    claims.audience === "eper:customer-asset-scan-child" &&
-    boundedText(claims.tenantId, 128) &&
-    boundedText(claims.applicationId, 128) &&
-    boundedText(claims.connectionId, 128) &&
-    boundedText(claims.scannerServiceId, 128) &&
-    claims.capability === "storage.object.read.internal" &&
-    boundedText(claims.tokenId, 128) &&
-    typeof claims.issuedAt === "number" && Number.isSafeInteger(claims.issuedAt) &&
-    typeof claims.expiresAt === "number" && Number.isSafeInteger(claims.expiresAt) &&
-    claims.issuedAt > 0 && claims.expiresAt > claims.issuedAt &&
-    claims.issuedAt <= nowSeconds + 30 &&
-    claims.expiresAt > nowSeconds - 30 &&
-    claims.expiresAt - claims.issuedAt <= 300;
-}
-
 function validWorkloadIdentity(value: unknown, nowSeconds: number): value is CustomerAssetScanChildSpiffeIdentity {
   if (!value || typeof value !== "object") return false;
   const workload = value as Record<string, unknown>;
@@ -75,43 +58,40 @@ function validWorkloadIdentity(value: unknown, nowSeconds: number): value is Cus
 }
 
 /**
- * Resolves scan metadata only through the SECURITY DEFINER functions installed
- * by migrations 046 and 052. The supplied executor must be a dedicated child
- * LOGIN connection with EXECUTE grants only; never pass the parent worker pool.
- * No direct business-table query or secret reference is accepted here.
+ * Resolves authorization scope and scan metadata from the authenticated
+ * PostgreSQL session_user mapping via migration 053. Tenant, application,
+ * worker, scanner and provider connection are not supplied to SQL by IPC or
+ * by an independently supplied claims object. The verified current-process
+ * SVID must match the operator-provisioned SPIFFE ID returned by PostgreSQL.
  */
 export class PostgresCustomerAssetScanChildInputResolver {
   constructor(private readonly sql: CustomerAssetScanChildSqlExecutor) {}
 
   async resolve(input: {
     start: CustomerAssetScanChildStart;
-    identity: CustomerAssetScanChildIdentityClaims;
     workload: CustomerAssetScanChildSpiffeIdentity;
   }): Promise<CustomerAssetScanChildResolvedInput> {
-    const { start, identity, workload } = input ?? {};
+    const { start, workload } = input ?? {};
     const nowSeconds = Math.floor(Date.now() / 1000);
     if (!isCustomerAssetScanChildStart(start) ||
-        !validIdentityClaims(identity, nowSeconds) ||
         !validWorkloadIdentity(workload, nowSeconds) ||
         !isUuid(start.input.assetId) ||
         !boundedText(start.input.tenantId, 128) ||
         !boundedText(start.input.applicationId, 128) ||
         !boundedText(start.workerId, 128) ||
         !boundedText(start.scannerServiceId, 128) ||
-        !Number.isSafeInteger(start.claimGeneration) || start.claimGeneration < 1 ||
-        identity.tenantId !== start.input.tenantId ||
-        identity.applicationId !== start.input.applicationId ||
-        identity.scannerServiceId !== start.scannerServiceId ||
-        identity.capability !== "storage.object.read.internal" ||
-        !boundedText(identity.connectionId, 128) ||
-        !boundedText(workload.spiffeId, 512) ||
-        !/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(workload.spiffeId) ||
-        workload.spiffeId.includes("..")) {
+        !Number.isSafeInteger(start.claimGeneration) || start.claimGeneration < 1) {
       throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID");
     }
 
     try {
       const result = await this.sql.query<{
+        tenant_id: string;
+        application_id: string;
+        worker_id: string;
+        scanner_service_id: string;
+        spiffe_id: string;
+        provider_connection_id: string;
         asset_id: string;
         storage_adapter_key: string;
         storage_object_reference: string;
@@ -121,9 +101,8 @@ export class PostgresCustomerAssetScanChildInputResolver {
         mime_type: string;
         attempt: number | string;
       }>(
-        "SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1,$2,$3,$4,$5,$6,$7)",
-        [start.input.tenantId, start.input.applicationId, start.input.assetId,
-          start.workerId, start.scannerServiceId, start.claimGeneration, workload.spiffeId],
+        "SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1,$2)",
+        [start.input.assetId, start.claimGeneration],
       );
       if (result.rows.length !== 1) {
         throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_INPUT_STALE");
@@ -131,6 +110,19 @@ export class PostgresCustomerAssetScanChildInputResolver {
       const row = result.rows[0];
       const sizeBytes = Number(row.size_bytes);
       const attempt = Number(row.attempt);
+      if (!boundedText(row.tenant_id, 128) ||
+          !boundedText(row.application_id, 128) ||
+          !boundedText(row.worker_id, 128) ||
+          !boundedText(row.scanner_service_id, 128) ||
+          !boundedText(row.spiffe_id, 512) ||
+          !boundedText(row.provider_connection_id, 128) ||
+          row.tenant_id !== start.input.tenantId ||
+          row.application_id !== start.input.applicationId ||
+          row.worker_id !== start.workerId ||
+          row.scanner_service_id !== start.scannerServiceId ||
+          row.spiffe_id !== workload.spiffeId) {
+        throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_PROVIDER_BINDING_INVALID");
+      }
       if (row.asset_id !== start.input.assetId ||
           !boundedText(row.storage_adapter_key, 128) ||
           !boundedText(row.storage_object_reference) ||
@@ -143,18 +135,11 @@ export class PostgresCustomerAssetScanChildInputResolver {
         throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_INPUT_STALE");
       }
 
-      const binding = await this.sql.query<{ provider_connection_id: string }>(
-        "SELECT * FROM public.eper_resolve_customer_asset_scan_child_provider_binding($1,$2,$3,$4,$5,$6,$7)",
-        [start.input.tenantId, start.input.applicationId, start.input.assetId,
-          start.workerId, start.scannerServiceId, start.claimGeneration, workload.spiffeId],
-      );
-      if (binding.rows.length !== 1 ||
-          !boundedText(binding.rows[0]?.provider_connection_id, 128) ||
-          binding.rows[0].provider_connection_id !== identity.connectionId) {
-        throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_PROVIDER_BINDING_INVALID");
-      }
-
       return Object.freeze({
+        tenantId: row.tenant_id,
+        applicationId: row.application_id,
+        workerId: row.worker_id,
+        scannerServiceId: row.scanner_service_id,
         assetId: row.asset_id,
         storageAdapterKey: row.storage_adapter_key,
         providerObjectReference: row.storage_object_reference,
@@ -163,7 +148,7 @@ export class PostgresCustomerAssetScanChildInputResolver {
         sizeBytes,
         mimeType: row.mime_type,
         attempt,
-        providerConnectionId: binding.rows[0].provider_connection_id,
+        providerConnectionId: row.provider_connection_id,
       });
     } catch (error) {
       if (error instanceof CustomerAssetScanChildInputResolverError) throw error;
