@@ -72,3 +72,22 @@ test("permits omitted optional operations only when capability is explicitly fal
   };
   assert.equal(assertProviderStorageDriver(driver), driver);
 });
+
+
+test("internal object read requires explicit capability and an executable method", () => {
+  const optedInWithoutMethod = {
+    ...base,
+    capabilities: { ...base.capabilities, internalObjectRead: true },
+  };
+  assert.throws(() => assertProviderStorageDriver(optedInWithoutMethod),
+    error => error instanceof ProviderStorageDriverContractError &&
+      error.code === "PROVIDER_DRIVER_METHOD_MISSING");
+  const optedIn = {
+    ...base,
+    capabilities: { ...base.capabilities, internalObjectRead: true },
+    async readObjectInternal() {
+      return (async function* () { yield new Uint8Array([1]); })();
+    },
+  };
+  assert.equal(assertProviderStorageDriver(optedIn), optedIn);
+});
