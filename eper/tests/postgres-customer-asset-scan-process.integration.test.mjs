@@ -689,7 +689,7 @@ test("PostgreSQL 16 scanner-supervisor LOGIN can renew only its mapped active cl
       );
       assert.equal((await renew(fixture.tenantId, fixture.applicationId, job.claimGeneration)).rows[0].renewed,
         true, "mapped supervisor must renew the active claim");
-      assert.equal((await renew(fixture.tenantId, fixture.applicationId, job.claimGeneration - 1)).rows[0].renewed,
+      assert.equal((await renew(fixture.tenantId, fixture.applicationId, job.claimGeneration + 1)).rows[0].renewed,
         false, "stale generation must not renew");
       await assert.rejects(
         renew(fixture.tenantId, fixture.applicationId + "-other", job.claimGeneration),
