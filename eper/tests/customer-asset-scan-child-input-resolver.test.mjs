@@ -23,7 +23,8 @@ const identity = {
   audience: "eper:customer-asset-scan-child", tenantId: "tenant-a",
   applicationId: "app-a", connectionId: "connection-a",
   scannerServiceId: "asset-scanner", capability: CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY,
-  issuedAt: 1_800_000_000, expiresAt: 1_800_000_120, tokenId: "token-9",
+  issuedAt: Math.floor(Date.now() / 1000) - 30,
+  expiresAt: Math.floor(Date.now() / 1000) + 120, tokenId: "token-9",
 };
 const workload = { spiffeId: "spiffe://eper.example/asset-scanner/child",
   trustDomain: "eper.example", audience: "eper:customer-asset-scan-child",
@@ -137,4 +138,18 @@ test("rejects an expired workload SVID before SQL", async () => {
     start, identity, workload: { ...workload, expiresAt: 1 },
   }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
   assert.equal(f.calls.length, 0);
+});
+test("rejects expired, future-issued or overlong identity claims before SQL", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  for (const changed of [
+    { expiresAt: now - 60 },
+    { issuedAt: now + 120, expiresAt: now + 180 },
+    { issuedAt: now - 400, expiresAt: now + 120 },
+  ]) {
+    const f = fixture();
+    await assert.rejects(() => f.resolver.resolve({
+      start, identity: { ...identity, ...changed }, workload,
+    }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
+    assert.equal(f.calls.length, 0);
+  }
 });
