@@ -31,6 +31,19 @@ GRANT UPDATE ON public.eper_customer_asset_upload_sessions
 GRANT SELECT (tenant_id, asset_id, upload_status, version),
       UPDATE ON public.eper_customer_assets
   TO eper_customer_asset_scan_supervisor_definer;
+-- Existing asset RLS policies also consult explicit application links.
+-- The definer needs a narrowly scoped read path for those policy predicates;
+-- the supervisor LOGIN itself receives no link-table privileges.
+GRANT SELECT (tenant_id, application_id, asset_id)
+  ON public.eper_customer_asset_application_links
+  TO eper_customer_asset_scan_supervisor_definer;
+DROP POLICY IF EXISTS customer_asset_scan_supervisor_recovery_link
+  ON public.eper_customer_asset_application_links;
+CREATE POLICY customer_asset_scan_supervisor_recovery_link
+  ON public.eper_customer_asset_application_links FOR SELECT
+  TO eper_customer_asset_scan_supervisor_definer
+  USING (tenant_id = current_setting('eper.tenant_id', true)
+     AND application_id = current_setting('eper.application_id', true));
 GRANT SELECT (
   tenant_id, application_id, upload_session_id, asset_id, correlation_id,
   state, attempt_count, max_attempts, lease_owner, lease_expires_at
