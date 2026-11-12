@@ -28,8 +28,9 @@ GRANT SELECT (tenant_id, application_id, upload_session_id, asset_id, upload_sta
 -- never updates session columns, and the grant is limited to updated_at.
 GRANT UPDATE ON public.eper_customer_asset_upload_sessions
   TO eper_customer_asset_scan_supervisor_definer;
-GRANT SELECT (tenant_id, asset_id, upload_status, version),
-      UPDATE ON public.eper_customer_assets
+GRANT SELECT (
+  tenant_id, asset_id, upload_status, version, repository_scope, owner_application_id
+), UPDATE ON public.eper_customer_assets
   TO eper_customer_asset_scan_supervisor_definer;
 -- Existing asset RLS policies also consult explicit application links.
 -- The definer needs a narrowly scoped read path for those policy predicates;
