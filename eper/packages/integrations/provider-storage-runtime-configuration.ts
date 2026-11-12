@@ -83,7 +83,7 @@ export function readProviderStorageRuntimeConfiguration(env: Record<string, stri
     if (typeof adapter.adapterKey !== "string" || !/^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(adapter.adapterKey) ||
         typeof adapter.adapterVersion !== "string" || !/^[0-9][A-Za-z0-9.+-]{0,127}$/.test(adapter.adapterVersion) ||
         !Array.isArray(adapter.capabilities) || adapter.capabilities.length < 1 || adapter.capabilities.length > 7 ||
-        adapter.capabilities.some(cap => typeof cap !== "string" || !/^storage\.(?:upload\.(?:grant|lookup|renew)|object\.(?:verify|scan)|download\.grant)$/.test(cap)) ||
+        adapter.capabilities.some(cap => typeof cap !== "string" || !/^storage\.(?:upload\.(?:grant|lookup|renew)|object\.(?:verify|scan|read\.internal)|download\.grant)$/.test(cap)) ||
         new Set(adapter.capabilities).size !== adapter.capabilities.length || typeof adapter.synthetic !== "boolean") {
       throw new ProviderStorageRuntimeConfigurationError("PROVIDER_STORAGE_RUNTIME_CONFIG_INVALID");
     }
