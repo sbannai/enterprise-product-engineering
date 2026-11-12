@@ -223,6 +223,7 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
     const idempotencyKey = "scan-child-key-" + suffix.slice(0, 20);
     const workerId = "ci-child-service:worker-" + suffix.slice(0, 12);
     const scannerServiceId = "ci-child-service";
+    const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
     const loginRole = "eper_scan_child_ci";
     const certDirectory = process.env.EPER_SCAN_CHILD_CERT_DIR;
     const bytes = Buffer.alloc(512, 65);
@@ -277,7 +278,7 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
         `INSERT INTO public.eper_customer_asset_scan_child_identities
           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
          VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [loginRole, tenantId, applicationId, workerId, scannerServiceId],
+        [loginRole, tenantId, applicationId, workerId, scannerServiceId, spiffeId],
       );
       const childUrl = new URL(connectionString);
       childUrl.username = loginRole;
@@ -311,7 +312,7 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
 
       const resolved = await childPool.query(
         `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, spiffeId],
       );
       assert.equal(resolved.rowCount, 1);
       assert.equal(resolved.rows[0].asset_id, assetId);
