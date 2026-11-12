@@ -789,6 +789,12 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
     assert.equal(privilegeProbe.rows[0].recovery_function_owner,
       "eper_customer_asset_scan_supervisor_definer");
     assert.equal(privilegeProbe.rows[0].recovery_is_security_definer, true);
+    assert.equal(privilegeProbe.rows[0].session_update, false,
+      "supervisor definer must not have table-wide upload-session UPDATE");
+    assert.equal(privilegeProbe.rows[0].asset_update, false,
+      "supervisor definer must not have table-wide asset UPDATE");
+    assert.equal(privilegeProbe.rows[0].inherits_asset_runtime_role, false,
+      "supervisor definer must not inherit the customer asset runtime role");
 
     // Execute isolated probes as the real SECURITY DEFINER owner. This distinguishes
     // base SELECT, row-lock and asset-policy failures without widening any grants.
@@ -874,6 +880,10 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, fixture.assetId],
     );
     console.log("[scan-supervisor-recovery isolated privilege probes]", isolatedProbe.rows[0]?.result);
+    assert.equal(isolatedProbe.rows[0]?.result?.session_select, "ok");
+    assert.equal(isolatedProbe.rows[0]?.result?.session_for_update, "ok",
+      "supervisor definer must have the narrow row-lock capability needed by recovery");
+    assert.equal(isolatedProbe.rows[0]?.result?.asset_select, "ok");
     await pool.query('DROP FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)');
 
     const supervisorRepository = new PostgresCustomerAssetRepository(pool, supervisorPool);
