@@ -200,3 +200,56 @@ test("dispatch permits application override when no tenant default exists", asyn
   assert.equal(result.policySource, "APPLICATION_OVERRIDE");
   assert.equal(result.tenantDefaultVersion, null);
 });
+
+
+test("dispatch pins selection to the exact expected connection when requested", async () => {
+  const { instance, calls } = service([
+    connection({ connectionId: "connection-a" }),
+    connection({ connectionId: "connection-b", providerKey: "alternate-mail" }),
+  ], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-b",
+    policy: { retryLimit: 4, senderProfile: "default" },
+    source: "TENANT_DEFAULT", tenantDefaultVersion: 3,
+  });
+  const result = await instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    expectedConnectionId: "connection-b",
+  });
+  assert.equal(result.connectionId, "connection-b");
+  assert.equal(result.providerKey, "alternate-mail");
+  assert.equal(calls.at(-1).connectionId, "connection-b");
+});
+
+test("dispatch never falls back to another connection when the expected binding is inactive or unauthorized", async () => {
+  for (const expected of [
+    "missing-connection",
+    "suspended-connection",
+    "unauthorized-connection",
+  ]) {
+    const candidates = [connection({ connectionId: "connection-a" })];
+    if (expected !== "missing-connection") {
+      candidates.push(connection({
+        connectionId: expected,
+        ...(expected === "suspended-connection" ? { bindingStatus: "SUSPENDED" } : {}),
+        ...(expected === "unauthorized-connection" ? { allowedCapabilities: ["sms.send"] } : {}),
+      }));
+    }
+    const { instance, calls } = service(candidates);
+    await assert.rejects(() => instance.resolve({
+      tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+      expectedConnectionId: expected,
+    }), error => error instanceof ProviderDispatchConfigurationError
+      && error.code === "PROVIDER_DISPATCH_NO_ACTIVE_BINDING");
+    assert.equal(calls.some(call => call.method === "resolveEffectivePolicy"), false,
+      "policy lookup must not run after exact binding authorization fails");
+  }
+});
+
+test("dispatch rejects malformed expected connection identifiers", async () => {
+  const { instance } = service([connection()]);
+  await assert.rejects(() => instance.resolve({
+    tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
+    expectedConnectionId: " ",
+  }), error => error instanceof ProviderDispatchConfigurationError
+    && error.code === "PROVIDER_DISPATCH_EXPECTED_CONNECTION_INVALID");
+});

@@ -37,11 +37,13 @@ export class ProviderRuntimeResolutionService<TAdapter> {
     tenantId: string;
     applicationId: string;
     capability: string;
+    expectedConnectionId?: string;
   }): Promise<ResolvedProviderRuntime<TAdapter>> {
     const selection = await this.dispatch.resolve({
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       capabilityKey: input.capability,
+      ...(input.expectedConnectionId !== undefined ? { expectedConnectionId: input.expectedConnectionId } : {}),
     });
     const definition: ProviderDefinition | null = await this.catalogue.get(selection.providerKey);
     if (!definition) throw new ProviderRuntimeResolutionError("PROVIDER_RUNTIME_DEFINITION_NOT_FOUND");

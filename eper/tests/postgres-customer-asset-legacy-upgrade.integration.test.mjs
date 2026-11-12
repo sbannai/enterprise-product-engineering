@@ -121,7 +121,9 @@ test("customer asset 023-024 upgrade backfills only legacy rows with persisted p
       }
     } finally {
       if (databaseCreated) {
-        await adminPool.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1", [databaseName]).catch(() => {});
+        // All migration clients and the fixture pool are closed before teardown.
+        // Do not terminate backends here: that can kill an in-flight test query
+        // and turn cleanup into a misleading administrator-command failure.
         await adminPool.query(`DROP DATABASE IF EXISTS "${databaseName}"`).catch(() => {});
       }
       if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
