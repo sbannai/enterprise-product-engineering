@@ -310,8 +310,8 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       });
 
       const resolved = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
       );
       assert.equal(resolved.rowCount, 1);
       assert.equal(resolved.rows[0].asset_id, assetId);
@@ -364,23 +364,23 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       );
 
       const stale = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration + 1],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration + 1, "spiffe://eper.example/asset-scanner/ci-child"],
       );
       assert.equal(stale.rowCount, 0, "stale claim generation must not resolve source input");
 
       await assert.rejects(
         childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-          ["other-" + tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+          ["other-" + tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
 
       await assert.rejects(
         childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-          [tenantId, "other-" + applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+          [tenantId, "other-" + applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
@@ -392,8 +392,8 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
         [tenantId, applicationId, uploadSessionId],
       );
       const expired = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
       );
       assert.equal(expired.rowCount, 0, "expired lease must not resolve source input");
     } finally {
