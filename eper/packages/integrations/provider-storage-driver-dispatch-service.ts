@@ -7,6 +7,7 @@ import type {
   ProviderStorageDriver,
 } from "./provider-storage-driver-contract.js";
 import { assertProviderStorageDriver } from "./provider-storage-driver-contract.js";
+import { verifiedProviderInternalObjectChunks } from "./provider-internal-object-read.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
 import type { StorageUploadRequest } from "../assets/storage-upload-adapter.js";
@@ -201,7 +202,12 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
         if (!stream || typeof stream[Symbol.asyncIterator] !== "function") {
           throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
         }
-        return stream;
+        return verifiedProviderInternalObjectChunks({
+          source: stream,
+          expectedSizeBytes: input.operation.request.expectedSizeBytes,
+          expectedSha256: input.operation.request.expectedSha256,
+          signal: input.signal,
+        });
       }
     }
   }
