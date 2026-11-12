@@ -34,8 +34,13 @@ export class ProviderRuntimeCredentialResolutionService<TAdapter, TCredentials> 
     tenantId: string;
     applicationId: string;
     capability: string;
+    expectedConnectionId?: string;
   }): Promise<ProviderRuntimeWithCredentials<TAdapter, TCredentials>> {
     const runtime = await this.runtime.resolve(input);
+    if (input.expectedConnectionId !== undefined &&
+        runtime.selection.connectionId !== input.expectedConnectionId) {
+      throw new ProviderRuntimeCredentialResolutionError("PROVIDER_RUNTIME_AUTHORIZATION_CHANGED");
+    }
     let connection: { secretReference: string; authMode: string };
     try {
       connection = await this.connections.getRuntimeSecretReference({
