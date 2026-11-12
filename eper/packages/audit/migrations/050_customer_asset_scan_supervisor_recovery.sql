@@ -11,17 +11,18 @@ GRANT SELECT (tenant_id, application_id, upload_session_id, asset_id, upload_sta
   TO eper_customer_asset_scan_supervisor_definer;
 -- PostgreSQL requires UPDATE privilege for SELECT FOR UPDATE; this function
 -- never updates session columns, and the grant is limited to updated_at.
-GRANT UPDATE (updated_at) ON public.eper_customer_asset_upload_sessions
+GRANT UPDATE ON public.eper_customer_asset_upload_sessions
   TO eper_customer_asset_scan_supervisor_definer;
 GRANT SELECT (tenant_id, asset_id, upload_status),
-      UPDATE (upload_status, scan_status, lifecycle_status, updated_by, updated_at, version)
-  ON public.eper_customer_assets
+      UPDATE ON public.eper_customer_assets
   TO eper_customer_asset_scan_supervisor_definer;
 GRANT SELECT (
   tenant_id, application_id, upload_session_id, asset_id, correlation_id,
   state, attempt_count, max_attempts, lease_expires_at
-), UPDATE (state, lease_owner, lease_expires_at, last_error_code, updated_at)
+)
   ON public.eper_customer_asset_scan_jobs
+  TO eper_customer_asset_scan_supervisor_definer;
+GRANT UPDATE ON public.eper_customer_asset_scan_jobs
   TO eper_customer_asset_scan_supervisor_definer;
 
 DROP POLICY IF EXISTS customer_asset_scan_supervisor_recovery_session
