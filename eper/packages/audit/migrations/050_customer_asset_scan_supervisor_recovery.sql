@@ -21,6 +21,37 @@ GRANT eper_customer_asset_scan_audit_writer TO eper_customer_asset_scan_supervis
 GRANT SELECT ON public.eper_customer_asset_scan_supervisor_identities
   TO eper_customer_asset_scan_supervisor_definer;
 
+-- The shared-download SELECT policy queries assets and application links.
+-- Restrict that policy to the customer asset runtime role; otherwise PostgreSQL
+-- OR-combines it for the supervisor and demands unrelated asset/link privileges.
+-- The supervisor uses its own tenant+application-scoped session policy below.
+DROP POLICY IF EXISTS customer_asset_upload_session_shared_read
+  ON public.eper_customer_asset_upload_sessions;
+CREATE POLICY customer_asset_upload_session_shared_read
+  ON public.eper_customer_asset_upload_sessions
+  FOR SELECT
+  TO eper_customer_asset_access
+  USING (
+    tenant_id = current_setting('eper.tenant_id', true)
+    AND EXISTS (
+      SELECT 1
+        FROM public.eper_customer_assets a
+        JOIN public.eper_customer_asset_application_links l
+          ON l.tenant_id = a.tenant_id
+         AND l.asset_id = a.asset_id
+       WHERE a.tenant_id = eper_customer_asset_upload_sessions.tenant_id
+         AND a.asset_id = eper_customer_asset_upload_sessions.asset_id
+         AND a.repository_scope = 'customer_shared'
+         AND a.lifecycle_status = 'active'
+         AND a.upload_status = 'available'
+         AND a.scan_status IN ('clean', 'not_required')
+         AND eper_customer_asset_upload_sessions.upload_status = 'completed'
+         AND eper_customer_asset_upload_sessions.provider_upload_reference IS NOT NULL
+         AND btrim(eper_customer_asset_upload_sessions.provider_upload_reference) <> ''
+         AND l.application_id = current_setting('eper.application_id', true)
+    )
+  );
+
 GRANT SELECT (tenant_id, application_id, upload_session_id, asset_id, upload_status)
   ON public.eper_customer_asset_upload_sessions
   TO eper_customer_asset_scan_supervisor_definer;
