@@ -505,9 +505,9 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_child_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
       );
 
       const privileges = await childPool.query(`
@@ -519,7 +519,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
           has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
           has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT') AS can_insert_audit,
           has_function_privilege(current_user,
-            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint)',
+            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint,text)',
             'EXECUTE') AS can_resolve_scan_input
       `);
       assert.deepEqual(privileges.rows[0], {
@@ -542,8 +542,8 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       );
 
       const resolved = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId, job.claimGeneration],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+        [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId, job.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
       );
       assert.equal(resolved.rowCount, 1, "mapped child should resolve the exact active generation");
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
@@ -553,8 +553,8 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
 
       await assert.rejects(
         childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-          [fixture.tenantId, fixture.applicationId + "-other", fixture.assetId, workerId, scannerServiceId, job.claimGeneration],
+          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
+          [fixture.tenantId, fixture.applicationId + "-other", fixture.assetId, workerId, scannerServiceId, job.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
         ),
         /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
       );
@@ -664,9 +664,9 @@ test("PostgreSQL 16 scanner-supervisor LOGIN can renew only its mapped active cl
       await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
       );
 
       const boundary = await supervisorPool.query(`
@@ -753,7 +753,7 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
          (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
        VALUES ($1, $2, $3, $4, $5, true)`,
-      [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+      [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
     );
     const privilegeProbe = await pool.query(
       `SELECT current_user AS probe_user,
@@ -1005,9 +1005,9 @@ test("PostgreSQL 16 scanner-supervisor LOGIN claims only jobs in its exact mappe
       await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
       );
 
       const boundary = await supervisorPool.query(`
