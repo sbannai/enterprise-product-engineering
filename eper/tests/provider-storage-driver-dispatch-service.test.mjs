@@ -285,3 +285,61 @@ test("does not invoke the provider when cancellation occurs during credential re
     error.code === "PROVIDER_STORAGE_DISPATCH_ABORTED");
   assert.equal(driverInvoked, false);
 });
+
+
+test("internal object read uses its own optional capability and exact connection binding", async () => {
+  const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])];
+  let received;
+  const f = fixture({
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      async readObjectInternal(context, request, requestId, signal) {
+        received = { context, request, requestId, signal };
+        return (async function* () { for (const chunk of chunks) yield chunk; })();
+      },
+    },
+  });
+  const result = await f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-internal-read",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  });
+  assert.equal(f.calls[0][1].capability, "storage.object.read.internal");
+  assert.equal(f.calls[0][1].expectedConnectionId, "connection-a");
+  assert.equal(received.context.connectionId, "connection-a");
+  assert.equal(received.request.providerObjectReference, "opaque-ref");
+  assert.equal(received.requestId, "req-internal-read");
+  assert.equal(result[Symbol.asyncIterator] instanceof Function, true);
+  const read = [];
+  for await (const chunk of result) read.push(...chunk);
+  assert.deepEqual(read, [1, 2, 3]);
+});
+
+test("internal object read fails closed when the adapter has not explicitly opted in", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-no-read",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
+  assert.equal(f.calls[0][1].capability, "storage.object.read.internal");
+});
+
+test("internal object read rejects invalid size or checksum before credential resolution", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-invalid-read",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 0, expectedSha256: "not-a-checksum",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+  assert.equal(f.calls.length, 0);
+});
