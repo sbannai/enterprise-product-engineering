@@ -70,8 +70,7 @@ export class PostgresCustomerAssetScanChildInputResolver {
         identity.capability !== "storage.object.read.internal" ||
         !boundedText(identity.connectionId, 128) ||
         !boundedText(workload.spiffeId, 512) ||
-        !/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!        identity.connectionId.trim().length === 0 ||
-        workload.spiffeId.trim().length === 0) {'()*+,;=:@%/-]+$/.test(workload.spiffeId) ||
+        !/^spiffe:\/\/[a-z0-9.-]+\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/.test(workload.spiffeId) ||
         workload.spiffeId.includes("..")) {
       throw new CustomerAssetScanChildInputResolverError("CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID");
     }
