@@ -568,3 +568,69 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       await pool.end();
     }
   });
+
+
+test("PostgreSQL 16 scanner-supervisor LOGIN is isolated behind the operator-managed identity registry",
+  { skip: !connectionString }, async () => {
+    const pool = new Pool({ connectionString, max: 3 });
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+    const role = "eper_scan_supervisor_" + suffix;
+    const password = randomUUID().replaceAll("-", "");
+    const supervisorUrl = new URL(connectionString);
+    supervisorUrl.username = role;
+    supervisorUrl.password = password;
+    const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 1 });
+    try {
+      await pool.query(
+        `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+           NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+      );
+      await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+      await pool.query(
+        `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, false)`,
+        [role, "tenant-" + suffix, "application-" + suffix,
+          "ci-asset-scanner:" + suffix, "ci-asset-scanner"],
+      );
+
+      const boundary = await supervisorPool.query(`
+        SELECT current_user,
+          pg_catalog.pg_has_role(current_user, 'eper_customer_asset_scan_supervisor_access', 'MEMBER') AS is_supervisor,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_supervisor_identities', 'SELECT') AS can_read_identity_registry,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'SELECT') AS can_read_assets,
+          has_table_privilege(current_user, 'public.eper_customer_assets', 'UPDATE') AS can_update_assets,
+          has_table_privilege(current_user, 'public.eper_customer_asset_upload_sessions', 'UPDATE') AS can_update_sessions,
+          has_table_privilege(current_user, 'public.eper_customer_asset_scan_jobs', 'UPDATE') AS can_update_jobs,
+          has_table_privilege(current_user, 'public.eper_audit_events', 'INSERT') AS can_insert_audit,
+          (SELECT rolsuper OR rolbypassrls FROM pg_catalog.pg_roles WHERE rolname = current_user) AS bypasses_security
+      `);
+      assert.deepEqual(boundary.rows[0], {
+        current_user: role,
+        is_supervisor: true,
+        can_read_identity_registry: false,
+        can_read_assets: false,
+        can_update_assets: false,
+        can_update_sessions: false,
+        can_update_jobs: false,
+        can_insert_audit: false,
+        bypasses_security: false,
+      });
+      await assert.rejects(
+        supervisorPool.query("SELECT login_role FROM public.eper_customer_asset_scan_supervisor_identities"),
+        error => error.code === "42501",
+      );
+      await assert.rejects(
+        supervisorPool.query("UPDATE public.eper_customer_asset_scan_jobs SET attempt_count = 99"),
+        error => error.code === "42501",
+      );
+    } finally {
+      await supervisorPool.end();
+      await pool.query(
+        "DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1",
+        [role],
+      ).catch(() => {});
+      await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+      await pool.end();
+    }
+  });
