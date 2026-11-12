@@ -5,6 +5,7 @@ import type {
   PostgresCustomerAssetScanChildInputResolver,
 } from "./customer-asset-scan-child-input-resolver.js";
 import { CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY } from "./customer-asset-scan-child-identity.js";
+import { isVerifiedCustomerAssetScanChildSpiffeIdentity } from "./customer-asset-scan-child-spiffe-identity.js";
 
 export interface CustomerAssetScanChildDatabaseCredentialResolver<TCredentials> {
   resolveScanCredentials(input: {
@@ -38,6 +39,11 @@ export class CustomerAssetScanChildDatabaseAuthorizationService<TCredentials> {
     start: CustomerAssetScanChildStart;
     workload: CustomerAssetScanChildSpiffeIdentity;
   }): Promise<CustomerAssetScanChildDatabaseAuthorization<TCredentials>> {
+    // Never trust a structurally compatible object: require provenance from
+    // the verifier that fetched this process's SVID over the Workload API.
+    if (!isVerifiedCustomerAssetScanChildSpiffeIdentity(input?.workload)) {
+      throw new CustomerAssetScanChildDatabaseAuthorizationError();
+    }
     const context = await this.contextResolver.resolve(input);
     let credentials: TCredentials;
     try {
