@@ -505,9 +505,9 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_child_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
       );
 
       const privileges = await childPool.query(`
@@ -664,9 +664,9 @@ test("PostgreSQL 16 scanner-supervisor LOGIN can renew only its mapped active cl
       await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
       );
 
       const boundary = await supervisorPool.query(`
@@ -753,7 +753,7 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
          (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
        VALUES ($1, $2, $3, $4, $5, true)`,
-      [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
+      [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
     );
     const privilegeProbe = await pool.query(
       `SELECT current_user AS probe_user,
@@ -1005,9 +1005,9 @@ test("PostgreSQL 16 scanner-supervisor LOGIN claims only jobs in its exact mappe
       await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, "spiffe://eper.example/asset-scanner/ci-child"],
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
       );
 
       const boundary = await supervisorPool.query(`
@@ -1088,8 +1088,8 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
       await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${role}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_child_identities
-           (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, true)`,
+           (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, true)`,
         [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, spiffeId],
       );
 
