@@ -319,10 +319,11 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       assert.equal(resolved.rows[0].storage_object_reference, "opaque-child-object-" + suffix);
       assert.equal(Number(resolved.rows[0].size_bytes), bytes.length);
       assert.equal(resolved.rows[0].checksum_sha256, checksumSha256);
-      // PostgreSQL cert authentication rejects an untrusted issuer, a mismatched CN, and no cert.
+      // PostgreSQL cert authentication rejects an expired cert, untrusted issuer, mismatched CN, and no cert.
       for (const candidate of [
         { cert: "wrong-cn.crt", key: "wrong-cn.key", label: "wrong certificate CN" },
         { cert: "untrusted-child.crt", key: "untrusted-child.key", label: "untrusted client CA" },
+        { cert: "expired-child.crt", key: "expired-child.key", label: "expired client certificate" },
       ]) {
         const rejectedPool = new Pool({
           connectionString: childUrl.toString(), max: 1,

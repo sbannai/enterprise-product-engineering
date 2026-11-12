@@ -28,6 +28,9 @@ openssl req -new -newkey rsa:2048 -nodes -keyout untrusted-child.key -out untrus
 openssl x509 -req -in untrusted-child.csr -CA untrusted-ca.crt -CAkey untrusted-ca.key -CAcreateserial -out untrusted-child.crt -days 2 -extfile child.ext
 openssl req -new -newkey rsa:2048 -nodes -keyout wrong-cn.key -out wrong-cn.csr -subj "/CN=eper_scan_child_wrong"
 openssl x509 -req -in wrong-cn.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out wrong-cn.crt -days 2 -extfile child.ext
+openssl req -new -newkey rsa:2048 -nodes -keyout expired-child.key -out expired-child.csr -subj "/CN=eper_scan_child_ci"
+openssl x509 -req -in expired-child.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out expired-child.crt -days 0 -extfile child.ext
+sleep 2 # Ensure the zero-day certificate is expired before the integration test uses it.
 
 for file in ca.crt server.crt server.key; do docker cp "$file" "$container_id:/var/lib/postgresql/data/$file"; done
 docker exec -u root "$container_id" chown postgres:postgres /var/lib/postgresql/data/ca.crt /var/lib/postgresql/data/server.crt /var/lib/postgresql/data/server.key
@@ -46,7 +49,7 @@ done
 docker exec "$container_id" pg_isready -U eper -d "$database_name"
 
 mkdir -p "$RUNNER_TEMP/eper-scan-child-certs"
-cp ca.crt child.crt child.key wrong-cn.crt wrong-cn.key untrusted-child.crt untrusted-child.key "$RUNNER_TEMP/eper-scan-child-certs/"
+cp ca.crt child.crt child.key wrong-cn.crt wrong-cn.key untrusted-child.crt untrusted-child.key expired-child.crt expired-child.key "$RUNNER_TEMP/eper-scan-child-certs/"
 chmod 600 "$RUNNER_TEMP/eper-scan-child-certs/"*.key
 {
   echo "EPER_SCAN_CHILD_CERT_DIR=$RUNNER_TEMP/eper-scan-child-certs"
