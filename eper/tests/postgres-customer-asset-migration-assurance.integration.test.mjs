@@ -322,6 +322,24 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       assert.equal(Number(resolved.rows[0].size_bytes), bytes.length);
       assert.equal(resolved.rows[0].checksum_sha256, checksumSha256);
 
+      const resolverPrivileges = await childPool.query(`
+        SELECT
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'EXECUTE') AS can_execute_legacy_input,
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_provider_binding(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'EXECUTE') AS can_execute_legacy_provider_binding,
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)',
+            'EXECUTE') AS can_execute_authenticated_context
+      `);
+      assert.deepEqual(resolverPrivileges.rows[0], {
+        can_execute_legacy_input: false,
+        can_execute_legacy_provider_binding: false,
+        can_execute_authenticated_context: true,
+      }, "the child LOGIN may execute only the session_user-derived context resolver");
+
       const providerBinding = await childPool.query(
         `SELECT * FROM public.eper_resolve_customer_asset_scan_child_provider_binding($1, $2, $3, $4, $5, $6, $7)`,
         [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration, spiffeId],
