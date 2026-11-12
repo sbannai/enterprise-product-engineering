@@ -993,27 +993,82 @@ export class PostgresCustomerAssetRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const recovered = await client.query<{
+      await this.setContext(client, input.tenantId, input.applicationId);
+      const candidates = await client.query<{
         upload_session_id: string; asset_id: string; correlation_id: string;
       }>(
         `SELECT upload_session_id, asset_id, correlation_id
-           FROM public.eper_recover_exhausted_customer_asset_scan_jobs($1, $2, $3, $4)`,
-        [input.tenantId, input.applicationId, input.scannerServiceId, limit],
+           FROM eper_customer_asset_scan_jobs
+          WHERE tenant_id = $1 AND application_id = $2
+            AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+            AND attempt_count >= max_attempts
+          ORDER BY lease_expires_at, upload_session_id
+          LIMIT $3`,
+        [input.tenantId, input.applicationId, limit],
       );
-      for (const item of recovered.rows) {
+      let recovered = 0;
+      for (const candidate of candidates.rows) {
+        const session = await client.query<{ asset_id: string; upload_status: string }>(
+          `SELECT asset_id, upload_status
+             FROM eper_customer_asset_upload_sessions
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (!session.rows[0] || session.rows[0].upload_status !== "completed"
+          || session.rows[0].asset_id !== candidate.asset_id) continue;
+        const asset = await client.query<{ upload_status: string }>(
+          `SELECT upload_status FROM eper_customer_assets
+            WHERE tenant_id = $1 AND asset_id = $2
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, candidate.asset_id],
+        );
+        if (!asset.rows[0] || asset.rows[0].upload_status !== "scanning") continue;
+        const job = await client.query<{ correlation_id: string }>(
+          `SELECT correlation_id
+             FROM eper_customer_asset_scan_jobs
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+              AND attempt_count >= max_attempts
+            FOR UPDATE SKIP LOCKED`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (!job.rows[0]) continue;
+        const deadLetter = await client.query(
+          `UPDATE eper_customer_asset_scan_jobs
+              SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
+                  last_error_code = 'ATTEMPTS_EXHAUSTED', updated_at = clock_timestamp()
+            WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3
+              AND state = 'leased' AND lease_expires_at <= clock_timestamp()
+              AND attempt_count >= max_attempts`,
+          [input.tenantId, input.applicationId, candidate.upload_session_id],
+        );
+        if (deadLetter.rowCount !== 1) continue;
+        const quarantined = await client.query(
+          `UPDATE eper_customer_assets
+              SET upload_status = 'failed', scan_status = 'error',
+                  lifecycle_status = 'quarantined', updated_by = $3,
+                  updated_at = clock_timestamp(), version = version + 1
+            WHERE tenant_id = $1 AND asset_id = $2 AND upload_status = 'scanning'`,
+          [input.tenantId, candidate.asset_id, input.scannerServiceId],
+        );
+        if (quarantined.rowCount !== 1) {
+          throw new Error("EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT");
+        }
         await appendAuditEventInTransaction(client as AuditSqlClient, {
           tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
           actorType: "service", actorId: input.scannerServiceId,
           action: "customer.asset.scan.exhausted", outcome: "failure",
           reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
-          resourceId: item.asset_id, correlationId: item.correlation_id, source: "job",
+          resourceId: candidate.asset_id, correlationId: job.rows[0].correlation_id, source: "job",
           operationName: "independent customer asset scan recovery",
-          payload: { assetId: item.asset_id, uploadSessionId: item.upload_session_id,
+          payload: { assetId: candidate.asset_id, uploadSessionId: candidate.upload_session_id,
             scanStatus: "error", resultingAssetStatus: "failed" },
         });
+        recovered += 1;
       }
       await client.query("COMMIT");
-      return recovered.rowCount ?? 0;
+      return recovered;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
