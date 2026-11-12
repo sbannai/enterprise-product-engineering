@@ -206,7 +206,11 @@ test("dispatch pins selection to the exact expected connection when requested", 
   const { instance, calls } = service([
     connection({ connectionId: "connection-a" }),
     connection({ connectionId: "connection-b", providerKey: "alternate-mail" }),
-  ]);
+  ], {
+    tenantId: "tenant-a", applicationId: "app-a", connectionId: "connection-b",
+    policy: { retryLimit: 4, senderProfile: "default" },
+    source: "TENANT_DEFAULT", tenantDefaultVersion: 3,
+  });
   const result = await instance.resolve({
     tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
     expectedConnectionId: "connection-b",
@@ -222,14 +226,15 @@ test("dispatch never falls back to another connection when the expected binding 
     "suspended-connection",
     "unauthorized-connection",
   ]) {
-    const { instance, calls } = service([
-      connection({ connectionId: "connection-a" }),
-      connection({
+    const candidates = [connection({ connectionId: "connection-a" })];
+    if (expected !== "missing-connection") {
+      candidates.push(connection({
         connectionId: expected,
         ...(expected === "suspended-connection" ? { bindingStatus: "SUSPENDED" } : {}),
         ...(expected === "unauthorized-connection" ? { allowedCapabilities: ["sms.send"] } : {}),
-      }),
-    ]);
+      }));
+    }
+    const { instance, calls } = service(candidates);
     await assert.rejects(() => instance.resolve({
       tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "email.send",
       expectedConnectionId: expected,
