@@ -220,19 +220,20 @@ BEGIN
       CONTINUE;
     END IF;
 
-    UPDATE public.eper_customer_asset_scan_jobs
+    UPDATE public.eper_customer_asset_scan_jobs AS scan_job
        SET state = 'dead_letter', lease_owner = NULL, lease_expires_at = NULL,
            last_error_code = 'ATTEMPTS_EXHAUSTED',
            updated_at = pg_catalog.clock_timestamp()
-     WHERE tenant_id = p_tenant_id AND application_id = p_application_id
-       AND upload_session_id = v_candidate.upload_session_id;
+     WHERE scan_job.tenant_id = p_tenant_id
+       AND scan_job.application_id = p_application_id
+       AND scan_job.upload_session_id = v_candidate.upload_session_id;
 
-    UPDATE public.eper_customer_assets
+    UPDATE public.eper_customer_assets AS asset
        SET upload_status = 'failed', scan_status = 'error',
            lifecycle_status = 'quarantined', updated_by = p_scanner_service_id,
-           updated_at = pg_catalog.clock_timestamp(), version = version + 1
-     WHERE tenant_id = p_tenant_id AND asset_id = v_candidate.asset_id
-       AND upload_status = 'scanning';
+           updated_at = pg_catalog.clock_timestamp(), version = asset.version + 1
+     WHERE asset.tenant_id = p_tenant_id AND asset.asset_id = v_candidate.asset_id
+       AND asset.upload_status = 'scanning';
     IF NOT FOUND THEN
       RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_EXHAUSTED_JOB_ASSET_STATE_CONFLICT';
     END IF;
