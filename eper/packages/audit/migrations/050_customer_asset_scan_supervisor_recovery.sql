@@ -55,13 +55,17 @@ CREATE POLICY customer_asset_upload_session_shared_read
 GRANT SELECT (tenant_id, application_id, upload_session_id, asset_id, upload_status)
   ON public.eper_customer_asset_upload_sessions
   TO eper_customer_asset_scan_supervisor_definer;
--- PostgreSQL requires UPDATE privilege for SELECT FOR UPDATE; this function
--- never updates session columns, and the grant is limited to updated_at.
-GRANT UPDATE ON public.eper_customer_asset_upload_sessions
+-- PostgreSQL requires UPDATE privilege for SELECT FOR UPDATE; grant only a
+-- harmless column privilege because this function never updates session rows.
+GRANT UPDATE (updated_at) ON public.eper_customer_asset_upload_sessions
   TO eper_customer_asset_scan_supervisor_definer;
 GRANT SELECT (
   tenant_id, asset_id, upload_status, version, repository_scope, owner_application_id
-), UPDATE ON public.eper_customer_assets
+) ON public.eper_customer_assets
+  TO eper_customer_asset_scan_supervisor_definer;
+GRANT UPDATE (
+  upload_status, scan_status, lifecycle_status, updated_by, updated_at, version
+) ON public.eper_customer_assets
   TO eper_customer_asset_scan_supervisor_definer;
 -- Existing asset RLS policies also consult explicit application links.
 -- The definer needs a narrowly scoped read path for those policy predicates;
@@ -82,7 +86,8 @@ GRANT SELECT (
 )
   ON public.eper_customer_asset_scan_jobs
   TO eper_customer_asset_scan_supervisor_definer;
-GRANT UPDATE ON public.eper_customer_asset_scan_jobs
+GRANT UPDATE (state, lease_owner, lease_expires_at, last_error_code, updated_at)
+  ON public.eper_customer_asset_scan_jobs
   TO eper_customer_asset_scan_supervisor_definer;
 
 DROP POLICY IF EXISTS customer_asset_scan_supervisor_recovery_session
