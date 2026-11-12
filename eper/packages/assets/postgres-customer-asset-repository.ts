@@ -86,7 +86,10 @@ function mapAsset(row: AssetRow): CustomerAsset {
  * upload policy before invoking mutations; every mutation is coupled to audit.
  */
 export class PostgresCustomerAssetRepository {
-  constructor(private readonly pool: AuditSqlPool) {}
+  constructor(
+    private readonly pool: AuditSqlPool,
+    private readonly supervisorPool?: AuditSqlPool,
+  ) {}
 
   async assertReady(): Promise<void> {
     const client = await this.pool.connect();
@@ -1069,6 +1072,54 @@ export class PostgresCustomerAssetRepository {
       }
       await client.query("COMMIT");
       return recovered;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /**
+   * Runs exhausted-lease recovery through a separately authenticated supervisor pool.
+   * State transition and canonical audit append share one caller-owned transaction.
+   */
+  async recoverExhaustedScanJobsAsSupervisor(input: {
+    tenantId: string; applicationId: string; scannerServiceId: string;
+    environment: AuditEnvironment; limit?: number;
+  }): Promise<number> {
+    if (!this.supervisorPool) {
+      throw new Error("EPER_CUSTOMER_ASSET_SCAN_SUPERVISOR_POOL_NOT_CONFIGURED");
+    }
+    this.validateId(input.tenantId, "tenantId");
+    this.validateId(input.applicationId, "applicationId");
+    this.validateId(input.scannerServiceId, "scannerServiceId");
+    const limit = input.limit ?? 25;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new Error("EPER_CUSTOMER_ASSET_SCAN_RECOVERY_LIMIT_INVALID");
+    }
+    const client = await this.supervisorPool.connect();
+    try {
+      await client.query("BEGIN");
+      const recovered = await client.query<{
+        upload_session_id: string; asset_id: string; correlation_id: string;
+      }>(
+        `SELECT upload_session_id, asset_id, correlation_id
+           FROM public.eper_recover_exhausted_customer_asset_scan_jobs($1, $2, $3, $4)`,
+        [input.tenantId, input.applicationId, input.scannerServiceId, limit],
+      );
+      for (const item of recovered.rows) {
+        await appendAuditEventInTransaction(client as AuditSqlClient, {
+          tenantId: input.tenantId, applicationId: input.applicationId, environment: input.environment,
+          actorType: "service", actorId: input.scannerServiceId,
+          action: "customer.asset.scan.exhausted", outcome: "failure",
+          reasonCode: "ATTEMPTS_EXHAUSTED", resourceType: "customer-asset",
+          resourceId: item.asset_id, correlationId: item.correlation_id, source: "job",
+          operationName: "independent customer asset scan recovery",
+          payload: { assetId: item.asset_id, uploadSessionId: item.upload_session_id,
+            scanStatus: "error", resultingAssetStatus: "failed" },
+        });
+      }
+      await client.query("COMMIT");
+      return recovered.rowCount ?? 0;
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch { /* preserve original error */ }
       throw error;
