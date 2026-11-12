@@ -77,6 +77,8 @@ jobs:
         run: npm run migrate:ticketing
       - name: Verify ticketing schema migrations are repeatable
         run: npm run migrate:ticketing
+      - name: Configure ephemeral PostgreSQL scanner-child client certificate authentication
+        run: bash scripts/configure-scan-child-client-cert-ci.sh
       # npm test already discovers every tests/*.test.mjs file, including
       # payment, PostgreSQL, invoice-authority, and receipt contracts. Avoid
       # rerunning those same test files as separate steps.
