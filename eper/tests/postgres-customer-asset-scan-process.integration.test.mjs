@@ -887,6 +887,63 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
     await pool.query('DROP FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)');
 
     const supervisorRepository = new PostgresCustomerAssetRepository(pool, supervisorPool);
+
+    // A row locked by another transaction must be skipped, not waited on or
+    // partially transitioned. The recovery operation should return zero.
+    const lockClient = await pool.connect();
+    try {
+      await lockClient.query("BEGIN");
+      await lockClient.query(
+        "SELECT upload_session_id FROM public.eper_customer_asset_upload_sessions WHERE tenant_id = $1 AND upload_session_id = $2 FOR UPDATE",
+        [fixture.tenantId, fixture.uploadSessionId],
+      );
+      assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+        tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+        scannerServiceId, environment: "sandbox", limit: 5,
+      }), 0, "locked upload session must be skipped");
+      const skippedState = await pool.query(
+        `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+           FROM public.eper_customer_assets a
+           JOIN public.eper_customer_asset_scan_jobs j
+             ON j.tenant_id = a.tenant_id AND j.asset_id = a.asset_id
+          WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+        [fixture.tenantId, fixture.assetId],
+      );
+      assert.equal(skippedState.rows[0].upload_status, "scanning");
+      assert.equal(skippedState.rows[0].state, "leased");
+    } finally {
+      await lockClient.query("ROLLBACK");
+      lockClient.release();
+    }
+
+    // Force the canonical audit append to fail. The recovery transition and
+    // quarantine must roll back with it, leaving the expired job recoverable.
+    await pool.query("REVOKE INSERT ON public.eper_audit_events FROM eper_customer_asset_scan_audit_writer");
+    try {
+      await assert.rejects(
+        supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+          tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+          scannerServiceId, environment: "sandbox", limit: 5,
+        }),
+        error => error.code === "42501",
+        "audit append failure must abort the recovery transaction",
+      );
+    } finally {
+      await pool.query("GRANT INSERT ON public.eper_audit_events TO eper_customer_asset_scan_audit_writer");
+    }
+    const rolledBackState = await pool.query(
+      `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+         FROM public.eper_customer_assets a
+         JOIN public.eper_customer_asset_scan_jobs j
+           ON j.tenant_id = a.tenant_id AND j.asset_id = a.asset_id
+        WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+      [fixture.tenantId, fixture.assetId],
+    );
+    assert.deepEqual(rolledBackState.rows[0], {
+      upload_status: "scanning", scan_status: "pending",
+      lifecycle_status: "active", state: "leased",
+    }, "failed audit append must roll back asset and job transitions");
+
     assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
       tenantId: fixture.tenantId, applicationId: fixture.applicationId,
       scannerServiceId, environment: "sandbox", limit: 5,
