@@ -547,7 +547,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       );
       assert.equal(resolved.rowCount, 1, "mapped child should resolve the exact active generation");
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
-      assert.equal(resolved.rows[0].size_bytes, 512);
+      assert.equal(Number(resolved.rows[0].size_bytes), 512);
       assert.equal(resolved.rows[0].mime_type, "application/pdf");
       assert.match(resolved.rows[0].provider_upload_reference, /^opaque-process-provider-ref-/);
 
