@@ -116,3 +116,24 @@ test("rejects malformed IPC envelope before dereferencing input or querying Post
     error.code === "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID");
   assert.equal(f.calls.length, 0);
 });
+
+test("rejects a workload identity with a mismatched trust domain or audience before SQL", async () => {
+  for (const changed of [
+    { trustDomain: "attacker.example" },
+    { audience: "other-audience" },
+  ]) {
+    const f = fixture();
+    await assert.rejects(() => f.resolver.resolve({
+      start, identity, workload: { ...workload, ...changed },
+    }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test("rejects an expired workload SVID before SQL", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.resolver.resolve({
+    start, identity, workload: { ...workload, expiresAt: 1 },
+  }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
+  assert.equal(f.calls.length, 0);
+});
