@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { runCustomerAssetScanChild } from "../dist/packages/assets/customer-asset-scan-child-supervisor.js";
 
 const start = () => ({
-  version: 2, type: "start", jobToken: "a".repeat(64), claimGeneration: 7,
+  version: 3, type: "start", jobToken: "a".repeat(64), claimGeneration: 7,
   requestId: "request-1", workerId: "scanner.synthetic.v1:worker-1", scannerServiceId: "scanner.synthetic.v1",
   input: {
     tenantId: "tenant-1", applicationId: "application-1", assetId: "asset-1",
