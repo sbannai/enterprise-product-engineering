@@ -98,54 +98,48 @@ export async function runCustomerAssetScanWorker(options: CustomerAssetScanWorke
             else options.signal.addEventListener("abort", abortScanOnShutdown, { once: true });
             let scanTimer: ReturnType<typeof setTimeout> | undefined;
             try {
-              // Keep the scanner promise in the race so normal completion and rejection are observed.
-              // On timeout, do not await it: cancellation is cooperative and generation fencing rejects late writes.
-              const scanPromise = Promise.resolve().then(async () => {
-                if (options.childRunner) {
-                  const start: CustomerAssetScanChildStart = {
-                    version: 3, type: "start", jobToken: randomBytes(32).toString("hex"),
-                    claimGeneration: job.claimGeneration, requestId: job.correlationId,
-                    workerId: options.workerId, scannerServiceId: options.scannerServiceId,
-                    input: {
-                      tenantId: options.tenantId, applicationId: options.applicationId,
-                      assetId: session.assetId, checksumSha256: session.checksumSha256,
-                      sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-                    },
-                  };
-                  const child = await options.childRunner(start, scanController.signal, scanTimeoutMs);
-                  if (child.kind !== "result") return {
-                    scanStatus: "error" as const, scannerServiceId: options.scannerServiceId,
-                  };
-                  return {
-                    scanStatus: child.value.scanStatus,
-                    scannerServiceId: child.value.scannerServiceId,
-                  };
-                }
-                return options.scanner!.scan({
+              // Child supervision owns its hard deadline and does not settle until the
+              // OS process emits close. Never race it against the parent's cooperative
+              // timeout: that could release the claim while a killed child is still exiting.
+              if (options.childRunner) {
+                const start: CustomerAssetScanChildStart = {
+                  version: 3, type: "start", jobToken: randomBytes(32).toString("hex"),
+                  claimGeneration: job.claimGeneration, requestId: job.correlationId,
+                  workerId: options.workerId, scannerServiceId: options.scannerServiceId,
+                  input: {
+                    tenantId: options.tenantId, applicationId: options.applicationId,
+                    assetId: session.assetId, checksumSha256: session.checksumSha256,
+                    sizeBytes: session.sizeBytes, mimeType: session.mimeType,
+                  },
+                };
+                const child = await options.childRunner(start, scanController.signal, scanTimeoutMs);
+                outcome = child.kind === "result"
+                  ? { scanStatus: child.value.scanStatus, scannerServiceId: child.value.scannerServiceId }
+                  : { scanStatus: "error", scannerServiceId: options.scannerServiceId };
+              } else {
+                // Legacy in-process scanners use cooperative cancellation only.
+                // Production bootstrap rejects this path until child isolation is enabled.
+                const scanPromise = Promise.resolve().then(() => options.scanner!.scan({
                   tenantId: options.tenantId, applicationId: options.applicationId,
                   assetId: session.assetId, uploadSessionId: job.uploadSessionId,
                   providerUploadReference: session.providerUploadReference,
                   checksumSha256: session.checksumSha256, sizeBytes: session.sizeBytes, mimeType: session.mimeType,
-                }, job.correlationId, scanController.signal);
-              });
-              const timeout = new Promise<never>((_, reject) => {
-                scanTimer = setTimeout(() => {
-                  // Cancellation is cooperative. Stop renewing this claim immediately so
-                  // a replacement worker can take over after lease expiry even when the
-                  // provider never settles. Generation fencing rejects any late callback.
-                  leaseLost = true;
-                  clearInterval(renewTimer);
-                  scanController.abort();
-                  reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
-                }, scanTimeoutMs);
-              });
-              try {
-                outcome = await Promise.race([scanPromise, timeout]);
-              } catch (error) {
-                // Promise.race has already attached a rejection handler to scanPromise.
-                // Do not await it here: a non-cooperative provider may never settle.
-                // The expired lease permits takeover; claimGeneration fences late writes.
-                throw error;
+                }, job.correlationId, scanController.signal));
+                const timeout = new Promise<never>((_, reject) => {
+                  scanTimer = setTimeout(() => {
+                    // Stop renewing this claim immediately; generation fencing rejects late writes.
+                    leaseLost = true;
+                    clearInterval(renewTimer);
+                    scanController.abort();
+                    reject(new Error("EPER_CUSTOMER_ASSET_SCAN_TIMEOUT"));
+                  }, scanTimeoutMs);
+                });
+                try {
+                  outcome = await Promise.race([scanPromise, timeout]);
+                } catch (error) {
+                  // The legacy provider promise may ignore cancellation; do not await it.
+                  throw error;
+                }
               }
             } catch (error) {
               options.onError?.(error);
