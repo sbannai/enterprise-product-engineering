@@ -47,10 +47,7 @@ function validWorkloadIdentity(value: unknown, nowSeconds: number): value is Cus
   if (typeof workload.spiffeId !== "string" || typeof workload.trustDomain !== "string" ||
       workload.audience !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE ||
       !Number.isSafeInteger(workload.expiresAt)) return false;
-  const match = /^spiffe:\/\/([a-z0-9.-]+)\/[A-Za-z0-9._~!function isUuid(value: unknown): value is string {
-  return typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}'()*+,;=:@%/-]+$/.exec(workload.spiffeId);
+  const match = /^spiffe:\/\/([a-z0-9.-]+)\/([A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)$/.exec(workload.spiffeId);
   return !!match && !workload.spiffeId.includes("..") &&
     match[1] === workload.trustDomain &&
     workload.expiresAt > nowSeconds &&
