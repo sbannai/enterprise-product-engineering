@@ -755,6 +755,29 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
        VALUES ($1, $2, $3, $4, $5, true)`,
       [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
     );
+    const privilegeProbe = await pool.query(
+      `SELECT current_user AS probe_user,
+              session_user AS probe_session_user,
+              pg_catalog.pg_get_userbyid(p.proowner) AS recovery_function_owner,
+              p.prosecdef AS recovery_is_security_definer,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_upload_sessions', 'SELECT') AS definer_session_select,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_upload_sessions', 'UPDATE') AS definer_session_update,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_assets', 'SELECT') AS definer_asset_select,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_assets', 'UPDATE') AS definer_asset_update,
+              pg_catalog.has_table_privilege('eper_customer_asset_scan_supervisor_definer',
+                'public.eper_customer_asset_application_links', 'SELECT') AS definer_link_select
+         FROM pg_catalog.pg_proc p
+        WHERE p.oid = 'public.eper_recover_exhausted_customer_asset_scan_jobs(varchar,varchar,varchar,integer)'::regprocedure`,
+    );
+    console.log("[scan-supervisor-recovery privilege probe]", privilegeProbe.rows[0]);
+    assert.equal(privilegeProbe.rows[0].recovery_function_owner,
+      "eper_customer_asset_scan_supervisor_definer");
+    assert.equal(privilegeProbe.rows[0].recovery_is_security_definer, true);
+
     const supervisorRepository = new PostgresCustomerAssetRepository(pool, supervisorPool);
     assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
       tenantId: fixture.tenantId, applicationId: fixture.applicationId,
