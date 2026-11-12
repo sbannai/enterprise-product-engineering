@@ -323,6 +323,7 @@ test("internal object read fails closed when the adapter has not explicitly opte
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-no-read",
+    expectedConnectionId: "connection-a",
     operation: { kind: "read_object_internal", request: {
       assetId: "asset-a", providerObjectReference: "opaque-ref",
       expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
