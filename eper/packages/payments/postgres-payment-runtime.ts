@@ -1,8 +1,38 @@
 import { createRequire } from "node:module";
-import type { SqlPool } from "./postgres-payment-store.js";
+import { performance } from "node:perf_hooks";
+import type { SqlClient, SqlPool } from "./postgres-payment-store.js";
+
+export interface PostgresPoolMetrics {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+  connectAttempts: number;
+  connectFailures: number;
+  inFlightAcquisitions: number;
+  acquisitionDurationTotalMs: number;
+  acquisitionDurationMaxMs: number;
+}
+
+/** Aggregate, low-cardinality pool snapshot; contains no SQL, credentials or tenant data. */
+export type PostgresPoolConnectCallback = (
+  error: Error | undefined,
+  client: SqlClient | undefined,
+  release: (error?: Error | boolean) => void,
+) => void;
 
 export interface PostgresPoolHandle extends SqlPool {
+  /** Promise acquisition remains the application-facing structural contract. */
+  connect(): Promise<SqlClient>;
+  /** Preserve node-postgres' callback overload because Pool.query() uses it internally. */
+  connect(callback: PostgresPoolConnectCallback): void;
   end(): Promise<void>;
+  snapshotMetrics(): PostgresPoolMetrics;
+}
+
+interface ObservablePgPool extends PostgresPoolHandle {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
 }
 
 /**
@@ -63,7 +93,7 @@ export function createPostgresPaymentPool(
       application_name: string;
     }) => PostgresPoolHandle;
   };
-  return new pg.Pool({
+  const pool = new pg.Pool({
     connectionString,
     max,
     idleTimeoutMillis,
@@ -73,5 +103,71 @@ export function createPostgresPaymentPool(
     lock_timeout: lockTimeout,
     idle_in_transaction_session_timeout: idleInTransactionTimeout,
     application_name: applicationName,
+  }) as ObservablePgPool;
+
+  // Preserve both node-postgres connect overloads. Pool.query() calls connect(callback)
+  // internally, so replacing connect with a Promise-only wrapper would leave queries
+  // waiting forever. Measure callback and Promise acquisitions without changing either API.
+  let connectAttempts = 0;
+  let connectFailures = 0;
+  let inFlightAcquisitions = 0;
+  let acquisitionDurationTotalMs = 0;
+  let acquisitionDurationMaxMs = 0;
+  const acquire = pool.connect.bind(pool) as {
+    (): Promise<SqlClient>;
+    (callback: PostgresPoolConnectCallback): void;
+  };
+  const recordAcquisition = (startedAt: number, failed: boolean): void => {
+    if (failed) connectFailures += 1;
+    const elapsed = Math.max(0, performance.now() - startedAt);
+    acquisitionDurationTotalMs += elapsed;
+    acquisitionDurationMaxMs = Math.max(acquisitionDurationMaxMs, elapsed);
+    inFlightAcquisitions = Math.max(0, inFlightAcquisitions - 1);
+  };
+  pool.connect = ((callback?: PostgresPoolConnectCallback) => {
+    connectAttempts += 1;
+    inFlightAcquisitions += 1;
+    const startedAt = performance.now();
+
+    if (typeof callback === "function") {
+      try {
+        return acquire((error, client, release) => {
+          recordAcquisition(startedAt, Boolean(error));
+          callback(error, client, release);
+        });
+      } catch (error) {
+        recordAcquisition(startedAt, true);
+        throw error;
+      }
+    }
+
+    let pending: Promise<SqlClient>;
+    try {
+      pending = acquire();
+    } catch (error) {
+      recordAcquisition(startedAt, true);
+      throw error;
+    }
+    return pending.then(
+      (client) => {
+        recordAcquisition(startedAt, false);
+        return client;
+      },
+      (error: unknown) => {
+        recordAcquisition(startedAt, true);
+        throw error;
+      },
+    );
+  }) as ObservablePgPool["connect"];
+  pool.snapshotMetrics = () => ({
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+    connectAttempts,
+    connectFailures,
+    inFlightAcquisitions,
+    acquisitionDurationTotalMs: Number(acquisitionDurationTotalMs.toFixed(3)),
+    acquisitionDurationMaxMs: Number(acquisitionDurationMaxMs.toFixed(3)),
   });
+  return pool;
 }
