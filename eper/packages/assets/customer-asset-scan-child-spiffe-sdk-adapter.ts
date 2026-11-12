@@ -66,7 +66,7 @@ function isExplicitUnixSocket(value: string): boolean {
   if (!value.startsWith("unix:///")) return false;
   const path = value.slice("unix://".length);
   return path.startsWith("/") &&
-    !/[?#\\s\\u0000-\\u001f\\u007f]/.test(path) &&
+    !/[?#\s\u0000-\u001f\u007f]/.test(path) &&
     !path.split("/").includes("..");
 }
 
