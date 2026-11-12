@@ -4,6 +4,9 @@ import {
   CustomerAssetScanChildDatabaseAuthorizationService,
   CustomerAssetScanChildDatabaseAuthorizationError,
 } from "../dist/packages/assets/customer-asset-scan-child-database-authorization.js";
+import {
+  CustomerAssetScanChildSpiffeIdentityVerifier,
+} from "../dist/packages/assets/customer-asset-scan-child-spiffe-identity.js";
 
 const start = {
   version: 3, type: "start", jobToken: "a".repeat(64), claimGeneration: 4,
@@ -13,8 +16,10 @@ const start = {
     assetId: "11111111-1111-4111-8111-111111111111",
     checksumSha256: "a".repeat(64), sizeBytes: 1, mimeType: "text/plain" },
 };
-const workload = { spiffeId: "spiffe://eper.example/scanner/child",
-  trustDomain: "eper.example", audience: "eper:customer-asset-scan-child", expiresAt: 9999999999 };
+const spiffeId = "spiffe://eper.example/scanner/child";
+const workload = await new CustomerAssetScanChildSpiffeIdentityVerifier({
+  async fetchJwtSvid() { return [{ spiffeId, expiresAtMs: Date.now() + 120_000 }]; },
+}, spiffeId).verifyCurrentProcessIdentity();
 const context = Object.freeze({
   tenantId: "tenant-db", applicationId: "app-db", workerId: "worker-db",
   scannerServiceId: "scanner-db", providerConnectionId: "connection-db",
@@ -57,4 +62,17 @@ test("rejects absent provider credentials", async () => {
   await assert.rejects(() => service.authorize({ start, workload }), {
     code: "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_AUTHORIZATION_UNAVAILABLE",
   });
+});
+
+test("rejects a caller-constructed identity even when its fields look valid", async () => {
+  let resolverCalls = 0;
+  const forged = { ...workload };
+  const service = new CustomerAssetScanChildDatabaseAuthorizationService(
+    { async resolve() { resolverCalls += 1; return context; } },
+    { async resolveScanCredentials() { return { secret: "must-not-resolve" }; } },
+  );
+  await assert.rejects(() => service.authorize({ start, workload: forged }), {
+    code: "CUSTOMER_ASSET_SCAN_CHILD_DATABASE_AUTHORIZATION_UNAVAILABLE",
+  });
+  assert.equal(resolverCalls, 0);
 });
