@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   ProviderStorageDispatchError,
@@ -304,7 +305,7 @@ test("internal object read uses its own optional capability and exact connection
     expectedConnectionId: "connection-a",
     operation: { kind: "read_object_internal", request: {
       assetId: "asset-a", providerObjectReference: "opaque-ref",
-      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+      expectedSizeBytes: 3, expectedSha256: createHash("sha256").update(new Uint8Array([1, 2, 3])).digest("hex"),
     } },
   });
   assert.equal(f.calls[0][1].capability, "storage.object.read.internal");
