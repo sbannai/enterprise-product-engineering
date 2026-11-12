@@ -62,7 +62,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Scanner child IPC and bounded process supervision regressions
-        run: node --test tests/customer-asset-scan-child-protocol.test.mjs tests/customer-asset-scan-child-supervisor.test.mjs tests/customer-asset-scan-child-runtime.test.mjs tests/customer-asset-scan-child-stdio.test.mjs
+        run: node --test tests/customer-asset-scan-child-protocol.test.mjs tests/customer-asset-scan-child-supervisor.test.mjs tests/customer-asset-scan-child-runtime.test.mjs tests/customer-asset-scan-child-stdio.test.mjs tests/customer-asset-scan-child-process.integration.test.mjs
       - name: Scanner child identity and scan-only authorization regressions
         run: node --test tests/customer-asset-scan-child-identity.test.mjs
       - name: Scanner child SPIFFE Workload API identity regressions
