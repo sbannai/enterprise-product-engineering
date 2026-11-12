@@ -719,6 +719,82 @@ test("PostgreSQL 16 scanner-supervisor LOGIN can renew only its mapped active cl
   });
 
 
+test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { skip: !connectionString }, async () => {
+  const pool = new Pool({ connectionString, max: 6 });
+  const fixtureRepository = new PostgresCustomerAssetRepository(pool);
+  const fixture = await createPendingScanFixture(pool, fixtureRepository, "scan-supervisor-recovery");
+  const workerId = "ci-asset-scanner:supervisor-recovery";
+  const scannerServiceId = "ci-asset-scanner";
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
+  const role = "eper_scan_recovery_" + suffix;
+  const password = randomUUID().replaceAll("-", "");
+  const supervisorUrl = new URL(connectionString);
+  supervisorUrl.username = role;
+  supervisorUrl.password = password;
+  const supervisorPool = new Pool({ connectionString: supervisorUrl.toString(), max: 1 });
+  try {
+    await fixtureRepository.claimScanJobs({
+      tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+      workerId, scannerServiceId, environment: "sandbox", limit: 1, leaseMs: 5_000,
+    });
+    await pool.query(
+      `UPDATE public.eper_customer_asset_scan_jobs
+          SET attempt_count = max_attempts,
+              lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+        WHERE tenant_id = $1 AND application_id = $2 AND upload_session_id = $3`,
+      [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId],
+    );
+    await pool.query(
+      `CREATE ROLE "${role}" WITH LOGIN INHERIT PASSWORD '${password}'
+         NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+    );
+    await pool.query(`GRANT eper_customer_asset_scan_supervisor_access TO "${role}"`);
+    await pool.query(
+      `INSERT INTO public.eper_customer_asset_scan_supervisor_identities
+         (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
+       VALUES ($1, $2, $3, $4, $5, true)`,
+      [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+    );
+    const supervisorRepository = new PostgresCustomerAssetRepository(pool, supervisorPool);
+    assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
+      tenantId: fixture.tenantId, applicationId: fixture.applicationId,
+      scannerServiceId, environment: "sandbox", limit: 5,
+    }), 1);
+    await assert.rejects(
+      supervisorPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
+      error => error.code === "42501",
+    );
+    const state = await pool.query(
+      `SELECT a.upload_status, a.scan_status, a.lifecycle_status, j.state
+         FROM public.eper_customer_assets a
+         JOIN public.eper_customer_asset_scan_jobs j
+           ON j.tenant_id = a.tenant_id AND j.asset_id = a.asset_id
+        WHERE a.tenant_id = $1 AND a.asset_id = $2`,
+      [fixture.tenantId, fixture.assetId],
+    );
+    assert.deepEqual(state.rows[0], {
+      upload_status: "failed", scan_status: "error",
+      lifecycle_status: "quarantined", state: "dead_letter",
+    });
+    const audit = await pool.query(
+      `SELECT action FROM public.eper_audit_events
+        WHERE tenant_id = $1 AND correlation_id = $2
+          AND action = 'customer.asset.scan.exhausted'`,
+      [fixture.tenantId, fixture.correlationId],
+    );
+    assert.equal(audit.rowCount, 1, "state transition must have its canonical audit event");
+  } finally {
+    await supervisorPool.end();
+    await pool.query(
+      "DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1",
+      [role],
+    ).catch(() => {});
+    await pool.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+    await pool.end();
+  }
+});
+
+
 test("PostgreSQL 16 scanner-supervisor LOGIN claims only jobs in its exact mapped scope",
   { skip: !connectionString }, async () => {
     const pool = new Pool({ connectionString, max: 5 });
