@@ -108,3 +108,10 @@ test("scanner child supervisor blocks runtime and dynamic-loader environment inj
     }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/, key + " must not cross the process boundary");
   }
 });
+
+test("scanner child supervisor safely handles a child that exits before reading its request", async () => {
+  await assert.rejects(runCustomerAssetScanChild({
+    executable: node, args: ["-e", "process.exit(0)"],
+    start: start(), timeoutMs: 2_000,
+  }), /CUSTOMER_ASSET_SCAN_CHILD_PROTOCOL_INVALID|CUSTOMER_ASSET_SCAN_CHILD_EXITED/);
+});

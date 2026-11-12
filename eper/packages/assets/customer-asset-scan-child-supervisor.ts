@@ -98,6 +98,15 @@ function supervise(
     }, timeoutMs);
 
     child.once("error", () => finish(new Error("CUSTOMER_ASSET_SCAN_CHILD_SPAWN_FAILED")));
+    // A child may exit before consuming its one-shot request. Handle EPIPE and
+    // stdout stream errors explicitly; let the process close event settle the
+    // attempt so a started child is never mistaken for an exited child.
+    child.stdin?.on("error", () => {
+      child.kill("SIGKILL");
+    });
+    child.stdout?.on("error", () => {
+      child.kill("SIGKILL");
+    });
     child.stdout?.on("data", (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       outputBytes += buffer.length;
