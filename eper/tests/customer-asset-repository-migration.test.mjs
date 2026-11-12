@@ -145,6 +145,7 @@ test("expected upload checksum migration is additive, repeatable and fails close
 
 
 const scanChildIsolationMigration = await readFile(new URL("../packages/audit/migrations/046_customer_asset_scan_child_readonly_input.sql", import.meta.url), "utf8");
+const scanChildProviderBindingMigration = await readFile(new URL("../packages/audit/migrations/052_customer_asset_scan_child_provider_binding.sql", import.meta.url), "utf8");
 
 test("scanner child input resolver binds the authenticated LOGIN identity to one tenant, application, worker and service", () => {
   assert.ok(scanChildIsolationMigration.includes("CREATE TABLE IF NOT EXISTS public.eper_customer_asset_scan_child_identities"));
@@ -169,4 +170,17 @@ test("scanner child source lookup is lease- and generation-fenced and exposes no
   assert.doesNotMatch(scanChildIsolationMigration, /GRANT .*eper_audit_(events|chain_head).*eper_customer_asset_scan_child_access/i);
   assert.ok(scanChildIsolationMigration.includes("REVOKE ALL ON FUNCTION public.eper_resolve_customer_asset_scan_child_input"));
   assert.ok(scanChildIsolationMigration.includes("COMMIT;"));
+});
+
+test("scanner child provider connection is operator-pinned and resolvable only for the live authenticated lease", () => {
+  assert.ok(scanChildProviderBindingMigration.includes("ADD COLUMN IF NOT EXISTS provider_connection_id varchar(128)"));
+  assert.ok(scanChildProviderBindingMigration.includes("enabled = false OR provider_connection_id IS NOT NULL"));
+  assert.ok(scanChildProviderBindingMigration.includes("WHERE i.login_role = session_user::name"));
+  assert.ok(scanChildProviderBindingMigration.includes("v_identity.provider_connection_id"));
+  assert.ok(scanChildProviderBindingMigration.includes("j.lease_owner = p_worker_id"));
+  assert.ok(scanChildProviderBindingMigration.includes("j.claim_generation = p_claim_generation"));
+  assert.ok(scanChildProviderBindingMigration.includes("j.lease_expires_at > pg_catalog.clock_timestamp()"));
+  assert.ok(scanChildProviderBindingMigration.includes("GRANT EXECUTE ON FUNCTION public.eper_resolve_customer_asset_scan_child_provider_binding"));
+  assert.doesNotMatch(scanChildProviderBindingMigration, /GRANT (SELECT|INSERT|UPDATE|DELETE|ALL).*eper_customer_asset_(assets|upload_sessions|scan_jobs).*eper_customer_asset_scan_child_access/i);
+  assert.ok(scanChildProviderBindingMigration.includes("COMMIT;"));
 });
