@@ -484,6 +484,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
     const fixture = await createPendingScanFixture(pool, repository, "scan-child-readonly");
     const workerId = "ci-asset-scanner:child-readonly-test";
     const scannerServiceId = "ci-asset-scanner";
+    const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
     const suffix = randomUUID().replaceAll("-", "").slice(0, 14);
     const role = "eper_scan_child_" + suffix;
     const password = randomUUID().replaceAll("-", "");
@@ -507,7 +508,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
         `INSERT INTO public.eper_customer_asset_scan_child_identities
            (login_role, tenant_id, application_id, worker_id, scanner_service_id, spiffe_id, enabled)
          VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId],
+        [role, fixture.tenantId, fixture.applicationId, workerId, scannerServiceId, spiffeId],
       );
 
       const privileges = await childPool.query(`
@@ -543,7 +544,7 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
 
       const resolved = await childPool.query(
         `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6, $7)`,
-        [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId, job.claimGeneration, "spiffe://eper.example/asset-scanner/ci-child"],
+        [fixture.tenantId, fixture.applicationId, fixture.assetId, workerId, scannerServiceId, job.claimGeneration, spiffeId],
       );
       assert.equal(resolved.rowCount, 1, "mapped child should resolve the exact active generation");
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
