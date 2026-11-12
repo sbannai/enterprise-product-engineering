@@ -152,6 +152,8 @@ jobs:
         env:
           EPER_CUSTOMER_ASSET_LIVE_TESTS: "1"
         run: node --test tests/postgres-customer-asset-upload-recovery.integration.test.mjs
+      - name: Configure ephemeral PostgreSQL scanner-child client certificate authentication
+        run: bash scripts/configure-scan-child-client-cert-ci.sh
       - name: Live PostgreSQL customer asset metadata idempotency and migration assurance
         run: node --test tests/postgres-customer-asset-migration-assurance.integration.test.mjs tests/postgres-customer-asset-metadata-idempotency.integration.test.mjs
       - name: PostgreSQL 16 customer asset scan worker process and recovery integration
