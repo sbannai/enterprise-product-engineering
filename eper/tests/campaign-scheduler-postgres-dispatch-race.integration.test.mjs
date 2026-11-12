@@ -504,8 +504,6 @@ test("dedicated scheduler LOGIN role can enqueue idempotently without UPDATE pri
     await adminPool.end();
   }
 });
-   }
- });
 
 
 test("dedicated scheduler LOGIN role materializes, claims, fences, completes and audits a one-time execution", {
