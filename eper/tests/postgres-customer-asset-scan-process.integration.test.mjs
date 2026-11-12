@@ -553,13 +553,11 @@ test("PostgreSQL 16 scanner-child LOGIN can resolve only its mapped live scan in
       assert.equal(resolved.rows[0].mime_type, "application/pdf");
       assert.match(resolved.rows[0].provider_upload_reference, /^opaque-process-provider-ref-/);
 
-      await assert.rejects(
-        childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
-          [fixture.assetId, job.claimGeneration + 1],
-        ),
-        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
+      const staleGeneration = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [fixture.assetId, job.claimGeneration + 1],
       );
+      assert.equal(staleGeneration.rowCount, 0, "stale claim generation must resolve no scan input");
     } finally {
       await childPool.end();
       await pool.query(
@@ -1124,15 +1122,13 @@ test("PostgreSQL 16 scanner child LOGIN is bound to its exact SPIFFE identity an
       assert.equal(resolved.rows[0].asset_id, fixture.assetId);
       assert.equal(resolved.rows[0].storage_adapter_key, "ci-storage");
       assert.equal(resolved.rows[0].checksum_sha256, createHash("sha256").update(fixture.testObjectBytes).digest("hex"));
-      await assert.rejects(resolveInput(job.claimGeneration + 1),
-        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/);
-      await assert.rejects(
-        childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
-          [fixture.assetId, job.claimGeneration + 1],
-        ),
-        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
+      const staleGeneration = await resolveInput(job.claimGeneration + 1);
+      assert.equal(staleGeneration.rowCount, 0, "stale claim generation must resolve no scan input");
+      const staleGenerationAgain = await childPool.query(
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [fixture.assetId, job.claimGeneration + 1],
       );
+      assert.equal(staleGenerationAgain.rowCount, 0, "stale claim generation must resolve no scan input");
       await assert.rejects(
         childPool.query("SELECT * FROM public.eper_customer_asset_scan_jobs"),
         error => error.code === "42501",
