@@ -790,6 +790,63 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
       "eper_customer_asset_scan_supervisor_definer");
     assert.equal(privilegeProbe.rows[0].recovery_is_security_definer, true);
 
+    // Execute isolated probes as the real SECURITY DEFINER owner. This distinguishes
+    // base SELECT, row-lock and asset-policy failures without widening any grants.
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION public.eper_test_probe_scan_recovery_privilege(
+        p_tenant_id varchar, p_application_id varchar, p_upload_session_id uuid, p_asset_id uuid
+      ) RETURNS jsonb
+      LANGUAGE plpgsql SECURITY DEFINER
+      SET search_path = pg_catalog
+      SET row_security = on
+      AS $probe$
+      DECLARE v_result jsonb := '{}'::jsonb; v_code text; v_message text;
+      BEGIN
+        PERFORM pg_catalog.set_config('eper.tenant_id', p_tenant_id, true);
+        PERFORM pg_catalog.set_config('eper.application_id', p_application_id, true);
+        BEGIN
+          PERFORM s.asset_id FROM public.eper_customer_asset_upload_sessions s
+           WHERE s.tenant_id = p_tenant_id AND s.application_id = p_application_id
+             AND s.upload_session_id = p_upload_session_id;
+          v_result := v_result || jsonb_build_object('session_select', 'ok');
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+          v_result := v_result || jsonb_build_object('session_select', v_code || ': ' || v_message);
+        END;
+        BEGIN
+          PERFORM s.asset_id FROM public.eper_customer_asset_upload_sessions s
+           WHERE s.tenant_id = p_tenant_id AND s.application_id = p_application_id
+             AND s.upload_session_id = p_upload_session_id
+           FOR UPDATE SKIP LOCKED;
+          v_result := v_result || jsonb_build_object('session_for_update', 'ok');
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+          v_result := v_result || jsonb_build_object('session_for_update', v_code || ': ' || v_message);
+        END;
+        BEGIN
+          PERFORM a.asset_id FROM public.eper_customer_assets a
+           WHERE a.tenant_id = p_tenant_id AND a.asset_id = p_asset_id;
+          v_result := v_result || jsonb_build_object('asset_select', 'ok');
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+          v_result := v_result || jsonb_build_object('asset_select', v_code || ': ' || v_message);
+        END;
+        RETURN v_result;
+      END
+      $probe$;
+      ALTER FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)
+        OWNER TO eper_customer_asset_scan_supervisor_definer;
+      REVOKE ALL ON FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)
+        TO eper_customer_asset_scan_supervisor_access;
+    `);
+    const isolatedProbe = await supervisorPool.query(
+      'SELECT public.eper_test_probe_scan_recovery_privilege($1,$2,$3,$4) AS result',
+      [fixture.tenantId, fixture.applicationId, fixture.uploadSessionId, fixture.assetId],
+    );
+    console.log("[scan-supervisor-recovery isolated privilege probes]", isolatedProbe.rows[0]?.result);
+    await pool.query('DROP FUNCTION public.eper_test_probe_scan_recovery_privilege(varchar,varchar,uuid,uuid)');
+
     const supervisorRepository = new PostgresCustomerAssetRepository(pool, supervisorPool);
     assert.equal(await supervisorRepository.recoverExhaustedScanJobsAsSupervisor({
       tenantId: fixture.tenantId, applicationId: fixture.applicationId,
