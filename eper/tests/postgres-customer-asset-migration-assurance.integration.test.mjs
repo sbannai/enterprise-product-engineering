@@ -212,7 +212,7 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
 
 
 test("scanner child LOGIN identity resolves only its live leased generation and has no direct data privileges",
-  { skip: !connectionString }, async () => {
+  { skip: !connectionString || !process.env.EPER_SCAN_CHILD_CERT_DIR }, async () => {
     const pool = new Pool({ connectionString, max: 4 });
     const suffix = randomUUID().replaceAll("-", "");
     const tenantId = "scan-child-tenant-" + suffix.slice(0, 12);
@@ -328,12 +328,30 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
           connectionString: childUrl.toString(), max: 1,
           ssl: { ca: await readFile(join(certDirectory, "ca.crt")), cert: await readFile(join(certDirectory, candidate.cert)), key: await readFile(join(certDirectory, candidate.key)), rejectUnauthorized: true },
         });
-        try { await assert.rejects(rejectedPool.connect(), undefined, candidate.label + " must be rejected"); }
-        finally { await rejectedPool.end(); }
+        let unexpectedClient;
+        try {
+          await assert.rejects(
+            async () => { unexpectedClient = await rejectedPool.connect(); },
+            undefined,
+            candidate.label + " must be rejected",
+          );
+        } finally {
+          unexpectedClient?.release();
+          await rejectedPool.end();
+        }
       }
       const noCertificatePool = new Pool({ connectionString: childUrl.toString(), max: 1, ssl: { ca: await readFile(join(certDirectory, "ca.crt")), rejectUnauthorized: true } });
-      try { await assert.rejects(noCertificatePool.connect(), undefined, "missing client certificate must be rejected"); }
-      finally { await noCertificatePool.end(); }
+      let unexpectedNoCertificateClient;
+      try {
+        await assert.rejects(
+          async () => { unexpectedNoCertificateClient = await noCertificatePool.connect(); },
+          undefined,
+          "missing client certificate must be rejected",
+        );
+      } finally {
+        unexpectedNoCertificateClient?.release();
+        await noCertificatePool.end();
+      }
 
       await assert.rejects(
         childPool.query("SELECT asset_id FROM public.eper_customer_assets WHERE tenant_id = $1", [tenantId]),
