@@ -9,6 +9,10 @@ GRANT SELECT ON public.eper_customer_asset_scan_supervisor_identities
 GRANT SELECT (tenant_id, application_id, upload_session_id, asset_id, upload_status)
   ON public.eper_customer_asset_upload_sessions
   TO eper_customer_asset_scan_supervisor_definer;
+-- PostgreSQL requires UPDATE privilege for SELECT FOR UPDATE; this function
+-- never updates session columns, and the grant is limited to updated_at.
+GRANT UPDATE (updated_at) ON public.eper_customer_asset_upload_sessions
+  TO eper_customer_asset_scan_supervisor_definer;
 GRANT SELECT (tenant_id, asset_id, upload_status),
       UPDATE (upload_status, scan_status, lifecycle_status, updated_by, updated_at, version)
   ON public.eper_customer_assets
@@ -26,6 +30,15 @@ CREATE POLICY customer_asset_scan_supervisor_recovery_session
   ON public.eper_customer_asset_upload_sessions FOR SELECT
   TO eper_customer_asset_scan_supervisor_definer
   USING (tenant_id = current_setting('eper.tenant_id', true)
+     AND application_id = current_setting('eper.application_id', true));
+DROP POLICY IF EXISTS customer_asset_scan_supervisor_recovery_session_lock
+  ON public.eper_customer_asset_upload_sessions;
+CREATE POLICY customer_asset_scan_supervisor_recovery_session_lock
+  ON public.eper_customer_asset_upload_sessions FOR UPDATE
+  TO eper_customer_asset_scan_supervisor_definer
+  USING (tenant_id = current_setting('eper.tenant_id', true)
+     AND application_id = current_setting('eper.application_id', true))
+  WITH CHECK (tenant_id = current_setting('eper.tenant_id', true)
      AND application_id = current_setting('eper.application_id', true));
 
 DROP POLICY IF EXISTS customer_asset_scan_supervisor_recovery_asset
