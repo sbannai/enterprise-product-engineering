@@ -38,7 +38,7 @@ export class CustomerAssetScanChildInputResolverError extends Error {
 
 function boundedText(value: unknown, maximum = 2048): value is string {
   return typeof value === "string" && value.trim().length > 0 &&
-    value.length <= maximum && !/[\\u0000-\\u001f\\u007f]/.test(value);
+    value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value);
 }
 function isUuid(value: unknown): value is string {
   return typeof value === "string" &&
