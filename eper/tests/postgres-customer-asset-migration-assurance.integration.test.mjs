@@ -212,7 +212,7 @@ test("customer asset migrations enforce catalog, RLS role boundary, rerun and ch
 
 
 test("scanner child LOGIN identity resolves only its live leased generation and has no direct data privileges",
-  { skip: !connectionString }, async () => {
+  { skip: !connectionString || !process.env.EPER_SCAN_CHILD_CERT_DIR }, async () => {
     const pool = new Pool({ connectionString, max: 4 });
     const suffix = randomUUID().replaceAll("-", "");
     const tenantId = "scan-child-tenant-" + suffix.slice(0, 12);
@@ -223,8 +223,8 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
     const idempotencyKey = "scan-child-key-" + suffix.slice(0, 20);
     const workerId = "ci-child-service:worker-" + suffix.slice(0, 12);
     const scannerServiceId = "ci-child-service";
-    const loginRole = "eper_scan_child_" + suffix.slice(0, 18);
-    const password = randomUUID().replaceAll("-", "");
+    const loginRole = "eper_scan_child_ci";
+    const certDirectory = process.env.EPER_SCAN_CHILD_CERT_DIR;
     const bytes = Buffer.alloc(512, 65);
     const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
     const repository = new PostgresCustomerAssetRepository(pool);
@@ -268,7 +268,7 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       assert.ok(claim, "fixture scan job must be claimable");
 
       await pool.query(
-        `CREATE ROLE "${loginRole}" WITH LOGIN INHERIT PASSWORD '${password}'
+        `CREATE ROLE "${loginRole}" WITH LOGIN INHERIT
           NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
       );
       roleCreated = true;
@@ -281,8 +281,18 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       );
       const childUrl = new URL(connectionString);
       childUrl.username = loginRole;
-      childUrl.password = password;
-      childPool = new Pool({ connectionString: childUrl.toString(), max: 1 });
+      childUrl.password = "";
+      assert.ok(certDirectory, "CI client-certificate directory must be configured");
+      const childSsl = {
+        ca: await readFile(join(certDirectory, "ca.crt")),
+        cert: await readFile(join(certDirectory, "child.crt")),
+        key: await readFile(join(certDirectory, "child.key")),
+        rejectUnauthorized: true,
+      };
+      childPool = new Pool({ connectionString: childUrl.toString(), max: 1, ssl: childSsl });
+
+      const tls = await childPool.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()");
+      assert.equal(tls.rows[0]?.ssl, true, "scanner child must use TLS");
 
       const privileges = await childPool.query(`
         SELECT current_user,
@@ -309,6 +319,40 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       assert.equal(resolved.rows[0].storage_object_reference, "opaque-child-object-" + suffix);
       assert.equal(Number(resolved.rows[0].size_bytes), bytes.length);
       assert.equal(resolved.rows[0].checksum_sha256, checksumSha256);
+      // PostgreSQL cert authentication rejects an expired cert, untrusted issuer, mismatched CN, and no cert.
+      for (const candidate of [
+        { cert: "wrong-cn.crt", key: "wrong-cn.key", label: "wrong certificate CN" },
+        { cert: "untrusted-child.crt", key: "untrusted-child.key", label: "untrusted client CA" },
+        { cert: "expired-child.crt", key: "expired-child.key", label: "expired client certificate" },
+      ]) {
+        const rejectedPool = new Pool({
+          connectionString: childUrl.toString(), max: 1,
+          ssl: { ca: await readFile(join(certDirectory, "ca.crt")), cert: await readFile(join(certDirectory, candidate.cert)), key: await readFile(join(certDirectory, candidate.key)), rejectUnauthorized: true },
+        });
+        let unexpectedClient;
+        try {
+          await assert.rejects(
+            async () => { unexpectedClient = await rejectedPool.connect(); },
+            undefined,
+            candidate.label + " must be rejected",
+          );
+        } finally {
+          unexpectedClient?.release();
+          await rejectedPool.end();
+        }
+      }
+      const noCertificatePool = new Pool({ connectionString: childUrl.toString(), max: 1, ssl: { ca: await readFile(join(certDirectory, "ca.crt")), rejectUnauthorized: true } });
+      let unexpectedNoCertificateClient;
+      try {
+        await assert.rejects(
+          async () => { unexpectedNoCertificateClient = await noCertificatePool.connect(); },
+          undefined,
+          "missing client certificate must be rejected",
+        );
+      } finally {
+        unexpectedNoCertificateClient?.release();
+        await noCertificatePool.end();
+      }
 
       await assert.rejects(
         childPool.query("SELECT asset_id FROM public.eper_customer_assets WHERE tenant_id = $1", [tenantId]),

@@ -73,6 +73,8 @@ jobs:
         run: docker compose -f docker-compose.local.yml config --quiet
       - name: Install from lockfile on clean runner
         run: npm ci
+      - name: Configure ephemeral PostgreSQL scanner-child client certificate authentication
+        run: bash scripts/configure-scan-child-client-cert-ci.sh
       - name: Run the same one-command developer verification documented for a fresh clone
         run: npm run dev:verify
       - name: Prove PostgreSQL backup and restore with server-matched PostgreSQL 16 utilities
