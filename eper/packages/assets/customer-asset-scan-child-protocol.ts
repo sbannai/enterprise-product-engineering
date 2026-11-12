@@ -51,7 +51,8 @@ export function isCustomerAssetScanChildStart(value: unknown): value is Customer
   if (!isRecord(value) || !hasExactKeys(value, [
     "version", "type", "jobToken", "claimGeneration", "requestId", "workerId", "scannerServiceId", "input",
   ]) || !validJobIdentity(value) || value.type !== "start" ||
-      !boundedString(value.requestId, 128) || !boundedString(value.workerId, 128) ||\n      !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.workerId) || !boundedString(value.scannerServiceId, 128) ||
+      !boundedString(value.requestId, 128) || !boundedString(value.workerId, 128) ||
+      !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.workerId) || !boundedString(value.scannerServiceId, 128) ||
       !/^[a-zA-Z0-9._:-]{2,128}$/.test(value.scannerServiceId) ||
       !isRecord(value.input) || !hasExactKeys(value.input, [
         "tenantId", "applicationId", "assetId", "checksumSha256", "sizeBytes", "mimeType",
