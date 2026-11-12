@@ -831,6 +831,35 @@ test("PostgreSQL 16 supervisor recovery appends canonical audit atomically", { s
           GET STACKED DIAGNOSTICS v_code = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
           v_result := v_result || jsonb_build_object('asset_select', v_code || ': ' || v_message);
         END;
+        v_result := v_result || jsonb_build_object(
+          'session_policies', (
+            SELECT coalesce(jsonb_agg(jsonb_build_object(
+              'name', policyname, 'command', cmd, 'roles', roles,
+              'qual', qual, 'with_check', with_check
+            )), '[]'::jsonb)
+              FROM pg_catalog.pg_policies
+             WHERE schemaname = 'public'
+               AND tablename = 'eper_customer_asset_upload_sessions'
+          ),
+          'session_triggers', (
+            SELECT coalesce(jsonb_agg(jsonb_build_object(
+              'name', t.tgname, 'definition', pg_catalog.pg_get_triggerdef(t.oid)
+            )), '[]'::jsonb)
+              FROM pg_catalog.pg_trigger t
+              JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+              JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relname = 'eper_customer_asset_upload_sessions'
+               AND NOT t.tgisinternal
+          ),
+          'session_constraints', (
+            SELECT coalesce(jsonb_agg(jsonb_build_object(
+              'name', con.conname, 'definition', pg_catalog.pg_get_constraintdef(con.oid)
+            )), '[]'::jsonb)
+              FROM pg_catalog.pg_constraint con
+             WHERE con.conrelid = 'public.eper_customer_asset_upload_sessions'::regclass
+          )
+        );
         RETURN v_result;
       END
       $probe$;
