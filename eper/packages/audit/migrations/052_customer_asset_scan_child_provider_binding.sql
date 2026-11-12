@@ -87,6 +87,9 @@ BEGIN
     RAISE EXCEPTION 'EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED';
   END IF;
 
+  PERFORM pg_catalog.set_config('eper.tenant_id', p_tenant_id, true);
+  PERFORM pg_catalog.set_config('eper.application_id', p_application_id, true);
+
   IF NOT EXISTS (
     SELECT 1
       FROM public.eper_customer_asset_scan_jobs AS j
