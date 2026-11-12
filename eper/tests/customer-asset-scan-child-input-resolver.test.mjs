@@ -5,7 +5,6 @@ import {
   PostgresCustomerAssetScanChildInputResolver,
   CustomerAssetScanChildInputResolverError,
 } from "../dist/packages/assets/customer-asset-scan-child-input-resolver.js";
-import { CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY } from "../dist/packages/assets/customer-asset-scan-child-identity.js";
 
 const start = {
   version: 3, type: "start", jobToken: "a".repeat(64), claimGeneration: 9,
@@ -18,102 +17,92 @@ const start = {
     sizeBytes: 6, mimeType: "text/plain",
   },
 };
-const identity = {
-  issuer: "eper-workload-identity", subject: "scanner-child",
-  audience: "eper:customer-asset-scan-child", tenantId: "tenant-a",
-  applicationId: "app-a", connectionId: "connection-a",
-  scannerServiceId: "asset-scanner", capability: CUSTOMER_ASSET_SCAN_CHILD_CAPABILITY,
-  issuedAt: Math.floor(Date.now() / 1000) - 30,
-  expiresAt: Math.floor(Date.now() / 1000) + 120, tokenId: "token-9",
-};
 const workload = { spiffeId: "spiffe://eper.example/asset-scanner/child",
   trustDomain: "eper.example", audience: "eper:customer-asset-scan-child",
   expiresAt: Math.floor(Date.now() / 1000) + 120 };
 const sourceRow = {
+  tenant_id: "tenant-a", application_id: "app-a",
+  worker_id: "asset-scanner:worker-1", scanner_service_id: "asset-scanner",
+  spiffe_id: workload.spiffeId, provider_connection_id: "connection-a",
   asset_id: start.input.assetId, storage_adapter_key: "synthetic.storage.v1",
   storage_object_reference: "opaque-storage-object", provider_upload_reference: "opaque-upload",
   checksum_sha256: start.input.checksumSha256, size_bytes: "6", mime_type: "text/plain", attempt: 2,
 };
-const fixture = ({ inputRows = [sourceRow], bindingRows = [{ provider_connection_id: "connection-a" }], error } = {}) => {
+const fixture = ({ rows = [sourceRow], error } = {}) => {
   const calls = [];
   const sql = { async query(statement, values) {
     calls.push({ statement, values });
     if (error) throw error;
-    return { rows: statement.includes("_child_input(") ? inputRows : bindingRows };
+    return { rows };
   } };
   return { resolver: new PostgresCustomerAssetScanChildInputResolver(sql), calls };
 };
 
-test("resolves only the current leased input and exact workload-bound provider connection via definer functions", async () => {
+test("derives complete child authorization scope and pinned provider connection from authenticated DB context", async () => {
   const f = fixture();
-  const result = await f.resolver.resolve({ start, identity, workload });
+  const result = await f.resolver.resolve({ start, workload });
   assert.deepEqual(result, {
+    tenantId: "tenant-a", applicationId: "app-a",
+    workerId: "asset-scanner:worker-1", scannerServiceId: "asset-scanner",
     assetId: sourceRow.asset_id, storageAdapterKey: "synthetic.storage.v1",
     providerObjectReference: "opaque-storage-object", providerUploadReference: "opaque-upload",
     checksumSha256: start.input.checksumSha256, sizeBytes: 6, mimeType: "text/plain",
     attempt: 2, providerConnectionId: "connection-a",
   });
-  assert.deepEqual(f.calls.map(call => call.values), [
-    ["tenant-a", "app-a", start.input.assetId, "asset-scanner:worker-1", "asset-scanner", 9, workload.spiffeId],
-    ["tenant-a", "app-a", start.input.assetId, "asset-scanner:worker-1", "asset-scanner", 9, workload.spiffeId],
-  ]);
-  assert.match(f.calls[0].statement, /eper_resolve_customer_asset_scan_child_input/);
-  assert.match(f.calls[1].statement, /eper_resolve_customer_asset_scan_child_provider_binding/);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].statement, "SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1,$2)");
+  assert.deepEqual(f.calls[0].values, [start.input.assetId, start.claimGeneration]);
 });
 
-test("rejects identity scope drift before querying the child database", async () => {
-  const f = fixture();
-  await assert.rejects(() => f.resolver.resolve({
-    start, identity: { ...identity, applicationId: "other-app" }, workload,
-  }), error => error instanceof CustomerAssetScanChildInputResolverError &&
-    error.code === "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID");
-  assert.equal(f.calls.length, 0);
+test("rejects database-derived scope that differs from IPC hints or verified SVID", async () => {
+  for (const changed of [
+    { tenant_id: "other-tenant" },
+    { application_id: "other-app" },
+    { worker_id: "other-worker" },
+    { scanner_service_id: "other-scanner" },
+    { spiffe_id: "spiffe://attacker.example/child" },
+  ]) {
+    const f = fixture({ rows: [{ ...sourceRow, ...changed }] });
+    await assert.rejects(() => f.resolver.resolve({ start, workload }), {
+      code: "CUSTOMER_ASSET_SCAN_CHILD_PROVIDER_BINDING_INVALID",
+    });
+  }
 });
 
 test("rejects missing or ambiguous current scan input", async () => {
   for (const rows of [[], [sourceRow, sourceRow]]) {
-    const f = fixture({ inputRows: rows });
-    await assert.rejects(() => f.resolver.resolve({ start, identity, workload }), {
+    const f = fixture({ rows });
+    await assert.rejects(() => f.resolver.resolve({ start, workload }), {
       code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_STALE",
     });
-    assert.equal(f.calls.length, 1);
   }
 });
 
-test("rejects changed checksum, size or MIME metadata before provider binding", async () => {
+test("rejects changed checksum, size or MIME metadata", async () => {
   for (const changed of [
     { checksum_sha256: "b".repeat(64) },
     { size_bytes: "7" },
     { mime_type: "application/octet-stream" },
   ]) {
-    const f = fixture({ inputRows: [{ ...sourceRow, ...changed }] });
-    await assert.rejects(() => f.resolver.resolve({ start, identity, workload }), {
+    const f = fixture({ rows: [{ ...sourceRow, ...changed }] });
+    await assert.rejects(() => f.resolver.resolve({ start, workload }), {
       code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_STALE",
     });
-    assert.equal(f.calls.length, 1);
   }
-});
-
-test("rejects a provider binding that differs from the authenticated identity connection", async () => {
-  const f = fixture({ bindingRows: [{ provider_connection_id: "connection-other" }] });
-  await assert.rejects(() => f.resolver.resolve({ start, identity, workload }), {
-    code: "CUSTOMER_ASSET_SCAN_CHILD_PROVIDER_BINDING_INVALID",
-  });
-  assert.equal(f.calls.length, 2);
 });
 
 test("fails closed and suppresses database diagnostics", async () => {
   const f = fixture({ error: new Error("password=do-not-leak host=private-db") });
-  await assert.rejects(() => f.resolver.resolve({ start, identity, workload }), error =>
+  await assert.rejects(() => f.resolver.resolve({ start, workload }), error =>
     error instanceof CustomerAssetScanChildInputResolverError &&
     error.code === "CUSTOMER_ASSET_SCAN_CHILD_INPUT_UNAVAILABLE" &&
     !error.message.includes("do-not-leak") && !error.message.includes("private-db"));
 });
 
-test("rejects malformed IPC envelope before dereferencing input or querying PostgreSQL", async () => {
+test("rejects malformed IPC envelope before querying PostgreSQL", async () => {
   const f = fixture();
   await assert.rejects(() => f.resolver.resolve({
-    start: { ...start, input: undefined }, identity, workload,
+    start: { ...start, input: undefined }, workload,
   }), error => error instanceof CustomerAssetScanChildInputResolverError &&
     error.code === "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID");
   assert.equal(f.calls.length, 0);
@@ -126,7 +115,7 @@ test("rejects a workload identity with a mismatched trust domain or audience bef
   ]) {
     const f = fixture();
     await assert.rejects(() => f.resolver.resolve({
-      start, identity, workload: { ...workload, ...changed },
+      start, workload: { ...workload, ...changed },
     }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
     assert.equal(f.calls.length, 0);
   }
@@ -135,21 +124,7 @@ test("rejects a workload identity with a mismatched trust domain or audience bef
 test("rejects an expired workload SVID before SQL", async () => {
   const f = fixture();
   await assert.rejects(() => f.resolver.resolve({
-    start, identity, workload: { ...workload, expiresAt: 1 },
+    start, workload: { ...workload, expiresAt: 1 },
   }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
   assert.equal(f.calls.length, 0);
-});
-test("rejects expired, future-issued or overlong identity claims before SQL", async () => {
-  const now = Math.floor(Date.now() / 1000);
-  for (const changed of [
-    { expiresAt: now - 60 },
-    { issuedAt: now + 120, expiresAt: now + 180 },
-    { issuedAt: now - 400, expiresAt: now + 120 },
-  ]) {
-    const f = fixture();
-    await assert.rejects(() => f.resolver.resolve({
-      start, identity: { ...identity, ...changed }, workload,
-    }), { code: "CUSTOMER_ASSET_SCAN_CHILD_INPUT_INVALID" });
-    assert.equal(f.calls.length, 0);
-  }
 });
