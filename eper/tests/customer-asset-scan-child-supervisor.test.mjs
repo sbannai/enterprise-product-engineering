@@ -97,3 +97,14 @@ test("scanner child supervisor hard-kills the child when the parent shuts down",
   setTimeout(() => controller.abort(), 50);
   await assert.rejects(pending, /CUSTOMER_ASSET_SCAN_CHILD_ABORTED/);
 });
+
+
+test("scanner child supervisor blocks runtime and dynamic-loader environment injection", async () => {
+  for (const key of ["NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "OPENSSL_CONF", "SSLKEYLOGFILE"]) {
+    await assert.rejects(runCustomerAssetScanChild({
+      executable: node, args: ["-e", "process.exit(0)"], start: start(), timeoutMs: 2_000,
+      environment: { [key]: "untrusted-runtime-override" },
+    }), /CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID/, key + " must not cross the process boundary");
+  }
+});

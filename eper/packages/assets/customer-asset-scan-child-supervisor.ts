@@ -47,7 +47,10 @@ export async function runCustomerAssetScanChild(
   }
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(options.environment ?? {})) {
-    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) || /(?:DATABASE|DB_URL|PASSWORD|PRIVATE_KEY|SECRET)/.test(key) || typeof value !== "string" || value.length > 4096) {
+    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key) ||
+        /(?:DATABASE|DB_URL|PASSWORD|PRIVATE_KEY|SECRET)/.test(key) ||
+        /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|OPENSSL_CONF|OPENSSL_MODULES|SSLKEYLOGFILE|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_INSERT_LIBRARIES|DYLD_LIBRARY_PATH)$/.test(key) ||
+        key.startsWith("DYLD_") || typeof value !== "string" || value.length > 4096) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_ENVIRONMENT_INVALID");
     }
     env[key] = value;
