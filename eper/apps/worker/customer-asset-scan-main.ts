@@ -48,6 +48,9 @@ const applicationId = required("EPER_CUSTOMER_ASSET_SCAN_APPLICATION_ID");
 const scannerModulePath = resolveScannerPath(required("EPER_CUSTOMER_ASSET_SCANNER_MODULE"));
 const environment = (process.env.EPER_AUDIT_ENVIRONMENT ?? "sandbox") as AuditEnvironment;
 if (!["production", "uat", "sandbox"].includes(environment)) throw new Error("EPER_AUDIT_ENVIRONMENT_INVALID");
+if (environment === "production" || process.env.EPER_ENVIRONMENT === "production") {
+  throw new Error("CUSTOMER_ASSET_SCAN_CHILD_PROCESS_ISOLATION_REQUIRED");
+}
 
 const controller = new AbortController();
 let shuttingDown = false;
