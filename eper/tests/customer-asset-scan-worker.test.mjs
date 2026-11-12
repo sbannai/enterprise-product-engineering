@@ -180,8 +180,8 @@ test("customer asset scan worker waits for child process exit before persisting 
   await runCustomerAssetScanWorker({
     repository: f.repository,
     childRunner: async (_message, _signal, timeoutMs) => {
-      assert.equal(timeoutMs, 50);
-      await new Promise(resolve => setTimeout(resolve, 150));
+      assert.equal(timeoutMs, 1_000);
+      await new Promise(resolve => setTimeout(resolve, 1_100));
       childExited = true; // Models the supervisor's close event after SIGKILL.
       return { kind: "failure", value: {
         version: 3, type: "failure", jobToken: "a".repeat(64),
@@ -190,7 +190,7 @@ test("customer asset scan worker waits for child process exit before persisting 
     },
     tenantId: "tenant-1", applicationId: "app-1", workerId: "asset-scanner:worker-1",
     scannerServiceId: "asset-scanner", environment: "sandbox", signal: f.controller.signal,
-    scanTimeoutMs: 50, onJob() { f.controller.abort(); },
+    scanTimeoutMs: 1_000, onJob() { f.controller.abort(); },
   });
   assert.equal(retryObservedAfterExit, true,
     "retry must not be persisted until the child supervisor confirms process exit");
