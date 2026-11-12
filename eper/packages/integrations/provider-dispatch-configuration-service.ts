@@ -24,7 +24,8 @@ export class ProviderDispatchConfigurationError extends Error {
     | "PROVIDER_DISPATCH_NO_ACTIVE_BINDING"
     | "PROVIDER_DISPATCH_AMBIGUOUS_BINDING"
     | "PROVIDER_DISPATCH_POLICY_INVALID"
-    | "PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH") {
+    | "PROVIDER_DISPATCH_POLICY_SCOPE_MISMATCH"
+    | "PROVIDER_DISPATCH_EXPECTED_CONNECTION_INVALID") {
     super(code);
     this.name = "ProviderDispatchConfigurationError";
   }
@@ -47,9 +48,9 @@ function eligible(connection: ApplicationProviderConnection, capabilityKey: stri
 }
 
 /**
- * Resolves the safe, effective provider configuration immediately before a
- * capability adapter is invoked. This is a routing decision only: secret
- * references and credential values are intentionally excluded.
+ * Resolves safe effective provider configuration. When expectedConnectionId is
+ * supplied, routing is pinned to that exact binding; it never falls back to a
+ * different eligible connection.
  */
 export class ProviderDispatchConfigurationService {
   constructor(
@@ -61,6 +62,7 @@ export class ProviderDispatchConfigurationService {
     tenantId: string;
     applicationId: string;
     capabilityKey: string;
+    expectedConnectionId?: string;
   }): Promise<ProviderDispatchSelection> {
     const identifiers = [
       ["TENANT", input.tenantId],
@@ -72,9 +74,16 @@ export class ProviderDispatchConfigurationService {
         throw new Error("PROVIDER_DISPATCH_" + label + "_INVALID");
       }
     }
+    if (input.expectedConnectionId !== undefined &&
+        (typeof input.expectedConnectionId !== "string" ||
+         !input.expectedConnectionId.trim() || input.expectedConnectionId.length > 128)) {
+      throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_EXPECTED_CONNECTION_INVALID");
+    }
 
     const connections = await this.connections.listForApplication(input.tenantId, input.applicationId);
-    const candidates = connections.filter(connection => eligible(connection, input.capabilityKey));
+    const candidates = connections.filter(connection =>
+      eligible(connection, input.capabilityKey) &&
+      (input.expectedConnectionId === undefined || connection.connectionId === input.expectedConnectionId));
     if (candidates.length === 0) {
       throw new ProviderDispatchConfigurationError("PROVIDER_DISPATCH_NO_ACTIVE_BINDING");
     }
