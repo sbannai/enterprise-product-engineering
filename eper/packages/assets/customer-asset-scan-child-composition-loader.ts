@@ -1,5 +1,5 @@
 import { lstat, realpath } from "node:fs/promises";
-import { isAbsolute, relative, sep } from "node:path";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 
 /**
  * Accept only immutable deployment-owned scanner composition code. Checking
@@ -15,14 +15,20 @@ export async function assertTrustedCustomerAssetScanCompositionModule(value: str
   if (markerIndex < 0) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
   const root = value.slice(0, markerIndex + marker.length - 1);
   const rel = relative(root, value);
-  if (!rel || rel === ".." || rel.startsWith(".." + sep)) {
+  if (!rel || rel === ".." || rel.startsWith(".." + sep) || dirname(value) !== root) {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
   }
   try {
-    const directory = await lstat(root);
-    if (!directory.isDirectory() || directory.isSymbolicLink() || (directory.mode & 0o022) !== 0 ||
-        await realpath(root) !== root) {
-      throw new Error("unsafe composition directory");
+    let current = root;
+    while (true) {
+      const directory = await lstat(current);
+      if (!directory.isDirectory() || directory.isSymbolicLink() || (directory.mode & 0o022) !== 0 ||
+          await realpath(current) !== current) {
+        throw new Error("unsafe composition directory");
+      }
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
     }
   } catch {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_DIRECTORY_INVALID");
