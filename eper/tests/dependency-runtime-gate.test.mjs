@@ -27,7 +27,7 @@ test("shared dependency gate resolves the most specific persisted installation",
     ]),
     scope: { tenantId: "tenant-1", applicationId: "app-1", deviceId: "scanner-1" },
     dependencyIds: ["vendor.sdk"], evaluatedAt: "2026-11-13T00:00:00Z",
-  }), /DEPENDENCY_RUNTIME_BLOCKED:vendor.sdk:unsupported_dependency/);
+  }), /DEPENDENCY_RUNTIME_BLOCKED:vendor.sdk:upgrade_required/);
 });
 
 test("shared dependency gate fails closed when persisted installation is absent", async () => {
