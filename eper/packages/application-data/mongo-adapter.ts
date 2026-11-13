@@ -45,8 +45,8 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   private idempotency() { return this.db.collection<Record<string, unknown>>("eper_application_data_idempotency"); }
   private scope(t: string, a: string, e: string) { return { tenantId: t, applicationId: a, entityType: e }; }
   private key(parts: string[]): string { return JSON.stringify(parts); }
-  private clean<T extends Record<string, unknown>>(value: T): Omit<T, "_id"> {
-    const { _id: _ignored, ...rest } = value; return rest;
+  private clean<T extends Record<string, unknown>>(value: T): Omit<T, "_id" | "_relationshipGuard"> {
+    const { _id: _ignored, _relationshipGuard: _guard, ...rest } = value; return rest;
   }
   private async transaction<T>(work: (session: MongoSessionLike) => Promise<T>): Promise<T> {
     const session = this.db.client!.startSession();
@@ -77,7 +77,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       const relationships=(model.relationships ?? []) as ApplicationDataRelationship[];
       for (const relation of relationships.filter(item=>item.targetEntity===entityType)) {
         const filter:Record<string,unknown>={...this.scope(c.tenantId,c.applicationId,String(model.entityType))};
-        filter[`data.${relation.field}"]=relation.cardinality==="one" ? id : id;
+        filter[`data.${relation.field}`]=id;
         const rows=await this.records().find(filter,{session}).limit(1).toArray();
         if (rows.length) throw new Error("APPLICATION_DATA_RECORD_REFERENCED");
       }
