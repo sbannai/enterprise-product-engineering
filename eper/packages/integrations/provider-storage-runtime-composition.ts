@@ -7,6 +7,7 @@ import { ProviderRuntimeResolutionService } from "./provider-runtime-resolution-
 import { ProviderRuntimeAdapterRegistry, type ProviderRuntimeAdapterRegistration } from "./provider-runtime-adapter-registry.js";
 import { assertProviderStorageDriver, type ProviderStorageDriver } from "./provider-storage-driver-contract.js";
 import { ProviderStorageDriverDispatchService } from "./provider-storage-driver-dispatch-service.js";
+import type { DependencyInventoryReader } from "../dependencies/runtime-gate.js";
 
 export type ProviderStorageRuntimeEnvironment = "development" | "test" | "uat" | "production";
 
