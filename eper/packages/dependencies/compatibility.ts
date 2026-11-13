@@ -69,7 +69,7 @@ interface ParsedVersion {
   readonly prerelease: readonly (string | number)[];
 }
 
-const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$/;
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
 function parseVersion(value: string): ParsedVersion | null {
   const match = SEMVER.exec(value);
