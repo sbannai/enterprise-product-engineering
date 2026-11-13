@@ -134,7 +134,11 @@ test("existing runtime composition accepts the dedicated synthetic driver only o
     catalogue: { async get() { return null; } },
     connections: { async getRuntimeSecretReference() { throw new Error("not called"); },
       async assertDispatchAuthorization() { throw new Error("not called"); } },
-    secretResolver: new SyntheticProviderStorageSecretResolver(),
+    secretResolver: {
+      adapterKey: "synthetic-secret",
+      adapterVersion: "1.0.0",
+      resolve: (input) => new SyntheticProviderStorageSecretResolver().resolve(input),
+    },
     scannerIdentity: "synthetic-scanner-v1", allowedHosts: ["uploads.synthetic.invalid"],
   };
   assert.equal(createProviderStorageRuntimeComposition(dependencies).enabled, true);
