@@ -2,13 +2,11 @@ import type {
   ProviderMalwareScanOutcome,
   ProviderMalwareScanRequest,
   ProviderInternalObjectReadRequest,
-  ProviderInternalObjectReadRequest,
   ProviderObjectVerificationOutcome,
   ProviderObjectVerificationRequest,
   ProviderStorageDriver,
 } from "./provider-storage-driver-contract.js";
 import { assertProviderStorageDriver } from "./provider-storage-driver-contract.js";
-import { verifiedProviderInternalObjectChunks } from "./provider-internal-object-read.js";
 import { verifiedProviderInternalObjectChunks } from "./provider-internal-object-read.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
@@ -39,7 +37,6 @@ const CAPABILITY_BY_OPERATION: Record<ProviderStorageOperation["kind"], string> 
   verify_object: "storage.object.verify",
   create_download: "storage.download.grant",
   scan_object: "storage.object.scan",
-  read_object_internal: "storage.object.read.internal",
   read_object_internal: "storage.object.read.internal",
 };
 
@@ -90,12 +87,7 @@ function validOperationRequest(operation: ProviderStorageOperation): boolean {
         Number.isSafeInteger(request.expectedSizeBytes) &&
         (request.expectedSizeBytes as number) > 0 &&
         validSha256(request.expectedSha256);
-    case "read_object_internal":
-      return validText(request.assetId, 128) &&
-        validText(request.providerObjectReference, 2048) &&
-        Number.isSafeInteger(request.expectedSizeBytes) &&
-        (request.expectedSizeBytes as number) > 0 &&
-        validSha256(request.expectedSha256);
+
   }
 }
 
