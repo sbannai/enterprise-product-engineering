@@ -1,3 +1,5 @@
+import { evaluateDependencyCompatibility, type DependencyPolicy, type DependencyInstallation } from "../dependencies/compatibility.js";
+
 export type CapabilityKind = "activity" | "rule" | "integration" | "reporting";
 export type CapabilityValueType = "text" | "number" | "boolean" | "date" | "record" | "file" | "event";
 
@@ -24,6 +26,11 @@ export interface CapabilityDescriptor {
   sideEffect: "none" | "external";
   requiresIdempotency?: boolean;
   deprecated?: boolean;
+  /** Vendor-managed runtime components required by this capability implementation. */
+  dependencies?: readonly {
+    policy: DependencyPolicy;
+    installation: DependencyInstallation;
+  }[];
 }
 export interface CompositionNode {
   id: string;
@@ -65,6 +72,7 @@ const MAX_EDGES = 1000;
 export function validateCapabilityComposition(
   graph: CapabilityComposition,
   catalogue: readonly CapabilityDescriptor[],
+  options: { evaluatedAt: string } = { evaluatedAt: new Date().toISOString() },
 ): CompositionDiagnostic[] {
   const diagnostics: CompositionDiagnostic[] = [];
   const add = (code: string, message: string, extra: Partial<CompositionDiagnostic> = {}) =>
@@ -100,6 +108,24 @@ export function validateCapabilityComposition(
     if (!node.configuration || typeof node.configuration !== "object" || Array.isArray(node.configuration)) {
       add("composition.configuration.invalid", "Complete the building block settings before continuing.", { nodeId: node.id });
       continue;
+    }
+    for (const dependency of descriptor.dependencies ?? []) {
+      try {
+        const compatibility = evaluateDependencyCompatibility({
+          policy: dependency.policy,
+          installation: dependency.installation,
+          evaluatedAt: options.evaluatedAt,
+        });
+        if (compatibility.blocking) {
+          add(
+            "composition.dependency.blocked",
+            "A required vendor component is incompatible or has reached its mandatory-update deadline.",
+            { nodeId: node.id },
+          );
+        }
+      } catch {
+        add("composition.dependency.policy_invalid", "A required vendor component has an invalid compatibility policy.", { nodeId: node.id });
+      }
     }
     if (descriptor.kind === "integration" && descriptor.sideEffect === "external" && descriptor.requiresIdempotency &&
         !Object.prototype.hasOwnProperty.call(node.configuration, "idempotencyPolicy")) {
