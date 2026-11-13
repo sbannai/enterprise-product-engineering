@@ -67,6 +67,12 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       catch (error) { if ((error as { code?: number }).code === 11000) throw new Error("APPLICATION_DATA_SCHEMA_VERSION_IMMUTABLE"); throw error; }
     });
   }
+  async transitionModelStatus(t: string, a: string, e: string, v: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void> {
+    if (!((from==="DRAFT"&&to==="ACTIVE")||(from==="ACTIVE"&&to==="RETIRED"))) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_INVALID");
+    const id=this.key([t,a,e,String(v)]);
+    const result=await this.models().replaceOne({ _id:id,status:from }, { ...(await this.models().findOne({_id:id}) ?? {}), status:to }, {});
+    if (!result.matchedCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
+  }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
     return this.transaction(async session => {
       const id=this.key([record.tenantId,record.applicationId,record.entityType,record.id]);
