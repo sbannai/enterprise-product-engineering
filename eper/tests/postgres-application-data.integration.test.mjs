@@ -48,3 +48,24 @@ test("PostgreSQL relationship references serialize with target deletion", {skip:
     await service.delete(context,"Customer","customer-"+suffix,1);
   } finally { await pool.end(); }
 });
+
+test("PostgreSQL create idempotency replays the original response without duplicate audit/outbox writes", {skip:!enabled}, async () => {
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
+  const suffix=randomUUID().replace(/-/g,"");
+  const context={tenantId:"data-idem-"+suffix,applicationId:"app-idem-"+suffix,actorId:"actor-idem",correlationId:"corr-idem-"+suffix,requirementId:"APP_DATA_IDEM_CI",idempotencyKey:"checkout-"+suffix};
+  try {
+    const service=new ApplicationDataService(new PostgresApplicationDataAdapter(pool));
+    await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Order",version:1,status:"ACTIVE",
+      fields:[{id:"customerId",type:"string",required:true},{id:"total",type:"number",required:true}]});
+    const first=await service.create(context,"Order","order-"+suffix,{customerId:"customer-1",total:25});
+    const replay=await service.create(context,"Order","order-"+suffix,{customerId:"customer-1",total:25});
+    assert.deepEqual(replay,first);
+    await assert.rejects(()=>service.create(context,"Order","order-other-"+suffix,{customerId:"customer-1",total:99}),/IDEMPOTENCY_KEY_REUSED/);
+    const records=await service.query(context,"Order",{limit:10});
+    assert.equal(records.length,1);
+    const audit=await pool.query("SELECT count(*)::int AS count FROM audit_evidence WHERE tenant_id=$1 AND correlation_id=$2",[context.tenantId,context.correlationId]);
+    const outbox=await pool.query("SELECT count(*)::int AS count FROM transactional_outbox WHERE tenant_id=$1 AND correlation_id=$2",[context.tenantId,context.correlationId]);
+    assert.equal(audit.rows[0].count,1);
+    assert.equal(outbox.rows[0].count,1);
+  } finally { await pool.end(); }
+});
