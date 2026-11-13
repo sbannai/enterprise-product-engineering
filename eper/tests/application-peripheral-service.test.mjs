@@ -51,6 +51,7 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
       }
       return adapter;
     },
+    dependencyIds(input) { calls.push(["dependencyIds", input]); return dependencyIds; },
     assertDependenciesCompatible(input) {
       calls.push(["dependencyCheck", input]);
       if (dependencyError) throw dependencyError;
