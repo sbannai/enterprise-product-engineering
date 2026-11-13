@@ -1,4 +1,4 @@
-import { isAbsolute } from "node:path";
+import { isAbsolute, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCustomerAssetScanChild, type CustomerAssetScanChildOutcome } from "./customer-asset-scan-child-supervisor.js";
 import type { CustomerAssetScanChildStart } from "./customer-asset-scan-child-protocol.js";
@@ -14,6 +14,7 @@ export interface TrustedCustomerAssetScanChildConfiguration {
   databaseCaFile: string;
   databaseClientCertificateFile: string;
   databaseClientKeyFile: string;
+  compositionModulePath: string;
 }
 
 const CHILD_ENTRYPOINT = fileURLToPath(
@@ -70,6 +71,17 @@ export function buildTrustedCustomerAssetScanChildLaunch(configuration: TrustedC
     EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET: socket,
     EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID: spiffeId,
     EPER_SCANNER_CHILD_SPIFFE_AUDIENCE: audience,
+    EPER_SCANNER_CHILD_COMPOSITION_MODULE: (() => {
+      const modulePath = required(configuration.compositionModulePath, "CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
+      const root = resolve(process.cwd(), "dist/packages/assets/scanners");
+      const candidate = resolve(process.cwd(), modulePath);
+      const rel = relative(root, candidate);
+      if (!modulePath.startsWith("./dist/packages/assets/scanners/") || !rel || rel === ".." ||
+          rel.startsWith(".." + sep) || !candidate.endsWith(".js")) {
+        throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_PATH_INVALID");
+      }
+      return candidate;
+    })(),
     PGHOST: host,
     PGPORT: String(configuration.databasePort),
     PGDATABASE: name,
