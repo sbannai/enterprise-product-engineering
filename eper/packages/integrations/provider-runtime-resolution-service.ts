@@ -71,7 +71,7 @@ export class ProviderRuntimeResolutionService<TAdapter> {
         adapterVersion: definition.adapterVersion,
         capability: input.capability,
         endpoint,
-        tlsMode: this.deploymentPolicy.tlsMode,
+        tlsMode: typeof selection.policy.tlsMode === "string" ? selection.policy.tlsMode : "",
         synthetic: admitted?.synthetic ?? false,
       });
     } else if (this.deploymentPolicy && !this.deploymentPolicy.enabled) {
