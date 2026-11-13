@@ -1,5 +1,3 @@
-import { evaluateDependencyCompatibility, type DependencyPolicy, type DependencyInstallation } from "../dependencies/compatibility.js";
-
 /**
  * Optional application-scoped peripheral capability.
  * Importing this package performs no discovery, connection or I/O.
@@ -49,11 +47,6 @@ export type PeripheralCommandResult =
   | { readonly outcome: "REJECTED"; readonly code: string }
   | { readonly outcome: "NEEDS_ATTENTION"; readonly code: string };
 
-export interface PeripheralAdapterDependency {
-  readonly policy: DependencyPolicy;
-  readonly installation: DependencyInstallation;
-}
-
 export interface PeripheralAdapterRegistration {
   readonly adapterKey: string;
   readonly adapterVersion: string;
@@ -61,8 +54,6 @@ export interface PeripheralAdapterRegistration {
   readonly adapter: PeripheralAdapter;
   /** Stable IDs for dependencies whose authoritative policy and installation live in the tenant inventory. */
   readonly dependencyIds?: readonly string[];
-  /** Legacy deterministic test seam; production activation must use persisted inventory. */
-  readonly dependencies?: readonly PeripheralAdapterDependency[];
 }
 
 /** Exact-match registry. Resolution never opens a connection or falls back to another adapter. */
@@ -98,27 +89,6 @@ export class PeripheralAdapterRegistry {
     const ids = registration.dependencyIds;
     if (new Set(ids).size !== ids.length || ids.some(id => !id.trim())) throw new Error("PERIPHERAL_ADAPTER_DEPENDENCY_IDS_INVALID");
     return Object.freeze([...ids]);
-  }
-  /** Evaluate every declared vendor dependency before peripheral activation. */
-  assertDependenciesCompatible(input: {
-    adapterKey: string;
-    adapterVersion: string;
-    kind: PeripheralKind;
-    evaluatedAt: string;
-  }): void {
-    const registration = this.adapters.get(this.key(input.adapterKey, input.adapterVersion));
-    if (!registration) throw new Error("PERIPHERAL_ADAPTER_NOT_REGISTERED");
-    if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
-    for (const dependency of registration.dependencies ?? []) {
-      const result = evaluateDependencyCompatibility({
-        policy: dependency.policy,
-        installation: dependency.installation,
-        evaluatedAt: input.evaluatedAt,
-      });
-      if (result.blocking) {
-        throw new Error("EPER_PERIPHERAL_DEPENDENCY_BLOCKED:" + result.dependencyId + ":" + result.status);
-      }
-    }
   }
   private key(adapterKey: string, version: string): string { return adapterKey + "@" + version; }
 }
