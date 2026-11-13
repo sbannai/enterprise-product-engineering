@@ -1,5 +1,5 @@
 import type { ApplicationCapabilityBoundary, ApplicationCapabilityScope } from "../addon-entitlements/application-capability-boundary.js";
-import { evaluateDependencyCompatibility } from "../dependencies/compatibility.js";
+import { assertDependencyRuntimeCompatible } from "../dependencies/runtime-gate.js";
 import type { PostgresDependencyInventoryRepository } from "../dependencies/postgres-dependency-inventory-repository.js";
 import {
   PeripheralAdapterRegistry,
@@ -224,46 +224,18 @@ export class ApplicationPeripheralService {
     const ids = this.adapters.dependencyIds?.({
       adapterKey:input.adapterKey,adapterVersion:input.adapterVersion,kind:input.kind,
     });
-    // Never fall back to adapter-local policy snapshots: they can be stale and
-    // bypass tenant/application inventory. Explicit [] is the only dependency-free declaration.
+    // Explicit [] is the only dependency-free declaration. Adapter snapshots
+    // never authorize runtime use; the shared gate reads persisted inventory.
     if(!Array.isArray(ids))throw new Error("EPER_PERIPHERAL_DEPENDENCY_DECLARATION_REQUIRED");
     if(ids.length===0)return;
     if(!this.dependencyInventory)throw new Error("EPER_DEPENDENCY_INVENTORY_NOT_CONFIGURED");
-    const scope={tenantId:input.tenantId,applicationId:input.applicationId};
-    const policies=await Promise.all(ids.map(id=>this.dependencyInventory!.get(scope,id)));
-    const installations=await this.dependencyInventory.listInstallations(scope);
-    for(let i=0;i<ids.length;i++){
-      const id=ids[i];
-      const policy=policies[i];
-      if(!policy||policy.policyStatus!=="active")throw new Error("EPER_PERIPHERAL_DEPENDENCY_POLICY_UNAVAILABLE:"+id);
-      const candidates=installations.filter(row=>row.dependencyId===id&&row.installationStatus!=="retired");
-      // Resolve the most specific known installation first. Identity IDs are
-      // supplied by the trusted, authorized activation context, not inferred.
-      const scopes=[
-        {type:"device",id:input.peripheralId},
-        {type:"workstation",id:input.workstationId},
-        {type:"user",id:input.userId},
-        {type:"gateway",id:input.gatewayId},
-        {type:"application",id:input.applicationId},
-      ].filter(scope=>!!scope.id);
-      let selected: typeof candidates = [];
-      for(const scope of scopes){
-        const matches=candidates.filter(row=>row.scopeType===scope.type&&row.scopeId===scope.id);
-        if(matches.length>1)throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_AMBIGUOUS:"+id+":"+scope.type);
-        if(matches.length===1){selected=matches;break;}
-      }
-      if(selected.length!==1)throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_MISSING:"+id);
-      const installation=selected[0];
-      if(installation.installationStatus==="blocked"||installation.installationStatus==="upgrade_pending"){
-        throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_NOT_READY:"+id);
-      }
-      const result=evaluateDependencyCompatibility({
-        policy,installation:{installedVersion:installation.installedVersion,
-          operatingSystem:installation.operatingSystem,runtime:installation.runtime,
-          deviceModel:installation.deviceModel},evaluatedAt:input.evaluatedAt,
-      });
-      if(result.blocking)throw new Error("EPER_PERIPHERAL_DEPENDENCY_BLOCKED:"+id+":"+result.status);
-    }
+    await assertDependencyRuntimeCompatible({
+      repository:this.dependencyInventory,
+      scope:{tenantId:input.tenantId,applicationId:input.applicationId,
+        deviceId:input.peripheralId,workstationId:input.workstationId,
+        userId:input.userId,gatewayId:input.gatewayId},
+      dependencyIds:ids,evaluatedAt:input.evaluatedAt,errorPrefix:"EPER_PERIPHERAL_DEPENDENCY",
+    });
   }
 
   private actorScope(input: PeripheralServiceScope) {
