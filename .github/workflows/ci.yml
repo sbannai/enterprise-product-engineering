@@ -225,6 +225,16 @@ jobs:
           node --test tests/campaign-scheduler-worker-restart.integration.test.mjs
       - name: Apply capability persistence migrations to ephemeral CI database
         run: npm run migrate:capabilities
+      - name: Apply application data migrations to ephemeral CI database
+        run: npm run migrate:application-data
+      - name: Verify application data migrations are safely repeatable
+        run: npm run migrate:application-data
+      - name: Application data schema, workflow binding and PostgreSQL integration regressions
+        env:
+          EPER_APPLICATION_DATA_LIVE_TESTS: "1"
+        run: |
+          node --test tests/application-data.test.mjs
+          node --test tests/postgres-application-data.integration.test.mjs
       - name: Apply ticketing persistence migrations to ephemeral CI database
         run: npm run migrate:ticketing
       - name: Verify ticketing migrations are safely repeatable
