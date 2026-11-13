@@ -8,6 +8,7 @@ import { ProviderRuntimeAdapterRegistry, type ProviderRuntimeAdapterRegistration
 import { assertProviderStorageDriver, type ProviderStorageDriver } from "./provider-storage-driver-contract.js";
 import { ProviderStorageDriverDispatchService } from "./provider-storage-driver-dispatch-service.js";
 import type { DependencyInventoryReader } from "../dependencies/runtime-gate.js";
+import type { ProviderRuntimeDeploymentPolicy } from "./provider-runtime-deployment-policy.js";
 
 export type ProviderStorageRuntimeEnvironment = "development" | "test" | "uat" | "production";
 
@@ -19,6 +20,7 @@ export type ProviderStorageRuntimeRegistration<TCredentials> =
 
 export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   enabled: boolean;
+  deploymentPolicy: ProviderRuntimeDeploymentPolicy;
   environment?: ProviderStorageRuntimeEnvironment;
   registrations?: readonly ProviderStorageRuntimeRegistration<TCredentials>[];
   dispatch?: Pick<ProviderDispatchConfigurationService, "resolve">;
@@ -45,7 +47,8 @@ export class ProviderStorageRuntimeCompositionError extends Error {
     | "PROVIDER_STORAGE_RUNTIME_SCANNER_IDENTITY_REQUIRED"
     | "PROVIDER_STORAGE_RUNTIME_ALLOWED_HOSTS_INVALID"
     | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID"
-    | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED") {
+    | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED"
+    | "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED") {
     super(code);
     this.name = "ProviderStorageRuntimeCompositionError";
   }
@@ -72,6 +75,9 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
   if (input.environment !== "development" && input.environment !== "test" &&
       input.environment !== "uat" && input.environment !== "production") {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
+  }
+  if (!input.deploymentPolicy?.enabled || input.deploymentPolicy.environment !== input.environment) {
+    throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
   }
   if (!input.dispatch || !input.catalogue || !input.connections || !input.secretResolver) {
     throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCIES_REQUIRED");
@@ -119,7 +125,7 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
   });
 
   const adapters = new ProviderRuntimeAdapterRegistry(registrations);
-  const runtime = new ProviderRuntimeResolutionService(input.dispatch, input.catalogue, adapters);
+  const runtime = new ProviderRuntimeResolutionService(input.dispatch, input.catalogue, adapters, input.deploymentPolicy);
   const credentials = new ProviderCredentialResolutionService(input.secretResolver);
   const runtimeWithCredentials = new ProviderRuntimeCredentialResolutionService(
     runtime, input.connections, credentials,
