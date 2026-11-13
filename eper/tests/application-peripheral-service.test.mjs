@@ -244,3 +244,24 @@ test("persisted dependency activation fails closed for ambiguous installation sc
   assert.equal(calls.some(call=>call[0]==="transition"),false);
   assert.equal(calls.some(call=>call[0]==="connect"),false);
 });
+
+test("persisted dependency activation fails closed when policy is missing or retired", async () => {
+  const dependencyId="vendor.scanner.sdk";
+  const inventoryMissing={async get(){return null;},async listInstallations(){return [];}};
+  const missing=fixture({dependencyIds:[dependencyId],dependencyInventory:inventoryMissing});
+  await assert.rejects(missing.service.activate({...scope,peripheralId:"peripheral-1",expectedVersion:7}),
+    /EPER_PERIPHERAL_DEPENDENCY_POLICY_UNAVAILABLE:vendor\.scanner\.sdk/);
+  assert.equal(missing.calls.some(call=>call[0]==="transition"),false);
+  assert.equal(missing.calls.some(call=>call[0]==="connect"),false);
+
+  const retiredPolicy={dependencyId,vendor:"Vendor",componentKind:"sdk",supportedVersions:{minimum:"1.0.0"},
+    supportState:"supported",mandatoryUpdate:false,downgradePolicy:"allowed",
+    notice:{verification:"not_provided",source:null,reference:null,recordedAt:null},policyStatus:"retired",version:3};
+  const retired=fixture({dependencyIds:[dependencyId],dependencyInventory:{
+    async get(){return retiredPolicy;},async listInstallations(){return [];}
+  }});
+  await assert.rejects(retired.service.activate({...scope,peripheralId:"peripheral-1",expectedVersion:7}),
+    /EPER_PERIPHERAL_DEPENDENCY_POLICY_UNAVAILABLE:vendor\.scanner\.sdk/);
+  assert.equal(retired.calls.some(call=>call[0]==="transition"),false);
+  assert.equal(retired.calls.some(call=>call[0]==="connect"),false);
+});
