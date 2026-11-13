@@ -5,6 +5,11 @@ import {
   ProviderRuntimeResolutionService,
 } from "../dist/packages/integrations/provider-runtime-resolution-service.js";
 
+const deploymentPolicy = {
+  enabled: true, environment: "test", allowedProviderKeys: ["storage-provider"],
+  adapters: [{ adapterKey: "storage.local", adapterVersion: "1.2.0", capabilities: ["storage.upload.grant"], synthetic: false }],
+  allowedHosts: ["objects.example.com"], tlsMode: "verify-full",
+};
 const selection = {
   tenantId: "tenant-a", applicationId: "app-a", capabilityKey: "storage.upload.grant",
   connectionId: "connection-a", providerKey: "storage-provider", connectionVersion: 4,
@@ -24,6 +29,7 @@ function fixture({ provider = definition(), adapter = {}, dispatchError = null, 
       { async resolve(input) { calls.push(["dispatch", input]); if (dispatchError) throw dispatchError; return selection; } },
       { async get(key) { calls.push(["catalogue", key]); return provider; } },
       { resolve(input) { calls.push(["registry", input]); if (registryError) throw registryError; return adapter; } },
+      deploymentPolicy,
     ),
   };
 }
