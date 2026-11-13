@@ -16,7 +16,7 @@ const configuration = {
   adapterKey: "synthetic.local", adapterVersion: "1.0.0", settings: { mode: "test" },
 };
 
-function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyError = null, dependencyIds = [], dependencyInventory = null } = {}) {
+function fixture({ connect = async () => {}, disconnect = async () => {}, noRegistration = false, noConfiguration = false, failDegradedPersist = false, initialStatus = "CONFIGURED", initialVersion = 7, authorize = async () => {}, dependencyIds = [], dependencyInventory = null } = {}) {
   const calls = [];
   let current = registration({ status: initialStatus, version: initialVersion });
   const config = configuration;
@@ -52,10 +52,6 @@ function fixture({ connect = async () => {}, disconnect = async () => {}, noRegi
       return adapter;
     },
     dependencyIds(input) { calls.push(["dependencyIds", input]); return dependencyIds; },
-    assertDependenciesCompatible(input) {
-      calls.push(["dependencyCheck", input]);
-      if (dependencyError) throw dependencyError;
-    },
   };
   const capabilities = {
     async withPeripheralManagement(trustedScope, operation) {
@@ -185,18 +181,22 @@ test("missing registration and missing configuration fail closed without adapter
 });
 
 
-test("vendor dependency policy is checked before ACTIVE persistence and adapter connection", async () => {
-  const { service, calls } = fixture({
-    dependencyError: new Error("EPER_PERIPHERAL_DEPENDENCY_BLOCKED:vendor.scanner.sdk:blocked_at_cutoff"),
-  });
+test("activation fails closed when adapter dependency declaration is absent", async () => {
+  const { service, calls } = fixture({ dependencyIds: undefined });
   await assert.rejects(
     service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 }),
-    /EPER_PERIPHERAL_DEPENDENCY_BLOCKED:vendor.scanner.sdk:blocked_at_cutoff/,
+    /EPER_PERIPHERAL_DEPENDENCY_DECLARATION_REQUIRED/,
   );
-  const dependencyCheck = calls.findIndex(call => call[0] === "dependencyCheck");
-  assert.ok(dependencyCheck >= 0);
   assert.equal(calls.some(call => call[0] === "transition"), false);
   assert.equal(calls.some(call => call[0] === "connect"), false);
+});
+
+test("explicitly dependency-free adapter declaration permits activation without inventory", async () => {
+  const { service, calls } = fixture({ dependencyIds: [] });
+  const result = await service.activate({ ...scope, peripheralId: "peripheral-1", expectedVersion: 7 });
+  assert.equal(result.status, "ACTIVE");
+  assert.equal(calls.some(call => call[0] === "transition"), true);
+  assert.equal(calls.some(call => call[0] === "connect"), true);
 });
 
 test("persisted vendor cutoff blocks activation before ACTIVE persistence and hardware I/O", async () => {
