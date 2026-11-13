@@ -72,6 +72,9 @@ export class ApplicationDataService {
     if (current && model.version !== current.version + 1) {
       throw new Error("APPLICATION_DATA_SCHEMA_VERSION_CONFLICT");
     }
+    if (current && model.status !== "DRAFT") {
+      throw new Error("APPLICATION_DATA_SCHEMA_ACTIVATION_REQUIRED");
+    }
     await this.adapter.putModel(clone(model));
   }
   async activateModel(tenantId: string, applicationId: string, entityType: string, version: number): Promise<void> {
