@@ -110,3 +110,14 @@ test("non-production composition requires synthetic driver provenance to be decl
       error.code === "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID",
   );
 });
+
+
+test("enabled composition refuses dependency-bearing drivers without durable inventory", () => {
+  const configured = input();
+  configured.registrations[0].adapter.dependencyIds = ["storage-sdk"];
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(configured),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED",
+  );
+});
