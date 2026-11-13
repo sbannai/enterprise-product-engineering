@@ -20,14 +20,14 @@ const repository = (installations) => ({
 });
 
 test("shared dependency gate resolves the most specific persisted installation", async () => {
-  await assertDependencyRuntimeCompatible({
+  await assert.rejects(() => assertDependencyRuntimeCompatible({
     repository: repository([
       row("application", "app-1", "2.0.0"),
       row("device", "scanner-1", "4.0.0"),
     ]),
     scope: { tenantId: "tenant-1", applicationId: "app-1", deviceId: "scanner-1" },
     dependencyIds: ["vendor.sdk"], evaluatedAt: "2026-11-13T00:00:00Z",
-  }).then(() => assert.fail("unsupported device version should block"));
+  }), /DEPENDENCY_RUNTIME_BLOCKED:vendor.sdk:unsupported_dependency/);
 });
 
 test("shared dependency gate fails closed when persisted installation is absent", async () => {
