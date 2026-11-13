@@ -27,6 +27,8 @@ export interface ApplicationDataContext {
   actorId: string;
   correlationId: string;
   requirementId: string;
+  /** Stable client/workflow key used to make create retries return the original result. */
+  idempotencyKey?: string;
 }
 export interface ApplicationDataRecord {
   tenantId: string;
