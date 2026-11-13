@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
-import { applicationDataCreateHash } from "./idempotency.js";
+import { applicationDataCreateHash, applicationDataUpdateHash } from "./idempotency.js";
 
 /** Local development/import-export adapter only. Not safe for concurrent processes or production transactions. */
 export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
@@ -74,10 +74,29 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     db.records.push(record); await this.write(db); return record;
   }
   async get(c: ApplicationDataContext, e: string, id: string) { return (await this.read()).records.find(r => r.tenantId === c.tenantId && r.applicationId === c.applicationId && r.entityType === e && r.id === id); }
+  async getIdempotentUpdate(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord | undefined> {
+    if (!c.idempotencyKey) return undefined;
+    const db=await this.read();
+    const prior=db.idempotency.find(item=>item.tenantId===c.tenantId&&item.applicationId===c.applicationId&&item.key===c.idempotencyKey);
+    if (!prior) return undefined;
+    const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
+    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    return prior.response;
+  }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord> {
     const db = await this.read(); const r = db.records.find(x => x.tenantId === c.tenantId && x.applicationId === c.applicationId && x.entityType === e && x.id === id);
     if (!r) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND"); if (r.version !== expected) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
-    Object.assign(r, patch, { version: r.version + 1, updatedAt: new Date().toISOString() }); await this.write(db); return r;
+    if (c.idempotencyKey) {
+      const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
+      const prior=db.idempotency.find(item=>item.tenantId===c.tenantId&&item.applicationId===c.applicationId&&item.key===c.idempotencyKey);
+      if (prior) {
+        if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+        return prior.response;
+      }
+      Object.assign(r, patch, { version: r.version + 1, updatedAt: new Date().toISOString() });
+      db.idempotency.push({tenantId:c.tenantId,applicationId:c.applicationId,key:c.idempotencyKey,requestHash,response:r});
+    } else Object.assign(r, patch, { version: r.version + 1, updatedAt: new Date().toISOString() });
+    await this.write(db); return r;
   }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
     const db = await this.read(); const i = db.records.findIndex(x => x.tenantId === c.tenantId && x.applicationId === c.applicationId && x.entityType === e && x.id === id);
