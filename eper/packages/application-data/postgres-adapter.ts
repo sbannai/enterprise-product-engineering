@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { withTenantTransaction, enqueueOutboxEvent } from "../capabilities/postgres-transaction.js";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
-import { applicationDataCreateHash } from "./idempotency.js";
+import { applicationDataCreateHash, applicationDataUpdateHash } from "./idempotency.js";
 
 type Row = Record<string, unknown>;
 function json<T>(value: unknown): T { return (typeof value === "string" ? JSON.parse(value) : value) as T; }
@@ -137,12 +137,37 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   async get(c: ApplicationDataContext, e: string, id: string): Promise<ApplicationDataRecord | undefined> {
     return this.scope(c, async client => { const r=await client.query<Row>("SELECT * FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4",[c.tenantId,c.applicationId,e,id]); return r.rows[0] ? mapRecord(r.rows[0]) : undefined; });
   }
+  async getIdempotentUpdate(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord | undefined> {
+    if (!c.idempotencyKey) return undefined;
+    const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
+    return this.scope(c,async client=>{
+      const result=await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",
+        [c.tenantId,c.applicationId,c.idempotencyKey]);
+      const prior=result.rows[0];
+      if (!prior) return undefined;
+      if (String(prior.request_hash)!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+      return json<ApplicationDataRecord>(prior.response);
+    });
+  }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: import("./contracts.js").ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     return this.scope(c, async client => {
+      const key=c.idempotencyKey;
+      const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
+      if (key && requestHash) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`application-data:update:${c.tenantId}:${c.applicationId}:${key}`]);
+        const replay=await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",[c.tenantId,c.applicationId,key]);
+        if (replay.rows[0]) {
+          if (String(replay.rows[0].request_hash)!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+          return json<ApplicationDataRecord>(replay.rows[0].response);
+        }
+      }
       if (patch.data) await this.lockRelationshipTargets(client,c,relationships,patch.data);
       const r=await client.query<Row>("UPDATE eper_application_data_records SET state=COALESCE($5,state),data=COALESCE($6::jsonb,data),version=version+1,updated_at=now() WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 AND version=$7 RETURNING *",[c.tenantId,c.applicationId,e,id,patch.state ?? null,patch.data === undefined ? null : JSON.stringify(patch.data),expected]);
       if (!r.rows[0]) { const exists=await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4",[c.tenantId,c.applicationId,e,id]); throw new Error(exists.rowCount ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND"); }
-      const saved=mapRecord(r.rows[0]); await this.evidence(client,c,"APPLICATION_DATA_UPDATED",saved); return saved;
+      const saved=mapRecord(r.rows[0]); await this.evidence(client,c,"APPLICATION_DATA_UPDATED",saved);
+      if (key && requestHash) await client.query("INSERT INTO eper_application_data_idempotency(tenant_id,application_id,idempotency_key,request_hash,response) VALUES($1,$2,$3,$4,$5::jsonb)",
+        [c.tenantId,c.applicationId,key,requestHash,JSON.stringify(saved)]);
+      return saved;
     });
   }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
