@@ -9,8 +9,8 @@ const source=resolve(root,"packages/dependencies/postgres-dependency-inventory-r
 
 test("dependency inventory repository scopes every read and write to tenant plus application",async()=>{
  const ts=await readFile(source,"utf8");
- assert.match(ts,/set_config\("eper\.tenant_id"/);
- assert.match(ts,/set_config\("eper\.application_id"/);
+ assert.match(ts,/set_config\(['"]eper\.tenant_id['"]/);
+ assert.match(ts,/set_config\(['"]eper\.application_id['"]/);
  assert.match(ts,/WHERE p\.tenant_id=\$1 AND p\.application_id=\$2/);
  assert.match(ts,/WHERE p\.tenant_id=\$1 AND p\.application_id=\$2 AND p\.dependency_id=\$3/);
  assert.match(ts,/BEGIN READ ONLY/);
