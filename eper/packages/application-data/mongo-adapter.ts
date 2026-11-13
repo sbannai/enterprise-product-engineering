@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
+import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord, ApplicationDataRelationship } from "./contracts.js";
 import { applicationDataCreateHash } from "./idempotency.js";
 
 interface MongoResult { acknowledged?: boolean; matchedCount?: number; deletedCount?: number; }
@@ -56,6 +56,33 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       throw error;
     } finally { await session.endSession(); }
   }
+  /** A transactional write to each target document serializes relationship creation against target deletion. */
+  private async lockRelationshipTargets(session: MongoSessionLike, c: ApplicationDataContext,
+    relationships: ApplicationDataRelationship[] | undefined, data: Record<string, unknown>): Promise<void> {
+    for (const relation of relationships ?? []) {
+      const value=data[relation.field];
+      if (value === undefined || value === null) continue;
+      const ids=relation.cardinality === "one" ? [value] : value;
+      if (!Array.isArray(ids)) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
+      for (const id of ids) {
+        const targetId=this.key([c.tenantId,c.applicationId,relation.targetEntity,String(id)]);
+        const result=await this.records().updateOne({_id:targetId},{$inc:{_relationshipGuard:1}},{session});
+        if (!result.matchedCount) throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + relation.field);
+      }
+    }
+  }
+  private async assertNotReferenced(session: MongoSessionLike, c: ApplicationDataContext, entityType: string, id: string): Promise<void> {
+    const models=await this.models().find({...this.scope(c.tenantId,c.applicationId,""),status:{$in:["ACTIVE","RETIRED"]}} as Record<string,unknown>,{session}).toArray();
+    for (const model of models) {
+      const relationships=(model.relationships ?? []) as ApplicationDataRelationship[];
+      for (const relation of relationships.filter(item=>item.targetEntity===entityType)) {
+        const filter:Record<string,unknown>={...this.scope(c.tenantId,c.applicationId,String(model.entityType))};
+        filter[`data.${relation.field}"]=relation.cardinality==="one" ? id : id;
+        const rows=await this.records().find(filter,{session}).limit(1).toArray();
+        if (rows.length) throw new Error("APPLICATION_DATA_RECORD_REFERENCED");
+      }
+    }
+  }
   private async evidence(session: MongoSessionLike, c: ApplicationDataContext, action: string, r: ApplicationDataRecord): Promise<void> {
     const id = randomUUID(); const occurredAt = new Date().toISOString();
     const payload = { applicationId:r.applicationId, entityType:r.entityType, recordId:r.id, version:r.version };
@@ -93,12 +120,13 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       if (!result.matchedCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
     });
   }
-  async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
+  async create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     const key = context.idempotencyKey;
     const requestHash = key ? applicationDataCreateHash(record) : undefined;
     const idempotencyId = key ? this.key([context.tenantId,context.applicationId,key]) : undefined;
     try {
       return await this.transaction(async session => {
+        await this.lockRelationshipTargets(session,context,relationships,record.data);
         if (key && idempotencyId && requestHash) {
           const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
           if (prior) {
@@ -133,8 +161,9 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const r=await this.records().findOne({ _id:this.key([c.tenantId,c.applicationId,e,id]), ...this.scope(c.tenantId,c.applicationId,e) });
     return r ? this.clean(r) as unknown as ApplicationDataRecord : undefined;
   }
-  async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord> {
+  async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     return this.transaction(async session => {
+      if (patch.data) await this.lockRelationshipTargets(session,c,relationships,patch.data);
       const _id=this.key([c.tenantId,c.applicationId,e,id]);
       const current=await this.records().findOne({ _id, version:expected },{session});
       if (!current) {
@@ -156,6 +185,9 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
         const exists=await this.records().findOne({ _id },{session});
         throw new Error(exists ? "APPLICATION_DATA_VERSION_CONFLICT" : "APPLICATION_DATA_RECORD_NOT_FOUND");
       }
+      const guard=await this.records().updateOne({_id},{$inc:{_relationshipGuard:1}},{session});
+      if (!guard.matchedCount) throw new Error("APPLICATION_DATA_RECORD_NOT_FOUND");
+      await this.assertNotReferenced(session,c,e,id);
       const deleted=await this.records().deleteOne({ _id,version:expected },{session});
       if (!deleted.deletedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
       await this.evidence(session,c,"APPLICATION_DATA_DELETED",this.clean(current) as unknown as ApplicationDataRecord);
