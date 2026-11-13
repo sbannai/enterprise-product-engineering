@@ -24,6 +24,11 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
   async getModel(t: string, a: string, e: string, v?: number) {
     return (await this.read()).models.find(m => m.tenantId === t && m.applicationId === a && m.entityType === e && (v === undefined || m.version === v));
   }
+  async getActiveModel(t: string, a: string, e: string): Promise<ApplicationDataModel | undefined> {
+    const db = await this.read();
+    return db.models.filter(m => m.tenantId === t && m.applicationId === a && m.entityType === e && m.status === "ACTIVE")
+      .sort((x,y) => y.version - x.version)[0];
+  }
   async putModel(model: ApplicationDataModel): Promise<void> {
     const db = await this.read(); if (db.models.some(m => m.tenantId === model.tenantId && m.applicationId === model.applicationId && m.entityType === model.entityType && m.version === model.version)) throw new Error("APPLICATION_DATA_SCHEMA_VERSION_IMMUTABLE");
     db.models.push(model); await this.write(db);
