@@ -60,6 +60,11 @@ test("PostgreSQL create idempotency replays the original response without duplic
     const first=await service.create(context,"Order","order-"+suffix,{customerId:"customer-1",total:25});
     const replay=await service.create(context,"Order","order-"+suffix,{customerId:"customer-1",total:25});
     assert.deepEqual(replay,first);
+    await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Order",version:2,status:"DRAFT",
+      fields:[{id:"customerId",type:"string",required:true},{id:"total",type:"number",required:true},{id:"fulfillmentMode",type:"string",required:true}]});
+    await service.activateModel(context.tenantId,context.applicationId,"Order",2);
+    const replayAfterSchemaUpgrade=await service.create(context,"Order","order-"+suffix,{customerId:"customer-1",total:25});
+    assert.deepEqual(replayAfterSchemaUpgrade,first);
     await assert.rejects(()=>service.create(context,"Order","order-other-"+suffix,{customerId:"customer-1",total:99}),/IDEMPOTENCY_KEY_REUSED/);
     const records=await service.query(context,"Order",{limit:10});
     assert.equal(records.length,1);
