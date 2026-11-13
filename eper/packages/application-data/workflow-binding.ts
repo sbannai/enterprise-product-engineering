@@ -10,12 +10,16 @@ export interface ApplicationDataWorkflowBinding {
   dataField?: string;
   resultKey?: string;
 }
+export type ApplicationDataWorkflowAuthorizer = (
+  context: ApplicationDataContext, entityType: string, operation: ApplicationDataWorkflowOperation,
+) => Promise<void>;
 /** Executes only platform-registered data operations; customer workflow JSON cannot select a collection or storage adapter. */
 export class ApplicationDataWorkflowActivity {
-  constructor(private readonly service: ApplicationDataService) {}
+  constructor(private readonly service: ApplicationDataService, private readonly authorize: ApplicationDataWorkflowAuthorizer) {}
   async execute(context: ApplicationDataContext, binding: ApplicationDataWorkflowBinding, input: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (!binding || !/^[a-zA-Z][a-zA-Z0-9._-]{1,127}$/.test(binding.entityType) ||
         !["create","get","update","delete","query"].includes(binding.operation)) throw new Error("APPLICATION_DATA_WORKFLOW_BINDING_INVALID");
+    await this.authorize(context,binding.entityType,binding.operation);
     const id = binding.recordIdField ? input[binding.recordIdField] : undefined;
     const data = binding.dataField ? input[binding.dataField] : undefined;
     const version = binding.expectedVersionField ? input[binding.expectedVersionField] : undefined;
