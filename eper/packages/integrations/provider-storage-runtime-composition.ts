@@ -7,6 +7,7 @@ import { ProviderRuntimeResolutionService } from "./provider-runtime-resolution-
 import { ProviderRuntimeAdapterRegistry, type ProviderRuntimeAdapterRegistration } from "./provider-runtime-adapter-registry.js";
 import { assertProviderStorageDriver, type ProviderStorageDriver } from "./provider-storage-driver-contract.js";
 import { ProviderStorageDriverDispatchService } from "./provider-storage-driver-dispatch-service.js";
+import type { DependencyInventoryReader } from "../dependencies/runtime-gate.js";
 
 export type ProviderStorageRuntimeEnvironment = "development" | "test" | "uat" | "production";
 
@@ -24,6 +25,7 @@ export type ProviderStorageRuntimeCompositionInput<TCredentials> = {
   catalogue?: Pick<PostgresProviderCatalogueRepository, "get">;
   connections?: Pick<PostgresProviderConnectionRepository, "getRuntimeSecretReference" | "assertDispatchAuthorization">;
   secretResolver?: ProviderSecretResolverPort<TCredentials>;
+  dependencyInventory?: DependencyInventoryReader;
   scannerIdentity?: string;
   allowedHosts?: readonly string[];
 };
@@ -42,7 +44,8 @@ export class ProviderStorageRuntimeCompositionError extends Error {
     | "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN"
     | "PROVIDER_STORAGE_RUNTIME_SCANNER_IDENTITY_REQUIRED"
     | "PROVIDER_STORAGE_RUNTIME_ALLOWED_HOSTS_INVALID"
-    | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID") {
+    | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID"
+    | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED") {
     super(code);
     this.name = "ProviderStorageRuntimeCompositionError";
   }
@@ -104,6 +107,9 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
     if (!registration.adapter.capabilities.malwareScan) {
       throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID");
     }
+    if (registration.adapter.dependencyIds.length > 0 && !input.dependencyInventory) {
+      throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED");
+    }
     return {
       adapterKey: registration.adapterKey,
       adapterVersion: registration.adapterVersion,
@@ -121,7 +127,7 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
 
   return {
     enabled: true,
-    dispatch: new ProviderStorageDriverDispatchService(runtimeWithCredentials),
+    dispatch: new ProviderStorageDriverDispatchService(runtimeWithCredentials, input.dependencyInventory),
     scannerIdentity: input.scannerIdentity,
     allowedHosts: [...input.allowedHosts],
   };

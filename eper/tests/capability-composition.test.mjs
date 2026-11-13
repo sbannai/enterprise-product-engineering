@@ -193,3 +193,31 @@ test("shared lifecycle gate rejects priority routing rather than persisting a fa
     }],
   }), /WORKFLOW_CAPABILITY_COMPOSITION_INVALID:workflow.adapter.priority_routing_not_representable/);
 });
+
+
+test("capability composition blocks dependency-bearing descriptors until a persisted execution-time gate exists", () => {
+  const withDependency = catalogue.map(item => item.typeId === "integration.notify"
+    ? { ...item, dependencyIds: ["vendor.workflow.sdk"] } : item);
+  const diagnostics = validateCapabilityComposition(base, withDependency);
+  assert.ok(diagnostics.some(item =>
+    item.code === "composition.dependency.runtime_gate_required" && item.nodeId === "notify"));
+});
+
+test("capability composition rejects malformed dependency ID declarations", () => {
+  const withDependency = catalogue.map(item => item.typeId === "integration.notify"
+    ? { ...item, dependencyIds: ["vendor.workflow.sdk", "vendor.workflow.sdk"] } : item);
+  const diagnostics = validateCapabilityComposition(base, withDependency);
+  assert.ok(diagnostics.some(item =>
+    item.code === "composition.dependency.declaration_invalid" && item.nodeId === "notify"));
+});
+
+
+test("platform workflow catalogue does not embed mutable dependency policy or installation snapshots", () => {
+  for (const descriptor of WORKFLOW_CAPABILITY_CATALOGUE) {
+    assert.equal(Object.hasOwn(descriptor, "dependencies"), false);
+    if (descriptor.dependencyIds !== undefined) {
+      assert.ok(Array.isArray(descriptor.dependencyIds));
+      assert.ok(descriptor.dependencyIds.every(id => typeof id === "string" && id.length > 0));
+    }
+  }
+});

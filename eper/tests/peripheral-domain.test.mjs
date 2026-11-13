@@ -58,3 +58,25 @@ test("lifecycle rejects skipping configuration and retired peripherals never rea
   assert.throws(() => transitionPeripheral("REGISTERED", "ACTIVE"), /PERIPHERAL_INVALID_STATE_TRANSITION/);
   assert.throws(() => transitionPeripheral("RETIRED", "ACTIVE"), /PERIPHERAL_INVALID_STATE_TRANSITION/);
 });
+
+
+test("adapter without an explicit dependency ID list is not treated as dependency-free", () => {
+  const registry = new PeripheralAdapterRegistry([{
+    adapterKey: "vendor.scanner", adapterVersion: "1.0.0",
+    kinds: ["barcode_scanner"], adapter,
+  }]);
+  assert.equal(registry.dependencyIds({
+    adapterKey: "vendor.scanner", adapterVersion: "1.0.0", kind: "barcode_scanner",
+  }), undefined);
+});
+
+test("legacy in-memory dependency snapshots cannot substitute for persisted dependency IDs", () => {
+  const registry = new PeripheralAdapterRegistry([{
+    adapterKey: "vendor.scanner", adapterVersion: "1.0.0",
+    kinds: ["barcode_scanner"], adapter,
+    dependencies: [{ policy: { dependencyId: "vendor.scanner.sdk" }, installation: { installedVersion: "1.0.0" } }],
+  }]);
+  assert.equal(registry.dependencyIds({
+    adapterKey: "vendor.scanner", adapterVersion: "1.0.0", kind: "barcode_scanner",
+  }), undefined);
+});

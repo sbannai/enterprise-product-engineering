@@ -28,7 +28,7 @@ test("dedicated synthetic driver traverses all six tenant-scoped dispatch operat
     },
   });
   const scope = { tenantId: "tenant-a", applicationId: "app-a" };
-  const dispatch = (kind, request) => service.dispatch({ ...scope, requestId: "req-" + kind,
+  const dispatch = (kind, request) => service.dispatch({ ...scope, actorId: "actor-a", correlationId: "corr-" + kind, requestId: "req-" + kind,
     operation: { kind, request } });
   const upload = { ...scope, actorId: "actor-a", assetId: "asset-a", uploadSessionId: "session-a",
     fileName: "proof.txt", mimeType: "text/plain", sizeBytes: 12 };

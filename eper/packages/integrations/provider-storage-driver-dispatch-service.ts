@@ -7,6 +7,7 @@ import type {
 } from "./provider-storage-driver-contract.js";
 import { assertProviderStorageDriver } from "./provider-storage-driver-contract.js";
 import type { ProviderRuntimeCredentialResolutionService } from "./provider-runtime-credential-resolution-service.js";
+import { assertDependencyRuntimeCompatible, type DependencyInventoryReader } from "../dependencies/runtime-gate.js";
 import type { StorageDownloadRequest, StorageDownloadResult } from "../assets/storage-download-adapter.js";
 import type { StorageUploadRequest } from "../assets/storage-upload-adapter.js";
 import type { StorageUploadLookupOutcome, StorageUploadLookupRequest, StorageUploadProviderOutcome } from "../assets/storage-upload-provider-contract.js";
@@ -84,7 +85,8 @@ export class ProviderStorageDispatchError extends Error {
     | "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH"
     | "PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING"
     | "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID"
-    | "PROVIDER_STORAGE_DISPATCH_ABORTED") {
+    | "PROVIDER_STORAGE_DISPATCH_ABORTED"
+    | "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED") {
     super(code);
     this.name = "ProviderStorageDispatchError";
   }
@@ -92,8 +94,9 @@ export class ProviderStorageDispatchError extends Error {
 
 /**
  * Last-mile, fail-closed invocation boundary for storage provider drivers.
- * Runtime selection and connection-version revalidation happen immediately
- * before secret resolution. Credentials remain local to this call and are
+ * Runtime selection and connection-version revalidation happen before secret
+ * resolution; persisted vendor dependencies are checked before driver entry.
+ * Credentials remain local to this call and are
  * never returned, persisted, or logged by this service.
  */
 export class ProviderStorageDriverDispatchService<TCredentials> {
@@ -102,17 +105,23 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
       ProviderRuntimeCredentialResolutionService<ProviderStorageDriver<TCredentials>, TCredentials>,
       "resolve"
     >,
+    private readonly dependencyInventory?: DependencyInventoryReader,
   ) {}
 
   async dispatch(input: {
     tenantId: string;
     applicationId: string;
     requestId: string;
+    /** Trusted actor resolved by the authenticated server boundary, never copied from provider payloads. */
+    actorId: string;
+    /** Server-generated request correlation identifier. */
+    correlationId: string;
     operation: ProviderStorageOperation;
     signal?: AbortSignal;
   }): Promise<ProviderStorageOperationResult> {
     if (!input || !input.operation || typeof input.requestId !== "string" ||
-        !input.requestId.trim() || input.requestId.length > 128) {
+        !input.requestId.trim() || input.requestId.length > 128 ||
+        !validText(input.actorId, 128) || !validText(input.correlationId, 128)) {
       throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
     }
     if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
@@ -135,6 +144,28 @@ export class ProviderStorageDriverDispatchService<TCredentials> {
     }
 
     const driver = assertProviderStorageDriver(resolved.runtime.adapter);
+    if (driver.dependencyIds.length > 0) {
+      if (!this.dependencyInventory) {
+        throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
+      }
+      try {
+        await assertDependencyRuntimeCompatible({
+          repository: this.dependencyInventory,
+          scope: {
+            tenantId: input.tenantId,
+            applicationId: input.applicationId,
+            userId: input.actorId,
+          },
+          dependencyIds: driver.dependencyIds,
+          evaluatedAt: new Date().toISOString(),
+          errorPrefix: "PROVIDER_STORAGE_DEPENDENCY",
+        });
+      } catch {
+        // Keep policy, inventory and database details inside the server boundary.
+        throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
+      }
+    }
+    if (input.signal?.aborted) throw new ProviderStorageDispatchError("PROVIDER_STORAGE_DISPATCH_ABORTED");
     const context = {
       tenantId: selection.tenantId,
       applicationId: selection.applicationId,

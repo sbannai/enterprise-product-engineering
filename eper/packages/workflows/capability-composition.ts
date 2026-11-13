@@ -24,6 +24,8 @@ export interface CapabilityDescriptor {
   sideEffect: "none" | "external";
   requiresIdempotency?: boolean;
   deprecated?: boolean;
+  /** Stable IDs of vendor-managed components required by this implementation. */
+  dependencyIds?: readonly string[];
 }
 export interface CompositionNode {
   id: string;
@@ -100,6 +102,20 @@ export function validateCapabilityComposition(
     if (!node.configuration || typeof node.configuration !== "object" || Array.isArray(node.configuration)) {
       add("composition.configuration.invalid", "Complete the building block settings before continuing.", { nodeId: node.id });
       continue;
+    }
+    if (descriptor.dependencyIds !== undefined &&
+        (!Array.isArray(descriptor.dependencyIds) ||
+         descriptor.dependencyIds.some(id => typeof id !== "string" || !SAFE_ID.test(id)) ||
+         new Set(descriptor.dependencyIds).size !== descriptor.dependencyIds.length)) {
+      add("composition.dependency.declaration_invalid",
+        "Vendor dependency declarations must contain unique stable dependency IDs.", { nodeId: node.id });
+    } else if ((descriptor.dependencyIds?.length ?? 0) > 0) {
+      // A descriptor's static metadata is not an authoritative inventory. Until
+      // the execution host resolves current tenant/application installations at
+      // dispatch time, publication must remain blocked for dependency-bearing nodes.
+      add("composition.dependency.runtime_gate_required",
+        "This capability requires a persisted dependency gate at execution time; static compatibility snapshots cannot authorize publication.",
+        { nodeId: node.id });
     }
     if (descriptor.kind === "integration" && descriptor.sideEffect === "external" && descriptor.requiresIdempotency &&
         !Object.prototype.hasOwnProperty.call(node.configuration, "idempotencyPolicy")) {

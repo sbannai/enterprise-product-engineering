@@ -1,4 +1,6 @@
 import type { ApplicationCapabilityBoundary, ApplicationCapabilityScope } from "../addon-entitlements/application-capability-boundary.js";
+import { assertDependencyRuntimeCompatible } from "../dependencies/runtime-gate.js";
+import type { PostgresDependencyInventoryRepository } from "../dependencies/postgres-dependency-inventory-repository.js";
 import {
   PeripheralAdapterRegistry,
   type PeripheralConnectionContext,
@@ -12,13 +14,20 @@ import {
   type ConfigurePeripheralInput,
 } from "./postgres-peripheral-repository.js";
 
-export interface PeripheralServiceScope extends ApplicationCapabilityScope, PeripheralAuditContext {}
+export interface PeripheralServiceScope extends ApplicationCapabilityScope, PeripheralAuditContext {
+  /** Trusted execution context IDs used to resolve shared dependency installations. */
+  workstationId?: string;
+  gatewayId?: string;
+}
 
 export interface PeripheralActionAuthorizer {
   authorize(input: {
     tenantId: string;
     applicationId: string;
     actorId: string;
+    /** Must be validated against the authenticated actor and tenant/application before authorization succeeds. */
+    workstationId?: string;
+    gatewayId?: string;
     action: "peripheral.register" | "peripheral.configure" | "peripheral.read" | "peripheral.activate" | "peripheral.suspend";
   }): Promise<void>;
 }
@@ -56,6 +65,7 @@ export class ApplicationPeripheralService {
     private readonly repository: PostgresPeripheralRepository,
     private readonly adapters: PeripheralAdapterRegistry,
     private readonly authorizer: PeripheralActionAuthorizer,
+    private readonly dependencyInventory?: PostgresDependencyInventoryRepository,
   ) {}
 
   async list(input: PeripheralServiceScope): Promise<PeripheralRegistration[]> {
@@ -94,6 +104,20 @@ export class ApplicationPeripheralService {
         adapterKey: configuration.adapterKey,
         adapterVersion: configuration.adapterVersion,
         kind: current.kind,
+      });
+      // Vendor-mandated dependency policy is evaluated before any durable ACTIVE
+      // transition or physical adapter I/O. A blocked dependency stays inactive.
+      await this.assertPersistedDependenciesCompatible({
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+        peripheralId: input.peripheralId,
+        adapterKey: configuration.adapterKey,
+        adapterVersion: configuration.adapterVersion,
+        kind: current.kind,
+        evaluatedAt: new Date().toISOString(),
+        workstationId: input.workstationId,
+        userId: input.actorId,
+        gatewayId: input.gatewayId,
       });
       const active = await this.repository.transition({
         ...this.auditInput(input),
@@ -192,11 +216,35 @@ export class ApplicationPeripheralService {
     });
   }
 
+  private async assertPersistedDependenciesCompatible(input: {
+    tenantId:string; applicationId:string; peripheralId:string; adapterKey:string;
+    adapterVersion:string; kind:PeripheralKind; evaluatedAt:string;
+    workstationId?:string; userId?:string; gatewayId?:string;
+  }):Promise<void>{
+    const ids = this.adapters.dependencyIds?.({
+      adapterKey:input.adapterKey,adapterVersion:input.adapterVersion,kind:input.kind,
+    });
+    // Explicit [] is the only dependency-free declaration. Adapter snapshots
+    // never authorize runtime use; the shared gate reads persisted inventory.
+    if(!Array.isArray(ids))throw new Error("EPER_PERIPHERAL_DEPENDENCY_DECLARATION_REQUIRED");
+    if(ids.length===0)return;
+    if(!this.dependencyInventory)throw new Error("EPER_DEPENDENCY_INVENTORY_NOT_CONFIGURED");
+    await assertDependencyRuntimeCompatible({
+      repository:this.dependencyInventory,
+      scope:{tenantId:input.tenantId,applicationId:input.applicationId,
+        deviceId:input.peripheralId,workstationId:input.workstationId,
+        userId:input.userId,gatewayId:input.gatewayId},
+      dependencyIds:ids,evaluatedAt:input.evaluatedAt,errorPrefix:"EPER_PERIPHERAL_DEPENDENCY",
+    });
+  }
+
   private actorScope(input: PeripheralServiceScope) {
     return {
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       actorId: input.actorId,
+      workstationId: input.workstationId,
+      gatewayId: input.gatewayId,
     };
   }
 
