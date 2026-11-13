@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord, ApplicationDataRelationship } from "./contracts.js";
-import { applicationDataCreateHash } from "./idempotency.js";
+import { applicationDataCreateHash, applicationDataUpdateHash } from "./idempotency.js";
 
 interface MongoResult { acknowledged?: boolean; matchedCount?: number; deletedCount?: number; }
 interface MongoCursor<T> { sort(spec: Record<string, 1 | -1>): MongoCursor<T>; limit(value: number): MongoCursor<T>; toArray(): Promise<T[]>; }
@@ -175,8 +175,27 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const r=await this.records().findOne({ _id:this.key([c.tenantId,c.applicationId,e,id]), ...this.scope(c.tenantId,c.applicationId,e) });
     return r ? this.clean(r) as unknown as ApplicationDataRecord : undefined;
   }
+  async getIdempotentUpdate(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord | undefined> {
+    const key=c.idempotencyKey;
+    if (!key) return undefined;
+    const prior=await this.idempotency().findOne({_id:this.key([c.tenantId,c.applicationId,key])});
+    if (!prior) return undefined;
+    const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
+    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    return prior.response as ApplicationDataRecord;
+  }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord> {
     return this.transaction(async session => {
+      const key=c.idempotencyKey;
+      const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
+      const idempotencyId=key ? this.key([c.tenantId,c.applicationId,key]) : undefined;
+      if (key && requestHash && idempotencyId) {
+        const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
+        if (prior) {
+          if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+          return prior.response as ApplicationDataRecord;
+        }
+      }
       if (patch.data) await this.lockRelationshipTargets(session,c,relationships,patch.data);
       const _id=this.key([c.tenantId,c.applicationId,e,id]);
       const current=await this.records().findOne({ _id, version:expected },{session});
@@ -188,7 +207,10 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
       const replaced=await this.records().replaceOne({ _id, version:expected },next,{session});
       if (!replaced.matchedCount) throw new Error("APPLICATION_DATA_VERSION_CONFLICT");
       const saved=this.clean(next) as unknown as ApplicationDataRecord;
-      await this.evidence(session,c,"APPLICATION_DATA_UPDATED",saved); return saved;
+      await this.evidence(session,c,"APPLICATION_DATA_UPDATED",saved);
+      if (key && requestHash && idempotencyId) await this.idempotency().insertOne({_id:idempotencyId,tenantId:c.tenantId,applicationId:c.applicationId,
+        idempotencyKey:key,requestHash,response:saved,createdAt:new Date().toISOString()},{session});
+      return saved;
     });
   }
   async delete(c: ApplicationDataContext, e: string, id: string, expected: number): Promise<void> {
