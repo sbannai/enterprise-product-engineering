@@ -74,3 +74,26 @@ test("PostgreSQL create idempotency replays the original response without duplic
     assert.equal(outbox.rows[0].count,1);
   } finally { await pool.end(); }
 });
+
+test("PostgreSQL update idempotency replays the committed version and prevents duplicate mutation evidence", {skip:!enabled}, async () => {
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
+  const suffix=randomUUID().replace(/-/g,"");
+  const context={tenantId:"data-upd-"+suffix,applicationId:"app-upd-"+suffix,actorId:"actor-upd",correlationId:"corr-upd-"+suffix,requirementId:"APP_DATA_UPDATE_IDEM"};
+  try {
+    const service=new ApplicationDataService(new PostgresApplicationDataAdapter(pool));
+    await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Order",version:1,status:"ACTIVE",
+      fields:[{id:"customerId",type:"string",required:true},{id:"total",type:"number",required:true}]});
+    const created=await service.create(context,"Order","order-"+suffix,{customerId:"customer-1",total:25});
+    const requestContext={...context,idempotencyKey:"update-"+suffix};
+    const patch={data:{customerId:"customer-1",total:30}};
+    const first=await service.update(requestContext,"Order",created.id,1,patch);
+    const replay=await service.update(requestContext,"Order",created.id,1,patch);
+    assert.deepEqual(replay,first);
+    assert.equal(replay.version,2);
+    await assert.rejects(()=>service.update(requestContext,"Order",created.id,1,{data:{customerId:"customer-1",total:35}}),/IDEMPOTENCY_KEY_REUSED/);
+    const records=await service.query(context,"Order",{limit:10});
+    assert.equal(records.length,1);
+    assert.equal(records[0].version,2);
+    assert.equal(records[0].data.total,30);
+  } finally { await pool.end(); }
+});
