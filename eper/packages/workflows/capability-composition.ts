@@ -1,5 +1,3 @@
-import { evaluateDependencyCompatibility, type DependencyPolicy, type DependencyInstallation } from "../dependencies/compatibility.js";
-
 export type CapabilityKind = "activity" | "rule" | "integration" | "reporting";
 export type CapabilityValueType = "text" | "number" | "boolean" | "date" | "record" | "file" | "event";
 
@@ -26,11 +24,8 @@ export interface CapabilityDescriptor {
   sideEffect: "none" | "external";
   requiresIdempotency?: boolean;
   deprecated?: boolean;
-  /** Vendor-managed runtime components required by this capability implementation. */
-  dependencies?: readonly {
-    policy: DependencyPolicy;
-    installation: DependencyInstallation;
-  }[];
+  /** Stable IDs of vendor-managed components required by this implementation. */
+  dependencyIds?: readonly string[];
 }
 export interface CompositionNode {
   id: string;
@@ -109,27 +104,19 @@ export function validateCapabilityComposition(
       add("composition.configuration.invalid", "Complete the building block settings before continuing.", { nodeId: node.id });
       continue;
     }
-    if ((descriptor.dependencies?.length ?? 0) > 0 && !options?.evaluatedAt) {
-      add("composition.dependency.evaluation_time_missing", "A trusted evaluation time is required to validate vendor dependency deadlines.", { nodeId: node.id });
-    }
-    for (const dependency of descriptor.dependencies ?? []) {
-      try {
-        if (!options?.evaluatedAt) continue;
-        const compatibility = evaluateDependencyCompatibility({
-          policy: dependency.policy,
-          installation: dependency.installation,
-          evaluatedAt: options.evaluatedAt,
-        });
-        if (compatibility.blocking) {
-          add(
-            "composition.dependency.blocked",
-            "A required vendor component is incompatible or has reached its mandatory-update deadline.",
-            { nodeId: node.id },
-          );
-        }
-      } catch {
-        add("composition.dependency.policy_invalid", "A required vendor component has an invalid compatibility policy.", { nodeId: node.id });
-      }
+    if (descriptor.dependencyIds !== undefined &&
+        (!Array.isArray(descriptor.dependencyIds) ||
+         descriptor.dependencyIds.some(id => typeof id !== "string" || !SAFE_ID.test(id)) ||
+         new Set(descriptor.dependencyIds).size !== descriptor.dependencyIds.length)) {
+      add("composition.dependency.declaration_invalid",
+        "Vendor dependency declarations must contain unique stable dependency IDs.", { nodeId: node.id });
+    } else if ((descriptor.dependencyIds?.length ?? 0) > 0) {
+      // A descriptor's static metadata is not an authoritative inventory. Until
+      // the execution host resolves current tenant/application installations at
+      // dispatch time, publication must remain blocked for dependency-bearing nodes.
+      add("composition.dependency.runtime_gate_required",
+        "This capability requires a persisted dependency gate at execution time; static compatibility snapshots cannot authorize publication.",
+        { nodeId: node.id });
     }
     if (descriptor.kind === "integration" && descriptor.sideEffect === "external" && descriptor.requiresIdempotency &&
         !Object.prototype.hasOwnProperty.call(node.configuration, "idempotencyPolicy")) {
