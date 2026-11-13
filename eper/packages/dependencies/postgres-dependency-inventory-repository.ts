@@ -21,7 +21,7 @@ export interface DependencyAuditContext extends DependencyScope {
 export interface SaveDependencyPolicyInput extends DependencyAuditContext {
   policy: Omit<DependencyPolicy, "notice">;
   expectedVersion: number;
-  notice?: { verification: DependencyNoticeVerification; source: string | null; reference: string | null; recordedAt?: string | null; evidenceDigest?: string | null; notes?: string | null };
+  notice?: { verification: DependencyNoticeVerification; source: string | null; reference: string | null; recordedAt?: string | null; effectiveAt?: string | null; requiredMinimumVersion?: string | null; evidenceDigest?: string | null; notes?: string | null };
 }
 export interface RecordDependencyInstallationInput extends DependencyAuditContext {
   dependencyId: string; installationId?: string;
@@ -134,8 +134,10 @@ export class PostgresDependencyInventoryRepository {
    if(!next.rows[0])throw new Error("DEPENDENCY_POLICY_SAVE_EMPTY");
    if(notice)await this.insertNotice(c,input,p.dependencyId,notice);
    await this.audit(c,input,"dependency.policy.save",p.dependencyId,{version:Number(next.rows[0].version),mandatoryUpdate:p.mandatoryUpdate});
+   const persisted=await c.query<PolicyRow>(this.policySelect()+` WHERE p.tenant_id=$1 AND p.application_id=$2 AND p.dependency_id=$3`,[input.tenantId,input.applicationId,p.dependencyId]);
+   if(!persisted.rows[0])throw new Error("DEPENDENCY_POLICY_READ_AFTER_SAVE_FAILED");
    await c.query("COMMIT");
-   const saved=await this.get(input,p.dependencyId);if(!saved)throw new Error("DEPENDENCY_POLICY_READ_AFTER_SAVE_FAILED");return saved;
+   return mapPolicy(persisted.rows[0]);
   }catch(e){await this.rollback(c);throw e;}finally{c.release();}
  }
  async recordInstallation(input:RecordDependencyInstallationInput):Promise<{installationId:string;version:number}>{
@@ -165,9 +167,11 @@ export class PostgresDependencyInventoryRepository {
   if(n.evidenceDigest&&!/^[a-f0-9]{64}$/.test(n.evidenceDigest))throw new Error("DEPENDENCY_NOTICE_DIGEST_INVALID");
   await c.query(`INSERT INTO eper_dependency_notice_evidence
    (tenant_id,application_id,dependency_id,notice_id,verification_state,source,reference,recorded_at,recorded_by,effective_at,required_minimum_version,evidence_digest,notes)
-   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,NULL,$10,$11)`,
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
    [input.tenantId,input.applicationId,dependencyId,randomUUID(),n.verification,n.source,n.reference,
-    validDate(n.recordedAt,"notice_recorded_at")??new Date().toISOString(),input.actorId,n.evidenceDigest??null,n.notes??null]);
+    validDate(n.recordedAt,"notice_recorded_at")??new Date().toISOString(),input.actorId,
+    n.effectiveAt?validDate(n.effectiveAt,"notice_effective_at"):null,
+    n.requiredMinimumVersion??null,n.evidenceDigest??null,n.notes??null]);
  }
  private policySelect():string{return `SELECT p.dependency_id,p.vendor,p.component_kind,p.supported_versions,p.required_minimum_version,
   p.support_state,p.mandatory_update,p.effective_at,p.downgrade_policy,p.compatible_operating_systems,
