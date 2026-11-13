@@ -44,7 +44,8 @@ export class ProviderStorageRuntimeCompositionError extends Error {
     | "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN"
     | "PROVIDER_STORAGE_RUNTIME_SCANNER_IDENTITY_REQUIRED"
     | "PROVIDER_STORAGE_RUNTIME_ALLOWED_HOSTS_INVALID"
-    | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID") {
+    | "PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID"
+    | "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED") {
     super(code);
     this.name = "ProviderStorageRuntimeCompositionError";
   }
@@ -105,6 +106,9 @@ export function createProviderStorageRuntimeComposition<TCredentials>(
     }
     if (!registration.adapter.capabilities.malwareScan) {
       throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DRIVER_INVALID");
+    }
+    if (registration.adapter.dependencyIds.length > 0 && !input.dependencyInventory) {
+      throw new ProviderStorageRuntimeCompositionError("PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED");
     }
     return {
       adapterKey: registration.adapterKey,
