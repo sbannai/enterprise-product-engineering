@@ -167,7 +167,15 @@ export function evaluateDependencyCompatibility(input: {
       !parseVersion(installation.installedVersion) ||
       (installation.proposedVersion !== undefined && !parseVersion(installation.proposedVersion)) ||
       (policy.requiredMinimumVersion !== undefined && !parseVersion(policy.requiredMinimumVersion)) ||
-      (policy.effectiveAt !== undefined && !Number.isFinite(Date.parse(policy.effectiveAt)))) {
+      (policy.effectiveAt !== undefined && !Number.isFinite(Date.parse(policy.effectiveAt))) ||
+      (policy.notice.verification === "verified" &&
+        (!policy.notice.source?.trim() || !policy.notice.reference?.trim() ||
+         !policy.notice.recordedAt || !Number.isFinite(Date.parse(policy.notice.recordedAt)))) ||
+      (policy.mandatoryUpdate &&
+        (!policy.requiredMinimumVersion || !policy.effectiveAt ||
+         policy.notice.verification !== "verified" ||
+         !policy.notice.source?.trim() || !policy.notice.reference?.trim() ||
+         !policy.notice.recordedAt || !Number.isFinite(Date.parse(policy.notice.recordedAt))))) {
     throw new Error("DEPENDENCY_COMPATIBILITY_INPUT_INVALID");
   }
 
@@ -179,6 +187,10 @@ export function evaluateDependencyCompatibility(input: {
   if (policy.notice.verification !== "verified" &&
       (policy.mandatoryUpdate || policy.supportState === "unknown" || policy.supportState === "unsupported")) {
     return decision(policy, "unknown_unverified", "Vendor support or mandatory-update evidence is not verified.", true);
+  }
+
+  if (policy.supportState === "unknown") {
+    return decision(policy, "unknown_unverified", "The vendor support state has not been established.", true);
   }
 
   if (policy.supportState === "unsupported") {
