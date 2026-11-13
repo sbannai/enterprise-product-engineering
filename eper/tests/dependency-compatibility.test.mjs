@@ -37,14 +37,14 @@ test("accepts an installation within the declared supported range", () => {
   assert.equal(evaluate().blocking, false);
 });
 
-test("requires a verified mandatory update before its cutoff", () => {
+test("marks a verified mandatory update as required but allows use before its cutoff", () => {
   const result = evaluate(policy({
     mandatoryUpdate: true,
     requiredMinimumVersion: "3.5.0",
     effectiveAt: "2026-12-01T00:00:00Z",
   }));
   assert.equal(result.status, "upgrade_required");
-  assert.equal(result.blocking, true);
+  assert.equal(result.blocking, false);
   assert.equal(result.requiredVersion, "3.5.0");
 });
 
