@@ -52,9 +52,9 @@ export interface ApplicationDataAdapter {
   getActiveModel(tenantId: string, applicationId: string, entityType: string): Promise<ApplicationDataModel | undefined>;
   putModel(model: ApplicationDataModel): Promise<void>;
   transitionModelStatus(tenantId: string, applicationId: string, entityType: string, version: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void>;
-  create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord>;
+  create(record: ApplicationDataRecord, context: ApplicationDataContext, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord>;
   get(context: ApplicationDataContext, entityType: string, id: string): Promise<ApplicationDataRecord | undefined>;
-  update(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord>;
+  update(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, relationships?: ApplicationDataRelationship[]): Promise<ApplicationDataRecord>;
   delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void>;
   query(context: ApplicationDataContext, entityType: string, query: ApplicationDataQuery): Promise<ApplicationDataRecord[]>;
 }
