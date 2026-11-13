@@ -4,7 +4,8 @@ import { withTenantTransaction, enqueueOutboxEvent } from "../capabilities/postg
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataModel, ApplicationDataQuery, ApplicationDataRecord } from "./contracts.js";
 
 type Row = Record<string, unknown>;
-function object(value: unknown): Record<string, unknown> { const parsed = typeof value === "string" ? JSON.parse(value) : value; if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("APPLICATION_DATA_PERSISTED_VALUE_INVALID"); return parsed as Record<string, unknown>; }
+function json<T>(value: unknown): T { return (typeof value === "string" ? JSON.parse(value) : value) as T; }
+function object(value: unknown): Record<string, unknown> { const parsed = json<unknown>(value); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("APPLICATION_DATA_PERSISTED_VALUE_INVALID"); return parsed as Record<string, unknown>; }
 function mapRecord(row: Row): ApplicationDataRecord {
   return { tenantId: String(row.tenant_id), applicationId: String(row.application_id), entityType: String(row.entity_type),
     id: String(row.record_id), schemaVersion: Number(row.schema_version), version: Number(row.version),
@@ -27,8 +28,9 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   }
   async getModel(t: string, a: string, e: string, v?: number): Promise<ApplicationDataModel | undefined> {
     return withTenantTransaction(this.pool, t, async ({ client }) => {
+      await client.query("SELECT set_config('eper.application_id',$1,true)",[a]);
       const result = await client.query<Row>("SELECT tenant_id,application_id,entity_type,version,status,fields,relationships FROM eper_application_data_models WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND ($4::integer IS NULL OR version=$4) ORDER BY version DESC LIMIT 1", [t,a,e,v ?? null]);
-      const r = result.rows[0]; return r ? { tenantId:String(r.tenant_id), applicationId:String(r.application_id), entityType:String(r.entity_type), version:Number(r.version), status:r.status as ApplicationDataModel["status"], fields:object(r.fields) as unknown as ApplicationDataModel["fields"], relationships:object(r.relationships ?? {}) as unknown as ApplicationDataModel["relationships"] } : undefined;
+      const r = result.rows[0]; return r ? { tenantId:String(r.tenant_id), applicationId:String(r.application_id), entityType:String(r.entity_type), version:Number(r.version), status:r.status as ApplicationDataModel["status"], fields:json<ApplicationDataModel["fields"]>(r.fields), relationships:json<ApplicationDataModel["relationships"]>(r.relationships ?? []) } : undefined;
     });
   }
   async putModel(model: ApplicationDataModel): Promise<void> {
