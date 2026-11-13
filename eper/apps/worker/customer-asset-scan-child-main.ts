@@ -1,9 +1,10 @@
 import { createRequire } from "node:module";
 import { constants } from "node:fs";
-import { lstat, open } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { isAbsolute, resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
+import { assertTrustedCustomerAssetScanCompositionModule } from "../../packages/assets/customer-asset-scan-child-composition-loader.js";
 import { CustomerAssetScanChildRuntime, type CustomerAssetScanChildRuntimeDependencies } from "../../packages/assets/customer-asset-scan-child-runtime.js";
 import {
   isCustomerAssetScanChildStart,
@@ -100,12 +101,9 @@ if (inputFailure || !isCustomerAssetScanChildStart(start)) {
     if (required("EPER_SCANNER_CHILD_SPIFFE_AUDIENCE") !== CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_AUDIENCE_INVALID");
     }
-    const compositionPath = resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE"));
-    const compositionMetadata = await lstat(compositionPath);
-    if (!compositionMetadata.isFile() || compositionMetadata.isSymbolicLink() ||
-        (compositionMetadata.mode & 0o022) !== 0 || compositionMetadata.size < 1 || compositionMetadata.size > 1_048_576) {
-      throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_FILE_INVALID");
-    }
+    const compositionPath = await assertTrustedCustomerAssetScanCompositionModule(
+      resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE")),
+    );
     const require = createRequire(import.meta.url);
     const pg = require("pg") as { Pool: new (options: Record<string, unknown>) => {
       end(): Promise<void>;
