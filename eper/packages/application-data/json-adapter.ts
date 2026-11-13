@@ -83,6 +83,7 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     if (!prior) return undefined;
     const requestHash=applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch});
     if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    if (!prior.response || typeof prior.response!=="object" || "deleted" in prior.response) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
     return prior.response;
   }
   async update(c: ApplicationDataContext, e: string, id: string, expected: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord> {
@@ -93,6 +94,7 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
       const prior=db.idempotency.find(item=>item.tenantId===c.tenantId&&item.applicationId===c.applicationId&&item.key===c.idempotencyKey);
       if (prior) {
         if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+        if (!prior.response || typeof prior.response!=="object" || "deleted" in prior.response) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
         return prior.response;
       }
       Object.assign(r, patch, { version: r.version + 1, updatedAt: new Date().toISOString() });
