@@ -72,7 +72,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     }
   }
   private async assertNotReferenced(session: MongoSessionLike, c: ApplicationDataContext, entityType: string, id: string): Promise<void> {
-    const models=await this.models().find({...this.scope(c.tenantId,c.applicationId,""),status:{$in:["ACTIVE","RETIRED"]}} as Record<string,unknown>,{session}).toArray();
+    const models=await this.models().find({tenantId:c.tenantId,applicationId:c.applicationId,status:{$in:["ACTIVE","RETIRED"]}},{session}).toArray();
     for (const model of models) {
       const relationships=(model.relationships ?? []) as ApplicationDataRelationship[];
       for (const relation of relationships.filter(item=>item.targetEntity===entityType)) {
@@ -126,7 +126,6 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
     const idempotencyId = key ? this.key([context.tenantId,context.applicationId,key]) : undefined;
     try {
       return await this.transaction(async session => {
-        await this.lockRelationshipTargets(session,context,relationships,record.data);
         if (key && idempotencyId && requestHash) {
           const prior=await this.idempotency().findOne({_id:idempotencyId},{session});
           if (prior) {
@@ -134,6 +133,7 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
             return prior.response as ApplicationDataRecord;
           }
         }
+        await this.lockRelationshipTargets(session,context,relationships,record.data);
         const id=this.key([record.tenantId,record.applicationId,record.entityType,record.id]);
         try { await this.records().insertOne({ ...record, _id:id }, { session }); }
         catch (error) { if ((error as { code?: number }).code === 11000) throw new Error("APPLICATION_DATA_RECORD_EXISTS"); throw error; }
