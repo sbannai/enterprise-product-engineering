@@ -67,7 +67,6 @@ const MAX_EDGES = 1000;
 export function validateCapabilityComposition(
   graph: CapabilityComposition,
   catalogue: readonly CapabilityDescriptor[],
-  options?: { evaluatedAt: string },
 ): CompositionDiagnostic[] {
   const diagnostics: CompositionDiagnostic[] = [];
   const add = (code: string, message: string, extra: Partial<CompositionDiagnostic> = {}) =>
