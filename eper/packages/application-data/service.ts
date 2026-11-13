@@ -1,4 +1,5 @@
 import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataField, ApplicationDataModel, ApplicationDataRecord, ApplicationDataQuery } from "./contracts.js";
+import { validateApplicationDataIdempotencyKey } from "./idempotency.js";
 
 const ID = /^[a-zA-Z][a-zA-Z0-9._-]{1,127}$/;
 function validId(value: string, code: string): void {
@@ -107,6 +108,7 @@ export class ApplicationDataService {
   }
   async create(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord> {
     const model = await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    validateApplicationDataIdempotencyKey(context.idempotencyKey);
     const validated = validateData(model.fields, data); await this.validateRelationships(context, model, validated);
     const now = new Date().toISOString();
     return this.adapter.create({ tenantId: context.tenantId, applicationId: context.applicationId, entityType,
