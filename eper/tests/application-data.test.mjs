@@ -97,6 +97,10 @@ test("create idempotency returns the original result and rejects key reuse with 
   const first=await service.create(requestContext,"Order","order-retry-01",{customerId:"c1",total:12,status:"NEW"});
   const replay=await service.create(requestContext,"Order","order-retry-01",{customerId:"c1",total:12,status:"NEW"});
   assert.deepEqual(replay,first);
+  await service.registerModel({...model,version:2,status:"DRAFT",fields:[...model.fields,{id:"fulfillmentMode",type:"string",required:true}]});
+  await service.activateModel("tenant-a","app-a","Order",2);
+  const replayAfterSchemaUpgrade=await service.create(requestContext,"Order","order-retry-01",{customerId:"c1",total:12,status:"NEW"});
+  assert.deepEqual(replayAfterSchemaUpgrade,first);
   assert.equal((await service.query(context,"Order",{limit:10})).length,1);
   await assert.rejects(()=>service.create(requestContext,"Order","order-retry-02",{customerId:"c1",total:99,status:"NEW"}),/IDEMPOTENCY_KEY_REUSED/);
   assert.equal((await service.query(context,"Order",{limit:10})).length,1);
