@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
-import { lstat, readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open } from "node:fs/promises";
 import { isAbsolute, resolve, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE } from "../../packages/assets/customer-asset-scan-child-spiffe-identity.js";
@@ -47,13 +48,23 @@ async function readStartMessage(): Promise<unknown> {
 }
 async function readDeploymentFile(path: string, privateKey = false): Promise<string> {
   if (!isAbsolute(path) || path.split("/").includes("..")) throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CERTIFICATE_PATH_INVALID");
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || metadata.isSymbolicLink() ||
-      (metadata.mode & (privateKey ? 0o077 : 0o022)) !== 0 ||
-      metadata.size < 1 || metadata.size > 1_048_576) {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    // Open without following the final symlink, then validate and read the
+    // same descriptor. This prevents replacing a checked certificate/key path.
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const metadata = await handle.stat();
+    if (!metadata.isFile() ||
+        (metadata.mode & (privateKey ? 0o077 : 0o022)) !== 0 ||
+        metadata.size < 1 || metadata.size > 1_048_576) {
+      throw new Error("unsafe deployment file");
+    }
+    return await handle.readFile("utf8");
+  } catch {
     throw new Error("CUSTOMER_ASSET_SCAN_CHILD_CERTIFICATE_FILE_INVALID");
+  } finally {
+    await handle?.close();
   }
-  return readFile(path, "utf8");
 }
 function emitFailure(start: unknown, code: CustomerAssetScanChildFailure["code"]): void {
   const candidate = start && typeof start === "object" ? start as Record<string, unknown> : {};
