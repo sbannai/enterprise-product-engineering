@@ -54,6 +54,7 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     if (!prior) return undefined;
     const requestHash=applicationDataCreateHash({tenantId:context.tenantId,applicationId:context.applicationId,entityType,id,data});
     if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    if (!prior.response || typeof prior.response!=="object" || "deleted" in prior.response) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
     return prior.response;
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
@@ -63,6 +64,7 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
       const prior = db.idempotency.find(item => item.tenantId === context.tenantId && item.applicationId === context.applicationId && item.key === context.idempotencyKey);
       if (prior) {
         if (prior.requestHash !== requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+        if (!prior.response || typeof prior.response!=="object" || "deleted" in prior.response) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
         return prior.response;
       }
       if (db.records.some(r => r.tenantId === record.tenantId && r.applicationId === record.applicationId && r.entityType === record.entityType && r.id === record.id)) throw new Error("APPLICATION_DATA_RECORD_EXISTS");
