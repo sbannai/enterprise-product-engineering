@@ -121,8 +121,10 @@ export class ProviderStorageDriverContractError extends Error {
 export function assertProviderStorageDriver<TCredentials>(
   driver: ProviderStorageDriver<TCredentials>,
 ): ProviderStorageDriver<TCredentials> {
-  if (!driver || typeof driver !== "object" || !driver.capabilities ||
-      typeof driver.capabilities !== "object") {
+  if (!driver || typeof driver !== "object" || !Array.isArray(driver.dependencyIds) ||
+      driver.dependencyIds.some(id => typeof id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id)) ||
+      new Set(driver.dependencyIds).size !== driver.dependencyIds.length ||
+      !driver.capabilities || typeof driver.capabilities !== "object") {
     throw new ProviderStorageDriverContractError("PROVIDER_DRIVER_INVALID");
   }
   const requirements: Array<[keyof ProviderStorageDriver<TCredentials>, boolean]> = [
