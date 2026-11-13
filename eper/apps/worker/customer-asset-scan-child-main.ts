@@ -70,7 +70,7 @@ function emitFailure(start: unknown, code: CustomerAssetScanChildFailure["code"]
   const candidate = start && typeof start === "object" ? start as Record<string, unknown> : {};
   const jobToken = typeof candidate.jobToken === "string" ? candidate.jobToken : "invalid";
   const claimGeneration = Number.isSafeInteger(candidate.claimGeneration) ? candidate.claimGeneration as number : 1;
-  process.stdout.write(JSON.stringify({
+  protocolWrite(JSON.stringify({
     version: 3, type: "failure", jobToken, claimGeneration, code,
   }));
 }
