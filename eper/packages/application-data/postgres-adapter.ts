@@ -33,6 +33,13 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
       const r = result.rows[0]; return r ? { tenantId:String(r.tenant_id), applicationId:String(r.application_id), entityType:String(r.entity_type), version:Number(r.version), status:r.status as ApplicationDataModel["status"], fields:json<ApplicationDataModel["fields"]>(r.fields), relationships:json<ApplicationDataModel["relationships"]>(r.relationships ?? []) } : undefined;
     });
   }
+  async getActiveModel(t: string, a: string, e: string): Promise<ApplicationDataModel | undefined> {
+    return withTenantTransaction(this.pool, t, async ({ client }) => {
+      await client.query("SELECT set_config('eper.application_id',$1,true)",[a]);
+      const result = await client.query<Row>("SELECT tenant_id,application_id,entity_type,version,status,fields,relationships FROM eper_application_data_models WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND status='ACTIVE' ORDER BY version DESC LIMIT 1",[t,a,e]);
+      const r=result.rows[0]; return r ? { tenantId:String(r.tenant_id),applicationId:String(r.application_id),entityType:String(r.entity_type),version:Number(r.version),status:r.status as ApplicationDataModel["status"],fields:json<ApplicationDataModel["fields"]>(r.fields),relationships:json<ApplicationDataModel["relationships"]>(r.relationships ?? []) } : undefined;
+    });
+  }
   async putModel(model: ApplicationDataModel): Promise<void> {
     await withTenantTransaction(this.pool, model.tenantId, async ({ client }) => {
       await client.query("SELECT set_config('eper.application_id',$1,true)",[model.applicationId]);
