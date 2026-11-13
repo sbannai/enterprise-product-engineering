@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS eper_application_data_models (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, application_id, entity_type, version)
 );
-CREATE INDEX IF NOT EXISTS eper_application_data_models_active_idx
-  ON eper_application_data_models(tenant_id, application_id, entity_type, version DESC)
+CREATE UNIQUE INDEX IF NOT EXISTS eper_application_data_models_one_active_idx
+  ON eper_application_data_models(tenant_id, application_id, entity_type)
   WHERE status='ACTIVE';
 
 CREATE TABLE IF NOT EXISTS eper_application_data_records (
