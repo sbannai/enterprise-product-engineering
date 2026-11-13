@@ -4,3 +4,4 @@ export * from "./json-adapter.js";
 export * from "./postgres-adapter.js";
 export * from "./mongo-adapter.js";
 export * from "./workflow-binding.js";
+export * from "./idempotency.js";
