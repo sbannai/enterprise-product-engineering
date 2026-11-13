@@ -166,13 +166,17 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     const workerId = "ci-asset-scanner:process-test";
     const scannerServiceId = "ci-asset-scanner";
     const workerLogin = await createWorkerLogin(pool, "scan", fixture, workerId, scannerServiceId);
-    const childLogin = await createChildLogin(pool, fixture, workerId, scannerServiceId);
+    let childLogin;
+    let childIdentityLock;
     const certDirectory = process.env.EPER_SCAN_CHILD_CERT_DIR;
     assert.ok(certDirectory, "CI client-certificate directory must be configured");
     const compositionPath = resolve("dist/packages/assets/scanners/ci-postgres-test-composition.js");
     const objectPath = resolve("dist/packages/assets/scanners/ci-postgres-test-object-" + randomUUID() + ".bin");
     let child;
     try {
+      childIdentityLock = await pool.connect();
+      await childIdentityLock.query("SELECT pg_advisory_lock(hashtext('eper:scan-child-ci-login')::bigint)");
+      childLogin = await createChildLogin(pool, fixture, workerId, scannerServiceId);
       await mkdir(dirname(compositionPath), { recursive: true });
       await writeFile(objectPath, fixture.testObjectBytes);
       const compositionSource = `import { createReadStream } from "node:fs";
@@ -301,9 +305,15 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, env }) {
       if (child) await stopChild(child).catch(() => {});
       await rm(compositionPath, { force: true });
       await rm(objectPath, { force: true });
-      await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [childLogin.role]).catch(() => {});
-      await pool.query(`REVOKE eper_customer_asset_scan_child_access FROM "${childLogin.role}"`).catch(() => {});
-      await pool.query(`DROP ROLE IF EXISTS "${childLogin.role}"`).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [childLogin?.role]).catch(() => {});
+      if (childLogin) {
+        await pool.query(`REVOKE eper_customer_asset_scan_child_access FROM "${childLogin.role}"`).catch(() => {});
+        await pool.query(`DROP ROLE IF EXISTS "${childLogin.role}"`).catch(() => {});
+      }
+      if (childIdentityLock) {
+        await childIdentityLock.query("SELECT pg_advisory_unlock(hashtext('eper:scan-child-ci-login')::bigint)").catch(() => {});
+        childIdentityLock.release();
+      }
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
