@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { runCustomerAssetScanChild } from "../dist/packages/assets/customer-asset-scan-child-supervisor.js";
 
 const start = () => ({
@@ -69,4 +70,19 @@ test("parent supervisor receives a fail-closed result when child scanner does no
   });
   assert.equal(outcome.kind, "failure");
   assert.equal(outcome.value.code, "SCANNER_RESULT_INVALID");
+});
+
+test("child bootstrap failures remain on protocol stdout after diagnostic output is redirected", () => {
+  const child = spawnSync(process.execPath, ["dist/apps/worker/customer-asset-scan-child-main.js"], {
+    input: "{}",
+    encoding: "utf8",
+    env: process.env,
+    timeout: 5_000,
+  });
+  assert.equal(child.error, undefined);
+  assert.equal(child.status, 1);
+  const response = JSON.parse(child.stdout.trim());
+  assert.equal(response.type, "failure");
+  assert.equal(response.code, "SCANNER_BOOTSTRAP_FAILED");
+  assert.equal(child.stderr.includes('"type":"failure"'), false);
 });
