@@ -29,3 +29,22 @@ test("PostgreSQL application data is application-scoped and commits audit/outbox
     assert.equal(outbox.rows[0].count,3);
   } finally { await pool.end(); }
 });
+
+test("PostgreSQL relationship references serialize with target deletion", {skip:!enabled}, async () => {
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
+  const suffix=randomUUID().replace(/-/g,"");
+  const context={tenantId:"data-rel-"+suffix,applicationId:"app-rel-"+suffix,actorId:"actor-rel",correlationId:"corr-rel-"+suffix,requirementId:"APP_DATA_REL_CI"};
+  try {
+    const service=new ApplicationDataService(new PostgresApplicationDataAdapter(pool));
+    await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Customer",version:1,status:"ACTIVE",
+      fields:[{id:"name",type:"string",required:true}]});
+    await service.registerModel({tenantId:context.tenantId,applicationId:context.applicationId,entityType:"Order",version:1,status:"ACTIVE",
+      fields:[{id:"customerId",type:"string",required:true},{id:"total",type:"number",required:true}],
+      relationships:[{field:"customerId",targetEntity:"Customer",cardinality:"one"}]});
+    await service.create(context,"Customer","customer-"+suffix,{name:"A"});
+    await service.create(context,"Order","order-"+suffix,{customerId:"customer-"+suffix,total:10});
+    await assert.rejects(()=>service.delete(context,"Customer","customer-"+suffix,1),/APPLICATION_DATA_RECORD_REFERENCED/);
+    await service.delete(context,"Order","order-"+suffix,1);
+    await service.delete(context,"Customer","customer-"+suffix,1);
+  } finally { await pool.end(); }
+});
