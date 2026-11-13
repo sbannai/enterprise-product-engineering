@@ -103,7 +103,9 @@ test("enabled composition fails closed without a complete provider registration"
 
 
 test("production rejects a driver that self-identifies as synthetic even if registration mislabels it", () => {
-  const configured = input({ environment: "production" });
+  const configured = input({ environment: "production", deploymentPolicy: {
+    ...input().deploymentPolicy, environment: "production",
+  } });
   configured.registrations[0].adapter.synthetic = true;
   configured.registrations[0].synthetic = false;
   assert.throws(
