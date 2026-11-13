@@ -65,8 +65,8 @@ function emitFailure(start: unknown, code: CustomerAssetScanChildFailure["code"]
 }
 
 const protocolWrite = process.stdout.write.bind(process.stdout);
-process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-  process.stderr.write(chunk as never, ...(args as never[]));
+process.stdout.write = ((chunk: string | Uint8Array) => {
+  process.stderr.write(chunk);
   return true;
 }) as typeof process.stdout.write;
 console.log = console.error;
@@ -88,7 +88,7 @@ if (!isCustomerAssetScanChildStart(start)) {
     const compositionPath = resolveCompositionPath(required("EPER_SCANNER_CHILD_COMPOSITION_MODULE"));
     const compositionMetadata = await lstat(compositionPath);
     if (!compositionMetadata.isFile() || compositionMetadata.isSymbolicLink() ||
-        (compositionMetadata.mode & 0o022) !== 0 || compositionMetadata.size < 1) {
+        (compositionMetadata.mode & 0o022) !== 0 || compositionMetadata.size < 1 || compositionMetadata.size > 1_048_576) {
       throw new Error("CUSTOMER_ASSET_SCAN_CHILD_COMPOSITION_FILE_INVALID");
     }
     const require = createRequire(import.meta.url);
