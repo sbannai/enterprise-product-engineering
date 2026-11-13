@@ -64,7 +64,7 @@ export class ApplicationDataService {
     validateModel(model);
     if (model.status === "ACTIVE") {
       const current = await this.adapter.getModel(model.tenantId, model.applicationId, model.entityType);
-      if (current && model.version !== current.version + 1 && model.version !== current.version) {
+      if (current && model.version !== current.version + 1) {
         throw new Error("APPLICATION_DATA_SCHEMA_VERSION_CONFLICT");
       }
     }
