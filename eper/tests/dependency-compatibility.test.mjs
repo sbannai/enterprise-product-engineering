@@ -105,3 +105,24 @@ test("rejects malformed versions, ranges, and evaluation timestamps", () => {
 test("a deprecated dependency is marked for upgrade rather than silently accepted", () => {
   assert.equal(evaluate(policy({ supportState: "deprecated" })).status, "upgrade_required");
 });
+
+
+test("rejects incomplete mandatory-update policy instead of silently treating it as optional", () => {
+  assert.throws(
+    () => evaluate(policy({ mandatoryUpdate: true, requiredMinimumVersion: "3.5.0" })),
+    /DEPENDENCY_COMPATIBILITY_INPUT_INVALID/,
+  );
+  assert.throws(
+    () => evaluate(policy({
+      mandatoryUpdate: true,
+      requiredMinimumVersion: "3.5.0",
+      effectiveAt: "2026-12-01T00:00:00Z",
+      notice: { verification: "verified", source: null, reference: null, recordedAt: null },
+    })),
+    /DEPENDENCY_COMPATIBILITY_INPUT_INVALID/,
+  );
+});
+
+test("fails closed when vendor support state is unknown even if a notice object is marked verified", () => {
+  assert.equal(evaluate(policy({ supportState: "unknown" })).status, "unknown_unverified");
+});
