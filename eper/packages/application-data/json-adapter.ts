@@ -47,6 +47,15 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     model.status = to;
     await this.write(db);
   }
+  async getIdempotentCreate(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord | undefined> {
+    if (!context.idempotencyKey) return undefined;
+    const db=await this.read();
+    const prior=db.idempotency.find(item=>item.tenantId===context.tenantId&&item.applicationId===context.applicationId&&item.key===context.idempotencyKey);
+    if (!prior) return undefined;
+    const requestHash=applicationDataCreateHash({tenantId:context.tenantId,applicationId:context.applicationId,entityType,id,data});
+    if (prior.requestHash!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
+    return prior.response;
+  }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
     const db = await this.read();
     if (context.idempotencyKey) {
