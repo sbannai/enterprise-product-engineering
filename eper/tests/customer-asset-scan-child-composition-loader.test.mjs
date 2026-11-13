@@ -44,10 +44,11 @@ test("trusted composition loader rejects symlinked module files", async () => {
 test("trusted composition loader rejects a symlinked scanner directory", async () => {
   const f = await fixture();
   try {
-    const link = join(f.base, "dist", "packages", "assets", "linked-scanners");
+    const target = join(f.base, "safe-scanners");
+    await mkdir(target, { recursive: true, mode: 0o750 });
+    await writeFile(join(target, "customer-asset-scan-composition.js"), "export {};\n");
     await rm(f.root, { recursive: true, force: true });
-    await symlink(join(f.base, "dist", "packages", "assets"), link);
-    const path = join(link, "customer-asset-scan-composition.js");
-    await assert.rejects(assertTrustedCustomerAssetScanCompositionModule(path), /COMPOSITION_DIRECTORY_INVALID/);
+    await symlink(target, f.root);
+    await assert.rejects(assertTrustedCustomerAssetScanCompositionModule(f.modulePath), /COMPOSITION_DIRECTORY_INVALID/);
   } finally { await rm(f.base, { recursive: true, force: true }); }
 });
