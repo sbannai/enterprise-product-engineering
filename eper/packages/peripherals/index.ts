@@ -88,11 +88,14 @@ export class PeripheralAdapterRegistry {
     if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
     return registration.adapter;
   }
-  dependencyIds(input: { adapterKey: string; adapterVersion: string; kind: PeripheralKind }): readonly string[] {
+  dependencyIds(input: { adapterKey: string; adapterVersion: string; kind: PeripheralKind }): readonly string[] | undefined {
     const registration = this.adapters.get(this.key(input.adapterKey, input.adapterVersion));
     if (!registration) throw new Error("PERIPHERAL_ADAPTER_NOT_REGISTERED");
     if (!registration.kinds.includes(input.kind)) throw new Error("PERIPHERAL_ADAPTER_KIND_UNSUPPORTED");
-    const ids = registration.dependencyIds ?? registration.dependencies?.map(item => item.policy.dependencyId) ?? [];
+    // An explicit empty list means the adapter has no vendor-managed dependencies.
+    // Missing declaration is not equivalent to an empty list and must fail closed.
+    if (registration.dependencyIds === undefined) return undefined;
+    const ids = registration.dependencyIds;
     if (new Set(ids).size !== ids.length || ids.some(id => !id.trim())) throw new Error("PERIPHERAL_ADAPTER_DEPENDENCY_IDS_INVALID");
     return Object.freeze([...ids]);
   }
