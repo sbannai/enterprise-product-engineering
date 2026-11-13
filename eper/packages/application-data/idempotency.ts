@@ -24,3 +24,20 @@ export function validateApplicationDataIdempotencyKey(key: string | undefined): 
     throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_INVALID");
   }
 }
+
+/** Fingerprint a conditional update so retries replay only the same intended mutation. */
+export function applicationDataUpdateHash(input: {
+  tenantId: string; applicationId: string; entityType: string; id: string;
+  expectedVersion: number; patch: { state?: "ACTIVE" | "ARCHIVED"; data?: Record<string, unknown> };
+}): string {
+  const canonical = (value: unknown): string => {
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+    const object = value as Record<string, unknown>;
+    return "{" + Object.keys(object).sort().map(key => JSON.stringify(key) + ":" + canonical(object[key])).join(",") + "}";
+  };
+  return createHash("sha256").update(canonical({
+    operation: "UPDATE", tenantId: input.tenantId, applicationId: input.applicationId,
+    entityType: input.entityType, id: input.id, expectedVersion: input.expectedVersion, patch: input.patch,
+  })).digest("hex");
+}
