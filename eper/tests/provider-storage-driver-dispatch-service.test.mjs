@@ -9,9 +9,10 @@ const capabilities = {
   idempotentCreateByUploadSessionId: true, lookupByUploadSessionId: true,
   renewByProviderReference: true, verifyObject: true, downloadGrant: true, malwareScan: true,
 };
-function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
+function fixture({ selection = {}, driver = {}, resolveError = null, dependencyInventory = undefined } = {}) {
   const calls = [];
   const adapter = {
+    dependencyIds: [],
     capabilities,
     async createUploadGrant(context, request, requestId) { calls.push(["create", context, request, requestId]); return { kind: "unknown", reason: "transport" }; },
     async lookupUpload(context, id, requestId) { calls.push(["lookup", context, id, requestId]); return { kind: "not_found" }; },
@@ -35,13 +36,14 @@ function fixture({ selection = {}, driver = {}, resolveError = null } = {}) {
         credentials,
       };
     },
-  });
+  }, dependencyInventory);
   return { service, calls, credentials };
 }
 
 test("resolves tenant-scoped runtime and invokes only the requested operation", async () => {
   const f = fixture();
   const result = await f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "upload-session-1" } },
   });
@@ -55,6 +57,7 @@ test("resolves tenant-scoped runtime and invokes only the requested operation", 
 test("rejects a runtime selection that does not match the requested tenant/application", async () => {
   const f = fixture({ selection: { tenantId: "tenant-other" } });
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session" } },
   }), error => error instanceof ProviderStorageDispatchError &&
@@ -65,6 +68,7 @@ test("rejects a runtime selection that does not match the requested tenant/appli
 test("rejects cross-tenant upload request before invoking driver", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "create_upload", request: {
       tenantId: "tenant-b", applicationId: "app-a", actorId: "actor", assetId: "asset",
@@ -78,6 +82,7 @@ test("rejects cross-tenant upload request before invoking driver", async () => {
 test("fails closed when a declared operation capability is unavailable", async () => {
   const f = fixture({ driver: { capabilities: { ...capabilities, malwareScan: false }, scanObject: undefined } });
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "scan_object", request: {
       assetId: "asset", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -90,6 +95,7 @@ test("fails closed when a declared operation capability is unavailable", async (
 test("does not invoke a driver when runtime or secret resolution fails", async () => {
   const f = fixture({ resolveError: new Error("binding or secret unavailable") });
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session" } },
   }), /binding or secret unavailable/);
@@ -99,11 +105,13 @@ test("does not invoke a driver when runtime or secret resolution fails", async (
 test("rejects malformed operation inputs before runtime or secret resolution", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { uploadSessionId: " " } },
   }), error => error instanceof ProviderStorageDispatchError &&
     error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "scan_object", request: {
       assetId: "asset", providerObjectReference: "object-ref", expectedSha256: "not-a-hash",
@@ -116,6 +124,7 @@ test("rejects malformed operation inputs before runtime or secret resolution", a
 test("classifies renew tenant mismatch as scope failure, not missing capability", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "renew_upload", request: {
       tenantId: "tenant-b", applicationId: "app-a", actorId: "actor", assetId: "asset",
@@ -130,6 +139,7 @@ test("classifies renew tenant mismatch as scope failure, not missing capability"
 test("classifies download application mismatch as scope failure, not missing capability", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "create_download", request: {
       tenantId: "tenant-a", applicationId: "app-other", actorId: "actor",
@@ -197,6 +207,7 @@ test("routes all six storage operations through their exact capability and synth
   for (const item of cases) {
     const f = fixture();
     const result = await f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
       tenantId: "tenant-a",
       applicationId: "app-a",
       requestId: `req-${item.kind}`,
@@ -221,6 +232,7 @@ test("forwards AbortSignal through tenant-scoped scan dispatch to the provider d
     return { kind: "timeout" };
   } } });
   await f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-cancel",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -236,6 +248,7 @@ test("rejects an already-aborted provider operation before resolving credentials
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-aborted",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -251,6 +264,7 @@ test("does not invoke the provider when cancellation occurs during credential re
   let driverInvoked = false;
   const resolution = new Promise(resolve => { releaseResolution = resolve; });
   const adapter = {
+    dependencyIds: [],
     capabilities,
     async createUploadGrant() { driverInvoked = true; return { kind: "unknown", reason: "transport" }; },
     async lookupUpload() { driverInvoked = true; return { kind: "not_found" }; },
@@ -274,6 +288,7 @@ test("does not invoke the provider when cancellation occurs during credential re
   });
   const controller = new AbortController();
   const pending = service.dispatch({
+    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-during-resolution",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -284,4 +299,82 @@ test("does not invoke the provider when cancellation occurs during credential re
   await assert.rejects(pending, error => error instanceof ProviderStorageDispatchError &&
     error.code === "PROVIDER_STORAGE_DISPATCH_ABORTED");
   assert.equal(driverInvoked, false);
+});
+
+
+const compatibleDependencyPolicy = {
+  dependencyId: "storage-sdk",
+  vendor: "Example Vendor",
+  componentKind: "sdk",
+  supportedVersions: { minimum: "1.0.0", maximum: "2.0.0" },
+  supportState: "supported",
+  mandatoryUpdate: false,
+  downgradePolicy: "allowed",
+  notice: { verification: "not_provided", source: null, reference: null, recordedAt: null },
+};
+const dependencyInstallation = (installedVersion) => ({
+  dependencyId: "storage-sdk",
+  installationId: "install-1",
+  scopeType: "application",
+  scopeId: "app-a",
+  installedVersion,
+  operatingSystem: "linux",
+  runtime: "node",
+  installationStatus: "observed",
+  version: 1,
+});
+function dependencyInventory(installedVersion) {
+  return {
+    async get(_scope, id) {
+      return id === "storage-sdk" ? compatibleDependencyPolicy : null;
+    },
+    async listInstallations() {
+      return [dependencyInstallation(installedVersion)];
+    },
+  };
+}
+
+test("gates provider driver invocation using server-owned dependency declarations and persisted inventory", async () => {
+  const f = fixture({
+    driver: { dependencyIds: ["storage-sdk"] },
+    dependencyInventory: dependencyInventory("1.4.0"),
+  });
+  const result = await f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-dependency-ok",
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-ok",
+    operation: { kind: "lookup_upload", request: {
+      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    } },
+  });
+  assert.deepEqual(result, { kind: "not_found" });
+  assert.equal(f.calls.some(call => call[0] === "lookup"), true);
+});
+
+test("blocks provider driver invocation when its installed dependency is outside the supported range", async () => {
+  const f = fixture({
+    driver: { dependencyIds: ["storage-sdk"] },
+    dependencyInventory: dependencyInventory("3.0.0"),
+  });
+  await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-dependency-block",
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-block",
+    operation: { kind: "lookup_upload", request: {
+      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
+  assert.equal(f.calls.some(call => call[0] === "lookup"), false);
+});
+
+test("fails closed when a provider driver declares dependencies but no durable inventory is configured", async () => {
+  const f = fixture({ driver: { dependencyIds: ["storage-sdk"] } });
+  await assert.rejects(() => f.service.dispatch({
+    actorId: "actor-a", correlationId: "corr-dependency-missing",
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-missing",
+    operation: { kind: "lookup_upload", request: {
+      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
+  assert.equal(f.calls.some(call => call[0] === "lookup"), false);
 });
