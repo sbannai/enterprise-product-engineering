@@ -19,8 +19,10 @@ type StoredRecord = ApplicationDataRecord & Record<string, unknown> & { _id: str
 type StoredModel = ApplicationDataModel & Record<string, unknown> & { _id: string };
 /** Structural types keep the official MongoDB driver optional. Transactions require a replica set or sharded cluster. */
 export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
-  constructor(private readonly db: MongoDatabaseLike) {
-    if (!db.client?.startSession) throw new Error("MONGODB_SESSION_SUPPORT_REQUIRED");
+  private readonly db: MongoDatabaseLike;
+  constructor(database: unknown) {
+    this.db = database as MongoDatabaseLike;
+    if (!this.db?.client?.startSession) throw new Error("MONGODB_SESSION_SUPPORT_REQUIRED");
   }
   private records() { return this.db.collection<StoredRecord>("eper_application_data_records"); }
   private models() { return this.db.collection<StoredModel>("eper_application_data_models"); }
