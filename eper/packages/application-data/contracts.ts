@@ -50,7 +50,7 @@ export interface ApplicationDataAdapter {
   putModel(model: ApplicationDataModel): Promise<void>;
   create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord>;
   get(context: ApplicationDataContext, entityType: string, id: string): Promise<ApplicationDataRecord | undefined>;
-  update(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }, contextForAudit: ApplicationDataContext): Promise<ApplicationDataRecord>;
-  delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, contextForAudit: ApplicationDataContext): Promise<void>;
+  update(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number, patch: { state?: ApplicationDataRecord["state"]; data?: Record<string, unknown> }): Promise<ApplicationDataRecord>;
+  delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void>;
   query(context: ApplicationDataContext, entityType: string, query: ApplicationDataQuery): Promise<ApplicationDataRecord[]>;
 }
