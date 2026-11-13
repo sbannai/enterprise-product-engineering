@@ -154,7 +154,7 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
       const key=c.idempotencyKey;
       const requestHash=key ? applicationDataUpdateHash({tenantId:c.tenantId,applicationId:c.applicationId,entityType:e,id,expectedVersion:expected,patch}) : undefined;
       if (key && requestHash) {
-        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`application-data:update:${c.tenantId}:${c.applicationId}:${key}`]);
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`application-data:${c.tenantId}:${c.applicationId}:${key}`]);
         const replay=await client.query<Row>("SELECT request_hash,response FROM eper_application_data_idempotency WHERE tenant_id=$1 AND application_id=$2 AND idempotency_key=$3",[c.tenantId,c.applicationId,key]);
         if (replay.rows[0]) {
           if (String(replay.rows[0].request_hash)!==requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
