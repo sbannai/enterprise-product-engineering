@@ -56,7 +56,11 @@ function input(overrides = {}) {
     dispatch: { async resolve() { throw new Error("not invoked in composition test"); } },
     catalogue: { async get() { return null; } },
     connections: { async getRuntimeSecretReference() { throw new Error("not invoked"); }, async assertDispatchAuthorization() { throw new Error("not invoked"); } },
-    secretResolver: { async resolve() { return { token: "test" }; } },
+    secretResolver: {
+      adapterKey: "secret-port",
+      adapterVersion: "1.0.0",
+      async resolve() { return { token: "test" }; },
+    },
     scannerIdentity: "scanner-v1",
     allowedHosts: ["storage.example.com"],
     ...overrides,
@@ -143,4 +147,29 @@ test("enabled composition refuses a missing or disabled deployment policy", () =
   assert.throws(() => createProviderStorageRuntimeComposition(input({ deploymentPolicy: { ...deploymentPolicy, enabled: false } })),
     error => error instanceof ProviderStorageRuntimeCompositionError &&
       error.code === "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
+});
+
+test("enabled composition binds the exact configured secret-manager adapter and version", () => {
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(input({
+      secretResolver: {
+        adapterKey: "other-secret-port",
+        adapterVersion: "1.0.0",
+        async resolve() { return { token: "test" }; },
+      },
+    })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED",
+  );
+  assert.throws(
+    () => createProviderStorageRuntimeComposition(input({
+      secretResolver: {
+        adapterKey: "secret-port",
+        adapterVersion: "2.0.0",
+        async resolve() { return { token: "test" }; },
+      },
+    })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_SECRET_MANAGER_NOT_ALLOWED",
+  );
 });
