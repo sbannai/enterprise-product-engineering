@@ -162,7 +162,9 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
         return record;
       });
     } catch (error) {
-      if (!(error instanceof Error) || error.message !== "APPLICATION_DATA_IDEMPOTENCY_RACE" || !idempotencyId || !requestHash) throw error;
+      const replayableRace = error instanceof Error &&
+        (error.message === "APPLICATION_DATA_IDEMPOTENCY_RACE" || error.message === "APPLICATION_DATA_RECORD_EXISTS");
+      if (!replayableRace || !idempotencyId || !requestHash) throw error;
       const prior=await this.idempotency().findOne({_id:idempotencyId});
       if (!prior) throw error;
       if (prior.requestHash !== requestHash) throw new Error("APPLICATION_DATA_IDEMPOTENCY_KEY_REUSED");
