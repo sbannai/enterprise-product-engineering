@@ -121,8 +121,15 @@ test("existing runtime composition accepts the dedicated synthetic driver only o
   const driver = new SyntheticProviderStorageDriver();
   const registration = { adapterKey: "synthetic-storage", adapterVersion: "1.0.0",
     capabilities, adapter: driver, synthetic: true };
+  const deploymentPolicy = {
+    enabled: true, environment: "test", allowedProviderKeys: ["synthetic-storage"],
+    adapters: [{ adapterKey: "synthetic-storage", adapterVersion: "1.0.0",
+      capabilities: ["storage.upload.grant", "storage.upload.lookup", "storage.upload.renew",
+        "storage.object.verify", "storage.download.grant", "storage.object.scan"], synthetic: true }],
+    allowedHosts: ["uploads.synthetic.invalid"], tlsMode: "verify-full",
+  };
   const dependencies = {
-    enabled: true, environment: "test", registrations: [registration],
+    enabled: true, environment: "test", deploymentPolicy, registrations: [registration],
     dispatch: { async resolve() { throw new Error("not called"); } },
     catalogue: { async get() { return null; } },
     connections: { async getRuntimeSecretReference() { throw new Error("not called"); },
@@ -131,6 +138,7 @@ test("existing runtime composition accepts the dedicated synthetic driver only o
     scannerIdentity: "synthetic-scanner-v1", allowedHosts: ["uploads.synthetic.invalid"],
   };
   assert.equal(createProviderStorageRuntimeComposition(dependencies).enabled, true);
-  assert.throws(() => createProviderStorageRuntimeComposition({ ...dependencies, environment: "production" }),
+  assert.throws(() => createProviderStorageRuntimeComposition({ ...dependencies, environment: "production",
+    deploymentPolicy: { ...deploymentPolicy, environment: "production" } }),
     error => error.code === "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN");
 });
