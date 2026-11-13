@@ -40,6 +40,9 @@ export class JsonFileApplicationDataAdapter implements ApplicationDataAdapter {
     const db = await this.read();
     const model = db.models.find(m => m.tenantId === t && m.applicationId === a && m.entityType === e && m.version === v);
     if (!model || model.status !== from) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
+    if (to === "ACTIVE") {
+      for (const active of db.models) if (active.tenantId === t && active.applicationId === a && active.entityType === e && active.status === "ACTIVE") active.status = "RETIRED";
+    }
     model.status = to;
     await this.write(db);
   }
