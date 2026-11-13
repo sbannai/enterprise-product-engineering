@@ -9,6 +9,7 @@ interface MongoCollectionLike<T extends Record<string, unknown>> {
   insertOne(document: T, options?: Record<string, unknown>): Promise<MongoResult>;
   replaceOne(filter: Record<string, unknown>, document: T, options?: Record<string, unknown>): Promise<MongoResult>;
   updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
+  updateMany(filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
   deleteOne(filter: Record<string, unknown>, options?: Record<string, unknown>): Promise<MongoResult>;
 }
 interface MongoSessionLike { withTransaction<T>(work: () => Promise<T>): Promise<T>; endSession(): Promise<void>; }
@@ -71,7 +72,12 @@ export class MongoApplicationDataAdapter implements ApplicationDataAdapter {
   async transitionModelStatus(t: string, a: string, e: string, v: number, from: ApplicationDataModel["status"], to: ApplicationDataModel["status"]): Promise<void> {
     if (!((from==="DRAFT"&&to==="ACTIVE")||(from==="ACTIVE"&&to==="RETIRED"))) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_INVALID");
     const id=this.key([t,a,e,String(v)]);
-    const result=await this.models().updateOne({ _id:id,status:from }, { $set:{status:to,updatedAt:new Date().toISOString()} });
+    const result=await this.transaction(async session => {
+      if (to === "ACTIVE") {
+        await this.models().updateMany({ ...this.scope(t,a,e), status:"ACTIVE" }, { $set:{status:"RETIRED",updatedAt:new Date().toISOString()} }, {session});
+      }
+      return this.models().updateOne({ _id:id,status:from }, { $set:{status:to,updatedAt:new Date().toISOString()} }, {session});
+    });
     if (!result.matchedCount) throw new Error("APPLICATION_DATA_SCHEMA_STATUS_TRANSITION_CONFLICT");
   }
   async create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord> {
