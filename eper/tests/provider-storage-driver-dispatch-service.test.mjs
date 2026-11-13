@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   ProviderStorageDispatchError,
@@ -37,13 +38,14 @@ function fixture({ selection = {}, driver = {}, resolveError = null, dependencyI
       };
     },
   }, dependencyInventory);
+  const dispatch = service.dispatch.bind(service);
+  service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   return { service, calls, credentials };
 }
 
 test("resolves tenant-scoped runtime and invokes only the requested operation", async () => {
   const f = fixture();
   const result = await f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "upload-session-1" } },
   });
@@ -57,7 +59,6 @@ test("resolves tenant-scoped runtime and invokes only the requested operation", 
 test("rejects a runtime selection that does not match the requested tenant/application", async () => {
   const f = fixture({ selection: { tenantId: "tenant-other" } });
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session" } },
   }), error => error instanceof ProviderStorageDispatchError &&
@@ -68,7 +69,6 @@ test("rejects a runtime selection that does not match the requested tenant/appli
 test("rejects cross-tenant upload request before invoking driver", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "create_upload", request: {
       tenantId: "tenant-b", applicationId: "app-a", actorId: "actor", assetId: "asset",
@@ -82,7 +82,6 @@ test("rejects cross-tenant upload request before invoking driver", async () => {
 test("fails closed when a declared operation capability is unavailable", async () => {
   const f = fixture({ driver: { capabilities: { ...capabilities, malwareScan: false }, scanObject: undefined } });
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "scan_object", request: {
       assetId: "asset", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -95,7 +94,6 @@ test("fails closed when a declared operation capability is unavailable", async (
 test("does not invoke a driver when runtime or secret resolution fails", async () => {
   const f = fixture({ resolveError: new Error("binding or secret unavailable") });
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session" } },
   }), /binding or secret unavailable/);
@@ -105,13 +103,11 @@ test("does not invoke a driver when runtime or secret resolution fails", async (
 test("rejects malformed operation inputs before runtime or secret resolution", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "lookup_upload", request: { uploadSessionId: " " } },
   }), error => error instanceof ProviderStorageDispatchError &&
     error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "scan_object", request: {
       assetId: "asset", providerObjectReference: "object-ref", expectedSha256: "not-a-hash",
@@ -124,7 +120,6 @@ test("rejects malformed operation inputs before runtime or secret resolution", a
 test("classifies renew tenant mismatch as scope failure, not missing capability", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "renew_upload", request: {
       tenantId: "tenant-b", applicationId: "app-a", actorId: "actor", assetId: "asset",
@@ -139,7 +134,6 @@ test("classifies renew tenant mismatch as scope failure, not missing capability"
 test("classifies download application mismatch as scope failure, not missing capability", async () => {
   const f = fixture();
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-1",
     operation: { kind: "create_download", request: {
       tenantId: "tenant-a", applicationId: "app-other", actorId: "actor",
@@ -207,7 +201,6 @@ test("routes all six storage operations through their exact capability and synth
   for (const item of cases) {
     const f = fixture();
     const result = await f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
       tenantId: "tenant-a",
       applicationId: "app-a",
       requestId: `req-${item.kind}`,
@@ -232,7 +225,6 @@ test("forwards AbortSignal through tenant-scoped scan dispatch to the provider d
     return { kind: "timeout" };
   } } });
   await f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-cancel",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -248,7 +240,6 @@ test("rejects an already-aborted provider operation before resolving credentials
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-aborted",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -285,10 +276,11 @@ test("does not invoke the provider when cancellation occurs during credential re
         credentials: { token: "test-only" },
       };
     },
-  });
+  }, { async getDependencyInventory() { return []; } });
+  const dispatch = service.dispatch.bind(service);
+  service.dispatch = input => dispatch({ actorId: "actor-a", correlationId: "correlation-a", ...input });
   const controller = new AbortController();
   const pending = service.dispatch({
-    actorId: "actor-a", correlationId: "corr-a",
     tenantId: "tenant-a", applicationId: "app-a", requestId: "req-during-resolution",
     operation: { kind: "scan_object", request: {
       assetId: "asset-a", providerObjectReference: "object-ref", expectedSha256: "a".repeat(64),
@@ -302,80 +294,98 @@ test("does not invoke the provider when cancellation occurs during credential re
 });
 
 
-const compatibleDependencyPolicy = {
-  dependencyId: "storage-sdk",
-  vendor: "Example Vendor",
-  componentKind: "sdk",
-  supportedVersions: { minimum: "1.0.0", maximum: "2.0.0" },
-  supportState: "supported",
-  policyStatus: "active",
-  mandatoryUpdate: false,
-  downgradePolicy: "allowed",
-  notice: { verification: "not_provided", source: null, reference: null, recordedAt: null },
-};
-const dependencyInstallation = (installedVersion) => ({
-  dependencyId: "storage-sdk",
-  installationId: "install-1",
-  scopeType: "application",
-  scopeId: "app-a",
-  installedVersion,
-  operatingSystem: "linux",
-  runtime: "node",
-  installationStatus: "observed",
-  version: 1,
-});
-function dependencyInventory(installedVersion) {
-  return {
-    async get(_scope, id) {
-      return id === "storage-sdk" ? compatibleDependencyPolicy : null;
-    },
-    async listInstallations() {
-      return [dependencyInstallation(installedVersion)];
-    },
-  };
-}
-
-test("gates provider driver invocation using server-owned dependency declarations and persisted inventory", async () => {
+test("internal object read uses its own optional capability and exact connection binding", async () => {
+  const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])];
+  let received;
   const f = fixture({
-    driver: { dependencyIds: ["storage-sdk"] },
-    dependencyInventory: dependencyInventory("1.4.0"),
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      async readObjectInternal(context, request, requestId, signal) {
+        received = { context, request, requestId, signal };
+        return (async function* () { for (const chunk of chunks) yield chunk; })();
+      },
+    },
   });
   const result = await f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-dependency-ok",
-    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-ok",
-    operation: { kind: "lookup_upload", request: {
-      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-internal-read",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: createHash("sha256").update(new Uint8Array([1, 2, 3])).digest("hex"),
     } },
   });
-  assert.deepEqual(result, { kind: "not_found" });
-  assert.equal(f.calls.some(call => call[0] === "lookup"), true);
+  assert.equal(f.calls[0][1].capability, "storage.object.read.internal");
+  assert.equal(f.calls[0][1].expectedConnectionId, "connection-a");
+  assert.equal(received.context.connectionId, "connection-a");
+  assert.equal(received.request.providerObjectReference, "opaque-ref");
+  assert.equal(received.requestId, "req-internal-read");
+  assert.equal(result[Symbol.asyncIterator] instanceof Function, true);
+  const read = [];
+  for await (const chunk of result) read.push(...chunk);
+  assert.deepEqual(read, [1, 2, 3]);
 });
 
-test("blocks provider driver invocation when its installed dependency is outside the supported range", async () => {
+test("internal object read fails closed when the adapter has not explicitly opted in", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-no-read",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 3, expectedSha256: "a".repeat(64),
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_CAPABILITY_MISSING");
+  assert.equal(f.calls[0][1].capability, "storage.object.read.internal");
+});
+
+test("internal object read rejects invalid size or checksum before credential resolution", async () => {
+  const f = fixture();
+  await assert.rejects(() => f.service.dispatch({
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-invalid-read",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 0, expectedSha256: "not-a-checksum",
+    } },
+  }), error => error instanceof ProviderStorageDispatchError &&
+    error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+  assert.equal(f.calls.length, 0);
+});
+
+test("internal object read rejects a runtime that violates the authenticated connection pin", async () => {
+  let driverInvoked = false;
   const f = fixture({
-    driver: { dependencyIds: ["storage-sdk"] },
-    dependencyInventory: dependencyInventory("3.0.0"),
+    selection: { connectionId: "connection-other" },
+    driver: {
+      capabilities: { ...capabilities, internalObjectRead: true },
+      async readObjectInternal() {
+        driverInvoked = true;
+        return (async function* () { yield new Uint8Array([1]); })();
+      },
+    },
   });
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-dependency-block",
-    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-block",
-    operation: { kind: "lookup_upload", request: {
-      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-wrong-connection",
+    expectedConnectionId: "connection-a",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 1, expectedSha256: createHash("sha256").update(new Uint8Array([1])).digest("hex"),
     } },
   }), error => error instanceof ProviderStorageDispatchError &&
-    error.code === "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
-  assert.equal(f.calls.some(call => call[0] === "lookup"), false);
+    error.code === "PROVIDER_STORAGE_DISPATCH_SCOPE_MISMATCH");
+  assert.equal(driverInvoked, false, "a driver must not run on a connection other than the authenticated pin");
 });
 
-test("fails closed when a provider driver declares dependencies but no durable inventory is configured", async () => {
-  const f = fixture({ driver: { dependencyIds: ["storage-sdk"] } });
+test("internal object read requires an explicit authenticated provider connection pin", async () => {
+  const f = fixture();
   await assert.rejects(() => f.service.dispatch({
-    actorId: "actor-a", correlationId: "corr-dependency-missing",
-    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-dependency-missing",
-    operation: { kind: "lookup_upload", request: {
-      tenantId: "tenant-a", applicationId: "app-a", uploadSessionId: "session",
+    tenantId: "tenant-a", applicationId: "app-a", requestId: "req-unpinned-read",
+    operation: { kind: "read_object_internal", request: {
+      assetId: "asset-a", providerObjectReference: "opaque-ref",
+      expectedSizeBytes: 1, expectedSha256: createHash("sha256").update(new Uint8Array([1])).digest("hex"),
     } },
   }), error => error instanceof ProviderStorageDispatchError &&
-    error.code === "PROVIDER_STORAGE_DISPATCH_DEPENDENCY_BLOCKED");
-  assert.equal(f.calls.some(call => call[0] === "lookup"), false);
+    error.code === "PROVIDER_STORAGE_DISPATCH_REQUEST_INVALID");
+  assert.equal(f.calls.length, 0, "un-pinned reads must fail before runtime or credential resolution");
 });
+

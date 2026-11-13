@@ -75,11 +75,20 @@ test("permits omitted optional operations only when capability is explicitly fal
 });
 
 
-test("rejects malformed or duplicate server-owned dependency declarations", () => {
-  assert.throws(() => assertProviderStorageDriver({ ...base, dependencyIds: ["bad id"] }),
+test("internal object read requires explicit capability and an executable method", () => {
+  const optedInWithoutMethod = {
+    ...base,
+    capabilities: { ...base.capabilities, internalObjectRead: true },
+  };
+  assert.throws(() => assertProviderStorageDriver(optedInWithoutMethod),
     error => error instanceof ProviderStorageDriverContractError &&
-      error.code === "PROVIDER_DRIVER_INVALID");
-  assert.throws(() => assertProviderStorageDriver({ ...base, dependencyIds: ["sdk", "sdk"] }),
-    error => error instanceof ProviderStorageDriverContractError &&
-      error.code === "PROVIDER_DRIVER_INVALID");
+      error.code === "PROVIDER_DRIVER_METHOD_MISSING");
+  const optedIn = {
+    ...base,
+    capabilities: { ...base.capabilities, internalObjectRead: true },
+    async readObjectInternal() {
+      return (async function* () { yield new Uint8Array([1]); })();
+    },
+  };
+  assert.equal(assertProviderStorageDriver(optedIn), optedIn);
 });

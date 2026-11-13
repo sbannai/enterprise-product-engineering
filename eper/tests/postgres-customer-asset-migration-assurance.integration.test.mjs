@@ -223,6 +223,7 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
     const idempotencyKey = "scan-child-key-" + suffix.slice(0, 20);
     const workerId = "ci-child-service:worker-" + suffix.slice(0, 12);
     const scannerServiceId = "ci-child-service";
+    const spiffeId = "spiffe://eper.example/asset-scanner/ci-child";
     const loginRole = "eper_scan_child_ci";
     const certDirectory = process.env.EPER_SCAN_CHILD_CERT_DIR;
     const bytes = Buffer.alloc(512, 65);
@@ -275,9 +276,10 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       await pool.query(`GRANT eper_customer_asset_scan_child_access TO "${loginRole}"`);
       await pool.query(
         `INSERT INTO public.eper_customer_asset_scan_child_identities
-          (login_role, tenant_id, application_id, worker_id, scanner_service_id, enabled)
-         VALUES ($1, $2, $3, $4, $5, true)`,
-        [loginRole, tenantId, applicationId, workerId, scannerServiceId],
+          (login_role, tenant_id, application_id, worker_id, scanner_service_id,
+           spiffe_id, provider_connection_id, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+        [loginRole, tenantId, applicationId, workerId, scannerServiceId, spiffeId, "ci-storage-connection"],
       );
       const childUrl = new URL(connectionString);
       childUrl.username = loginRole;
@@ -310,15 +312,42 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       });
 
       const resolved = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [assetId, claim.claimGeneration],
       );
       assert.equal(resolved.rowCount, 1);
+      assert.equal(resolved.rows[0].tenant_id, tenantId);
+      assert.equal(resolved.rows[0].application_id, applicationId);
+      assert.equal(resolved.rows[0].worker_id, workerId);
+      assert.equal(resolved.rows[0].scanner_service_id, scannerServiceId);
+      assert.equal(resolved.rows[0].spiffe_id, spiffeId);
+      assert.equal(resolved.rows[0].provider_connection_id, "ci-storage-connection");
       assert.equal(resolved.rows[0].asset_id, assetId);
       assert.equal(resolved.rows[0].provider_upload_reference, "opaque-child-provider-ref-" + suffix);
       assert.equal(resolved.rows[0].storage_object_reference, "opaque-child-object-" + suffix);
       assert.equal(Number(resolved.rows[0].size_bytes), bytes.length);
       assert.equal(resolved.rows[0].checksum_sha256, checksumSha256);
+
+      const resolverPrivileges = await childPool.query(`
+        SELECT
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_input(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'EXECUTE') AS can_execute_legacy_input,
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_provider_binding(varchar,varchar,uuid,varchar,varchar,bigint,text)',
+            'EXECUTE') AS can_execute_legacy_provider_binding,
+          has_function_privilege(current_user,
+            'public.eper_resolve_customer_asset_scan_child_context(uuid,bigint)',
+            'EXECUTE') AS can_execute_authenticated_context
+      `);
+      assert.deepEqual(resolverPrivileges.rows[0], {
+        can_execute_legacy_input: false,
+        can_execute_legacy_provider_binding: false,
+        can_execute_authenticated_context: true,
+      }, "the child LOGIN may execute only the session_user-derived context resolver");
+
+      assert.equal(resolved.rows[0].provider_connection_id, "ci-storage-connection",
+        "provider connection must come from the authenticated child identity mapping");
       // PostgreSQL cert authentication rejects an expired cert, untrusted issuer, mismatched CN, and no cert.
       for (const candidate of [
         { cert: "wrong-cn.crt", key: "wrong-cn.key", label: "wrong certificate CN" },
@@ -364,26 +393,10 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
       );
 
       const stale = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration + 1],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [assetId, claim.claimGeneration + 1],
       );
       assert.equal(stale.rowCount, 0, "stale claim generation must not resolve source input");
-
-      await assert.rejects(
-        childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-          ["other-" + tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
-        ),
-        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
-      );
-
-      await assert.rejects(
-        childPool.query(
-          `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-          [tenantId, "other-" + applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
-        ),
-        /EPER_CUSTOMER_ASSET_SCAN_CHILD_IDENTITY_DENIED/,
-      );
 
       await pool.query(
         `UPDATE public.eper_customer_asset_scan_jobs
@@ -392,10 +405,10 @@ test("scanner child LOGIN identity resolves only its live leased generation and 
         [tenantId, applicationId, uploadSessionId],
       );
       const expired = await childPool.query(
-        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_input($1, $2, $3, $4, $5, $6)`,
-        [tenantId, applicationId, assetId, workerId, scannerServiceId, claim.claimGeneration],
+        `SELECT * FROM public.eper_resolve_customer_asset_scan_child_context($1, $2)`,
+        [assetId, claim.claimGeneration],
       );
-      assert.equal(expired.rowCount, 0, "expired lease must not resolve source input");
+      assert.equal(expired.rowCount, 0, "expired lease must not resolve source input or provider connection");
     } finally {
       if (childPool) await childPool.end();
       await pool.query("DELETE FROM public.eper_customer_asset_scan_child_identities WHERE login_role = $1", [loginRole]).catch(() => {});

@@ -29,6 +29,17 @@ export interface CustomerAssetScanChildSpiffeIdentity {
   readonly expiresAt: number;
 }
 
+// A WeakSet makes verification provenance unforgeable by constructing a structurally
+// identical object. Only this module's successful Workload API verifier can register it.
+const verifiedCurrentProcessIdentities = new WeakSet<object>();
+
+export function isVerifiedCustomerAssetScanChildSpiffeIdentity(
+  value: unknown,
+): value is CustomerAssetScanChildSpiffeIdentity {
+  return typeof value === "object" && value !== null &&
+    verifiedCurrentProcessIdentities.has(value);
+}
+
 export class CustomerAssetScanChildSpiffeIdentityError extends Error {
   constructor(readonly code:
     | "CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_UNAVAILABLE"
@@ -89,12 +100,14 @@ export class CustomerAssetScanChildSpiffeIdentityVerifier {
         throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_INVALID");
       }
 
-      return Object.freeze({
+      const identity: CustomerAssetScanChildSpiffeIdentity = Object.freeze({
         spiffeId: this.expectedSpiffeId,
         trustDomain,
         audience: CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_AUDIENCE,
         expiresAt,
       });
+      verifiedCurrentProcessIdentities.add(identity);
+      return identity;
     } catch (error) {
       if (error instanceof CustomerAssetScanChildSpiffeIdentityError) throw error;
       throw new CustomerAssetScanChildSpiffeIdentityError("CUSTOMER_ASSET_SCAN_CHILD_SPIFFE_UNAVAILABLE");
