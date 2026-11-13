@@ -37,6 +37,7 @@ import { PostgresApplicationAddonEntitlementReader } from "../../packages/addon-
 import { ApplicationAddonAccessGate } from "../../packages/addon-entitlements/application-addon-access-gate.js";
 import { ApplicationCapabilityBoundary } from "../../packages/addon-entitlements/application-capability-boundary.js";
 import { PostgresPeripheralRepository } from "../../packages/peripherals/postgres-peripheral-repository.js";
+import { PostgresDependencyInventoryRepository } from "../../packages/dependencies/postgres-dependency-inventory-repository.js";
 import { ApplicationPeripheralService } from "../../packages/peripherals/application-peripheral-service.js";
 import { PostgresPeripheralRoleAuthorizer } from "../../packages/peripherals/peripheral-authorization.js";
 import { PeripheralAdapterRegistry } from "../../packages/peripherals/index.js";
@@ -547,6 +548,10 @@ if (platformAdminCredentialStore) await platformAdminCredentialStore.assertReady
 const peripheralRepository = peripheralApiEnabled && paymentPool
   ? new PostgresPeripheralRepository(paymentPool)
   : undefined;
+const dependencyInventory = peripheralApiEnabled && paymentPool
+  ? new PostgresDependencyInventoryRepository(paymentPool, process.env.RENDER_GIT_COMMIT || process.env.EPER_BUILD_ID)
+  : undefined;
+if (dependencyInventory) await dependencyInventory.assertReady();
 const peripheralRoleAuthorizer = peripheralApiEnabled && workflowActorRoleAssignmentStore
   ? new PostgresPeripheralRoleAuthorizer(workflowActorRoleAssignmentStore)
   : undefined;
@@ -563,8 +568,10 @@ const peripheralService = peripheralApiEnabled && paymentPool && peripheralRepos
         adapterVersion: "1.0.0",
         kinds: ["barcode_scanner", "qr_reader", "sensor", "rfid_nfc", "printer", "weighing_scale", "custom"],
         adapter: new SyntheticPeripheralAdapter(),
+        dependencyIds: [],
       }]),
       peripheralRoleAuthorizer,
+      dependencyInventory,
     )
   : undefined;
 if (peripheralRepository) await peripheralRepository.assertReady();
