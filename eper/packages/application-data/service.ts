@@ -28,7 +28,10 @@ function validateModel(model: ApplicationDataModel): void {
     ids.add(field.id);
   }
   for (const relation of model.relationships ?? []) {
-    if (!ids.has(relation.field) || !ID.test(relation.targetEntity) || !["one", "many"].includes(relation.cardinality)) {
+    const field = model.fields.find(item => item.id === relation.field);
+    if (!field || !ID.test(relation.targetEntity) || !["one", "many"].includes(relation.cardinality) ||
+        (relation.cardinality === "one" && field.type !== "string") ||
+        (relation.cardinality === "many" && field.type !== "array")) {
       throw new Error("APPLICATION_DATA_RELATIONSHIP_INVALID");
     }
   }
@@ -70,6 +73,20 @@ export class ApplicationDataService {
     }
     await this.adapter.putModel(clone(model));
   }
+  private async validateRelationships(context: ApplicationDataContext, model: ApplicationDataModel, data: Record<string, unknown>): Promise<void> {
+    for (const relation of model.relationships ?? []) {
+      const value = data[relation.field];
+      if (value === undefined || value === null) continue;
+      const ids = relation.cardinality === "one" ? [value] : value;
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== "string")) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
+      for (const id of ids as string[]) {
+        validId(id, "APPLICATION_DATA_RELATIONSHIP_TARGET_ID_INVALID");
+        if (!await this.adapter.get(context, relation.targetEntity, id)) {
+          throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + relation.field);
+        }
+      }
+    }
+  }
   private async activeModel(context: ApplicationDataContext, entityType: string): Promise<ApplicationDataModel> {
     this.validateContext(context); validId(entityType, "APPLICATION_DATA_ENTITY_INVALID");
     const model = await this.adapter.getModel(context.tenantId, context.applicationId, entityType);
@@ -84,9 +101,10 @@ export class ApplicationDataService {
   }
   async create(context: ApplicationDataContext, entityType: string, id: string, data: Record<string, unknown>): Promise<ApplicationDataRecord> {
     const model = await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    const validated = validateData(model.fields, data); await this.validateRelationships(context, model, validated);
     const now = new Date().toISOString();
     return this.adapter.create({ tenantId: context.tenantId, applicationId: context.applicationId, entityType,
-      id, schemaVersion: model.version, version: 1, state: "ACTIVE", data: validateData(model.fields, data), createdAt: now, updatedAt: now }, context);
+      id, schemaVersion: model.version, version: 1, state: "ACTIVE", data: validated, createdAt: now, updatedAt: now }, context);
   }
   async get(context: ApplicationDataContext, entityType: string, id: string): Promise<ApplicationDataRecord | undefined> {
     await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
@@ -99,7 +117,9 @@ export class ApplicationDataService {
     if (!patch || typeof patch !== "object" || Array.isArray(patch) || Object.keys(patch).some(k => !["state", "data"].includes(k))) {
       throw new Error("APPLICATION_DATA_PATCH_INVALID");
     }
-    const normalized = { ...patch, ...(patch.data === undefined ? {} : { data: validateData(model.fields, patch.data) }) };
+    const validated = patch.data === undefined ? undefined : validateData(model.fields, patch.data);
+    if (validated) await this.validateRelationships(context, model, validated);
+    const normalized = { ...patch, ...(validated === undefined ? {} : { data: validated }) };
     return this.adapter.update(context, entityType, id, expectedVersion, normalized);
   }
   async delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void> {
