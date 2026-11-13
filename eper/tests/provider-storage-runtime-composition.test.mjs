@@ -39,7 +39,9 @@ const deploymentPolicy = {
 function input(overrides = {}) {
   return {
     enabled: true,
-    deploymentPolicy,
+    deploymentPolicy: Object.prototype.hasOwnProperty.call(overrides, "deploymentPolicy")
+      ? overrides.deploymentPolicy
+      : { ...deploymentPolicy, environment: overrides.environment ?? "test" },
     environment: "test",
     registrations: [{
       adapterKey: "storage-test",
