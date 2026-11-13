@@ -6,6 +6,7 @@ import {
 } from "../dist/packages/integrations/provider-storage-driver-contract.js";
 
 const base = {
+  dependencyIds: [],
   capabilities: {
     idempotentCreateByUploadSessionId: true,
     lookupByUploadSessionId: true,
