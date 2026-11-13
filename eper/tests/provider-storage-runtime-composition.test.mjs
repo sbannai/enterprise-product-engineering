@@ -28,6 +28,7 @@ function driver() {
 function input(overrides = {}) {
   return {
     enabled: true,
+    deploymentPolicy,
     environment: "test",
     registrations: [{
       adapterKey: "storage-test",
@@ -55,7 +56,7 @@ test("disabled composition creates no executable dispatcher and needs no provide
   });
 });
 
-test("enabled composition creates a dispatcher from explicit dependencies", () => {
+test("enabled composition creates a dispatcher from explicit dependencies and a deployment policy", () => {
   const result = createProviderStorageRuntimeComposition(input());
   assert.equal(result.enabled, true);
   assert.equal(typeof result.dispatch?.dispatch, "function");
@@ -120,4 +121,13 @@ test("enabled composition refuses dependency-bearing drivers without durable inv
     error => error instanceof ProviderStorageRuntimeCompositionError &&
       error.code === "PROVIDER_STORAGE_RUNTIME_DEPENDENCY_INVENTORY_REQUIRED",
   );
+});
+
+test("enabled composition refuses a missing or disabled deployment policy", () => {
+  assert.throws(() => createProviderStorageRuntimeComposition(input({ deploymentPolicy: undefined })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
+  assert.throws(() => createProviderStorageRuntimeComposition(input({ deploymentPolicy: { ...deploymentPolicy, enabled: false } })),
+    error => error instanceof ProviderStorageRuntimeCompositionError &&
+      error.code === "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
 });
