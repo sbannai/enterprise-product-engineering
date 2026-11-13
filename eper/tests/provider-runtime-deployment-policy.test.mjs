@@ -89,22 +89,29 @@ test("database-selected provider, exact adapter version, capability and endpoint
 });
 
 test("production refuses synthetic drivers even if a malformed caller requests one", () => {
-  const production = {
-    ...configuration,
-    adapters: [{ ...configuration.adapters[0], synthetic: false }],
-  };
-  const policy = readProviderRuntimeDeploymentPolicy({
-    ...env,
-    NODE_ENV: "production",
-    EPER_ENVIRONMENT: "production",
-    EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_JSON: JSON.stringify(production),
-  });
-  assert.throws(
-    () => assertProviderRuntimeDeploymentAllowed(policy, {
-      ...candidate, synthetic: true,
-    }),
-    error => error.code === "PROVIDER_RUNTIME_ADAPTER_NOT_ALLOWED",
-  );
+  const directory = mkdtempSync(join(tmpdir(), "eper-provider-config-"));
+  const file = join(directory, "provider-runtime.json");
+  try {
+    const production = {
+      ...configuration,
+      adapters: [{ ...configuration.adapters[0], synthetic: false }],
+    };
+    writeFileSync(file, JSON.stringify(production), { mode: 0o600 });
+    const policy = readProviderRuntimeDeploymentPolicy({
+      EPER_PROVIDER_STORAGE_RUNTIME_ENABLED: "true",
+      NODE_ENV: "production",
+      EPER_ENVIRONMENT: "production",
+      EPER_PROVIDER_STORAGE_RUNTIME_CONFIG_FILE: file,
+    });
+    assert.throws(
+      () => assertProviderRuntimeDeploymentAllowed(policy, {
+        ...candidate, synthetic: true,
+      }),
+      error => error.code === "PROVIDER_RUNTIME_ADAPTER_NOT_ALLOWED",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("disabled runtime remains disabled and cannot authorize a provider", () => {
