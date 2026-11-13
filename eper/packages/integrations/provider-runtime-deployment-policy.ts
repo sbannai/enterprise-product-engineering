@@ -51,7 +51,7 @@ function readDeploymentConfigText(env: Record<string, string | undefined>): stri
     try {
       const metadata = lstatSync(filePath);
       if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 2 ||
-          metadata.size > 65_536 || (metadata.mode & 0o002) !== 0) {
+          metadata.size > 65_536 || (metadata.mode & 0o022) !== 0) {
         throw new Error("unsafe config file");
       }
       return readFileSync(filePath, "utf8");
