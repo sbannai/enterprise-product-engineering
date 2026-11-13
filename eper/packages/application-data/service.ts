@@ -89,7 +89,7 @@ export class ApplicationDataService {
   }
   private async activeModel(context: ApplicationDataContext, entityType: string): Promise<ApplicationDataModel> {
     this.validateContext(context); validId(entityType, "APPLICATION_DATA_ENTITY_INVALID");
-    const model = await this.adapter.getModel(context.tenantId, context.applicationId, entityType);
+    const model = await this.adapter.getActiveModel(context.tenantId, context.applicationId, entityType);
     if (!model || model.status !== "ACTIVE") throw new Error("APPLICATION_DATA_MODEL_NOT_ACTIVE");
     return model;
   }
