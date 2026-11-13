@@ -13,6 +13,7 @@ const configuration = () => ({
   databaseCaFile: "/run/eper/db/ca.pem",
   databaseClientCertificateFile: "/run/eper/db/client.pem",
   databaseClientKeyFile: "/run/eper/db/client-key.pem",
+  compositionModulePath: "./dist/packages/assets/scanners/customer-asset-scan-composition.js",
 });
 
 test("trusted scanner launcher fixes Node executable, child entrypoint and runtime flags", () => {
@@ -28,6 +29,7 @@ test("trusted scanner launcher fixes Node executable, child entrypoint and runti
 test("trusted scanner launcher passes only explicit SPIFFE and certificate-authenticated DB settings", () => {
   const launch = buildTrustedCustomerAssetScanChildLaunch(configuration());
   assert.deepEqual(Object.keys(launch.environment).sort(), [
+    "EPER_SCANNER_CHILD_COMPOSITION_MODULE",
     "EPER_SCANNER_CHILD_EXPECTED_SPIFFE_ID",
     "EPER_SCANNER_CHILD_SPIFFE_AUDIENCE",
     "EPER_SCANNER_CHILD_SPIFFE_WORKLOAD_API_SOCKET",
@@ -35,6 +37,7 @@ test("trusted scanner launcher passes only explicit SPIFFE and certificate-authe
     "PGSSLROOTCERT", "PGUSER",
   ].sort());
   assert.equal(launch.environment.PGSSLMODE, "verify-full");
+  assert.match(launch.environment.EPER_SCANNER_CHILD_COMPOSITION_MODULE, /dist\\/packages\\/assets\\/scanners\\/customer-asset-scan-composition\\.js$/);
   assert.equal(launch.environment.PGSSLKEY, "/run/eper/db/client-key.pem");
   assert.equal(Object.values(launch.environment).some(value => /password|secret|credential/i.test(value)), false);
 });
