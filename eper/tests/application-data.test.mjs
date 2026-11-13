@@ -58,3 +58,13 @@ test("draft schema versions do not displace the active transaction schema", asyn
   const saved=await service.create(context,"Order","order-draft-safe",{customerId:"c1",total:8,status:"NEW"});
   assert.equal(saved.schemaVersion,1);
 });
+
+test("draft schema activation is an explicit status-only transition", async t => {
+  const service=await fixture(t);
+  const draft={...model,version:2,status:"DRAFT",fields:[...model.fields,{id:"notes",type:"string"}]};
+  await service.registerModel(draft);
+  await service.activateModel("tenant-a","app-a","Order",2);
+  const saved=await service.create(context,"Order","order-v2",{customerId:"c1",total:8,status:"NEW",notes:"published"});
+  assert.equal(saved.schemaVersion,2);
+  await assert.rejects(()=>service.registerModel({...draft,status:"ACTIVE"}),/SCHEMA_VERSION_IMMUTABLE/);
+});
