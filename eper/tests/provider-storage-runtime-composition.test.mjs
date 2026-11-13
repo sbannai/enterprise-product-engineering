@@ -28,6 +28,13 @@ function driver() {
 function input(overrides = {}) {
   return {
     enabled: true,
+    deploymentPolicy: {
+      enabled: true, environment: "test", allowedProviderKeys: ["storage-provider"],
+      adapters: [{ adapterKey: "storage-test", adapterVersion: "1.0.0", capabilities: [
+        "storage.upload.grant", "storage.upload.lookup", "storage.upload.renew",
+        "storage.object.verify", "storage.download.grant", "storage.object.scan",
+      ], synthetic: false }], allowedHosts: ["storage.example.com"], tlsMode: "verify-full",
+    },
     environment: "test",
     registrations: [{
       adapterKey: "storage-test",
@@ -72,6 +79,11 @@ test("production rejects synthetic storage drivers", () => {
     error => error instanceof ProviderStorageRuntimeCompositionError &&
       error.code === "PROVIDER_STORAGE_RUNTIME_SYNTHETIC_DRIVER_FORBIDDEN",
   );
+});
+
+test("enabled composition requires an active deployment policy", () => {
+  assert.throws(() => createProviderStorageRuntimeComposition(input({ deploymentPolicy: undefined })),
+    error => error.code === "PROVIDER_STORAGE_RUNTIME_DEPLOYMENT_POLICY_REQUIRED");
 });
 
 test("enabled composition requires a scanner identity and host allowlist", () => {
