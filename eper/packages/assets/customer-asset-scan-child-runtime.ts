@@ -53,6 +53,8 @@ export class CustomerAssetScanChildRuntime {
       providerStream = await this.dependencies.provider.dispatch({
         tenantId: context.tenantId,
         applicationId: context.applicationId,
+        actorId: context.scannerServiceId,
+        correlationId: start.requestId,
         expectedConnectionId: context.providerConnectionId,
         requestId: start.requestId,
         signal,
