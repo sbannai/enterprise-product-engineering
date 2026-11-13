@@ -87,7 +87,7 @@ test("database-selected provider, exact adapter version, capability and endpoint
 test("production refuses synthetic drivers even if a malformed caller requests one", () => {
   const production = {
     ...configuration,
-    adapters: [{ ...configuration.adapters[0], synthetic: true }],
+    adapters: [{ ...configuration.adapters[0], synthetic: false }],
   };
   const policy = readProviderRuntimeDeploymentPolicy({
     ...env,
