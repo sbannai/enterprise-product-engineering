@@ -1,4 +1,4 @@
-import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataField, ApplicationDataModel, ApplicationDataRecord, ApplicationDataQuery } from "./contracts.js";
+import type { ApplicationDataAdapter, ApplicationDataContext, ApplicationDataField, ApplicationDataModel, ApplicationDataRecord, ApplicationDataQuery, ApplicationDataRelationship } from "./contracts.js";
 import { validateApplicationDataIdempotencyKey } from "./idempotency.js";
 
 const ID = /^[a-zA-Z][a-zA-Z0-9._-]{1,127}$/;
@@ -112,7 +112,7 @@ export class ApplicationDataService {
     const validated = validateData(model.fields, data); await this.validateRelationships(context, model, validated);
     const now = new Date().toISOString();
     return this.adapter.create({ tenantId: context.tenantId, applicationId: context.applicationId, entityType,
-      id, schemaVersion: model.version, version: 1, state: "ACTIVE", data: validated, createdAt: now, updatedAt: now }, context);
+      id, schemaVersion: model.version, version: 1, state: "ACTIVE", data: validated, createdAt: now, updatedAt: now }, context, model.relationships);
   }
   async get(context: ApplicationDataContext, entityType: string, id: string): Promise<ApplicationDataRecord | undefined> {
     await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
@@ -128,7 +128,7 @@ export class ApplicationDataService {
     const validated = patch.data === undefined ? undefined : validateData(model.fields, patch.data);
     if (validated) await this.validateRelationships(context, model, validated);
     const normalized = { ...patch, ...(validated === undefined ? {} : { data: validated }) };
-    return this.adapter.update(context, entityType, id, expectedVersion, normalized);
+    return this.adapter.update(context, entityType, id, expectedVersion, normalized, model.relationships);
   }
   async delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void> {
     await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
