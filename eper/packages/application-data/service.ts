@@ -148,8 +148,11 @@ export class ApplicationDataService {
     return this.adapter.update(context, entityType, id, expectedVersion, normalized, model.relationships);
   }
   async delete(context: ApplicationDataContext, entityType: string, id: string, expectedVersion: number): Promise<void> {
-    await this.activeModel(context, entityType); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    this.validateContext(context); validId(entityType,"APPLICATION_DATA_ENTITY_INVALID"); validId(id, "APPLICATION_DATA_RECORD_ID_INVALID");
+    validateApplicationDataIdempotencyKey(context.idempotencyKey);
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error("APPLICATION_DATA_EXPECTED_VERSION_INVALID");
+    if (await this.adapter.getIdempotentDelete(context,entityType,id,expectedVersion)) return;
+    await this.activeModel(context, entityType);
     return this.adapter.delete(context, entityType, id, expectedVersion);
   }
   async query(context: ApplicationDataContext, entityType: string, query: ApplicationDataQuery = {}): Promise<ApplicationDataRecord[]> {
