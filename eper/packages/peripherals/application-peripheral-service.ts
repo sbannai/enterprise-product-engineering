@@ -14,7 +14,12 @@ import {
   type ConfigurePeripheralInput,
 } from "./postgres-peripheral-repository.js";
 
-export interface PeripheralServiceScope extends ApplicationCapabilityScope, PeripheralAuditContext {}
+export interface PeripheralServiceScope extends ApplicationCapabilityScope, PeripheralAuditContext {
+  /** Trusted execution context IDs used to resolve shared dependency installations. */
+  workstationId?: string;
+  userId?: string;
+  gatewayId?: string;
+}
 
 export interface PeripheralActionAuthorizer {
   authorize(input: {
@@ -108,6 +113,9 @@ export class ApplicationPeripheralService {
         adapterVersion: configuration.adapterVersion,
         kind: current.kind,
         evaluatedAt: new Date().toISOString(),
+        workstationId: input.workstationId,
+        userId: input.userId,
+        gatewayId: input.gatewayId,
       });
       const active = await this.repository.transition({
         ...this.auditInput(input),
@@ -209,6 +217,7 @@ export class ApplicationPeripheralService {
   private async assertPersistedDependenciesCompatible(input: {
     tenantId:string; applicationId:string; peripheralId:string; adapterKey:string;
     adapterVersion:string; kind:PeripheralKind; evaluatedAt:string;
+    workstationId?:string; userId?:string; gatewayId?:string;
   }):Promise<void>{
     const ids = this.adapters.dependencyIds?.({
       adapterKey:input.adapterKey,adapterVersion:input.adapterVersion,kind:input.kind,
@@ -226,10 +235,22 @@ export class ApplicationPeripheralService {
       const policy=policies[i];
       if(!policy||policy.policyStatus!=="active")throw new Error("EPER_PERIPHERAL_DEPENDENCY_POLICY_UNAVAILABLE:"+id);
       const candidates=installations.filter(row=>row.dependencyId===id&&row.installationStatus!=="retired");
-      const device=candidates.filter(row=>row.scopeType==="device"&&row.scopeId===input.peripheralId);
-      const application=candidates.filter(row=>row.scopeType==="application"&&row.scopeId===input.applicationId);
-      const selected=device.length?device:application;
-      if(selected.length!==1)throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_"+(selected.length===0?"MISSING":"AMBIGUOUS")+":"+id);
+      // Resolve the most specific known installation first. Identity IDs are
+      // supplied by the trusted, authorized activation context, not inferred.
+      const scopes=[
+        {type:"device",id:input.peripheralId},
+        {type:"workstation",id:input.workstationId},
+        {type:"user",id:input.userId},
+        {type:"gateway",id:input.gatewayId},
+        {type:"application",id:input.applicationId},
+      ].filter(scope=>!!scope.id);
+      let selected: typeof candidates = [];
+      for(const scope of scopes){
+        const matches=candidates.filter(row=>row.scopeType===scope.type&&row.scopeId===scope.id);
+        if(matches.length>1)throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_AMBIGUOUS:"+id+":"+scope.type);
+        if(matches.length===1){selected=matches;break;}
+      }
+      if(selected.length!==1)throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_MISSING:"+id);
       const installation=selected[0];
       if(installation.installationStatus==="blocked"||installation.installationStatus==="upgrade_pending"){
         throw new Error("EPER_PERIPHERAL_DEPENDENCY_INSTALLATION_NOT_READY:"+id);
