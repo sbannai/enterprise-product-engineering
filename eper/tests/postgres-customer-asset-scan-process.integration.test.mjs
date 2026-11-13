@@ -173,7 +173,7 @@ test("process-level PostgreSQL 16 scan worker claims, invokes configured test sc
     const objectPath = resolve("dist/packages/assets/scanners/ci-postgres-test-object-" + randomUUID() + ".bin");
     let child;
     try {
-      await mkdir(dirname(scannerPath), { recursive: true });
+      await mkdir(dirname(compositionPath), { recursive: true });
       await writeFile(objectPath, fixture.testObjectBytes);
       const compositionSource = `import { createReadStream } from "node:fs";
 import { CustomerAssetScanChildSpiffeIdentityVerifier } from "../customer-asset-scan-child-spiffe-identity.js";
@@ -306,8 +306,6 @@ export function createCustomerAssetScanChildRuntimeDependencies({ pool, env }) {
       await pool.query(`DROP ROLE IF EXISTS "${childLogin.role}"`).catch(() => {});
       await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
       await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
-      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
-      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
@@ -325,7 +323,7 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
     try {
       const [job] = await repository.claimScanJobs({
         tenantId: fixture.tenantId, applicationId: fixture.applicationId,
-        workerId, scannerServiceId: "ci-asset-scanner", environment: "sandbox",
+        workerId, scannerServiceId, environment: "sandbox",
         limit: 1, leaseMs: 5_000,
       });
       assert.ok(job, "fixture must create a claimable scan job");
@@ -381,6 +379,8 @@ test("process-level PostgreSQL 16 recovery worker quarantines an exhausted lease
       assert.equal(audit.rowCount, 1, "recovery transition and audit must commit together");
     } finally {
       if (child) await stopChild(child).catch(() => {});
+      await pool.query("DELETE FROM public.eper_customer_asset_scan_supervisor_identities WHERE login_role = $1", [workerLogin.role]).catch(() => {});
+      await pool.query(`REVOKE eper_customer_asset_scan_supervisor_access FROM "${workerLogin.role}"`).catch(() => {});
       await pool.query(`DROP ROLE IF EXISTS "${workerLogin.role}"`).catch(() => {});
       await pool.end();
     }
