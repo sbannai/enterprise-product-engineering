@@ -5,7 +5,7 @@ import { buildTrustedCustomerAssetScanChildLaunch } from "../dist/packages/asset
 const configuration = () => ({
   workloadApiSocket: "unix:///run/spire/sockets/agent.sock",
   expectedSpiffeId: "spiffe://example.org/eper/scanner-child",
-  audience: "eper-customer-asset-scan",
+  audience: "eper:customer-asset-scan-child",
   databaseHost: "127.0.0.1",
   databasePort: 5432,
   databaseName: "eper",
