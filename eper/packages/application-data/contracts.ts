@@ -47,6 +47,7 @@ export interface ApplicationDataQuery {
 }
 export interface ApplicationDataAdapter {
   getModel(tenantId: string, applicationId: string, entityType: string, version?: number): Promise<ApplicationDataModel | undefined>;
+  getActiveModel(tenantId: string, applicationId: string, entityType: string): Promise<ApplicationDataModel | undefined>;
   putModel(model: ApplicationDataModel): Promise<void>;
   create(record: ApplicationDataRecord, context: ApplicationDataContext): Promise<ApplicationDataRecord>;
   get(context: ApplicationDataContext, entityType: string, id: string): Promise<ApplicationDataRecord | undefined>;
