@@ -17,7 +17,6 @@ import {
 export interface PeripheralServiceScope extends ApplicationCapabilityScope, PeripheralAuditContext {
   /** Trusted execution context IDs used to resolve shared dependency installations. */
   workstationId?: string;
-  userId?: string;
   gatewayId?: string;
 }
 
@@ -26,6 +25,9 @@ export interface PeripheralActionAuthorizer {
     tenantId: string;
     applicationId: string;
     actorId: string;
+    /** Must be validated against the authenticated actor and tenant/application before authorization succeeds. */
+    workstationId?: string;
+    gatewayId?: string;
     action: "peripheral.register" | "peripheral.configure" | "peripheral.read" | "peripheral.activate" | "peripheral.suspend";
   }): Promise<void>;
 }
@@ -114,7 +116,7 @@ export class ApplicationPeripheralService {
         kind: current.kind,
         evaluatedAt: new Date().toISOString(),
         workstationId: input.workstationId,
-        userId: input.userId,
+        userId: input.actorId,
         gatewayId: input.gatewayId,
       });
       const active = await this.repository.transition({
@@ -269,6 +271,8 @@ export class ApplicationPeripheralService {
       tenantId: input.tenantId,
       applicationId: input.applicationId,
       actorId: input.actorId,
+      workstationId: input.workstationId,
+      gatewayId: input.gatewayId,
     };
   }
 
