@@ -18,7 +18,13 @@ export class ApplicationDataWorkflowActivity {
   constructor(private readonly service: ApplicationDataService, private readonly authorize: ApplicationDataWorkflowAuthorizer) {}
   async execute(context: ApplicationDataContext, binding: ApplicationDataWorkflowBinding, input: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (!binding || !/^[a-zA-Z][a-zA-Z0-9._-]{1,127}$/.test(binding.entityType) ||
-        !["create","get","update","delete","query"].includes(binding.operation)) throw new Error("APPLICATION_DATA_WORKFLOW_BINDING_INVALID");
+        !["create","get","update","delete","query"].includes(binding.operation) ||
+        !input || typeof input !== "object" || Array.isArray(input)) throw new Error("APPLICATION_DATA_WORKFLOW_BINDING_INVALID");
+    if (["create", "update", "delete"].includes(binding.operation) &&
+        (typeof context?.idempotencyKey !== "string" ||
+         !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,127}$/.test(context.idempotencyKey))) {
+      throw new Error("APPLICATION_DATA_WORKFLOW_IDEMPOTENCY_KEY_REQUIRED");
+    }
     await this.authorize(context,binding.entityType,binding.operation);
     const id = binding.recordIdField ? input[binding.recordIdField] : undefined;
     const data = binding.dataField ? input[binding.dataField] : undefined;
@@ -34,9 +40,9 @@ export class ApplicationDataWorkflowActivity {
       return { [key]: await this.service.get(context,binding.entityType,id) ?? null };
     }
     if (binding.operation === "update") {
-      if (typeof id !== "string" || !Number.isSafeInteger(version)) throw new Error("APPLICATION_DATA_WORKFLOW_INPUT_INVALID");
-      const patch = data && typeof data === "object" && !Array.isArray(data) ? { data:data as Record<string,unknown> } : {};
-      return { [key]: await this.service.update(context,binding.entityType,id,version as number,patch) };
+      if (typeof id !== "string" || !Number.isSafeInteger(version) ||
+          !data || typeof data !== "object" || Array.isArray(data)) throw new Error("APPLICATION_DATA_WORKFLOW_INPUT_INVALID");
+      return { [key]: await this.service.update(context,binding.entityType,id,version as number,{ data:data as Record<string,unknown> }) };
     }
     if (binding.operation === "delete") {
       if (typeof id !== "string" || !Number.isSafeInteger(version)) throw new Error("APPLICATION_DATA_WORKFLOW_INPUT_INVALID");
