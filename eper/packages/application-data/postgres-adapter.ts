@@ -62,16 +62,19 @@ export class PostgresApplicationDataAdapter implements ApplicationDataAdapter {
   /** Lock referenced rows in the same transaction. FOR KEY SHARE serializes with deletion's FOR UPDATE lock. */
   private async lockRelationshipTargets(client: import("pg").PoolClient, context: ApplicationDataContext,
     relationships: import("./contracts.js").ApplicationDataRelationship[] | undefined, data: Record<string, unknown>): Promise<void> {
+    const targets: Array<{entityType:string; id:string; field:string}> = [];
     for (const relation of relationships ?? []) {
       const value = data[relation.field];
       if (value === undefined || value === null) continue;
       const ids = relation.cardinality === "one" ? [value] : value;
-      if (!Array.isArray(ids)) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
-      for (const id of ids) {
-        const target = await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 FOR KEY SHARE",
-          [context.tenantId,context.applicationId,relation.targetEntity,id]);
-        if (!target.rowCount) throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + relation.field);
-      }
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== "string")) throw new Error("APPLICATION_DATA_RELATIONSHIP_VALUE_INVALID:" + relation.field);
+      for (const id of ids as string[]) targets.push({entityType:relation.targetEntity,id,field:relation.field});
+    }
+    targets.sort((a,b)=>a.entityType.localeCompare(b.entityType)||a.id.localeCompare(b.id));
+    for (const targetRef of targets) {
+      const target = await client.query("SELECT 1 FROM eper_application_data_records WHERE tenant_id=$1 AND application_id=$2 AND entity_type=$3 AND record_id=$4 FOR KEY SHARE",
+        [context.tenantId,context.applicationId,targetRef.entityType,targetRef.id]);
+      if (!target.rowCount) throw new Error("APPLICATION_DATA_RELATIONSHIP_TARGET_NOT_FOUND:" + targetRef.field);
     }
   }
   /** The target row is locked FOR UPDATE before scanning references, closing the insert/delete race. */
