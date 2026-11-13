@@ -31,7 +31,7 @@ test("application data enforces optimistic concurrency and schema validation on 
   await assert.rejects(()=>service.update(context,"Order","order-01",1,{state:"ARCHIVED"}),/VERSION_CONFLICT/);
 });
 test("workflow binding invokes registered operations without exposing a storage collection", async t => {
-  const service=await fixture(t); const activity=new ApplicationDataWorkflowActivity(service);
+  const service=await fixture(t); const activity=new ApplicationDataWorkflowActivity(service, async () => {});
   const result=await activity.execute(context,{entityType:"Order",operation:"create",recordIdField:"orderId",dataField:"payload"},{orderId:"order-01",payload:{customerId:"c1",total:12,status:"NEW"}});
   assert.equal(result.result.id,"order-01");
   await assert.rejects(()=>activity.execute(context,{entityType:"Order",operation:"create",recordIdField:"id",dataField:"payload"},{id:"order-02",payload:{bad:true}}),/UNKNOWN_FIELD/);
